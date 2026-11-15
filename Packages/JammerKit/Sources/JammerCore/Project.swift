@@ -116,6 +116,8 @@ public struct ClipboardContent: Codable, Sendable, Equatable {
     public var length: Frame
     public var tracks: [[Clip]]
     public var sources: [SourceRef]
+    /// The words of those sources, so pasting into another project keeps them.
+    public var transcripts: [SourceTranscript]?
 }
 
 public enum EditError: Error, LocalizedError, Equatable {
@@ -148,9 +150,11 @@ public struct Project: Codable, Equatable, Sendable {
     public var sources: [SourceRef]
     /// Tempo and time signature. Projects saved before it existed open at 120 BPM in 4/4.
     public var tempo: TempoMap
+    /// Recognised words per source, anchored in source frames (see `placedWords`).
+    public var transcripts: [SourceTranscript]
 
     public init(sampleRate: Double, channels: Int, tracks: [Track] = [], markers: [Marker] = [], sources: [SourceRef] = [],
-                tempo: TempoMap = TempoMap()) {
+                tempo: TempoMap = TempoMap(), transcripts: [SourceTranscript] = []) {
         formatVersion = Self.formatVersion
         self.sampleRate = sampleRate
         self.channels = channels
@@ -158,9 +162,10 @@ public struct Project: Codable, Equatable, Sendable {
         self.markers = markers
         self.sources = sources
         self.tempo = tempo
+        self.transcripts = transcripts
     }
 
-    private enum CodingKeys: String, CodingKey { case formatVersion, sampleRate, channels, tracks, markers, sources, tempo }
+    private enum CodingKeys: String, CodingKey { case formatVersion, sampleRate, channels, tracks, markers, sources, tempo, transcripts }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -171,6 +176,7 @@ public struct Project: Codable, Equatable, Sendable {
         markers = try c.decode([Marker].self, forKey: .markers)
         sources = try c.decode([SourceRef].self, forKey: .sources)
         tempo = try c.decodeIfPresent(TempoMap.self, forKey: .tempo) ?? TempoMap()
+        transcripts = try c.decodeIfPresent([SourceTranscript].self, forKey: .transcripts) ?? []
     }
 
     /// A project with one track playing the whole file.
@@ -246,7 +252,8 @@ public struct Project: Codable, Equatable, Sendable {
             }
         }
         let used = Set(tracks.flatMap { $0.map(\.sourceID) })
-        return ClipboardContent(length: Frame(range.count), tracks: tracks, sources: sources.filter { used.contains($0.id) })
+        return ClipboardContent(length: Frame(range.count), tracks: tracks, sources: sources.filter { used.contains($0.id) },
+                                transcripts: transcripts.filter { used.contains($0.sourceID) })
     }
 
     public mutating func cut(_ range: Range<Frame>) throws -> ClipboardContent {
@@ -270,6 +277,7 @@ public struct Project: Codable, Equatable, Sendable {
     public mutating func paste(_ content: ClipboardContent, at t: Frame) throws {
         guard content.length > 0 else { throw EditError.emptyRange }
         for s in content.sources where source(s.id) == nil { sources.append(s) }
+        for t in content.transcripts ?? [] where !transcripts.contains(where: { $0.sourceID == t.sourceID }) { transcripts.append(t) }
         guard content.tracks.allSatisfy({ $0.allSatisfy { c in source(c.sourceID) != nil } }) else { throw EditError.unknownSource }
         insertGap(at: t, length: content.length)
         while tracks.count < content.tracks.count { tracks.append(Track(name: "Track \(tracks.count + 1)")) }
@@ -358,5 +366,6 @@ public struct Project: Codable, Equatable, Sendable {
     public mutating func pruneSources() {
         let used = Set(tracks.flatMap { $0.clips.map(\.sourceID) })
         sources.removeAll { !used.contains($0.id) }
+        transcripts.removeAll { !used.contains($0.sourceID) }
     }
 }
