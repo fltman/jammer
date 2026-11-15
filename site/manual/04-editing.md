@@ -41,3 +41,9 @@ Every edit that cuts through audio splits it into clips. You see clip edges as t
 ## Echo
 
 The `echo` operation (for agents and sibling apps; a menu entry comes later) adds a feedback echo: `delay` between repeats (0.02–2 s), `feedback` (how much comes back, up to 0.95) and `mix` (how loud the echoes are). The audio in the range is rendered into a new file per track with the echo, so the original stays untouched and one undo removes it. With `tail`, Jämmer makes room after the range so the echoes can ring out.
+
+## History
+
+Undo never throws work away. If you undo a few steps and then do something else, the steps you undid stay in the history as a branch. **View › Show History** (⌥⌘Y) shows the whole tree: the branch you're on is bright, other branches are dim, and clicking any step takes you there. Going to a step is itself one step, so ⌘Z brings you back to where you were.
+
+The history is saved inside the `.jammer` package, so it's still there when you open the project again. It keeps the last 500 steps; when it has to drop some, it drops old side branches first and says so at the top of the History window.

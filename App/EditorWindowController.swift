@@ -242,6 +242,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         session.status = byTrack ? "Finding speakers: one per track…" : "Finding speakers… (the first time downloads the model, about 20 MB)"
     }
 
+    @objc func showHistory(_ sender: Any?) { HistoryPanel.show(session) }
+
     @objc func showPlugins(_ sender: Any?) {
         guard let window else { return }
         let host = NSHostingController(rootView: AnyView(EmptyView()))

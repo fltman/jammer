@@ -219,6 +219,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             item("Go to Start", #selector(EditorWindowController.goToStart(_:)), ""),
         ]))
         main.addItem(submenu("View", [
+            item("Show History", #selector(EditorWindowController.showHistory(_:)), "y", [.command, .option]),
             item("Zoom In", #selector(EditorWindowController.zoomIn(_:)), "+"),
             item("Zoom Out", #selector(EditorWindowController.zoomOut(_:)), "-"),
             item("Zoom to Fit", #selector(EditorWindowController.zoomToFit(_:)), "0"),

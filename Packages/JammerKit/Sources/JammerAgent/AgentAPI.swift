@@ -324,6 +324,8 @@ public enum AgentAPI {
         | GET | `/api/v1/documents/{id}/tracks/{trackId}/drift?against=<trackId>` | How far two recorders' clocks part: `{"drift": {"ppm", "msPerHour", "confidence"}}`. Needs at least 90 s of overlap. |
         | GET | `/api/v1/documents/{id}/tracks` | The tracks with their ids, clips and plugins (`inserts`). |
         | GET | `/api/v1/documents/{id}/tracks/{trackId}/inserts/{insert}` | One plugin: `{"insert": {"id", "plugin", "name", "bypass", "latencyMs", "factoryPresets", "params": [{"identifier", "name", "unit", "min", "max", "value"}]}}`. |
+        | GET | `/api/v1/documents/{id}/history` | The history tree: `{"current", "pruned", "limit", "nodes": [{"id", "parent", "action", "time", "branch"}]}`. A change made after an undo starts a branch; the old future stays reachable. |
+        | POST | `/api/v1/documents/{id}/history/{node}` | Goes to that step (any branch). One undo step; `undo` goes back. |
         | GET | `/api/v1/plugins` | The Audio Unit effects installed on this Mac, optionally filtered by `?q=`: `{"plugins": [{"id", "name", "manufacturer", "kind", "version", "v3"}], "safeMode"}`. |
         | POST | `/api/v1/documents/{id}/diarize` | Finds who speaks when (a job). Body: `{"mode": "by_track"\\|"ml", "tracks": [id], "speakers", "minSpeakers", "maxSpeakers"}`; all optional. The result has `speakers` (names) and `seconds` (each one's speaking time) in order of id. |
         | GET | `/api/v1/documents/{id}/speakers` | `{"speakers": [{"id", "name", "seconds"}], "turns": [{"speaker", "track", "start", "end"}]}`, as it plays now, optionally over `?start=&end=`. |

@@ -57,6 +57,7 @@ final class EditorSession {
         plan = PlanCompiler.compile(project, pool: pool)
         output.setPlan(plan)
         output.setGain(volume)
+        history = try? History(root: project)
         loadPeaks()
         syncInserts()
     }
@@ -125,10 +126,69 @@ final class EditorSession {
         let old = project
         guard newProject != old else { return }
         replace(with: newProject)
-        undoManager?.registerUndo(withTarget: self) { target in
-            MainActor.assumeIsolated { target.commit(old, action: action) }
+        // The history tree records the change; undo and redo move along it (a change after
+        // an undo starts a branch rather than discarding the old future).
+        let from = history?.current
+        try? history?.record(project, action: action)
+        undoGroup {
+            if let from, let to = history?.current {
+                registerMove(back: from, forward: to, action: action)
+            } else {
+                undoManager?.registerUndo(withTarget: self) { target in
+                    MainActor.assumeIsolated { target.commit(old, action: action) }
+                }
+            }
+            undoManager?.setActionName(action)
         }
-        undoManager?.setActionName(action)
+        historyVersion += 1
+    }
+
+    /// One change, one undo step. AppKit only closes its automatic undo group after a
+    /// user event, so changes from agents (no events in between) piled into one group and
+    /// one undo took several back. Each change now gets an explicit top-level group,
+    /// closing a stale automatic one first. Inside undo or redo the manager's own group is
+    /// open and the registration goes there.
+    private func undoGroup(_ body: () -> Void) {
+        guard let um = undoManager, !um.isUndoing, !um.isRedoing else { body(); return }
+        // An automatic group left open since the last event belongs to an earlier change.
+        while um.groupingLevel > 0 { um.endUndoGrouping() }
+        um.beginUndoGrouping()
+        body()
+        um.endUndoGrouping()
+    }
+
+    /// The document's history (View › History, `GET …/history`).
+    @ObservationIgnored var history: History?
+    var historyVersion = 0
+
+    /// Undo (and then redo) as moves between two history nodes.
+    private func registerMove(back: UUID, forward: UUID, action: String) {
+        undoManager?.registerUndo(withTarget: self) { target in
+            MainActor.assumeIsolated {
+                target.moveHistory(to: back)
+                target.registerMove(back: forward, forward: back, action: action)
+                target.undoManager?.setActionName(action)
+            }
+        }
+    }
+
+    private func moveHistory(to id: UUID) {
+        guard let p = try? history?.move(to: id) else { return }
+        replace(with: p)
+        historyVersion += 1
+    }
+
+    /// Goes to any step in the history; itself one undo step back to where you were.
+    func jump(to id: UUID) throws {
+        guard let h = history, let node = h.node(id) else { throw HistoryError.unknownNode }
+        let from = h.current
+        guard from != id else { return }
+        moveHistory(to: id)
+        let action = "Go to \(node.action)"
+        undoGroup {
+            registerMove(back: from, forward: id, action: action)
+            undoManager?.setActionName(action)
+        }
     }
 
     /// A finished transcription: one undo step. Sources the project no longer uses are skipped.
@@ -181,9 +241,16 @@ final class EditorSession {
         output.setPlan(preview ?? plan)
     }
 
-    /// Used when a document is read, without undo.
-    func load(_ newProject: Project) {
+    /// Used when a document is read, without undo. A saved history whose current step is
+    /// this project continues; otherwise the history starts here.
+    func load(_ newProject: Project, history saved: History? = nil) {
         replace(with: newProject)
+        if let saved, let p = try? saved.project(of: saved.current), p.tracks == project.tracks, p.markers == project.markers {
+            history = saved
+        } else {
+            history = try? History(root: project)
+        }
+        historyVersion += 1
     }
 
     /// Sources that now live inside the package. Applied to every project this

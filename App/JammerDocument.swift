@@ -25,6 +25,9 @@ final class JammerDocument: NSDocument {
     nonisolated(unsafe) private var mediaWrapper: FileWrapper?
     /// Set before the window opens for documents created from audio.
     var pendingProject: Project?
+    /// A history read from the package before the window opened.
+    var pendingHistory: History?
+    static let historyFile = "history.json"
 
     override class var autosavesInPlace: Bool { true }
     override class var readableTypes: [String] { [UTType.jammerProject.identifier, UTType.audio.identifier] }
@@ -35,6 +38,7 @@ final class JammerDocument: NSDocument {
     override func makeWindowControllers() {
         let project = pendingProject ?? session?.project ?? Project(sampleRate: 48_000, channels: 2, tracks: [Track(name: "Track 1")])
         let s = session ?? EditorSession(project: project)
+        if session == nil, let h = pendingHistory { s.load(project, history: h) }
         s.document = self
         session = s
         let wc = EditorWindowController(session: s)
@@ -80,9 +84,10 @@ final class JammerDocument: NSDocument {
         }
         let project = try ProjectPackage.read(fileWrapper, packageURL: fileURL)
         mediaWrapper = fileWrapper.fileWrappers?[ProjectPackage.mediaFolderName]
+        let history = fileWrapper.fileWrappers?[Self.historyFile]?.regularFileContents.flatMap { try? JSONDecoder().decode(History.self, from: $0) }
         // NSDocument reads on the main thread (no concurrent reading).
         MainActor.assumeIsolated {
-            if let session { session.load(project) } else { pendingProject = project }
+            if let session { session.load(project, history: history) } else { pendingProject = project; pendingHistory = history }
         }
     }
 
@@ -122,7 +127,14 @@ final class JammerDocument: NSDocument {
             pendingCopies = copies
             pendingCollected = collected
         }
-        return try ProjectPackage.fileWrapper(project!, existingMedia: mediaWrapper)
+        let wrapper = try ProjectPackage.fileWrapper(project!, existingMedia: mediaWrapper)
+        // The history tree travels in the package.
+        if let h = MainActor.assumeIsolated({ session?.history }), let data = try? JSONEncoder().encode(h) {
+            let file = FileWrapper(regularFileWithContents: data)
+            file.preferredFilename = Self.historyFile
+            wrapper.addFileWrapper(file)
+        }
+        return wrapper
     }
 
     override func write(to url: URL, ofType typeName: String, for saveOperation: NSDocument.SaveOperationType,

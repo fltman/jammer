@@ -334,6 +334,20 @@ enum AgentRouter {
             case ["transcript"]:
                 try only("GET")
                 return try transcript(session, r)
+            case ["history"]:
+                try only("GET")
+                guard let h = session.history else { throw APIError.notAvailable("This document has no history yet.") }
+                let active = Set(h.activePath)
+                return .json(["current": h.current.uuidString, "pruned": h.pruned, "limit": h.limit,
+                              "nodes": h.nodes.map { n -> [String: Any] in
+                                  ["id": n.id.uuidString, "parent": n.parent?.uuidString ?? NSNull(), "action": n.action,
+                                   "time": ISO8601DateFormatter().string(from: n.time), "branch": !active.contains(n.id)]
+                              }])
+            case let t where t.count == 2 && t[0] == "history":
+                try only("POST")
+                guard let id = UUID(uuidString: t[1]), session.history?.node(id) != nil else { throw APIError.notFound("No step \(t[1]) in the history.") }
+                try session.jump(to: id)
+                return .json(["current": id.uuidString, "document": detail(session)])
             case ["diarize"]:
                 try only("POST")
                 return try diarize(session, r)
