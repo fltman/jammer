@@ -176,7 +176,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
     @objc func exportAudio(_ sender: Any?) {
         guard let window else { return }
         let panel = NSSavePanel()
-        panel.allowedContentTypes = [.wav, .aiff, UTType("org.xiph.flac") ?? .audio, .mpeg4Audio]
+        panel.allowedContentTypes = [.wav, .aiff, UTType("org.xiph.flac") ?? .audio, .mpeg4Audio, UTType(filenameExtension: "opus") ?? .audio]
         panel.allowsOtherFileTypes = true
         panel.nameFieldStringValue = session.name + ".wav"
         let model = ExportChoices(hasSelection: session.selection != nil)
@@ -317,7 +317,7 @@ struct StatusBar: View {
 final class ExportChoices {
     enum Choice: String, CaseIterable {
         case wav16 = "WAV 16-bit", wav24 = "WAV 24-bit", wavFloat = "WAV 32-bit float", aiff24 = "AIFF 24-bit",
-             flac16 = "FLAC 16-bit", flac24 = "FLAC 24-bit", alac24 = "Apple Lossless (ALAC) 24-bit", aac = "AAC 192 kbit/s"
+             flac16 = "FLAC 16-bit", flac24 = "FLAC 24-bit", alac24 = "Apple Lossless (ALAC) 24-bit", aac = "AAC 192 kbit/s", opus = "Opus 96 kbit/s (Ogg)"
         var encoded: EncodedExportOptions? {
             switch self {
             case .wav16, .wav24, .wavFloat: nil
@@ -326,6 +326,7 @@ final class ExportChoices {
             case .flac24: .init(format: .flac, bitDepth: 24)
             case .alac24: .init(format: .alac, bitDepth: 24)
             case .aac: .init(format: .aac, bitRate: 192_000)
+            case .opus: .init(format: .opus, bitRate: 96_000)
             }
         }
         var encoding: WAVWriter.Encoding { self == .wav16 ? .int16 : (self == .wavFloat ? .float32 : .int24) }

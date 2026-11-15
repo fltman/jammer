@@ -669,13 +669,19 @@ enum AgentRouter {
             let rate = obj["bitRate"] as? Int ?? 192_000
             guard (64_000...320_000).contains(rate) else { throw APIError.badRequest("bitRate must be 64000–320000.") }
             encoded = EncodedExportOptions(format: .aac, bitRate: rate)
+        case .opus:
+            if obj["bitDepth"] != nil { throw APIError.badRequest("opus has no bitDepth; use bitRate.") }
+            guard session.project.channels <= 2 else { throw APIError.badRequest("opus export takes mono or stereo documents.") }
+            let rate = obj["bitRate"] as? Int ?? 96_000
+            guard (16_000...256_000).contains(rate) else { throw APIError.badRequest("bitRate must be 16000–256000 for opus.") }
+            encoded = EncodedExportOptions(format: .opus, bitRate: rate)
         default:
             guard format.bitDepths.contains(bits) else {
                 throw APIError.badRequest("bitDepth must be \(format.bitDepths.map(String.init).joined(separator: " or ")) for \(format.rawValue).")
             }
             encoded = EncodedExportOptions(format: format, bitDepth: bits)
         }
-        if format != .aac, obj["bitRate"] != nil { throw APIError.badRequest("bitRate is for aac only.") }
+        if format != .aac, format != .opus, obj["bitRate"] != nil { throw APIError.badRequest("bitRate is for aac and opus only.") }
         var range: Range<Frame>? = nil
         if let a = obj["start"] as? Double, let b = obj["end"] as? Double {
             guard a >= 0, b > a else { throw APIError.badRequest("start and end must be seconds with end after start.") }
@@ -692,7 +698,7 @@ enum AgentRouter {
         defer { try? FileManager.default.removeItem(at: tmp) }
         try await session.export(to: tmp, options: .init(encoding: encoding, range: range, dither: obj["dither"] as? Bool ?? false, encoded: encoded))
         let data = try Data(contentsOf: tmp, options: .mappedIfSafe)
-        let types: [ExportFormat: String] = [.wav: "audio/wav", .aiff: "audio/aiff", .flac: "audio/flac", .alac: "audio/mp4", .aac: "audio/mp4"]
+        let types: [ExportFormat: String] = [.wav: "audio/wav", .aiff: "audio/aiff", .flac: "audio/flac", .alac: "audio/mp4", .aac: "audio/mp4", .opus: "audio/ogg"]
         return Response(status: 200, contentType: types[format] ?? "application/octet-stream", body: data,
                         extraHeaders: ["Content-Disposition": "attachment; filename=\"\(asciiName(session.name)).\(format.fileExtension)\""])
     }

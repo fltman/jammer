@@ -4,7 +4,7 @@ import Foundation
 /// Export formats beyond WAV, through Apple's encoders (ExtAudioFile). WAV and RF64 stay
 /// with `WAVWriter`, which keeps bext, iXML and markers.
 public enum ExportFormat: String, Sendable, Codable, CaseIterable {
-    case wav, aiff, flac, alac, aac
+    case wav, aiff, flac, alac, aac, opus
 
     public var fileExtension: String {
         switch self {
@@ -12,10 +12,11 @@ public enum ExportFormat: String, Sendable, Codable, CaseIterable {
         case .aiff: "aiff"
         case .flac: "flac"
         case .alac, .aac: "m4a"
+        case .opus: "opus"
         }
     }
 
-    public var isLossless: Bool { self != .aac }
+    public var isLossless: Bool { self != .aac && self != .opus }
     /// Bit depths a format can store (AAC has none).
     public var bitDepths: [Int] {
         switch self {
@@ -23,7 +24,7 @@ public enum ExportFormat: String, Sendable, Codable, CaseIterable {
         case .aiff: [16, 24]
         case .flac: [16, 24]
         case .alac: [16, 24]
-        case .aac: []
+        case .aac, .opus: []
         }
     }
 }
@@ -60,7 +61,7 @@ public final class EncodedWriter {
 
     public init(url: URL, options: EncodedExportOptions, channels: Int, sampleRate: Double) throws {
         self.channels = channels
-        guard options.format != .wav else { throw ExportError.unsupported("Use WAVWriter for WAV.") }
+        guard options.format != .wav, options.format != .opus else { throw ExportError.unsupported("Use WAVWriter for WAV and OggOpusWriter for Opus.") }
         if options.format.isLossless, !options.format.bitDepths.contains(options.bitDepth) {
             throw ExportError.unsupported("\(options.format.rawValue.uppercased()) takes \(options.format.bitDepths.map(String.init).joined(separator: " or ")) bits.")
         }
@@ -88,7 +89,7 @@ public final class EncodedWriter {
         case .aac:
             type = kAudioFileM4AType
             dst.mFormatID = kAudioFormatMPEG4AAC
-        case .wav:
+        case .wav, .opus:
             fatalError()
         }
         if options.format != .aiff {
@@ -140,6 +141,11 @@ public final class EncodedWriter {
     /// Renders `range` of a plan into a file in one go.
     public static func export(_ plan: RenderPlan, range: Range<Frame>, to url: URL, options: EncodedExportOptions,
                               progress: (Double) -> Bool = { _ in true }) throws {
+        if options.format == .opus {
+            try OggOpusWriter.export(plan, range: range, to: url, bitRate: options.bitRate)
+            _ = progress(1)
+            return
+        }
         let w = try EncodedWriter(url: url, options: options, channels: plan.channels, sampleRate: plan.sampleRate)
         var done: Frame = 0
         var cancelled = false
