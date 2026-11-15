@@ -12,13 +12,33 @@ public struct OperationSpec: Sendable, Identifiable {
         public var description: String
         public var required: Bool
         public var options: [String]?
+        /// Allowed values for numbers, checked before a step runs and published in the schema.
+        public var range: ClosedRange<Double>?
 
-        public init(_ name: String, _ kind: Kind, _ description: String, required: Bool = false, options: [String]? = nil) {
+        public init(_ name: String, _ kind: Kind, _ description: String, required: Bool = false, options: [String]? = nil,
+                    range: ClosedRange<Double>? = nil) {
             self.name = name
             self.kind = kind
             self.description = description
             self.required = required
             self.options = options
+            self.range = range
+        }
+
+        /// JSON Schema for this parameter.
+        public var schema: [String: Any] {
+            var d: [String: Any] = ["description": description]
+            switch kind {
+            case .seconds: d["type"] = "number"; d["minimum"] = range?.lowerBound ?? 0
+            case .number: d["type"] = "number"
+            case .string: d["type"] = "string"
+            case .boolean: d["type"] = "boolean"
+            case .list: d["type"] = "array"; d["items"] = ["type": "string"]
+            }
+            if let range, kind != .seconds || range.lowerBound != 0 { d["minimum"] = range.lowerBound }
+            if let range { d["maximum"] = range.upperBound }
+            if let options { d["enum"] = options }
+            return d
         }
     }
 
@@ -33,6 +53,13 @@ public struct OperationSpec: Sendable, Identifiable {
     public var edits: Bool
 
     public var id: String { name }
+
+    /// `params` as a JSON Schema object (SIBLINGS.md §3).
+    public var schema: [String: Any] {
+        var props: [String: Any] = [:]
+        for p in params { props[p.name] = p.schema }
+        return ["type": "object", "properties": props, "required": params.filter(\.required).map(\.name), "additionalProperties": false]
+    }
 
     init(_ name: String, _ title: String, _ description: String, params: [Param] = [], paid: Bool = false, edits: Bool = true) {
         self.name = name
@@ -95,6 +122,13 @@ public enum Operations {
         .init("correct_word", "Correct Word", "Changes how a word is spelled in the transcript. The audio doesn't change.",
               params: [.init("word", .string, "The word's id.", required: true),
                        .init("text", .string, "The corrected text.", required: true)]),
+        .init("echo", "Echo", "Adds a feedback echo to the range (the whole document without a range or selection), bounced into a new file per track; the original audio is untouched and one undo brings it back. With `tail`, the document grows after the range so the echoes ring out.",
+              params: [.init("delay", .seconds, "Time between repeats in seconds, 0.02–2.", required: true, range: 0.02...2),
+                       .init("feedback", .number, "How much of each repeat comes back, 0–0.95. Default 0.4.", range: 0...0.95),
+                       .init("mix", .number, "Level of the echoes against the original, 0–1. Default 0.35; 0 changes nothing.", range: 0...1),
+                       start, end,
+                       .init("tracks", .list, "Track ids to change. Default: every track."),
+                       .init("tail", .boolean, "Make room after the range for the echoes to ring out. Default false.")]),
         .init("remove_tempo_change", "Remove Tempo Change", "Removes the tempo change at exactly `at` (see `tempo.changes` in the document). The first one can't be removed, only changed with `set_tempo`.",
               params: [.init("at", .seconds, "Position of the change in seconds.", required: true)]),
     ]
@@ -165,12 +199,18 @@ public struct EditState: Sendable {
     public var selection: Range<Frame>?
     public var playhead: Frame
     public var clipboard: ClipboardContent?
+    /// For steps that render audio (echo): where sources are read and new files written.
+    public var pool: SourcePool?
+    public var media: URL?
 
-    public init(project: Project, selection: Range<Frame>? = nil, playhead: Frame = 0, clipboard: ClipboardContent? = nil) {
+    public init(project: Project, selection: Range<Frame>? = nil, playhead: Frame = 0, clipboard: ClipboardContent? = nil,
+                pool: SourcePool? = nil, media: URL? = nil) {
         self.project = project
         self.selection = selection
         self.playhead = playhead
         self.clipboard = clipboard
+        self.pool = pool
+        self.media = media
     }
 }
 
@@ -243,6 +283,9 @@ public enum StepRunner {
             case .seconds, .number:
                 guard let d = value.double, d.isFinite else { throw StepFailure("\(step.op): \"\(key)\" must be a number.") }
                 if p.kind == .seconds, d < 0 { throw StepFailure("\(step.op): \"\(key)\" can't be negative.") }
+                if let r = p.range, !r.contains(d) {
+                    throw StepFailure("\(step.op): \"\(key)\" must be between \(r.lowerBound.formatted()) and \(r.upperBound.formatted()).")
+                }
             case .string:
                 guard let s = value.string else { throw StepFailure("\(step.op): \"\(key)\" must be a string.") }
                 if let options = p.options, !options.contains(s) {
@@ -395,6 +438,24 @@ public enum StepRunner {
             do { try s.project.correctWord(id, to: text) } catch {
                 throw StepFailure("correct_word: no word with id \(id.uuidString).", reason: "not_found")
             }
+        case "echo":
+            guard let pool = s.pool, let media = s.media else { throw StepFailure("echo needs the app to render audio.") }
+            let r = try range(wholeIfNone: true); try checkInside(r)
+            var tracks: Set<UUID>?
+            if let ids = p["tracks"]?.strings {
+                var set = Set<UUID>()
+                for t in ids {
+                    guard let id = UUID(uuidString: t), project.tracks.contains(where: { $0.id == id }) else {
+                        throw StepFailure("echo: no track with id \(t).", reason: "not_found")
+                    }
+                    set.insert(id)
+                }
+                tracks = set
+            }
+            let e = Echo(delay: p["delay"]?.double ?? 0.3, feedback: p["feedback"]?.double ?? 0.4, mix: p["mix"]?.double ?? 0.35)
+            let tail = p["tail"].map { $0 == .bool(true) } ?? false
+            s.project = try s.project.applyingEcho(e, range: r, tracks: tracks, tail: tail, pool: pool, media: media)
+            return ["tailSeconds": tail ? (project.seconds(e.tail(sampleRate: project.sampleRate)) * 1_000).rounded() / 1_000 : 0]
         case "set_tempo":
             var meter: Meter?
             switch (p["beats"]?.double, p["unit"]?.double) {

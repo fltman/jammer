@@ -146,7 +146,8 @@ final class EditorSession {
     /// Runs steps from the menu, the palette or an agent. All or nothing: a
     /// failure leaves the document as it was. One undo step.
     func run(_ steps: [Step], action: String) async -> [StepResult] {
-        let start = EditState(project: project, selection: selection, playhead: playhead, clipboard: AppClipboard.content)
+        let start = EditState(project: project, selection: selection, playhead: playhead, clipboard: AppClipboard.content,
+                              pool: pool, media: MediaStore.folder)
         let pool = self.pool
         let (results, end) = await Task.detached(priority: .userInitiated) { () -> ([StepResult], EditState) in
             var s = start

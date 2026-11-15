@@ -131,6 +131,10 @@ A transcript is a view of the edit: it always reads what plays now. Each word ha
 
 Look, listen, then repair. `GET …/analysis/restoration` tells you whether there is hum, clipping or clicks. `POST …/restore/preview` with `Accept: application/json` gives the numbers before and after for a short stretch, so you can check that a repair helps (and that `amount` isn't too much) without listening. `POST …/restore` then runs it as a job. `dehum` finds 50 or 60 Hz by itself; pass `humFrequency` if it says `no_hum` and you know better. `amount` blends between the original (0) and the full repair (1). Use `tracks` to repair one speaker in a multitrack recording.
 
+## Sibling apps
+
+Glimmer and Flimmer call Jämmer the same way you do (see their own guides). They add `X-Sibling: <slug>`; Jämmer logs it and shows "Requested by …" in the window, and it gives no extra rights. `GET /api/v1/operations` lists every op with `params` as a JSON Schema, plus `paid`, `undoable` and `startsJob`, so an assistant can turn them into tools named `jammer.<op>`.
+
 ## Operations
 
 These are the `op` values for `steps`, with their `params`. The same list is available as JSON from `GET /api/v1/operations`.
@@ -316,6 +320,20 @@ Changes how a word is spelled in the transcript. The audio doesn't change.
 |---|---|---|
 | `word` | string | **Required.** The word's id. |
 | `text` | string | **Required.** The corrected text. |
+
+### `echo`
+
+Adds a feedback echo to the range (the whole document without a range or selection), bounced into a new file per track; the original audio is untouched and one undo brings it back. With `tail`, the document grows after the range so the echoes ring out.
+
+| Param | Type | Description |
+|---|---|---|
+| `delay` | seconds | **Required.** Time between repeats in seconds, 0.02–2. |
+| `feedback` | number | How much of each repeat comes back, 0–0.95. Default 0.4. |
+| `mix` | number | Level of the echoes against the original, 0–1. Default 0.35; 0 changes nothing. |
+| `start` | seconds | Range start in seconds. With `end`, overrides the selection. |
+| `end` | seconds | Range end in seconds. |
+| `tracks` | list | Track ids to change. Default: every track. |
+| `tail` | boolean | Make room after the range for the echoes to ring out. Default false. |
 
 ### `remove_tempo_change`
 

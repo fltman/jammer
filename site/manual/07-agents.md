@@ -34,3 +34,9 @@ An agent can never start recording.
 Jämmer uses port 9003 when it's free, otherwise the first free port from 9301 to 9319. The splash always shows the address in use. Glimmer and Flimmer use their own ports, so all three can run at once.
 
 The full API is described in the [agent guide](../agents.md).
+
+## Glimmer and Flimmer
+
+Jämmer's sibling apps can ask it for things through the same local API, for example Flimmer's Copilot: "turn up the volume and add an echo to this clip". Flimmer sends the clip's audio to Jämmer, the steps run in a Jämmer window you can see (one undo step, the status bar says "Requested by Flimmer"), and Flimmer gets the result back as a new take. The document stays open in Jämmer so you can carry on by hand.
+
+What siblings can ask Jämmer for: every operation in its list (cut, gain, normalize, fades, echo, removing words, and the rest), plus measuring loudness, transcribing and repairing audio. They can't start recording, delete your files or change settings, and asking gives them no rights an agent wouldn't have.

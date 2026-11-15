@@ -37,3 +37,7 @@ Gain at exactly 0 dB leaves the samples bit-exact.
 ## Clips
 
 Every edit that cuts through audio splits it into clips. You see clip edges as thin lines in the lanes. Double-click a clip to select it.
+
+## Echo
+
+The `echo` operation (for agents and sibling apps; a menu entry comes later) adds a feedback echo: `delay` between repeats (0.02–2 s), `feedback` (how much comes back, up to 0.95) and `mix` (how loud the echoes are). The audio in the range is rendered into a new file per track with the echo, so the original stays untouched and one undo removes it. With `tail`, Jämmer makes room after the range so the echoes can ring out.

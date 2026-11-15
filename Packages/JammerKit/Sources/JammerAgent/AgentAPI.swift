@@ -237,14 +237,11 @@ public enum AgentAPI {
 
     // MARK: Operations
 
+    /// GET /api/v1/operations, in the series' shape (SIBLINGS.md §3): params as JSON Schema.
     public static var operations: [[String: Any]] {
         Operations.all.map { op in
-            ["name": op.name, "title": op.title, "description": op.description, "paid": op.paid, "edits": op.edits,
-             "params": op.params.map { p -> [String: Any] in
-                 var d: [String: Any] = ["name": p.name, "type": p.kind.rawValue, "description": p.description, "required": p.required]
-                 if let o = p.options { d["options"] = o }
-                 return d
-             }]
+            ["name": op.name, "description": op.description, "params": op.schema,
+             "paid": op.paid, "undoable": op.edits, "startsJob": false]
         }
     }
 
@@ -387,6 +384,10 @@ public enum AgentAPI {
         ## Restoration
 
         Look, listen, then repair. `GET …/analysis/restoration` tells you whether there is hum, clipping or clicks. `POST …/restore/preview` with `Accept: application/json` gives the numbers before and after for a short stretch, so you can check that a repair helps (and that `amount` isn't too much) without listening. `POST …/restore` then runs it as a job. `dehum` finds 50 or 60 Hz by itself; pass `humFrequency` if it says `no_hum` and you know better. `amount` blends between the original (0) and the full repair (1). Use `tracks` to repair one speaker in a multitrack recording.
+
+        ## Sibling apps
+
+        Glimmer and Flimmer call Jämmer the same way you do (see their own guides). They add `X-Sibling: <slug>`; Jämmer logs it and shows "Requested by …" in the window, and it gives no extra rights. `GET /api/v1/operations` lists every op with `params` as a JSON Schema, plus `paid`, `undoable` and `startsJob`, so an assistant can turn them into tools named `jammer.<op>`.
 
         ## Operations
 

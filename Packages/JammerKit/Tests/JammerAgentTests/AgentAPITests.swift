@@ -349,3 +349,64 @@ struct RestoreRequestTests {
         #expect(r.status == 422 && json["error"]?["reason"] as? String == "no_hum" && json["error"]?["code"] as? String == "unprocessable")
     }
 }
+
+@Suite("Siblings")
+struct SiblingTests {
+    @Test("/api/v1/operations has the series' shape with JSON Schema params")
+    func operationsShape() throws {
+        let ops = AgentAPI.operations
+        #expect(!ops.isEmpty)
+        for op in ops {
+            #expect(Set(op.keys) == ["name", "description", "params", "paid", "undoable", "startsJob"], "\(op["name"] ?? "?")")
+            let schema = try #require(op["params"] as? [String: Any])
+            #expect(schema["type"] as? String == "object")
+            #expect(schema["properties"] is [String: Any])
+            #expect(schema["required"] is [String])
+        }
+        let echo = try #require(ops.first { $0["name"] as? String == "echo" })
+        let props = (echo["params"] as! [String: Any])["properties"] as! [String: [String: Any]]
+        #expect(props["delay"]?["type"] as? String == "number")
+        #expect(props["delay"]?["minimum"] as? Double == 0.02 && props["delay"]?["maximum"] as? Double == 2)
+        #expect(props["feedback"]?["maximum"] as? Double == 0.95)
+        #expect(props["tracks"]?["type"] as? String == "array")
+        #expect(props["tail"]?["type"] as? String == "boolean")
+        #expect((echo["params"] as! [String: Any])["required"] as? [String] == ["delay"])
+        let gain = try #require(ops.first { $0["name"] as? String == "gain" })
+        #expect(gain["undoable"] as? Bool == true && gain["paid"] as? Bool == false && gain["startsJob"] as? Bool == false)
+        _ = try JSONSerialization.data(withJSONObject: ["operations": ops])
+    }
+
+    @Test("Out-of-range numbers fail before anything runs; echo needs the app")
+    func echoStep() {
+        #expect(throws: StepFailure.self) { try StepRunner.validate(Step(op: "echo", params: ["delay": .number(3)])) }
+        #expect(throws: StepFailure.self) { try StepRunner.validate(Step(op: "echo", params: ["delay": .number(0.3), "feedback": .number(1)])) }
+        let info = AudioFileInfo(container: .wav, sampleFormat: .float32, bigEndian: false, channels: 2, sampleRate: 48_000,
+                                 channelMask: nil, dataOffset: 0, frames: 48_000, chunks: [], bext: nil, ixml: nil, markers: [])
+        var s = EditState(project: Project(source: SourceRef(name: "t", path: "/dev/null", info: info)))
+        let r = StepRunner.run([Step(op: "echo", params: ["delay": .number(0.3)])], on: &s) { _, _ in
+            LoudnessResult(integrated: nil, range: nil, maxMomentary: nil, maxShortTerm: nil, samplePeak: 0, truePeak: 0, duration: 0)
+        }
+        #expect(r[0].status == .failed)
+    }
+
+    @Test("echo through steps, as a sibling would call it")
+    func echoThroughSteps() throws {
+        let signal = (0..<96_000).map { $0 % 9_600 == 0 ? Float(0.5) : 0 }
+        let info = AudioFileInfo(container: .wav, sampleFormat: .float32, bigEndian: false, channels: 2, sampleRate: 48_000,
+                                 channelMask: nil, dataOffset: 0, frames: 48_000, chunks: [], bext: nil, ixml: nil, markers: [])
+        let ref = SourceRef(name: "t", path: "/dev/null", info: info)
+        let pool = SourcePool()
+        pool.register(ref.id, memory: signal, channels: 2)
+        let media = FileManager.default.temporaryDirectory.appending(path: "jammer-echo-step-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: media) }
+        var s = EditState(project: Project(source: ref), pool: pool, media: media)
+        let steps = [Step(op: "gain", params: ["db": .number(3)]),
+                     Step(op: "echo", params: ["delay": .number(0.25), "feedback": .number(0.3), "mix": .number(0.4), "tail": .bool(true)])]
+        let r = StepRunner.run(steps, on: &s) { _, _ in
+            LoudnessResult(integrated: nil, range: nil, maxMomentary: nil, maxShortTerm: nil, samplePeak: 0, truePeak: 0, duration: 0)
+        }
+        #expect(r.map(\.status) == [.done, .done])
+        #expect(s.project.length > 48_000)
+        #expect(s.project.sources.contains { $0.name.hasSuffix("(echo)") })
+    }
+}

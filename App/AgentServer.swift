@@ -2,6 +2,7 @@ import AppKit
 import JammerAgent
 import JammerCore
 import Network
+import OSLog
 
 // MARK: Open documents
 
@@ -223,8 +224,18 @@ enum AgentRouter {
         }
     }
 
+    static let siblingLog = Logger(subsystem: "com.brattoo.jammer", category: "siblings")
+    static let siblingNames = ["glimmer": "Glimmer", "flimmer": "Flimmer", "jammer": "Jämmer"]
+
     private static func dispatch(_ r: AgentAPI.Request, port: UInt16) async throws -> Response {
         let s = r.segments
+        // A sibling app (SIBLINGS.md): logged and shown, never given extra rights.
+        if let sib = r.headers["x-sibling"]?.lowercased() {
+            siblingLog.notice("\(r.method, privacy: .public) \(r.path, privacy: .public) requested by \(sib, privacy: .public)")
+            if s.count >= 4, s[2] == "documents", let session = AgentRegistry.shared.session(s[3]), r.method != "GET" {
+                session.status = "Requested by \(siblingNames[sib] ?? sib)"
+            }
+        }
         func only(_ methods: String...) throws {
             guard methods.contains(r.method) else {
                 throw APIError(405, "method_not_allowed", "\(r.method) isn't allowed here; use \(methods.joined(separator: " or ")).")
