@@ -296,6 +296,18 @@ extension Project {
         let src = SourceRef(name: "\(tracks[t].name) (drift corrected)", path: url.path, info: try AudioFileReader.info(at: url))
         var p = self
         p.sources.append(src)
+        // Words and speaker turns go to the new file, stretched like the audio.
+        let scale = 1 + ppm / 1_000_000
+        let words = placedWords(in: first..<end).filter { $0.track == t }.map { w -> Word in
+            var w2 = w.word
+            w2.start = Frame((Double(w.start - first) * scale).rounded())
+            w2.end = Frame((Double(w.end - first) * scale).rounded())
+            return w2
+        }
+        if !words.isEmpty {
+            p.setTranscript(SourceTranscript(sourceID: src.id, language: transcripts.first?.language ?? "und", engine: "carried", words: words, speakers: speakers))
+        }
+        p.addCarriedTurns(turnsForBounce(track: t, range: first..<end, scale: scale), to: src.id)
         p.tracks[t].clips = [Clip(sourceID: src.id, start: first, length: src.info.frames)]
         p.pruneSources()
         return p

@@ -94,6 +94,8 @@ extension Restoration {
                 }
                 p.transcripts.append(SourceTranscript(sourceID: newSource.id, language: tr.language, engine: tr.engine, words: words, speakers: tr.speakers))
             }
+            // So do the speaker turns.
+            p.addCarriedTurns(p.turns(of: src.id, in: segment, length: clip.length), to: newSource.id)
             p.tracks[t].clips[c].sourceID = newSource.id
             p.tracks[t].clips[c].sourceStart = 0
         }

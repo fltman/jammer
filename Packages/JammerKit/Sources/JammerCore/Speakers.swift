@@ -154,6 +154,32 @@ extension Project {
         }
     }
 
+    /// The speaker turns of track `t` heard in `range`, in the frames of a new source whose
+    /// frame 0 plays at `range.lowerBound` (stretched by `scale` for a resampled one). For
+    /// effects that bounce a stretch into a new file: the turns go with it, like the words.
+    public func turnsForBounce(track t: Int, range: Range<Frame>, scale: Double = 1) -> [SpeakerTurn] {
+        placedTurns(in: range).filter { $0.track == t }.map {
+            SpeakerTurn(speaker: $0.speaker, start: Frame((Double($0.start - range.lowerBound) * scale).rounded()),
+                        end: Frame((Double($0.end - range.lowerBound) * scale).rounded()))
+        }
+    }
+
+    /// The turns in `segment` of `source` (source frames), shifted to start at 0 and cut to `length`.
+    public func turns(of source: UUID, in segment: Range<Frame>, length: Frame) -> [SpeakerTurn] {
+        (speakerTurns.first { $0.sourceID == source }?.turns ?? []).compactMap { t in
+            let lo = max(0, t.start - segment.lowerBound), hi = min(length, t.end - segment.lowerBound)
+            return hi > lo ? SpeakerTurn(speaker: t.speaker, start: lo, end: hi) : nil
+        }
+    }
+
+    /// Stores carried turns for a new source.
+    public mutating func addCarriedTurns(_ turns: [SpeakerTurn], to source: UUID) {
+        guard !turns.isEmpty else { return }
+        let engine = speakerTurns.first?.engine ?? "carried"
+        speakerTurns.removeAll { $0.sourceID == source }
+        speakerTurns.append(SourceSpeakers(sourceID: source, engine: engine, turns: turns))
+    }
+
     /// Renames a speaker given by index or by its current name.
     public mutating func renameSpeaker(_ key: String, to name: String) throws {
         let i: Int

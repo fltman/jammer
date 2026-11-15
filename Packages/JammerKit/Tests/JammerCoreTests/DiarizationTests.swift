@@ -115,4 +115,81 @@ struct DiarizationTests {
         let rms = (e / 16_000).squareRoot()
         #expect(abs(rms - 0.5 / 2.0.squareRoot()) < 0.01, "only the 1 kHz tone is left: rms \(rms)")
     }
+
+    // MARK: Turns follow bounced audio
+
+    /// Each speaker's turns on a track as merged timeline ranges (bounces split turns at clip edges).
+    private func coverage(_ p: Project, track: Int) -> [Int: [Range<Frame>]] {
+        var out: [Int: [Range<Frame>]] = [:]
+        for t in p.placedTurns().filter({ $0.track == track }).sorted(by: { $0.start < $1.start }) {
+            if let last = out[t.speaker]?.last, t.start <= last.upperBound + 1 {
+                out[t.speaker]![out[t.speaker]!.count - 1] = last.lowerBound..<max(last.upperBound, t.end)
+            } else {
+                out[t.speaker, default: []].append(t.start..<t.end)
+            }
+        }
+        return out
+    }
+
+    private func diarized(_ dir: TempDir) throws -> (Project, SourcePool) {
+        var (p, pool, _) = try doubleEnder(dir)
+        p.applyDiarization(Diarization.byTrack(p, pool: pool, tracks: p.tracks.map(\.id)), engine: "by-track")
+        return (p, pool)
+    }
+
+    private func sameCoverage(_ a: [Int: [Range<Frame>]], _ b: [Int: [Range<Frame>]], tolerance: Frame = 0) -> Bool {
+        guard a.keys.sorted() == b.keys.sorted() else { return false }
+        return a.keys.allSatisfy { k in
+            a[k]!.count == b[k]!.count && zip(a[k]!, b[k]!).allSatisfy { abs($0.lowerBound - $1.lowerBound) <= tolerance && abs($0.upperBound - $1.upperBound) <= tolerance }
+        }
+    }
+
+    @Test("Turns move with a restoration's new file")
+    func turnsThroughRestore() throws {
+        let dir = TempDir()
+        let (p, pool) = try diarized(dir)
+        let before = (coverage(p, track: 0), coverage(p, track: 1))
+        let (q, _) = try Restoration.apply(.init(kind: .dehum, humFrequency: 50), to: p, range: Frame(4 * sr)..<Frame(8 * sr), tracks: [p.tracks[0].id],
+                                           pool: pool, media: dir.url.appending(path: "media"))
+        #expect(q.sources.count > p.sources.count - 0 && q.tracks[0].clips.count == 3)
+        #expect(sameCoverage(coverage(q, track: 0), before.0))
+        #expect(sameCoverage(coverage(q, track: 1), before.1))
+    }
+
+    @Test("Turns move with echo's new file")
+    func turnsThroughEcho() throws {
+        let dir = TempDir()
+        let (p, pool) = try diarized(dir)
+        let before = coverage(p, track: 0)
+        let q = try p.applyingEcho(Echo(delay: 0.2, feedback: 0.3, mix: 0.3), range: Frame(4 * sr)..<Frame(8 * sr), tracks: [p.tracks[0].id], tail: false,
+                                   pool: pool, media: dir.url.appending(path: "media"))
+        #expect(q.tracks[0].clips.count == 3)
+        #expect(sameCoverage(coverage(q, track: 0), before))
+    }
+
+    @Test("Turns move with spectral attenuation's new file")
+    func turnsThroughSpectral() throws {
+        let dir = TempDir()
+        let (p, pool) = try diarized(dir)
+        let before = coverage(p, track: 0)
+        let q = try p.applyingSpectralAttenuation(range: Frame(4 * sr)..<Frame(8 * sr), freq: 1_000...2_000, gainDB: -20, tracks: [p.tracks[0].id],
+                                                  pool: pool, media: dir.url.appending(path: "media"))
+        #expect(q.tracks[0].clips.count == 3)
+        #expect(sameCoverage(coverage(q, track: 0), before))
+    }
+
+    @Test("Turns and words move with drift correction, stretched like the audio")
+    func turnsThroughDrift() throws {
+        let dir = TempDir()
+        var (p, pool) = try diarized(dir)
+        let src = p.tracks[1].clips[0].sourceID
+        p.setTranscript(SourceTranscript(sourceID: src, language: "sv-SE", engine: "t", words: [Word(text: "ja", start: Frame(25 * sr), end: Frame(25.3 * sr))]))
+        let before = coverage(p, track: 1)
+        let q = try p.correctingDrift(of: p.tracks[1].id, ppm: 50, pool: pool, media: dir.url.appending(path: "media"))
+        #expect(q.tracks[1].clips[0].sourceID != src)
+        // 50 ppm over 30 s is 72 frames at most.
+        #expect(sameCoverage(coverage(q, track: 1), before, tolerance: 80))
+        let w = q.placedWords().first { $0.word.text == "ja" }
+        #expect(w != nil && abs(w!.start - Frame(25 * sr)) <= 80 && w!.word.speaker == 1)
+    }
 }

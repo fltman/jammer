@@ -213,13 +213,16 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         }()
     }
 
-    /// Audio › Find Speakers: each track as its speaker for a double-ender, the model otherwise.
+    /// Audio › Find Speakers: each track as its speaker for a double-ender, the model
+    /// otherwise; with a count ("2 Speakers") always the model, told how many.
     @objc func findSpeakers(_ sender: Any?) {
         let p = session.project
         let tracks = p.tracks.filter { !$0.clips.isEmpty }.map(\.id)
         guard !tracks.isEmpty else { return }
-        let byTrack = p.hasOverlappingTracks || Diarization.engine == nil
-        _ = JobRegistry.shared.startDiarization(session, byTrack: byTrack, tracks: tracks, minSpeakers: nil, maxSpeakers: nil)
+        let count = (sender as? NSMenuItem)?.representedObject as? Int
+        guard count == nil || Diarization.engine != nil else { return }
+        let byTrack = count == nil && (p.hasOverlappingTracks || Diarization.engine == nil)
+        _ = JobRegistry.shared.startDiarization(session, byTrack: byTrack, tracks: tracks, minSpeakers: count, maxSpeakers: count)
         session.status = byTrack ? "Finding speakers: one per track…" : "Finding speakers… (the first time downloads the model, about 20 MB)"
     }
 

@@ -141,6 +141,7 @@ extension Project {
                 let lang = transcripts.first?.language ?? "und"
                 p.setTranscript(SourceTranscript(sourceID: src.id, language: lang, engine: "carried", words: mine))
             }
+            p.addCarriedTurns(turnsForBounce(track: t, range: r), to: src.id)
         }
         p.pruneSources()
         return p

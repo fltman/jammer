@@ -149,9 +149,17 @@ final class JobRegistry {
             diarized.applyDiarization(results, engine: engine)
             session?.applySpeakers(from: diarized)
             let seconds = diarized.speakerSeconds()
+            // The model merges similar voices easily (docs/DIARISATION.md); say so rather than
+            // presenting one speaker as the answer.
+            let single = !byTrack && minSpeakers == nil && results.contains { $0.names.count == 1 }
+            let hint = "Only one speaker was found. If more people talk, run it again with the number of speakers: the model often merges voices that sound alike."
+            session?.status = single
+                ? "Found one speaker. If more people talk, choose Audio › Find Speakers › 2 Speakers (or more)."
+                : "Found \(diarized.speakers.count) speaker\(diarized.speakers.count == 1 ? "" : "s")."
             job.status = .done
             job.progress = 1
             job.result = ["mode": .string(byTrack ? "by_track" : "ml"),
+                          "hint": single ? .string(hint) : .null,
                           "speakers": .array(diarized.speakers.map { .string($0) }),
                           "seconds": .array(diarized.speakers.indices.map { .number(((seconds[$0] ?? 0) * 10).rounded() / 10) }),
                           "turns": .number(Double(diarized.placedTurns().count))]

@@ -182,6 +182,7 @@ extension Project {
             p.tracks[t].clips.sort { $0.start < $1.start }
             let mine = words.filter { $0.track == t }.map { w -> Word in var w2 = w.word; w2.start = w.start - r.lowerBound; w2.end = w.end - r.lowerBound; return w2 }
             if !mine.isEmpty { p.setTranscript(SourceTranscript(sourceID: src.id, language: transcripts.first?.language ?? "und", engine: "carried", words: mine)) }
+            p.addCarriedTurns(turnsForBounce(track: t, range: r), to: src.id)
         }
         p.pruneSources()
         return p

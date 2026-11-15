@@ -177,7 +177,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             restoreItem("Reduce Noise…", "denoise"),
             item("Attenuate Frequencies…", #selector(EditorWindowController.attenuateFrequencies(_:)), ""),
             .separator(),
-            item("Find Speakers", #selector(EditorWindowController.findSpeakers(_:)), ""),
+            submenu("Find Speakers", [
+                item("Automatically", #selector(EditorWindowController.findSpeakers(_:)), ""),
+                .separator(),
+            ] + (2...4).map { n in
+                let i = item("\(n) Speakers", #selector(EditorWindowController.findSpeakers(_:)), "")
+                i.representedObject = n
+                return i
+            }),
             item("Plugins…", #selector(EditorWindowController.showPlugins(_:)), "p", [.command, .option, .shift]),
         ]))
         main.addItem(submenu("Transport", [
