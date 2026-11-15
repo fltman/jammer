@@ -38,3 +38,5 @@ Normalizing to a loudness target raises everything by the same amount and doesn'
 ## Jämmer quits or stalls with a plugin on a track
 
 Turn on **Safe mode** under **Audio › Plugins…**. Every plugin then runs in a process of its own, so one that crashes can't take Jämmer with it. If the document crashes Jämmer as soon as it opens, hold off on playing, open **Audio › Plugins…** and switch the plugin off or remove it. See [Plugins](15-plugins.md).
+
+Plugins from developers other than Apple always run in a process of their own: for safety, Jämmer doesn't let other developers' code load into the app itself. That costs a little performance per plugin and keeps a crashing plugin from taking Jämmer down.

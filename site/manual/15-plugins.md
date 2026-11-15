@@ -23,7 +23,7 @@ The original files are never touched; taking a plugin off brings the track back 
 
 ## Plugins are someone else's code
 
-A plugin runs with Jämmer's rights, and a badly behaved one can crash the app. If that happens, turn on **Safe mode** at the bottom of **Audio › Plugins…**: every plugin then runs in a separate process, and a plugin that fails stops processing (the track plays without it) instead of taking Jämmer down. Plugins from developers other than Apple that macOS won't load into Jämmer run that way anyway.
+A plugin runs with Jämmer's rights, and a badly behaved one can crash the app. If that happens, turn on **Safe mode** at the bottom of **Audio › Plugins…**: every plugin then runs in a separate process, and a plugin that fails stops processing (the track plays without it) instead of taking Jämmer down. Plugins from developers other than Apple always run that way, for safety: Jämmer doesn't let other developers' code load into the app itself.
 
 A plugin that isn't installed on this Mac (a document from another computer) is listed with a warning and passes the audio through unchanged; its settings stay in the document for when it's back.
 
