@@ -204,7 +204,7 @@ public enum Operations {
     public static var endpoints: [OperationSpec] { [
         .init("transcribe", "Transcribe", "Transcribes the document on this Mac; words get ids and times. Answers with a job; the transcript lands as one undo step.",
               params: [.init("language", .string, "BCP 47, e.g. sv-SE or en-US. Default: the Mac's language."),
-                       .init("engine", .string, "Recogniser.", options: ["auto", "apple"]),
+                       .init("engine", .string, "Recogniser. auto: KB-Whisper for Swedish when installed, else Parakeet (25 European languages) when installed, else Apple. A model that isn't installed fails with reason model_missing; the user installs models in Jämmer's Settings.", options: ["auto", "apple", "parakeet", "whisper"]),
                        .init("replace", .boolean, "Transcribe again even where there is a transcript.")],
               call: ("POST", "/api/v1/documents/{id}/transcribe"), startsJob: true),
         .init("get_transcript", "Read Transcript", "The words as they play now, with ids, times and confidence.",

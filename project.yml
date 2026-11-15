@@ -49,6 +49,8 @@ targets:
         product: JammerMP3
       - package: JammerKit
         product: JammerDiarize
+      - package: JammerKit
+        product: JammerParakeet
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.brattoo.jammer

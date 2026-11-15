@@ -321,11 +321,15 @@ enum AgentRouter {
                 try only("POST")
                 let body = try json(r)
                 let lang = (body["language"] as? String) ?? Locale.current.identifier(.bcp47)
-                if let e = body["engine"] as? String, !["auto", "apple"].contains(e) {
-                    throw APIError.badRequest("engine must be \"auto\" or \"apple\".")
+                let name = (body["engine"] as? String) ?? "auto"
+                guard let choice = SpeechEngines.Choice(rawValue: name) else {
+                    throw APIError.badRequest("engine must be one of \(SpeechEngines.Choice.allCases.map(\.rawValue).joined(separator: ", ")).")
+                }
+                do { _ = try SpeechEngines.engine(choice, for: Locale(identifier: lang)) } catch let e as SpeechEngines.Unavailable {
+                    throw APIError.unprocessable(e.reason, e.message)
                 }
                 let job = JobRegistry.shared.startTranscription(session, locale: Locale(identifier: lang),
-                                                                replace: body["replace"] as? Bool ?? false)
+                                                                replace: body["replace"] as? Bool ?? false, engine: choice)
                 return .json(["job": job.json], status: 202)
             case ["transcript"]:
                 try only("GET")

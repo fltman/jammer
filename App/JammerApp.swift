@@ -47,6 +47,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                                      forEventClass: AEEventClass(kCoreEventClass), andEventID: AEEventID(kAEOpenDocuments))
     }
 
+    @objc func showSettings(_ sender: Any?) { SettingsWindow.show() }
+
     @objc func handleOpenDocuments(_ event: NSAppleEventDescriptor, reply: NSAppleEventDescriptor) {
         guard let list = event.paramDescriptor(forKeyword: keyDirectObject) else { return }
         let items = list.numberOfItems > 0 ? (1...list.numberOfItems).compactMap { list.atIndex($0) } : [list]
@@ -140,6 +142,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         main.addItem(submenu("Jämmer", [
             item("About Jämmer", #selector(NSApplication.orderFrontStandardAboutPanel(_:)), ""),
+            .separator(),
+            item("Settings…", #selector(AppDelegate.showSettings(_:)), ","),
             .separator(),
             item("Hide Jämmer", #selector(NSApplication.hide(_:)), "h"),
             item("Hide Others", #selector(NSApplication.hideOtherApplications(_:)), "h", [.command, .option]),

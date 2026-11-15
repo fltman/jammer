@@ -168,19 +168,15 @@ final class JobRegistry {
         return job
     }
 
-    func startTranscription(_ session: EditorSession, locale: Locale, replace: Bool) -> Job {
+    func startTranscription(_ session: EditorSession, locale: Locale, replace: Bool, engine choice: SpeechEngines.Choice = .auto) -> Job {
         var job = Job(kind: "transcribe", documentID: session.agentID)
         jobs[job.id] = job
         let project = session.project
         let used = Set(project.tracks.flatMap { $0.clips.map(\.sourceID) })
         let todo = project.sources.filter { src in used.contains(src.id) && (replace || !project.transcripts.contains { $0.sourceID == src.id }) }
         let pool = session.pool
-        // KB-Whisper for Swedish when its model is installed (it scores far better, see
-        // docs/TRANSCRIPTION.md); Apple's recognisers otherwise.
-        let store = ModelStore.standard()
-        let kb = ModelSpec.catalogue.first { store.isInstalled($0) }
-        let engine: any TranscriptionEngine = (locale.language.languageCode?.identifier == "sv" && kb != nil)
-            ? WhisperEngine(model: kb!, path: store.path(for: kb!)) : AppleSpeechEngine()
+        // See SpeechEngines: KB-Whisper for Swedish, then Parakeet, then Apple (docs/TRANSCRIPTION.md).
+        let engine: any TranscriptionEngine = (try? SpeechEngines.engine(choice, for: locale)) ?? AppleSpeechEngine()
         let id = job.id
         let total = Double(todo.reduce(Frame(0)) { $0 + $1.info.frames })
         tasks[id] = Task { [weak self, weak session] in

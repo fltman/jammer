@@ -48,7 +48,7 @@ Goal: open a WAV of several hours, zoom smoothly, play, cut, undo, export bit-ex
 | Built-in assistant, sibling tools, plan impact | Done (`ASSISTANT.md`) |
 | AU hosting: AUv2/AUv3 effect inserts per track in the render worker (not the device thread), fixed 512-frame quanta, latency compensated, reset and pre-roll on seek; settings as full state in the document; safe mode loads every plugin out of process, and in-process failures fall back to it; exports and loudness use units of their own; agent API (`/plugins`, add/set/remove_insert, insert detail) | Done, verified with curl and in the app (Apple's AUPeakLimiter window) |
 | Diarisation: by_track (bleed-aware VAD per track) and ml (FluidAudio, pyannote Community-1 Core ML, CC-BY-4.0); turns anchored in sources, words labelled, rename_speaker, `POST …/diarize`, `GET …/speakers` | Done (`DIARISATION.md`: by_track 3.6 %, easy 1.2 %, hard 59 % / 46 % with the count given) |
-| Parakeet engine | Open |
+| Parakeet engine (v3 via FluidAudio; engine auto/apple/parakeet/whisper; Settings › Models with size and licence) | Done (Swedish 5.1 %, English 0.0 %, ~40× real time; `TRANSCRIPTION.md`) |
 
 Replace the Audio Hijack → RX → Descript → Auphonic chain for speech and podcasts: multitrack for speech with double-ender import, spectrogram view with basic selection, restoration v1 (DeepFilterNet 3 with an amount control; de-click, de-clip, de-hum as DSP), transcription (KB-Whisper, Parakeet, SpeechTranscriber where Swedish is available) with text-based editing, diarisation, filler-word and silence suggestions, loudness presets, export to WAV/BWF, AIFF, FLAC, ALAC, AAC, MP3 (LAME, dynamic) and Opus, chapters, AU hosting, "Edit in Jämmer" from Flimmer, Developer ID + notarisation + Sparkle.
 

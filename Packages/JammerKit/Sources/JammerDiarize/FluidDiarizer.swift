@@ -27,6 +27,19 @@ public final class FluidDiarizer: SpeakerDiarizer, @unchecked Sendable {
             .allSatisfy { FileManager.default.fileExists(atPath: repo.appending(path: $0).path) }
     }
 
+    /// Fetches the five model files now (Settings › Models) instead of on first use.
+    public func install(progress: @escaping @Sendable (Double) -> Void = { _ in }) async throws {
+        ModelRegistry.baseURL = source.absoluteString.hasSuffix("/") ? String(source.absoluteString.dropLast()) : source.absoluteString
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        _ = try await OfflineDiarizerModels.load(from: folder) { p in progress(p.fractionCompleted) }
+        progress(1)
+    }
+
+    public func remove() throws {
+        lock.withLock { managers = [:] }
+        try? FileManager.default.removeItem(at: folder.appending(path: "speaker-diarization"))
+    }
+
     public func diarize(mono16k: [Float], minSpeakers: Int?, maxSpeakers: Int?,
                         progress: @escaping @Sendable (Double) -> Void) async throws -> [DiarizedSegment] {
         let key = "\(minSpeakers ?? 0)-\(maxSpeakers ?? 0)"

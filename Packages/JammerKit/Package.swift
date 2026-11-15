@@ -97,6 +97,7 @@ if hasFluidAudio {
     // trait off. We want none of it: only the diarisation code, with no TTS.
     let fa = "Vendor/FluidAudio/Sources"
     package.products.append(.library(name: "JammerDiarize", targets: ["JammerDiarize"]))
+    package.products.append(.library(name: "JammerParakeet", targets: ["JammerParakeet"]))
     package.targets += [
         .target(name: "FastClusterWrapper", path: fa + "/FastClusterWrapper", publicHeadersPath: "include"),
         .target(name: "MachTaskSelfWrapper", path: fa + "/MachTaskSelfWrapper", publicHeadersPath: "include"),
@@ -104,6 +105,8 @@ if hasFluidAudio {
                 exclude: ["ASR/Parakeet/Unified/benchmark.md"],
                 swiftSettings: [.define("Diarizer")]),
         .target(name: "JammerDiarize", dependencies: ["FluidAudio", "JammerCore"]),
+        .target(name: "JammerParakeet", dependencies: ["FluidAudio", "JammerSpeech", "JammerCore"]),
+        .testTarget(name: "JammerParakeetTests", dependencies: ["JammerParakeet", "JammerSpeech", "JammerCore"]),
         .testTarget(name: "JammerDiarizeTests", dependencies: ["JammerDiarize", "JammerCore"]),
     ]
 }
