@@ -17,7 +17,7 @@
 | A 15 kHz tone | all of it in "other" |
 | Synthetic song (spoken voice, bass line, drum hits), SI-SDR in the mix → in its stem | voice −7.0 → 22.0 dB; bass 6.6 → 31.5 dB; drums −18.4 → −1.6 dB |
 | In the app: mix loudness and true peak before and after separating | −13.85 LUFS, −3.99 dBTP both times |
-| Speed | 8 s of audio in 3.2 s in the package test; 8 s in the debug app |
+| Speed, debug build | 8 s of audio in 3.2 s in the package test; 8 s in the debug app |
 
 ## Soundtracks: MRX
 
@@ -32,9 +32,20 @@
 | Sum of stems minus the mix, across chunk borders | −144 dB |
 | Synthetic scene (spoken voice over a chord and noise bursts), speech SI-SDR in the mix → in its stem, with 3 s chunks | −5.5 → 1.6 dB |
 | In the app, 8 s at 48 kHz stereo: mix loudness and true peak before and after | −16.04 LUFS, −3.78 dBTP both times |
-| Speed, debug build | 28 s for 8 s of stereo; not yet measured in a release build |
+| Speed, debug build | 28 s for 8 s of stereo |
 
 The synthetic scene is a poor stand-in for a film mix (the model was trained on real speech, music and sound effects), so the 1.6 dB says little about real material; it shows the pipeline separates in the right direction. Training-data caveat: see `LICENSES.md`.
+
+## Speed and memory in a release build (2026-11-15, this Mac)
+
+`StemBench` in `StemTests` (`swift test -c release -Xswiftc -enable-testing`), the engines alone on generated 44.1 kHz stereo, under `/usr/bin/time -l`. Peak memory is the test process and includes the input held in memory (about 21 MB per minute); in the app the track being separated is in memory too.
+
+| Model | 1 minute | 10 minutes | Peak memory (1 min / 10 min) |
+|---|---|---|---|
+| music4 (Spleeter, GPU) | 0.9 s (64× real time) | 7.0 s (86×) | 1.8 GB / 1.5 GB |
+| dialog (MRX, CPU) | 6.2 s (9.7×) | 66.8 s (9.0×) | 0.8 GB / 1.9 GB |
+
+Both are well faster than real time, so the job shows its progress and no time estimate. The debug build is much slower (above); the figures here are what a released Jämmer does.
 
 ## Caveats
 

@@ -343,3 +343,30 @@ struct SoundtrackTests {
         #expect(sisdr(stems[0]) > sisdr(mix) + 3)
     }
 }
+
+/// Speed in a release build: `JAMMER_STEM_BENCH=music4|dialog JAMMER_STEM_SECONDS=60 swift test -c release --filter StemBench`
+/// under /usr/bin/time -l for peak memory.
+@Suite("Stem bench", .enabled(if: ProcessInfo.processInfo.environment["JAMMER_STEM_BENCH"] != nil))
+struct StemBench {
+    @Test func bench() throws {
+        let env = ProcessInfo.processInfo.environment
+        let seconds = Double(env["JAMMER_STEM_SECONDS"] ?? "60") ?? 60
+        let n = Int(seconds * 44_100)
+        var x = [Float](repeating: 0, count: n * 2)
+        var seed: UInt64 = 1
+        for i in 0..<n {
+            let t = Double(i) / 44_100
+            seed = seed &* 6_364_136_223_846_793_005 &+ 1
+            let v = Float(0.2 * sin(2 * .pi * 220 * t) + 0.1 * sin(2 * .pi * 1_760 * t)) + Float(Int32(truncatingIfNeeded: seed >> 32)) / 2_147_483_648 * 0.05
+            x[i * 2] = v; x[i * 2 + 1] = v
+        }
+        let engine: StemEngine = env["JAMMER_STEM_BENCH"] == "dialog"
+            ? SoundtrackEngine(try MRXNet(checkpoint: TorchCheckpoint(url: mrxDir!.appending(path: "default_mrx_pre_trained_weights.pth"))))
+            : MaskingEngine(try SpleeterNet(checkpoint: TFCheckpoint(index: spleeterDir!.appending(path: "4stems/model.index"), data: spleeterDir!.appending(path: "4stems/model.data-00000-of-00001"))))
+        let t0 = Date()
+        var frames = 0
+        try engine.separate(x, progress: { _ in true }) { s, b in if s == 0 { frames += b.count / 2 } }
+        let took = Date().timeIntervalSince(t0)
+        print(String(format: "BENCH %@ %.0f s stereo: %.1f s (%.1f× real time), %d frames out", env["JAMMER_STEM_BENCH"]!, seconds, took, seconds / took, frames))
+    }
+}
