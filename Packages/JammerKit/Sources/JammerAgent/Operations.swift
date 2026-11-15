@@ -62,6 +62,12 @@ public struct OperationSpec: Sendable, Identifiable {
 
     public var id: String { name }
 
+    /// The operations an assistant with a small tool budget should get first ("core");
+    /// the rest are "advanced" (SIBLINGS.md §3).
+    public static let core: Set<String> = ["delete", "gain", "fade_in", "fade_out", "normalize", "loudness_preset", "delete_words",
+                                           "echo", "transcribe", "get_transcript", "restore", "measure_loudness", "export", "diarize"]
+    public var tier: String { Self.core.contains(name) ? "core" : "advanced" }
+
     /// Every parameter including the document id in the path, for endpoints; GET parameters go in the query.
     public var allParams: [Param] {
         guard let call else { return params }

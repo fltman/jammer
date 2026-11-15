@@ -512,6 +512,8 @@ enum AgentRouter {
         }
         let doc = controller.open(Project(source: source), name: source.name)
         guard let session = doc.session else { throw APIError.internalError("The document window didn't open.") }
+        // A sibling that makes a document is shown too, not only one that changes it.
+        if let sib = r.headers["x-sibling"]?.lowercased() { session.status = "Requested by \(siblingNames[sib] ?? sib)" }
         return .json(["document": detail(session)], status: 201)
     }
 

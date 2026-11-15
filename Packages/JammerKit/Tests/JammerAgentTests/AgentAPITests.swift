@@ -509,3 +509,14 @@ struct InsertStepTests {
         #expect(r[0].reason == "not_found")
     }
 }
+
+@Suite("Operation tiers")
+struct TierTests {
+    @Test("10–15 core operations, all of them real; every operation has a tier")
+    func tiers() {
+        let all = Operations.all + Operations.endpoints
+        #expect((10...15).contains(OperationSpec.core.count))
+        #expect(OperationSpec.core.isSubset(of: Set(all.map(\.name))))
+        #expect(AgentAPI.operations.allSatisfy { ["core", "advanced"].contains($0["tier"] as? String ?? "") })
+    }
+}
