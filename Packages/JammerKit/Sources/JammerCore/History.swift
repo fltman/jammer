@@ -70,11 +70,14 @@ public struct History: Codable, Sendable, Equatable {
 
     public func project(of id: UUID) throws -> Project {
         guard let n = node(id) else { throw HistoryError.unknownNode }
-        let json = try (n.body as NSData).decompressed(using: .lzfse) as Data
-        var p = try JSONDecoder().decode(Project.self, from: json)
+        // The history travels in the project package, so each state is as untrusted as the project:
+        // expanded under a size limit and checked like one.
+        let limit = ProjectSafety.Limits().bytes
+        let json = try ProjectSafety.decompress(n.body, limit: limit)
+        var p = try ProjectPackage.decodeChecked(json).project
         let dec = JSONDecoder()
-        if let t = blobs[n.transcriptsKey] { p.transcripts = try dec.decode([SourceTranscript].self, from: (t as NSData).decompressed(using: .lzfse) as Data) }
-        if let s = blobs[n.turnsKey] { p.speakerTurns = try dec.decode([SourceSpeakers].self, from: (s as NSData).decompressed(using: .lzfse) as Data) }
+        if let t = blobs[n.transcriptsKey] { p.transcripts = try dec.decode([SourceTranscript].self, from: ProjectSafety.decompress(t, limit: limit)) }
+        if let s = blobs[n.turnsKey] { p.speakerTurns = try dec.decode([SourceSpeakers].self, from: ProjectSafety.decompress(s, limit: limit)) }
         return p
     }
 

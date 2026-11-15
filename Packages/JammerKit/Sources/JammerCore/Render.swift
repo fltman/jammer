@@ -7,8 +7,32 @@ public final class SourcePool: @unchecked Sendable {
     private let lock = NSLock()
     private var open: [UUID: OpaquePointer] = [:]
     private var missingIDs: Set<UUID> = []
+    private var refusedIDs: [UUID: Refusal] = [:]
+    private var policy: (@Sendable (URL) -> Bool)?
+
+    /// Why a source's file isn't used although something is there.
+    public enum Refusal: Sendable, Equatable {
+        /// It lies outside where this document may read (the package and the folders the user allowed).
+        case notAllowed(URL)
+        /// It isn't the audio the project says it is: not a WAV or AIFF, or its header says otherwise.
+        case notAsDescribed(URL)
+    }
 
     public init() {}
+
+    /// Limits which files this pool opens: the real location of each file (symlinks followed)
+    /// is put to `allows`. nil (the default) allows everything, for audio the user picked directly.
+    public func restrict(_ allows: (@Sendable (URL) -> Bool)?) {
+        lock.withLock {
+            policy = allows
+            // Asked again under the new rule.
+            for id in refusedIDs.keys { missingIDs.remove(id) }
+            refusedIDs = [:]
+        }
+    }
+
+    /// Files that are there but weren't used, and why.
+    public var refused: [UUID: Refusal] { lock.withLock { refusedIDs } }
 
     deinit { for (_, s) in open { jm_source_release(s) } }
 
@@ -18,8 +42,29 @@ public final class SourcePool: @unchecked Sendable {
     public func source(for ref: SourceRef) -> OpaquePointer? {
         lock.withLock {
             if let s = open[ref.id] { return s }
-            let url = Self.resolve(ref)
-            guard let s = AudioFileReader.openSource(ref.info, at: url) else {
+            if missingIDs.contains(ref.id) { return nil }
+            let url = Self.real(Self.resolve(ref))
+            if let policy, !policy(url) {
+                refusedIDs[ref.id] = .notAllowed(url)
+                missingIDs.insert(ref.id)
+                return nil
+            }
+            // A project says which bytes of which file are sound. That is never taken on trust: the
+            // file must itself be a WAV or AIFF whose own header says the same, or it could be made to
+            // read any file on the disk as "audio" (and an export would carry it out).
+            guard FileManager.default.fileExists(atPath: url.path) else {
+                missingIDs.insert(ref.id)
+                return nil
+            }
+            guard let actual = try? AudioFileReader.info(at: url), actual.sampleFormat == ref.info.sampleFormat, actual.channels == ref.info.channels,
+                  actual.sampleRate == ref.info.sampleRate, actual.bigEndian == ref.info.bigEndian, actual.dataOffset == ref.info.dataOffset else {
+                refusedIDs[ref.id] = .notAsDescribed(url)
+                missingIDs.insert(ref.id)
+                return nil
+            }
+            var info = ref.info
+            info.frames = min(ref.info.frames, actual.frames)
+            guard let s = AudioFileReader.openSource(info, at: url) else {
                 missingIDs.insert(ref.id)
                 return nil
             }
@@ -37,6 +82,11 @@ public final class SourcePool: @unchecked Sendable {
             open[id].map { jm_source_release($0) }
             open[id] = s
         }
+    }
+
+    /// Where a file really is: symlinks followed all the way.
+    public static func real(_ url: URL) -> URL {
+        realpath(url.path, nil).map { p in defer { free(p) }; return URL(fileURLWithPath: String(cString: p)) } ?? url.standardizedFileURL
     }
 
     public static func resolve(_ ref: SourceRef) -> URL {

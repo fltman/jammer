@@ -20,13 +20,26 @@ public enum ProjectPackage {
         return try e.encode(project)
     }
 
-    public static func decode(_ data: Data) throws -> Project {
+    /// A project from bytes, checked (`ProjectSafety`): refused when it can't be a project,
+    /// repaired where it can be.
+    public static func decode(_ data: Data) throws -> Project { try decodeChecked(data).project }
+
+    public static func decodeChecked(_ data: Data, limits: ProjectSafety.Limits = .init()) throws -> (project: Project, notes: [String]) {
+        guard data.count <= limits.bytes else { throw AudioFileError.unreadable("The project file is \(data.count >> 20) MB, larger than any real project.") }
         struct Version: Decodable { var formatVersion: Int }
-        let v = try JSONDecoder().decode(Version.self, from: data)
-        guard v.formatVersion <= Project.formatVersion else {
-            throw AudioFileError.unsupported("This project was saved by a newer Jammer (format \(v.formatVersion)).")
+        var project: Project
+        do {
+            let v = try JSONDecoder().decode(Version.self, from: data)
+            guard v.formatVersion <= Project.formatVersion else {
+                throw AudioFileError.unsupported("This project was saved by a newer Jammer (format \(v.formatVersion)).")
+            }
+            project = try JSONDecoder().decode(Project.self, from: data)
+        } catch let e as AudioFileError { throw e } catch {
+            // The decoder's own words are about keys and types; say what it means for the user.
+            throw AudioFileError.unreadable("The project file is damaged or cut off and can't be opened.")
         }
-        return try JSONDecoder().decode(Project.self, from: data)
+        let notes = try ProjectSafety.check(&project, limits: limits)
+        return (project, notes)
     }
 
     /// The package as a FileWrapper. Media files already inside are kept by reference.
@@ -36,21 +49,41 @@ public enum ProjectPackage {
         return FileWrapper(directoryWithFileWrappers: children)
     }
 
-    public static func read(_ wrapper: FileWrapper, packageURL: URL?) throws -> Project {
-        guard let manifest = wrapper.fileWrappers?[manifestName]?.regularFileContents else {
+    public static func read(_ wrapper: FileWrapper, packageURL: URL?) throws -> Project { try readChecked(wrapper, packageURL: packageURL).project }
+
+    /// The file name of a source kept in the package, when `packagePath` is what Jämmer writes
+    /// ("Media/<name>") and nothing else: no "..", no further folders, nothing absolute.
+    static func mediaName(_ packagePath: String) -> String? {
+        let parts = packagePath.split(separator: "/", omittingEmptySubsequences: false).map(String.init)
+        guard parts.count == 2, parts[0] == mediaFolderName, !parts[1].isEmpty, parts[1] != ".", parts[1] != "..", !parts[1].contains("\0") else { return nil }
+        return parts[1]
+    }
+
+    /// Reads the package and says what had to be left out. A source "in the package" is one that
+    /// really is: a plain file directly in Media/, not a link, and not a path that climbs out.
+    public static func readChecked(_ wrapper: FileWrapper, packageURL: URL?) throws -> (project: Project, notes: [String]) {
+        guard wrapper.isDirectory, let manifestWrapper = wrapper.fileWrappers?[manifestName], manifestWrapper.isRegularFile,
+              let manifest = manifestWrapper.regularFileContents else {
             throw AudioFileError.unreadable("The project has no \(manifestName).")
         }
-        var project = try decode(manifest)
-        // Sources stored inside the package move with it.
-        if let packageURL {
-            for i in project.sources.indices {
-                if let rel = project.sources[i].packagePath {
-                    project.sources[i].path = packageURL.appending(path: rel).path
-                    project.sources[i].bookmark = nil
-                }
+        var (project, notes) = try decodeChecked(manifest)
+        let media = wrapper.fileWrappers?[mediaFolderName]
+        var outside = 0
+        for i in project.sources.indices {
+            guard let rel = project.sources[i].packagePath else { continue }
+            project.sources[i].bookmark = nil
+            // Media must be a real folder in the package and the file a real file in it.
+            if let name = mediaName(rel), let media, media.isDirectory, let file = media.fileWrappers?[name], file.isRegularFile, let packageURL {
+                project.sources[i].path = packageURL.appending(path: mediaFolderName).appending(path: name).path
+            } else {
+                // Said to be inside the package but isn't: not looked for anywhere else.
+                project.sources[i].path = ""
+                project.sources[i].packagePath = nil
+                outside += 1
             }
         }
-        return project
+        if outside > 0 { notes.append("\(outside) audio file\(outside == 1 ? "" : "s") said to be inside the project \(outside == 1 ? "isn't" : "aren't") there (or the path points out of it) and \(outside == 1 ? "was" : "were") left out.") }
+        return (project, notes)
     }
 }
 
