@@ -17,3 +17,20 @@
 - Probe on synthetic speech (macOS voice Alva, sv_SE, 6.8 s): 18 of 19 words right; "ljudredigering" came out as "ju redigering" with confidence 0.70/0.50, against 0.8–0.9 for the words it got right. Low confidence is worth showing.
 
 The app asks `supportedLocales` at run time (the list changes with OS updates) and picks SpeechTranscriber, then DictationTranscriber, for the document's language. KB-Whisper (better Swedish word error rate, see the research report) and Parakeet TDT v3 come next as downloadable engines; their licences are in `LICENSES.md`.
+
+## Measuring engines
+
+`JAMMER_BENCH=1 swift test --filter TranscriptionBenchmark` speaks 14 Swedish podcast-style sentences with the macOS voice Alva at 180 and 230 words a minute and scores each engine with word error rate (`WordErrorRate`: substitutions, deletions and insertions over reference words, after lower-casing and removing punctuation; å, ä and ö count). The scorer is checked first against known cases (jiwer's "hello world" → "hello duck" = 50 %, one substitution plus one deletion in six words, insertions) and against a brute-force edit distance on random word lists.
+
+Synthetic speech is clean and evenly paced, so these numbers flatter every engine; they're for comparing engines with each other, not for promising accuracy on real recordings.
+
+### Results, 2026-11-15 (macOS 27.2.1)
+
+| Engine | Speech | Words | S / D / I | WER |
+|---|---|---|---|---|
+| Apple dictation (sv-SE) | Alva, 180 wpm | 118 | 6 / 3 / 2 | 9.3 % |
+| Apple dictation (sv-SE) | Alva, 230 wpm | 118 | 12 / 2 / 2 | 13.6 % |
+
+All: 11.4 % WER over 236 words; 84 s of audio in 3.8 s (22× real time, including starting the recogniser for each sentence). Some errors are only formatting: numbers come out as digits ("en minut" → "1 minut", "sexton" → "16"), which the scorer counts as substitutions. Real errors: "podd" → "tåg", "LUFS" → "luft", "Kapitelmarkeringar" → "Kapitel marar", and dropped "och".
+
+KB-Whisper (small, then medium) is next in this table; it becomes the default for Swedish only if it scores better here. Its model files are listed with size and SHA-256 in `JammerSpeech/Models.swift` and download from a configurable source (Hugging Face by default) into `Application Support/Jammer/Models` (`JAMMER_MODELS_DIR` during development), verified before use. The runtime, whisper.cpp (MIT), has no prebuilt Apple binary in its releases, so it has to be compiled from source; that's waiting for a go-ahead.
