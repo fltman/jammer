@@ -239,9 +239,11 @@ public enum AgentAPI {
 
     /// GET /api/v1/operations, in the series' shape (SIBLINGS.md §3): params as JSON Schema.
     public static var operations: [[String: Any]] {
-        Operations.all.map { op in
-            ["name": op.name, "description": op.description, "params": op.schema,
-             "paid": op.paid, "undoable": op.edits, "startsJob": false]
+        (Operations.all + Operations.endpoints).map { op in
+            var d: [String: Any] = ["name": op.name, "description": op.description, "params": op.schema,
+                                    "paid": op.paid, "undoable": op.edits, "startsJob": op.startsJob]
+            if let call = op.call { d["call"] = ["method": call.method, "path": call.path] }
+            return d
         }
     }
 

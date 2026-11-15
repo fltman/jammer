@@ -51,6 +51,9 @@ public struct OperationSpec: Sendable, Identifiable {
     public var paid: Bool
     /// Changes the document (and so lands in undo).
     public var edits: Bool
+    /// An endpoint of its own rather than a step: how to call it, and whether it answers with a job.
+    public var call: (method: String, path: String)?
+    public var startsJob: Bool
 
     public var id: String { name }
 
@@ -61,13 +64,16 @@ public struct OperationSpec: Sendable, Identifiable {
         return ["type": "object", "properties": props, "required": params.filter(\.required).map(\.name), "additionalProperties": false]
     }
 
-    init(_ name: String, _ title: String, _ description: String, params: [Param] = [], paid: Bool = false, edits: Bool = true) {
+    init(_ name: String, _ title: String, _ description: String, params: [Param] = [], paid: Bool = false, edits: Bool = true,
+         call: (method: String, path: String)? = nil, startsJob: Bool = false) {
         self.name = name
         self.title = title
         self.description = description
         self.params = params
         self.paid = paid
         self.edits = edits
+        self.call = call
+        self.startsJob = startsJob
     }
 }
 
@@ -131,6 +137,35 @@ public enum Operations {
                        .init("tail", .boolean, "Make room after the range for the echoes to ring out. Default false.")]),
         .init("remove_tempo_change", "Remove Tempo Change", "Removes the tempo change at exactly `at` (see `tempo.changes` in the document). The first one can't be removed, only changed with `set_tempo`.",
               params: [.init("at", .seconds, "Position of the change in seconds.", required: true)]),
+    ]
+
+    /// Work that has an endpoint of its own (jobs, analysis, listening), described the same
+    /// way so agents and assistants see one list. Not valid in `steps`.
+    static let restoreParams: [OperationSpec.Param] = [
+        .init("kind", .string, "The repair.", required: true, options: Restoration.Kind.allCases.map(\.rawValue)),
+        .init("amount", .number, "Blend between the original (0) and the full repair (1). Default 1.", range: 0...1),
+        start, end,
+        .init("tracks", .list, "Track ids to repair. Default: every track."),
+        .init("humFrequency", .number, "dehum: the mains frequency; without it 50 or 60 Hz is found.", range: 20...400),
+        .init("sensitivity", .number, "declick: higher finds quieter clicks. Default 1.", range: 0.1...10),
+    ]
+    public static let endpoints: [OperationSpec] = [
+        .init("transcribe", "Transcribe", "Transcribes the document on this Mac; words get ids and times. Answers with a job; the transcript lands as one undo step.",
+              params: [.init("language", .string, "BCP 47, e.g. sv-SE or en-US. Default: the Mac's language."),
+                       .init("engine", .string, "Recogniser.", options: ["auto", "apple"]),
+                       .init("replace", .boolean, "Transcribe again even where there is a transcript.")],
+              call: ("POST", "/api/v1/documents/{id}/transcribe"), startsJob: true),
+        .init("get_transcript", "Read Transcript", "The words as they play now, with ids, times and confidence.",
+              params: [start, end], edits: false, call: ("GET", "/api/v1/documents/{id}/transcript")),
+        .init("measure_loudness", "Measure Loudness", "Integrated LUFS, loudness range, max momentary and short-term, sample and true peak.",
+              params: [start, end], edits: false, call: ("GET", "/api/v1/documents/{id}/analysis")),
+        .init("analyze_restoration", "Find Problems", "Looks for mains hum, clipping and clicks without changing anything.",
+              params: [start, end, .init("tracks", .list, "Track ids (query: comma-separated).")], edits: false,
+              call: ("GET", "/api/v1/documents/{id}/analysis/restoration")),
+        .init("restore_preview", "Preview Repair", "The repaired audio of at most 30 s, without changing the document; with Accept: application/json the measurements before and after.",
+              params: restoreParams, edits: false, call: ("POST", "/api/v1/documents/{id}/restore/preview")),
+        .init("restore", "Repair", "Removes hum, repairs clipping, removes clicks or reduces noise. Answers with a job; one undo step brings the original back.",
+              params: restoreParams, call: ("POST", "/api/v1/documents/{id}/restore"), startsJob: true),
     ]
 
     public static func named(_ name: String) -> OperationSpec? { all.first { $0.name == name } }

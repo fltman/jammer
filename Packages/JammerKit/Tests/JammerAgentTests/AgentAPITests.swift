@@ -357,7 +357,8 @@ struct SiblingTests {
         let ops = AgentAPI.operations
         #expect(!ops.isEmpty)
         for op in ops {
-            #expect(Set(op.keys) == ["name", "description", "params", "paid", "undoable", "startsJob"], "\(op["name"] ?? "?")")
+            let keys: Set<String> = ["name", "description", "params", "paid", "undoable", "startsJob"]
+            #expect(Set(op.keys) == keys || Set(op.keys) == keys.union(["call"]), "\(op["name"] ?? "?")")
             let schema = try #require(op["params"] as? [String: Any])
             #expect(schema["type"] as? String == "object")
             #expect(schema["properties"] is [String: Any])
@@ -408,5 +409,26 @@ struct SiblingTests {
         #expect(r.map(\.status) == [.done, .done])
         #expect(s.project.length > 48_000)
         #expect(s.project.sources.contains { $0.name.hasSuffix("(echo)") })
+    }
+}
+
+
+@Suite("Endpoints in the operation list")
+struct EndpointListTests {
+    @Test("Jobs and analysis are listed with call and startsJob; steps have no call")
+    func endpoints() throws {
+        let ops = AgentAPI.operations
+        let restore = try #require(ops.first { $0["name"] as? String == "restore" })
+        #expect(restore["startsJob"] as? Bool == true)
+        #expect((restore["call"] as? [String: String]) == ["method": "POST", "path": "/api/v1/documents/{id}/restore"])
+        let analysis = try #require(ops.first { $0["name"] as? String == "analyze_restoration" })
+        #expect((analysis["call"] as? [String: String])?["method"] == "GET" && analysis["startsJob"] as? Bool == false)
+        #expect(ops.first { $0["name"] as? String == "transcribe" }?["startsJob"] as? Bool == true)
+        #expect(ops.first { $0["name"] as? String == "gain" }?["call"] == nil)
+        // The restore schema and the body parser accept exactly the same fields.
+        let props = Set(((restore["params"] as! [String: Any])["properties"] as! [String: Any]).keys)
+        #expect(props == RestoreRequest.keys)
+        // Endpoints aren't steps.
+        #expect(throws: StepFailure.self) { try StepRunner.validate(Step(op: "restore", params: [:])) }
     }
 }
