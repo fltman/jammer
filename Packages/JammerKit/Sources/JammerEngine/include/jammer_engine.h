@@ -111,6 +111,16 @@ bool jm_render(const jm_plan *_Nonnull plan, int64_t start, int64_t frames, floa
 typedef struct jm_unit jm_unit;
 jm_unit *_Nonnull jm_unit_create(AudioUnit _Nonnull unit, int32_t channels, void *_Nullable context,
                                  void (*_Nullable release)(void *_Nullable context));
+/// An effect that isn't an Audio Unit (a VST 3 or CLAP plugin held by a helper process).
+/// `process` gets planar input and writes planar output, `channels` × `frames` floats each
+/// (channel c at c × frames), and returns false when the block wasn't processed; the chain then
+/// lets the input through, delayed by the unit's latency so the track stays in time. It is
+/// called from the render worker or an offline render, never the device thread, and may block.
+jm_unit *_Nonnull jm_unit_create_processor(int32_t channels, void *_Nullable context,
+                                           bool (*_Nonnull process)(void *_Nullable context, const float *_Nonnull in, float *_Nonnull out,
+                                                                    int32_t channels, int32_t frames),
+                                           void (*_Nullable reset)(void *_Nullable context),
+                                           void (*_Nullable release)(void *_Nullable context));
 void jm_unit_release(jm_unit *_Nullable unit);
 
 typedef struct jm_chain jm_chain;

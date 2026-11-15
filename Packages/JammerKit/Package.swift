@@ -83,7 +83,7 @@ let package = Package(
 // Scanning VST 3 and CLAP plugins in a helper process, so a plugin that crashes or hangs
 // while it is loaded can't touch the app.
 package.products.append(.library(name: "JammerPlugins", targets: ["JammerPlugins"]))
-package.targets.append(.target(name: "JammerPlugins", dependencies: ["JammerCore"]))
+package.targets.append(.target(name: "JammerPlugins", dependencies: ["JammerCore", "JammerEngine"]))
 if hasCLAP {
     package.products.append(.executable(name: "jammer-plugin-probe", targets: ["PluginProbe"]))
     package.products.append(.executable(name: "jammer-plugin-host", targets: ["PluginHostHelper"]))
@@ -99,7 +99,7 @@ if hasCLAP {
                 linkerSettings: [.linkedFramework("CoreFoundation")]),
         // The process that holds one plugin while it works (one per plugin).
         .executableTarget(name: "PluginHostHelper", dependencies: ["JammerPluginHost"], path: "Sources/PluginHostHelper"),
-        .testTarget(name: "JammerPluginHostTests", dependencies: ["JammerPluginHost", "JammerPlugins", "PluginHostHelper"]),
+        .testTarget(name: "JammerPluginHostTests", dependencies: ["JammerPluginHost", "JammerPlugins", "PluginHostHelper", "JammerCore", "JammerEngine"]),
     ]
 }
 

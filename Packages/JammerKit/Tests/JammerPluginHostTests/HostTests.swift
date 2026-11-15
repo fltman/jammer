@@ -2,6 +2,8 @@ import Foundation
 import Testing
 import JammerPluginHost
 import JammerPlugins
+import JammerCore
+import JammerEngine
 
 /// A real CLAP effect, compiled for the test: a gain with a 64-sample delay (so it has
 /// latency), one automatable parameter, one read-only one, and saved state.
@@ -441,5 +443,207 @@ struct HostProcessTests {
         #expect(message { try start(try TestEffect.build("Dies", defines: ["CRASH_ON_INIT"], in: dir)) } == "The plugin crashed while it was being loaded.")
         #expect(message { try PluginHostProcess(helper: dir.appending(path: "none"), format: .clap, bundle: bundle, id: "x", sampleRate: 48_000, channels: 2) } == "The plugin host helper is missing.")
         #expect(message { try PluginHostProcess(helper: Self.helper, format: .vst3, bundle: bundle, id: "x", sampleRate: 48_000, channels: 2) } == "This build can't host vst3 plugins yet.")
+    }
+}
+
+/// A helper must never be left behind.
+@Suite("Helpers don't outlive what started them")
+struct OrphanTests {
+    func alive(_ pid: Int32) -> Bool { kill(pid, 0) == 0 }
+
+    @Test("When the process that started a helper is killed, the helper ends by itself, also with its input still open")
+    func parentKilled() throws {
+        // A stand-in for the app: a shell that starts the helper and then just sits there. The test
+        // holds the helper's input open, so the only thing that can end the helper is the watcher.
+        let app = Process(), input = Pipe(), output = Pipe()
+        app.executableURL = URL(fileURLWithPath: "/bin/sh")
+        app.arguments = ["-c", "\"$0\" <&0 & echo $!; exec sleep 1000", HostProcessTests.helper.path]
+        app.standardInput = input
+        app.standardOutput = output
+        try app.run()
+        var line = Data()
+        while let b = try output.fileHandleForReading.read(upToCount: 1), b != Data([10]) { line.append(b) }
+        let helper = try #require(Int32(String(decoding: line, as: UTF8.self)))
+        usleep(300_000)
+        #expect(alive(helper) && alive(app.processIdentifier))
+        kill(app.processIdentifier, SIGKILL)
+        app.waitUntilExit()
+        var waited = 0.0
+        while alive(helper), waited < 5 { usleep(100_000); waited += 0.1 }
+        #expect(!alive(helper), "the helper is still running \(waited) s after its parent was killed")
+        _ = input   // kept open until here on purpose
+    }
+
+    @Test("Letting go of the plugin object ends its helper")
+    func released() throws {
+        let dir = FileManager.default.temporaryDirectory.appending(path: "jammer-hostp-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        var pids: [Int32] = []
+        do {
+            let bundle = try TestEffect.build("Fx", in: dir)
+            let hosts = try (0..<4).map { _ in try PluginHostProcess(helper: HostProcessTests.helper, format: .clap, bundle: bundle, id: "com.brattoo.test.fx", sampleRate: 48_000, channels: 2) }
+            pids = hosts.map(\.processIdentifier)
+            #expect(pids.allSatisfy(alive))
+            // Also when it is held by an engine unit: the unit's release lets it go.
+            _ = PluginHostUnit(hosts[0])
+        }
+        usleep(500_000)
+        #expect(pids.allSatisfy { !alive($0) })
+    }
+}
+
+/// The helper process in the engine's insert chain, where it will run: latency compensated,
+/// sample for sample, and a dead helper leaves the track in time.
+@Suite("A hosted plugin in the engine's chain")
+struct ChainTests {
+    /// Puts one hosted plugin on every track that has inserts.
+    final class Provider: ChainProvider {
+        let unit: PluginHostUnit
+        let latency: Int64
+        init(_ host: PluginHostProcess) { unit = PluginHostUnit(host); latency = Int64(host.latency) }
+        func attachChain(for track: Track, to plan: OpaquePointer, index: Int32) -> Int64? {
+            let chain = jm_chain_create(2, 4_096)
+            jm_chain_add(chain, unit.unit, latency)
+            jm_plan_set_chain(plan, index, chain)
+            jm_chain_release(chain)
+            return latency
+        }
+    }
+
+    func film(seconds: Double = 4) -> (Project, SourcePool, [Float]) {
+        let n = Int(seconds * 48_000)
+        // Not periodic in 64 samples, so a shift by the plugin's latency can't hide.
+        let x = (0..<n).flatMap { i -> [Float] in let v = Float(sin(Double(i) * 0.0137) * 0.4 + sin(Double(i) * 0.211) * 0.1); return [v, -v * 0.5] }
+        let info = AudioFileInfo(container: .wav, sampleFormat: .float32, bigEndian: false, channels: 2, sampleRate: 48_000,
+                                 channelMask: nil, dataOffset: 0, frames: Int64(n), chunks: [], bext: nil, ixml: nil, markers: [])
+        let ref = SourceRef(name: "t", path: "/dev/null", info: info)
+        let pool = SourcePool()
+        pool.register(ref.id, memory: x, channels: 2)
+        var p = Project(source: ref)
+        // Any insert makes the compiler ask the provider for a chain.
+        p.tracks[0].inserts = [Insert(plugin: .init(type: 1, subtype: 2, manufacturer: 3), name: "Hosted")]
+        return (p, pool, x)
+    }
+
+    func host(_ dir: URL, defines: [String] = [], timeout: Double = 20) throws -> PluginHostProcess {
+        try PluginHostProcess(helper: HostProcessTests.helper, format: .clap, bundle: try TestEffect.build("Fx\(defines.count)", defines: defines, in: dir),
+                              id: "com.brattoo.test.fx", sampleRate: 48_000, channels: 2, timeout: timeout)
+    }
+
+    @Test("An export with a plugin of known latency lines up sample for sample with one without")
+    func latency() throws {
+        let dir = FileManager.default.temporaryDirectory.appending(path: "jammer-hostp-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let (p, pool, x) = film()
+        let h = try host(dir)
+        #expect(h.latency == 64 && h.set(7, to: 0.5))
+        let plain = PlanCompiler.compile(p, pool: pool).render(from: 0, frames: Int(p.length))
+        #expect(plain == x)
+        let provider = Provider(h)
+        let with = PlanCompiler.compile(p, pool: pool, inserts: provider).render(from: 0, frames: Int(p.length))
+        // The plugin delays by 64 and halves; in the export only the halving is left, at every sample.
+        #expect(with.count == plain.count && with == plain.map { $0 * 0.5 })
+        // From the middle, and in odd block sizes: the same samples as the whole export has there.
+        let plan = PlanCompiler.compile(p, pool: pool, inserts: provider)
+        let mid = plan.render(from: 50_001, frames: 30_000)
+        #expect(mid == Array(with[(50_001 * 2)..<(80_001 * 2)]))
+        var pieces: [Float] = []
+        var at: Frame = 0
+        for n in [1, 777, 512, 5_000, 63, 64, 65] { pieces += plan.render(from: at, frames: n); at += Frame(n) }
+        #expect(pieces == Array(with[0..<pieces.count]))
+    }
+
+    @Test("The helper dies in the middle of an export: the rest is the unprocessed sound, still in time", arguments: ["CRASH_AT_BLOCK=40", "HANG_AT_BLOCK=40"])
+    func dies(how: String) throws {
+        let dir = FileManager.default.temporaryDirectory.appending(path: "jammer-hostp-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let (p, pool, x) = film()
+        let h = try host(dir, defines: [how], timeout: 1)
+        #expect(h.set(7, to: 0.5))
+        let out = PlanCompiler.compile(p, pool: pool, inserts: Provider(h)).render(from: 0, frames: Int(p.length))
+        #expect(h.died == (how.hasPrefix("CRASH") ? .crashed(signal: SIGABRT) : .hung))
+        // Halved while the plugin lived, then exactly what went in, with no jump in time where it died.
+        let firstPlain = (0..<out.count).first { out[$0] != x[$0] * 0.5 }!
+        #expect(firstPlain > 10_000 && firstPlain < 60_000, "died at sample \(firstPlain / 2)")
+        #expect(Array(out[firstPlain...]) == Array(x[firstPlain...]))
+        #expect(Array(out[..<firstPlain]) == x[..<firstPlain].map { $0 * 0.5 })
+    }
+}
+
+/// How long a block takes through the pipe (JAMMER_PLUGIN_BENCH=1; numbers are printed, not asserted).
+@Suite("Plugin host timing", .enabled(if: ProcessInfo.processInfo.environment["JAMMER_PLUGIN_BENCH"] != nil), .serialized)
+struct HostTiming {
+    func stats(_ times: [Double]) -> String {
+        let t = times.sorted()
+        return String(format: "mean %.3f ms, median %.3f, p99 %.3f, max %.3f", t.reduce(0, +) / Double(t.count) * 1000, t[t.count / 2] * 1000, t[Int(Double(t.count) * 0.99)] * 1000, t.last! * 1000)
+    }
+
+    /// One 512-frame block through `plugins` in series (a chain on one track), `blocks` times.
+    func chain(_ plugins: [PluginHostProcess], blocks: Int, pace: Double? = nil) -> [Double] {
+        let n = 512
+        let a = (0..<2).map { _ in UnsafeMutablePointer<Float>.allocate(capacity: n) }, b = (0..<2).map { _ in UnsafeMutablePointer<Float>.allocate(capacity: n) }
+        defer { (a + b).forEach { $0.deallocate() } }
+        for c in 0..<2 { for i in 0..<n { a[c][i] = Float(i) / 1024; b[c][i] = 0 } }
+        let ins = UnsafeMutablePointer<UnsafePointer<Float>>.allocate(capacity: 2), outs = UnsafeMutablePointer<UnsafeMutablePointer<Float>>.allocate(capacity: 2)
+        defer { ins.deallocate(); outs.deallocate() }
+        var times: [Double] = []
+        let start = Date()
+        for k in 0..<blocks {
+            if let pace {
+                let due = start.addingTimeInterval(Double(k) * pace)
+                let wait = due.timeIntervalSinceNow
+                if wait > 0 { usleep(UInt32(wait * 1_000_000)) }
+            }
+            let t0 = DispatchTime.now().uptimeNanoseconds
+            var flip = false
+            for p in plugins {
+                for c in 0..<2 { ins[c] = UnsafePointer(flip ? b[c] : a[c]); outs[c] = flip ? a[c] : b[c] }
+                p.process(ins, outs, frames: n)
+                flip.toggle()
+            }
+            times.append(Double(DispatchTime.now().uptimeNanoseconds - t0) / 1e9)
+        }
+        return times
+    }
+
+    @Test("Round trip per block", arguments: [48_000.0, 96_000.0])
+    func timing(rate: Double) throws {
+        let dir = FileManager.default.temporaryDirectory.appending(path: "jammer-hostp-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let bundle = try TestEffect.build("Fx", in: dir)
+        func make(_ n: Int) throws -> [PluginHostProcess] {
+            try (0..<n).map { _ in try PluginHostProcess(helper: HostProcessTests.helper, format: .clap, bundle: bundle, id: "com.brattoo.test.fx", sampleRate: rate, channels: 2) }
+        }
+        let block = 512 / rate
+        print(String(format: "BENCH %.0f Hz: a 512-frame block lasts %.2f ms", rate, block * 1000))
+        for n in [1, 8, 24] {
+            let t0 = Date()
+            let plugins = try make(n)
+            let started = Date().timeIntervalSince(t0)
+            _ = chain(plugins, blocks: 200)
+            // As fast as it goes (an export), then paced like playback, then paced while an export runs beside it.
+            let flat = chain(plugins, blocks: 3_000)
+            let paced = chain(plugins, blocks: 600, pace: block)
+            let others = try make(n)
+            let stop = DispatchSemaphore(value: 0)
+            final class Flag: @unchecked Sendable { var done = false }
+            let flag = Flag()
+            Thread.detachNewThread { [self] in
+                while !flag.done { _ = chain(others, blocks: 50) }
+                stop.signal()
+            }
+            let busy = chain(plugins, blocks: 600, pace: block)
+            flag.done = true
+            stop.wait()
+            let per = flat.reduce(0, +) / Double(flat.count) / Double(n)
+            print(String(format: "BENCH %.0f Hz, %2d plugins in a chain (started in %.2f s): per plugin %.3f ms = %.1f %% of a block", rate, n, started, per * 1000, per / block * 100))
+            print("BENCH   export speed:        ", stats(flat), String(format: "→ %.0f× real time", block / (flat.reduce(0, +) / Double(flat.count))))
+            print("BENCH   playback pace:       ", stats(paced), String(format: "(%.1f %% of the block at p99)", paced.sorted()[Int(Double(paced.count) * 0.99)] / block * 100))
+            print("BENCH   playback + an export:", stats(busy), String(format: "(%.1f %% of the block at p99; %d of %d blocks over a whole block)", busy.sorted()[Int(Double(busy.count) * 0.99)] / block * 100, busy.filter { $0 > block }.count, busy.count))
+        }
     }
 }

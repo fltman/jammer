@@ -21,6 +21,7 @@
 #include <cstdio>
 #include <cstring>
 #include <string>
+#include <thread>
 #include <unistd.h>
 #include <vector>
 
@@ -79,6 +80,16 @@ int main() {
     // and point fd 1 at stderr for everything else.
     out = dup(1);
     dup2(2, 1);
+    // Never outlive Jämmer. Normally its end closes our input and the loop below ends; but a
+    // plugin stuck in its own code would never get there, so a watcher ends the process the
+    // moment the parent is gone (the parent id changes when it dies).
+    const pid_t parent = getppid();
+    std::thread([parent] {
+        for (;;) {
+            if (getppid() != parent) _exit(0);
+            usleep(250'000);
+        }
+    }).detach();
     jph_plugin *plugin = nullptr;
     int32_t channels = 2, maxFrames = 512;
     std::vector<uint8_t> payload;

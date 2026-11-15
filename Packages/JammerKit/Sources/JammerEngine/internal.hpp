@@ -42,9 +42,15 @@ struct Clip {
 struct Plan;
 class Renderer;
 
-/// An Audio Unit and the input its render callback hands it.
+/// One effect in a chain: an Audio Unit and the input its render callback hands it, or a
+/// processor the caller supplies (a plugin that lives in a helper process).
 struct Unit {
     AudioUnit unit = nullptr;
+    /// Set instead of `unit`: planar in and out, `channels` × `frames` floats each (channel c at
+    /// c × frames). False when the block wasn't processed. Called from the render worker or an
+    /// offline render, never the device thread, and may block.
+    bool (*process)(void *context, const float *in, float *out, int32_t channels, int32_t frames) = nullptr;
+    void (*reset)(void *context) = nullptr;
     int32_t channels = 1;
     void *context = nullptr;
     void (*release)(void *) = nullptr;
@@ -57,7 +63,15 @@ struct Unit {
 /// A track's insert chain and its stream state. Used by one render at a time (locked).
 struct Chain {
     static constexpr int64_t kQuantum = 512;
-    struct Entry { std::shared_ptr<Unit> unit; int64_t latency; };
+    struct Entry {
+        std::shared_ptr<Unit> unit;
+        int64_t latency;
+        /// The last `latency` frames that went in (planar ring, per channel). When the unit fails,
+        /// its input comes out through this, so the track stays in time with the others: the
+        /// chain has already been compensated for the unit's latency.
+        std::vector<float> held;
+        int64_t heldAt = 0;
+    };
 
     int32_t channels;
     int64_t preroll;

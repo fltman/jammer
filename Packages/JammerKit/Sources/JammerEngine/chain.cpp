@@ -49,7 +49,12 @@ Chain::Chain(int32_t channels, int64_t preroll) : channels(channels), preroll(st
 Chain::~Chain() { std::free(list_); }
 
 void Chain::reset(int64_t start) {
-    for (auto &e : units) AudioUnitReset(e.unit->unit, kAudioUnitScope_Global, 0);
+    for (auto &e : units) {
+        if (e.unit->unit) AudioUnitReset(e.unit->unit, kAudioUnitScope_Global, 0);
+        else if (e.unit->reset) e.unit->reset(e.unit->context);
+        std::fill(e.held.begin(), e.held.end(), 0.0f);
+        e.heldAt = 0;
+    }
     sampleTime_ = 0;
     inCursor_ = start - preroll;
     discard_ = preroll + latency;
@@ -69,25 +74,46 @@ void Chain::produce(const Plan &plan, int32_t track, Renderer &renderer) {
     ts.mFlags = kAudioTimeStampSampleTimeValid;
     for (auto &e : units) {
         Unit &u = *e.unit;
-        u.feed = a_.data();
-        u.feedFrames = q;
-        for (int32_t c = 0; c < channels; ++c) {
-            list_->mBuffers[c].mNumberChannels = 1;
-            list_->mBuffers[c].mDataByteSize = UInt32(q * sizeof(float));
-            list_->mBuffers[c].mData = b_.data() + c * q;
+        bool ok;
+        if (u.process) {
+            ok = u.process(u.context, a_.data(), b_.data(), channels, int32_t(q));
+            if (!ok) status.store(-1, std::memory_order_relaxed);
+        } else {
+            u.feed = a_.data();
+            u.feedFrames = q;
+            for (int32_t c = 0; c < channels; ++c) {
+                list_->mBuffers[c].mNumberChannels = 1;
+                list_->mBuffers[c].mDataByteSize = UInt32(q * sizeof(float));
+                list_->mBuffers[c].mData = b_.data() + c * q;
+            }
+            AudioUnitRenderActionFlags flags = 0;
+            const OSStatus err = AudioUnitRender(u.unit, &flags, &ts, 0, UInt32(q), list_);
+            u.feed = nullptr;
+            ok = err == noErr;
+            if (!ok) status.store(err, std::memory_order_relaxed);
+            if (ok) {
+                for (int32_t c = 0; c < channels; ++c) {
+                    const float *got = static_cast<const float *>(list_->mBuffers[c].mData);
+                    if (got && got != b_.data() + c * q) std::memcpy(b_.data() + c * q, got, size_t(q) * sizeof(float));
+                }
+            }
         }
-        AudioUnitRenderActionFlags flags = 0;
-        const OSStatus err = AudioUnitRender(u.unit, &flags, &ts, 0, UInt32(q), list_);
-        u.feed = nullptr;
-        if (err != noErr) {
-            status.store(err, std::memory_order_relaxed);
-            continue; // pass the input through
+        // Remember what went in, and when the unit failed let that through, as late as the unit
+        // would have been: the chain is compensated for its latency whether it works or not.
+        if (e.latency > 0) {
+            for (int64_t i = 0; i < q; ++i) {
+                for (int32_t c = 0; c < channels; ++c) {
+                    float &slot = e.held[size_t(c * e.latency + e.heldAt)];
+                    const float in = a_[size_t(c * q + i)];
+                    if (!ok) b_[size_t(c * q + i)] = slot;
+                    slot = in;
+                }
+                e.heldAt = (e.heldAt + 1) % e.latency;
+            }
+            std::swap(a_, b_);
+        } else if (ok) {
+            std::swap(a_, b_);
         }
-        for (int32_t c = 0; c < channels; ++c) {
-            const float *got = static_cast<const float *>(list_->mBuffers[c].mData);
-            if (got && got != b_.data() + c * q) std::memcpy(b_.data() + c * q, got, size_t(q) * sizeof(float));
-        }
-        std::swap(a_, b_);
     }
     sampleTime_ += double(q);
     inCursor_ += q;
@@ -127,6 +153,17 @@ jm_unit *jm_unit_create(AudioUnit unit, int32_t channels, void *context, void (*
     return new jm_unit{std::move(u)};
 }
 
+jm_unit *jm_unit_create_processor(int32_t channels, void *context, bool (*process)(void *, const float *, float *, int32_t, int32_t),
+                                  void (*reset)(void *), void (*release)(void *)) {
+    auto u = std::make_shared<Unit>();
+    u->channels = std::max(1, channels);
+    u->context = context;
+    u->process = process;
+    u->reset = reset;
+    u->release = release;
+    return new jm_unit{std::move(u)};
+}
+
 void jm_unit_release(jm_unit *unit) { delete unit; }
 
 jm_chain *jm_chain_create(int32_t channels, int64_t preroll) {
@@ -134,8 +171,11 @@ jm_chain *jm_chain_create(int32_t channels, int64_t preroll) {
 }
 
 void jm_chain_add(jm_chain *chain, jm_unit *unit, int64_t latency) {
-    chain->ptr->units.push_back(Chain::Entry{unit->ptr, std::max<int64_t>(0, latency)});
-    chain->ptr->latency += std::max<int64_t>(0, latency);
+    const int64_t l = std::max<int64_t>(0, latency);
+    Chain::Entry e{unit->ptr, l, {}, 0};
+    e.held.assign(size_t(l * chain->ptr->channels), 0.0f);
+    chain->ptr->units.push_back(std::move(e));
+    chain->ptr->latency += l;
 }
 
 void jm_chain_release(jm_chain *chain) { delete chain; }
