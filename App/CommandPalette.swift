@@ -31,6 +31,12 @@ enum CommandPalette {
             .init(id: "collect", title: "Collect Audio and Save", detail: "File: copy every file the project plays from into it", shortcut: "") {
                 NSApp.sendAction(#selector(JammerDocument.collectAudio(_:)), to: nil, from: nil)
             },
+            .init(id: "transcript", title: "Show or Hide Transcript", detail: "View", shortcut: "⌥⌘T") {
+                NSApp.sendAction(#selector(EditorWindowController.toggleTranscript(_:)), to: nil, from: nil)
+            },
+            .init(id: "restore", title: "Restore… (hum, clipping, clicks)", detail: "Audio", shortcut: "") {
+                NSApp.sendAction(#selector(EditorWindowController.showRestore(_:)), to: nil, from: nil)
+            },
             .init(id: "tempo", title: "Set Tempo…", detail: "Audio", shortcut: "") {
                 NSApp.sendAction(#selector(EditorWindowController.setTempo(_:)), to: nil, from: nil)
             },

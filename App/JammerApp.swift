@@ -97,6 +97,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return i
         }
 
+        func restoreItem(_ title: String, _ kind: String) -> NSMenuItem {
+            let i = item(title, #selector(EditorWindowController.showRestore(_:)))
+            i.representedObject = kind
+            return i
+        }
+
         main.addItem(submenu("Jämmer", [
             item("About Jämmer", #selector(NSApplication.orderFrontStandardAboutPanel(_:)), ""),
             .separator(),
@@ -148,6 +154,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             item("Measure Loudness", #selector(EditorWindowController.analyzeLoudness(_:)), "l", [.command, .option]),
             item("Add Marker", #selector(EditorWindowController.addMarker(_:)), "m", [.command, .option]),
             item("Set Tempo…", #selector(EditorWindowController.setTempo(_:)), ""),
+            .separator(),
+            restoreItem("Remove Hum…", "dehum"),
+            restoreItem("Repair Clipping…", "declip"),
+            restoreItem("Remove Clicks…", "declick"),
         ]))
         main.addItem(submenu("Transport", [
             // Space and Return are handled by the timeline, so text fields keep them.
@@ -159,6 +169,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             item("Zoom Out", #selector(EditorWindowController.zoomOut(_:)), "-"),
             item("Zoom to Fit", #selector(EditorWindowController.zoomToFit(_:)), "0"),
             item("Zoom to Selection", #selector(EditorWindowController.zoomToSelection(_:)), "e"),
+            .separator(),
+            item("Show Transcript", #selector(EditorWindowController.toggleTranscript(_:)), "t", [.command, .option]),
             .separator(),
             item("Enter Full Screen", #selector(NSWindow.toggleFullScreen(_:)), "f", [.command, .control]),
         ]))

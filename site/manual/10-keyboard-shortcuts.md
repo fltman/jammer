@@ -51,6 +51,7 @@
 | ⌘+ / ⌘− | Zoom In / Out |
 | ⌘0 | Zoom to Fit |
 | ⌘E | Zoom to Selection |
+| ⌥⌘T | Show or Hide Transcript |
 | ⌃⌘F | Full Screen |
 | ⌘M | Minimize |
 

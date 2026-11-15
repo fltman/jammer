@@ -18,10 +18,12 @@ final class OperationItem: NSObject {
 final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenuItemValidation {
     let session: EditorSession
     let timeline: TimelineView
+    let transcript: TranscriptPanel
 
     init(session: EditorSession) {
         self.session = session
         timeline = TimelineView(session: session)
+        transcript = TranscriptPanel(session: session)
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1_200, height: 640),
                               styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                               backing: .buffered, defer: false)
@@ -36,7 +38,10 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
 
         let transport = NSHostingView(rootView: TransportBar(session: session, timeline: timeline))
         let statusBar = NSHostingView(rootView: StatusBar(session: session))
-        let stack = NSStackView(views: [transport, timeline, statusBar])
+        let stack = NSStackView(views: [transport, timeline, transcript, statusBar])
+        transcript.isHidden = !UserDefaults.standard.bool(forKey: "transcript.visible")
+        transcript.heightAnchor.constraint(equalTo: timeline.heightAnchor, multiplier: 0.45).isActive = true
+        transcript.setContentHuggingPriority(.defaultLow, for: .vertical)
         stack.orientation = .vertical
         stack.spacing = 0
         stack.alignment = .width
@@ -66,6 +71,26 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
     @objc func zoomOut(_ sender: Any?) { timeline.zoom(by: 0.5) }
     @objc func zoomToFit(_ sender: Any?) { timeline.zoomToFit() }
     @objc func zoomToSelection(_ sender: Any?) { timeline.zoomToSelection() }
+
+    @objc func toggleTranscript(_ sender: Any?) {
+        transcript.isHidden.toggle()
+        UserDefaults.standard.set(!transcript.isHidden, forKey: "transcript.visible")
+    }
+
+    @objc func showRestore(_ sender: Any?) {
+        guard let window else { return }
+        let kind = (sender as? NSMenuItem)?.representedObject as? String
+        let model = RestoreModel(session: session, kind: kind.flatMap(Restoration.Kind.init(rawValue:)) ?? .dehum)
+        let host = NSHostingController(rootView: AnyView(EmptyView()))
+        host.rootView = AnyView(RestoreSheet(model: model) { [weak host] in
+            guard let sheet = host?.view.window else { return }
+            window.endSheet(sheet)
+        })
+        window.contentViewController?.presentAsSheet(host) ?? {
+            let sheet = NSWindow(contentViewController: host)
+            window.beginSheet(sheet)
+        }()
+    }
 
     @objc func performOperation(_ sender: Any?) {
         guard let item = (sender as? NSMenuItem)?.representedObject as? OperationItem else { return }
@@ -158,6 +183,13 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
             return session.project.length > 0
         }
         if item.action == #selector(zoomToSelection(_:)) { return session.selection != nil }
+        if item.action == #selector(toggleTranscript(_:)) {
+            item.title = transcript.isHidden ? "Show Transcript" : "Hide Transcript"
+            return true
+        }
+        if item.action == #selector(showRestore(_:)) {
+            return session.project.length > 0 && !(JobRegistry.shared.latest("restore", document: session.agentID).map { !$0.isFinished } ?? false)
+        }
         if item.action == #selector(performOperation(_:)), let op = (item.representedObject as? OperationItem)?.op {
             let needsRange: Set<String> = ["delete", "silence", "crop", "fade_in", "fade_out", "cut", "copy"]
             return !needsRange.contains(op) || session.selection != nil
@@ -223,7 +255,10 @@ struct StatusBar: View {
             } else {
                 Text("No selection")
             }
-            if let status = session.status { Text(status).foregroundStyle(Theme.neonColor).lineLimit(1) }
+            if let job = JobRegistry.shared.running.first(where: { $0.documentID == session.agentID }) {
+                Text("\(job.kind == "transcribe" ? "Transcribing" : "Repairing")… \(Int(job.progress * 100)) %")
+                    .foregroundStyle(Theme.neonColor)
+            } else if let status = session.status { Text(status).foregroundStyle(Theme.neonColor).lineLimit(1) }
             Spacer()
             if !session.missingSources.isEmpty {
                 Label("\(session.missingSources.count) missing file(s)", systemImage: "exclamationmark.triangle").foregroundStyle(.orange)

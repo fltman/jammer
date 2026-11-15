@@ -1,0 +1,262 @@
+import AppKit
+import JammerAgent
+import JammerCore
+import Observation
+
+extension NSAttributedString.Key {
+    /// Index into the panel's placed words.
+    static let jammerWord = NSAttributedString.Key("JammerWord")
+}
+
+/// The transcript under the timeline. It reads what plays now (a view of the edit
+/// list): selecting words selects their audio, Delete removes them, a click moves the
+/// playhead, and the word being played is lit.
+@MainActor
+final class TranscriptPanel: NSView, NSTextViewDelegate {
+    let session: EditorSession
+    private let textView = TranscriptTextView()
+    private let scroll = NSScrollView()
+    private let empty = NSTextField(wrappingLabelWithString: "")
+    private let language = NSPopUpButton()
+    private let transcribeButton = NSButton(title: "Transcribe", target: nil, action: nil)
+    private let progress = NSProgressIndicator()
+    private var placed: [PlacedWord] = []
+    private var ranges: [NSRange] = []
+    private var shownVersion = -1
+    private var litWord: Int?
+    private var updatingSelection = false
+
+    static let languages: [(String, String)] = [
+        ("Swedish", "sv-SE"), ("English (US)", "en-US"), ("English (UK)", "en-GB"), ("German", "de-DE"),
+        ("French", "fr-FR"), ("Spanish", "es-ES"), ("Italian", "it-IT"), ("Portuguese (Brazil)", "pt-BR"),
+    ]
+
+    init(session: EditorSession) {
+        self.session = session
+        super.init(frame: .zero)
+        wantsLayer = true
+        layer?.backgroundColor = Theme.lane.cgColor
+
+        let title = NSTextField(labelWithString: "Transcript")
+        title.font = .systemFont(ofSize: 11, weight: .semibold)
+        title.textColor = Theme.text
+        for (name, code) in Self.languages {
+            language.addItem(withTitle: name)
+            language.lastItem?.representedObject = code
+        }
+        let preferred = UserDefaults.standard.string(forKey: "transcript.language") ?? Locale.current.identifier(.bcp47)
+        if let i = Self.languages.firstIndex(where: { $0.1 == preferred || $0.1.hasPrefix(preferred.prefix(2)) }) { language.selectItem(at: i) }
+        language.controlSize = .small
+        language.setAccessibilityLabel("Transcription language")
+        transcribeButton.target = self
+        transcribeButton.action = #selector(transcribe(_:))
+        transcribeButton.controlSize = .small
+        transcribeButton.bezelStyle = .rounded
+        progress.style = .bar
+        progress.controlSize = .small
+        progress.minValue = 0
+        progress.maxValue = 1
+        progress.isIndeterminate = false
+        progress.isHidden = true
+        progress.widthAnchor.constraint(equalToConstant: 120).isActive = true
+        let header = NSStackView(views: [title, NSView(), progress, language, transcribeButton])
+        header.orientation = .horizontal
+        header.edgeInsets = NSEdgeInsets(top: 6, left: 14, bottom: 6, right: 14)
+        header.setHuggingPriority(.required, for: .vertical)
+
+        textView.isEditable = false
+        textView.isSelectable = true
+        textView.drawsBackground = false
+        textView.textContainerInset = NSSize(width: 10, height: 6)
+        textView.font = .systemFont(ofSize: 14)
+        textView.delegate = self
+        textView.panel = self
+        textView.setAccessibilityLabel("Transcript")
+        scroll.documentView = textView
+        scroll.hasVerticalScroller = true
+        scroll.drawsBackground = false
+        textView.autoresizingMask = [.width]
+        textView.isVerticallyResizable = true
+        textView.textContainer?.widthTracksTextView = true
+
+        empty.textColor = .secondaryLabelColor
+        empty.font = .systemFont(ofSize: 12)
+        empty.alignment = .center
+
+        let stack = NSStackView(views: [header, scroll, empty])
+        stack.orientation = .vertical
+        stack.spacing = 0
+        stack.alignment = .width
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: leadingAnchor), stack.trailingAnchor.constraint(equalTo: trailingAnchor),
+            stack.topAnchor.constraint(equalTo: topAnchor), stack.bottomAnchor.constraint(equalTo: bottomAnchor),
+            heightAnchor.constraint(greaterThanOrEqualToConstant: 110),
+        ])
+        observe()
+        refresh()
+    }
+
+    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+
+    private func observe() {
+        withObservationTracking {
+            _ = session.version
+            _ = session.playhead
+            _ = session.selection
+            _ = JobRegistry.shared.latest("transcribe", document: session.agentID)
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                guard let self else { return }
+                self.refresh()
+                self.observe()
+            }
+        }
+    }
+
+    private func refresh() {
+        if session.version != shownVersion { rebuild() }
+        let job = JobRegistry.shared.latest("transcribe", document: session.agentID)
+        let running = job.map { !$0.isFinished } ?? false
+        progress.isHidden = !running
+        progress.doubleValue = job?.progress ?? 0
+        transcribeButton.isEnabled = !running
+        transcribeButton.title = session.project.transcripts.isEmpty ? "Transcribe" : "Transcribe Again"
+        if placed.isEmpty {
+            empty.isHidden = false
+            scroll.isHidden = true
+            if running {
+                empty.stringValue = "Transcribing on this Mac…"
+            } else if let job, job.status == .failed {
+                empty.stringValue = job.error?.message ?? "Transcription failed."
+            } else {
+                empty.stringValue = "No transcript yet. Choose the language and click Transcribe. Everything runs on this Mac."
+            }
+        } else {
+            empty.isHidden = true
+            scroll.isHidden = false
+        }
+        lightPlayingWord()
+        mirrorSelection()
+    }
+
+    private func rebuild() {
+        shownVersion = session.version
+        // Show the language the transcript is in, once there is one.
+        if let lang = session.project.transcripts.first?.language,
+           let i = Self.languages.firstIndex(where: { $0.1 == lang }) ?? Self.languages.firstIndex(where: { $0.1.prefix(2) == lang.prefix(2) }) {
+            language.selectItem(at: i)
+        }
+        placed = session.project.placedWords()
+        let text = NSMutableAttributedString()
+        ranges = []
+        let normal: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 14), .foregroundColor: NSColor(white: 1, alpha: 0.88)]
+        for (i, w) in placed.enumerated() {
+            if i > 0 { text.append(NSAttributedString(string: " ", attributes: normal)) }
+            var attrs = normal
+            attrs[.jammerWord] = i
+            if w.isPartial { attrs[.foregroundColor] = NSColor(white: 1, alpha: 0.45) }
+            if let c = w.word.confidence, c < 0.6 {
+                // Unsure words: dotted underline, so they're easy to check.
+                attrs[.underlineStyle] = NSUnderlineStyle.single.rawValue | NSUnderlineStyle.patternDot.rawValue
+                attrs[.underlineColor] = Theme.marker
+            }
+            let start = text.length
+            text.append(NSAttributedString(string: w.word.text, attributes: attrs))
+            ranges.append(NSRange(location: start, length: text.length - start))
+        }
+        updatingSelection = true
+        textView.textStorage?.setAttributedString(text)
+        updatingSelection = false
+        litWord = nil
+    }
+
+    /// The word under the playhead gets a soft neon background while playing.
+    private func lightPlayingWord() {
+        guard let lm = textView.layoutManager else { return }
+        let i = session.isPlaying ? wordIndex(at: session.playhead) : nil
+        guard i != litWord else { return }
+        if let old = litWord, old < ranges.count { lm.removeTemporaryAttribute(.backgroundColor, forCharacterRange: ranges[old]) }
+        litWord = i
+        if let i, i < ranges.count {
+            lm.addTemporaryAttribute(.backgroundColor, value: Theme.neon.withAlphaComponent(0.28), forCharacterRange: ranges[i])
+            textView.scrollRangeToVisible(ranges[i])
+        }
+    }
+
+    private func wordIndex(at frame: Frame) -> Int? {
+        var lo = 0, hi = placed.count
+        while lo < hi {
+            let mid = (lo + hi) / 2
+            if placed[mid].end <= frame { lo = mid + 1 } else { hi = mid }
+        }
+        return lo < placed.count && placed[lo].start <= frame ? lo : nil
+    }
+
+    /// A timeline selection shows as selected words.
+    private func mirrorSelection() {
+        guard let sel = session.selection, !placed.isEmpty else { return }
+        let inside = placed.indices.filter { placed[$0].start < sel.upperBound && placed[$0].end > sel.lowerBound }
+        guard let first = inside.first, let last = inside.last else { return }
+        let r = NSRange(location: ranges[first].location, length: NSMaxRange(ranges[last]) - ranges[first].location)
+        guard textView.selectedRange() != r else { return }
+        updatingSelection = true
+        textView.setSelectedRange(r)
+        updatingSelection = false
+    }
+
+    func selectedWordIndices() -> [Int] {
+        let sel = textView.selectedRange()
+        guard sel.length > 0 else { return [] }
+        return ranges.indices.filter { NSIntersectionRange(ranges[$0], sel).length > 0 }
+    }
+
+    func textViewDidChangeSelection(_ notification: Notification) {
+        guard !updatingSelection else { return }
+        let sel = textView.selectedRange()
+        if sel.length == 0 {
+            // A click: the playhead goes to the word.
+            if let i = ranges.firstIndex(where: { NSLocationInRange(sel.location, $0) || NSMaxRange($0) == sel.location }) {
+                session.selection = nil
+                session.seek(placed[i].start)
+            }
+            return
+        }
+        let idx = selectedWordIndices()
+        guard let first = idx.first, let last = idx.last else { return }
+        session.selection = placed[first].start..<placed[last].end
+    }
+
+    /// Delete: the selected words go, with the pauses between them.
+    func deleteSelectedWords() {
+        let ids = selectedWordIndices().map { JSONValue.string(placed[$0].word.id.uuidString) }
+        guard !ids.isEmpty else { NSSound.beep(); return }
+        session.perform("delete_words", ["words": .array(ids), "bridge": .number(0.3)])
+    }
+
+    @objc func transcribe(_ sender: Any?) {
+        let code = language.selectedItem?.representedObject as? String ?? "sv-SE"
+        UserDefaults.standard.set(code, forKey: "transcript.language")
+        _ = JobRegistry.shared.startTranscription(session, locale: Locale(identifier: code), replace: !session.project.transcripts.isEmpty)
+        refresh()
+    }
+}
+
+/// Read-only text that turns Delete into "delete these words".
+final class TranscriptTextView: NSTextView {
+    weak var panel: TranscriptPanel?
+
+    override func keyDown(with event: NSEvent) {
+        if event.keyCode == 51 || event.keyCode == 117 {
+            MainActor.assumeIsolated { panel?.deleteSelectedWords() }
+            return
+        }
+        // Space plays and stops, as on the timeline.
+        if event.charactersIgnoringModifiers == " " {
+            MainActor.assumeIsolated { panel?.session.togglePlay() }
+            return
+        }
+        super.keyDown(with: event)
+    }
+}

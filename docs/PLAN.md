@@ -29,6 +29,18 @@ Goal: open a WAV of several hours, zoom smoothly, play, cut, undo, export bit-ex
 
 ## Phase 1: MVP, the speech and audio editor
 
+| Item | Status |
+|---|---|
+| Licence register for the phase 1 models, read at the source | Done (`LICENSES.md`) |
+| Transcripts as a view of the edit list; text-based deleting and correcting | Done |
+| Apple speech engine (SpeechTranscriber; DictationTranscriber for Swedish) | Done (`TRANSCRIPTION.md`) |
+| Agent API: jobs, transcribe, transcript, delete_words, correct_word | Done, verified with curl |
+| Restoration v1 DSP: de-hum, de-clip, de-click, golden renders | Done |
+| Restoration through new sources; analysis, preview, restore jobs in the API | Done, verified with curl |
+| App: transcript panel, Restore sheet with A/B preview | Done, checked in the app |
+| DeepFilterNet 3 (libDF) with amount control | Waiting for approval to build libDF |
+| KB-Whisper, Parakeet engines; diarisation | Open |
+
 Replace the Audio Hijack → RX → Descript → Auphonic chain for speech and podcasts: multitrack for speech with double-ender import, spectrogram view with basic selection, restoration v1 (DeepFilterNet 3 with an amount control; de-click, de-clip, de-hum as DSP), transcription (KB-Whisper, Parakeet, SpeechTranscriber where Swedish is available) with text-based editing, diarisation, filler-word and silence suggestions, loudness presets, export to WAV/BWF, AIFF, FLAC, ALAC, AAC, MP3 (LAME, dynamic) and Opus, chapters, AU hosting, "Edit in Jämmer" from Flimmer, Developer ID + notarisation + Sparkle.
 
 ## Phase 2: Layers and restoration
