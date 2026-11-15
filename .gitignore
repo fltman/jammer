@@ -1,0 +1,13 @@
+.DS_Store
+.build/
+.swiftpm/
+build/
+DerivedData/
+*.xcodeproj/
+xcuserdata/
+# Research notes contain private paths and stay local.
+research/
+# Never commit secrets.
+.env
+*.p8
+*.pem
