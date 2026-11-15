@@ -146,14 +146,31 @@ public struct Project: Codable, Equatable, Sendable {
     public var tracks: [Track]
     public var markers: [Marker]
     public var sources: [SourceRef]
+    /// Tempo and time signature. Projects saved before it existed open at 120 BPM in 4/4.
+    public var tempo: TempoMap
 
-    public init(sampleRate: Double, channels: Int, tracks: [Track] = [], markers: [Marker] = [], sources: [SourceRef] = []) {
+    public init(sampleRate: Double, channels: Int, tracks: [Track] = [], markers: [Marker] = [], sources: [SourceRef] = [],
+                tempo: TempoMap = TempoMap()) {
         formatVersion = Self.formatVersion
         self.sampleRate = sampleRate
         self.channels = channels
         self.tracks = tracks
         self.markers = markers
         self.sources = sources
+        self.tempo = tempo
+    }
+
+    private enum CodingKeys: String, CodingKey { case formatVersion, sampleRate, channels, tracks, markers, sources, tempo }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        formatVersion = try c.decode(Int.self, forKey: .formatVersion)
+        sampleRate = try c.decode(Double.self, forKey: .sampleRate)
+        channels = try c.decode(Int.self, forKey: .channels)
+        tracks = try c.decode([Track].self, forKey: .tracks)
+        markers = try c.decode([Marker].self, forKey: .markers)
+        sources = try c.decode([SourceRef].self, forKey: .sources)
+        tempo = try c.decodeIfPresent(TempoMap.self, forKey: .tempo) ?? TempoMap()
     }
 
     /// A project with one track playing the whole file.
@@ -171,6 +188,11 @@ public struct Project: Codable, Equatable, Sendable {
 
     public func frames(_ seconds: Double) -> Frame { Frame((seconds * sampleRate).rounded()) }
     public func seconds(_ frames: Frame) -> Double { Double(frames) / sampleRate }
+
+    /// Bar, beat and tick at `frame`.
+    public func musicalPosition(at frame: Frame) -> MusicalPosition { tempo.position(at: frame, sampleRate: sampleRate) }
+    /// The first frame at or after a bar, beat and tick.
+    public func frame(at position: MusicalPosition) throws -> Frame { try tempo.frame(at: position, sampleRate: sampleRate) }
 
     // MARK: Edits (every track, like a waveform editor)
 
@@ -206,6 +228,7 @@ public struct Project: Codable, Equatable, Sendable {
                 if m.position >= range.upperBound { m.position -= Frame(n) }
                 return m
             }
+            tempo.delete(range)
         }
     }
 
@@ -240,6 +263,7 @@ public struct Project: Codable, Equatable, Sendable {
             for j in tracks[i].clips.indices where tracks[i].clips[j].start >= t { tracks[i].clips[j].start += length }
         }
         for j in markers.indices where markers[j].position >= t { markers[j].position += length }
+        tempo.insertGap(at: t, length: length)
     }
 
     /// Inserts copied audio at `t`, pushing what follows to the right.
