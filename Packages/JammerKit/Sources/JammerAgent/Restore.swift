@@ -21,7 +21,6 @@ public struct RestoreRequest: Sendable, Equatable {
             throw .badRequest("kind is required: \(Restoration.Kind.allCases.map(\.rawValue).joined(separator: ", ")).")
         }
         guard let kind = Restoration.Kind(rawValue: k) else {
-            if k == "denoise" { throw .notAvailable("denoise isn't available yet.") }
             throw .badRequest("kind must be one of \(Restoration.Kind.allCases.map(\.rawValue).joined(separator: ", ")).")
         }
         func number(_ key: String) throws(AgentAPI.APIError) -> Double? {
@@ -31,6 +30,7 @@ public struct RestoreRequest: Sendable, Equatable {
             }
             return n.doubleValue
         }
+        if kind == .denoise, Restoration.denoiser == nil { throw .notAvailable("denoise isn't available in this build.") }
         let amount = try number("amount") ?? 1
         guard (0...1).contains(amount) else { throw .badRequest("amount must be between 0 and 1.") }
         let hum = try number("humFrequency")

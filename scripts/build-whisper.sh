@@ -24,10 +24,10 @@ cmake -S "$src" -B "$build" -G Ninja \
 cmake --build "$build" --config Release >> "$build.log"
 # One static library and the public headers.
 stage="$build/stage"
-rm -rf "$stage" && mkdir -p "$stage/include"
+rm -rf "$stage" && mkdir -p "$stage/include/whisper"
 libtool -static -o "$stage/libwhisper-all.a" $(find "$build" -name '*.a' ! -path "*/stage/*") 2>/dev/null
-cp "$src/include/whisper.h" "$src"/ggml/include/*.h "$stage/include/"
-cat > "$stage/include/module.modulemap" <<'MAP'
+cp "$src/include/whisper.h" "$src"/ggml/include/*.h "$stage/include/whisper/"
+cat > "$stage/include/whisper/module.modulemap" <<'MAP'
 module whisper {
     header "whisper.h"
     link "c++"

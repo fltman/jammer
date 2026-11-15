@@ -5,6 +5,8 @@ import PackageDescription
 // whisper.cpp is built from pinned source by scripts/build-whisper.sh; until then the
 // package builds without the Whisper engine.
 let hasWhisper = FileManager.default.fileExists(atPath: Context.packageDirectory + "/Vendor/whisper.xcframework")
+// DeepFilterNet's libDF likewise, from scripts/build-libdf.sh.
+let hasDeepFilter = FileManager.default.fileExists(atPath: Context.packageDirectory + "/Vendor/DeepFilter.xcframework")
 
 let package = Package(
     name: "JammerKit",
@@ -58,5 +60,15 @@ if hasWhisper {
         .target(name: "JammerWhisper", dependencies: ["whisper", "JammerSpeech", "JammerCore"],
                 linkerSettings: [.linkedFramework("Accelerate"), .linkedFramework("Metal"), .linkedFramework("MetalKit"), .linkedLibrary("c++")]),
         .testTarget(name: "JammerWhisperTests", dependencies: ["JammerWhisper", "JammerSpeech", "JammerCore"]),
+    ]
+}
+
+if hasDeepFilter {
+    package.products.append(.library(name: "JammerDenoise", targets: ["JammerDenoise"]))
+    package.targets += [
+        .binaryTarget(name: "DeepFilter", path: "Vendor/DeepFilter.xcframework"),
+        .target(name: "JammerDenoise", dependencies: ["DeepFilter", "JammerCore"],
+                linkerSettings: [.linkedFramework("Security"), .linkedFramework("CoreFoundation"), .linkedFramework("AVFoundation")]),
+        .testTarget(name: "JammerDenoiseTests", dependencies: ["JammerDenoise", "JammerCore"]),
     ]
 }

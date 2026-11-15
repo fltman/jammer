@@ -5,7 +5,11 @@ import Foundation
 /// the processed audio (float WAVs in the media folder). The original files are never
 /// touched, and undo is the previous project value, like every other edit.
 extension Restoration {
-    public enum Kind: String, Sendable, Codable, CaseIterable { case dehum, declip, declick }
+    public enum Kind: String, Sendable, Codable, CaseIterable { case dehum, declip, declick, denoise }
+
+    /// Noise reduction is plugged in by the app (DeepFilterNet through libDF, which the
+    /// core doesn't link): one channel in, the same length out, aligned. nil: not available.
+    nonisolated(unsafe) public static var denoiser: (@Sendable (_ samples: [Float], _ sampleRate: Double, _ amount: Float) -> [Float])?
 
     public struct Settings: Sendable, Equatable {
         public var kind: Kind
@@ -35,12 +39,14 @@ extension Restoration {
         case nothingInRange
         case noHum
         case unreadable(String)
+        case notAvailable
 
         public var errorDescription: String? {
             switch self {
             case .nothingInRange: "There's no audio in that range."
             case .noHum: "No mains hum found (50 or 60 Hz). Give the frequency to remove it anyway."
             case .unreadable(let n): "Can't read \(n)."
+            case .notAvailable: "Noise reduction isn't available in this build."
             }
         }
     }
@@ -104,7 +110,14 @@ extension Restoration {
         var report = ApplyReport()
         // Clicks and clipping need context on both sides; hum filters carry state.
         let window = Frame(sr * 10)
-        let margin: Frame = settings.kind == .dehum ? 0 : Frame(sr * 0.25)
+        // Denoising starts each window with a fresh model, so it gets a second to settle.
+        let margin: Frame = switch settings.kind {
+        case .dehum: 0
+        case .denoise: Frame(sr)
+        default: Frame(sr * 0.25)
+        }
+        let denoise = Restoration.denoiser
+        if settings.kind == .denoise, denoise == nil { throw ApplyError.notAvailable }
         let total = source.info.frames
         func read(_ range: Range<Frame>) throws -> [[Float]] {
             let raw = pool.read(source, from: range.lowerBound, count: range.count)
@@ -156,6 +169,8 @@ extension Restoration {
                     let (o, r) = declip(x, amount: settings.amount, level: clipLevel)
                     y = o
                     report.clippedRuns += r.runs
+                case .denoise:
+                    y = settings.amount == 0 ? x : denoise!(x, sr, settings.amount)
                 case .declick:
                     let (o, r) = declick(x, amount: settings.amount, sensitivity: settings.sensitivity)
                     y = o
