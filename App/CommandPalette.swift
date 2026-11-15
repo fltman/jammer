@@ -28,6 +28,9 @@ enum CommandPalette {
             .init(id: "loud", title: "Measure Loudness", detail: "Analysis", shortcut: "⌥⌘L") {
                 NSApp.sendAction(#selector(EditorWindowController.analyzeLoudness(_:)), to: nil, from: nil)
             },
+            .init(id: "collect", title: "Collect Audio and Save", detail: "File: copy every file the project plays from into it", shortcut: "") {
+                NSApp.sendAction(#selector(JammerDocument.collectAudio(_:)), to: nil, from: nil)
+            },
             .init(id: "tempo", title: "Set Tempo…", detail: "Audio", shortcut: "") {
                 NSApp.sendAction(#selector(EditorWindowController.setTempo(_:)), to: nil, from: nil)
             },

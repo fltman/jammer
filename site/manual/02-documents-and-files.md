@@ -9,9 +9,19 @@ A Jämmer project (`.jammer`) is a small package. Inside is `project.json`, a re
 - **File › Save…** (⌘S) saves; Jämmer also saves automatically as you work, like other Mac apps.
 - **File › Duplicate** (⇧⌘S) makes a copy of the project.
 - **File › Revert to Saved** goes back to the last save.
+- **File › Collect Audio and Save** copies every file the project plays from into the package (see below).
 - **File › Close** (⌘W) closes the window.
 
 If a file the project uses has been moved or deleted, the status bar says how many files are missing, and those clips play as silence.
+
+## Collect audio into the project
+
+**File › Collect Audio and Save** (also in the command palette, ⌘K) makes the project self-contained: every file its clips play from is copied into the package's `Media` folder, and the project plays from those copies from then on. You can then move the `.jammer` file to another disk or Mac, or delete the originals. An untitled project asks where to save first.
+
+- On the same APFS disk a copy is a clone: it's instant and takes no extra space until one of the two files changes. To another disk, it's a full copy.
+- Files decoded from MP3, AAC, FLAC and so on are collected too, so the project no longer depends on `~/Library/Application Support/Jammer/Media`.
+- Files already in the package, and missing files, are left alone. Collecting again only copies what's new.
+- Undo keeps working, and steps from before the collection also play from the copies.
 
 ## Audio files
 

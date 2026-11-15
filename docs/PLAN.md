@@ -2,7 +2,7 @@
 
 Phases from the scoping research (2026-11-15), adopted as decisions. Each phase ships a usable app. Speech, restoration and post come first; MIDI and instruments come no earlier than after phase 3.
 
-## Phase 0: Foundation, the vertical slice (in progress)
+## Phase 0: Foundation, the vertical slice (done)
 
 Goal: open a WAV of several hours, zoom smoothly, play, cut, undo, export bit-exactly, and let an agent do the same.
 
@@ -25,7 +25,7 @@ Goal: open a WAV of several hours, zoom smoothly, play, cut, undo, export bit-ex
 | Audio workgroups | Deferred: the worker renders 340 ms ahead and isn't tied to the device deadline. Joining `kAudioDevicePropertyIOThreadOSWorkgroup` pays off once rendering moves into the device cycle (low-latency monitoring, plugin chains), phase 1–2 |
 | Tempo map in the time model: frame-anchored tempo and time signature, bar.beat.tick, `set_tempo`/`remove_tempo_change` | Done |
 | Multi-hour stress test (`scripts/stress.sh`, results in `docs/STRESS.md`); zoomed-in waveform reads moved off the main thread after it found 150 ms stalls | Done |
-| Collect media into the package ("collect and save") | Open |
+| Collect media into the package: File › Collect Audio and Save copies (clones on APFS) every used source into `Media/`; undo steps follow | Done, verified in the app (original deleted, project plays from its copy) |
 
 ## Phase 1: MVP, the speech and audio editor
 

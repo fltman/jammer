@@ -20,7 +20,9 @@ enum MediaStore {
 /// `JammerDocumentController`), so a WAV is never overwritten by a save.
 final class JammerDocument: NSDocument {
     private(set) var session: EditorSession?
-    private var mediaWrapper: FileWrapper?
+    /// Touched from NSDocument's read/write overrides, which are nonisolated but run
+    /// on the main thread here (no asynchronous reading or writing).
+    nonisolated(unsafe) private var mediaWrapper: FileWrapper?
     /// Set before the window opens for documents created from audio.
     var pendingProject: Project?
 
@@ -84,10 +86,73 @@ final class JammerDocument: NSDocument {
         }
     }
 
+    // MARK: Collect and save
+
+    /// Set by "Collect Audio and Save"; the next save copies the sources into Media/.
+    private var collectOnSave = false
+    nonisolated(unsafe) private var pendingCopies: [ProjectPackage.MediaCopy] = []
+    private var pendingCollected: Project?
+
+    /// Copies every file the project plays from into the package, then saves.
+    /// An untitled project is saved first (the save panel), then collected.
+    @objc func collectAudio(_ sender: Any?) {
+        if fileURL == nil {
+            runModalSavePanel(for: .saveOperation, delegate: self, didSave: #selector(document(_:didSaveForCollect:contextInfo:)), contextInfo: nil)
+        } else {
+            collectOnSave = true
+            save(sender)
+        }
+    }
+
+    @objc private func document(_ document: NSDocument, didSaveForCollect didSave: Bool, contextInfo: UnsafeMutableRawPointer?) {
+        guard didSave else { return }
+        collectOnSave = true
+        save(nil)
+    }
+
     override func fileWrapper(ofType typeName: String) throws -> FileWrapper {
-        let project = MainActor.assumeIsolated { session?.project ?? pendingProject }
-        guard let project else { throw CocoaError(.fileWriteUnknown) }
-        return try ProjectPackage.fileWrapper(project, existingMedia: mediaWrapper)
+        var project = MainActor.assumeIsolated { session?.project ?? pendingProject }
+        guard project != nil else { throw CocoaError(.fileWriteUnknown) }
+        pendingCopies = []
+        pendingCollected = nil
+        if collectOnSave, let p = project {
+            let existing = Set(mediaWrapper?.fileWrappers?.keys.map { $0 } ?? [])
+            let (collected, copies) = ProjectPackage.planCollection(p, existingMedia: existing)
+            project = collected
+            pendingCopies = copies
+            pendingCollected = collected
+        }
+        return try ProjectPackage.fileWrapper(project!, existingMedia: mediaWrapper)
+    }
+
+    override func write(to url: URL, ofType typeName: String, for saveOperation: NSDocument.SaveOperationType,
+                        originalContentsURL absoluteOriginalContentsURL: URL?) throws {
+        try super.write(to: url, ofType: typeName, for: saveOperation, originalContentsURL: absoluteOriginalContentsURL)
+        // project.json already names the copies; put them in place before the save counts.
+        try ProjectPackage.copyMedia(pendingCopies, intoPackage: url)
+    }
+
+    override func save(to url: URL, ofType typeName: String, for saveOperation: NSDocument.SaveOperationType,
+                       completionHandler: @escaping (Error?) -> Void) {
+        super.save(to: url, ofType: typeName, for: saveOperation) { [weak self] error in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                let collecting = self.collectOnSave
+                self.collectOnSave = false
+                if error == nil, collecting, let collected = self.pendingCollected, let package = self.fileURL {
+                    let resolved = ProjectPackage.resolvedInPackage(collected, package: package)
+                    self.mediaWrapper = try? FileWrapper(url: package.appending(path: ProjectPackage.mediaFolderName))
+                    self.session?.adoptCollected(resolved.sources.filter { $0.packagePath != nil })
+                    let n = self.pendingCopies.count
+                    self.session?.status = n == 0 ? "Everything is already in the project." : "Collected \(n) file\(n == 1 ? "" : "s") into the project."
+                } else if let error, collecting {
+                    self.session?.status = "Couldn't collect: \(error.localizedDescription)"
+                }
+                self.pendingCopies = []
+                self.pendingCollected = nil
+            }
+            completionHandler(error)
+        }
     }
 }
 

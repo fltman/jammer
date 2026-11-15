@@ -114,6 +114,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             item("Save…", #selector(NSDocument.save(_:)), "s"),
             item("Duplicate", #selector(NSDocument.duplicate(_:)), "s", [.command, .shift]),
             item("Revert to Saved", #selector(NSDocument.revertToSaved(_:)), ""),
+            item("Collect Audio and Save", #selector(JammerDocument.collectAudio(_:)), ""),
             .separator(),
             item("Export Audio…", #selector(EditorWindowController.exportAudio(_:)), "e", [.command, .shift]),
         ]))

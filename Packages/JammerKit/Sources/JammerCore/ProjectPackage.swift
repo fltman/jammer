@@ -53,3 +53,76 @@ public enum ProjectPackage {
         return project
     }
 }
+
+// MARK: Collect and save
+
+extension ProjectPackage {
+    /// One file to copy into the package's Media folder.
+    public struct MediaCopy: Sendable, Equatable {
+        public var from: URL
+        /// File name inside Media/.
+        public var name: String
+    }
+
+    /// The project with every source its clips use moved into the package, and
+    /// the copies that takes. Sources already inside, and files that are missing,
+    /// are left as they are. `existingMedia` are names already in Media/.
+    public static func planCollection(_ project: Project, existingMedia: Set<String>) -> (project: Project, copies: [MediaCopy]) {
+        var p = project
+        var taken = Set(existingMedia.map { $0.lowercased() })
+        var copies: [MediaCopy] = []
+        let used = Set(project.tracks.flatMap { $0.clips.map(\.sourceID) })
+        for i in p.sources.indices where p.sources[i].packagePath == nil && used.contains(p.sources[i].id) {
+            let url = SourcePool.resolve(p.sources[i])
+            guard FileManager.default.fileExists(atPath: url.path) else { continue }
+            let name = uniqueName(for: url.lastPathComponent, taken: &taken)
+            copies.append(MediaCopy(from: url, name: name))
+            p.sources[i].packagePath = "\(mediaFolderName)/\(name)"
+            p.sources[i].bookmark = nil
+        }
+        return (p, copies)
+    }
+
+    /// Copies into `package`/Media. On APFS a copy on the same volume is a clone and costs no space.
+    public static func copyMedia(_ copies: [MediaCopy], intoPackage package: URL) throws {
+        guard !copies.isEmpty else { return }
+        let media = package.appending(path: mediaFolderName)
+        try FileManager.default.createDirectory(at: media, withIntermediateDirectories: true)
+        for c in copies {
+            let dest = media.appending(path: c.name)
+            if FileManager.default.fileExists(atPath: dest.path) { try FileManager.default.removeItem(at: dest) }
+            do { try FileManager.default.copyItem(at: c.from, to: dest) } catch {
+                throw AudioFileError.unreadable("Couldn't copy \(c.from.lastPathComponent) into the project: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    /// The sources of `project` as they are once the package at `package` holds them.
+    public static func resolvedInPackage(_ project: Project, package: URL) -> Project {
+        var p = project
+        for i in p.sources.indices {
+            if let rel = p.sources[i].packagePath {
+                p.sources[i].path = package.appending(path: rel).path
+                p.sources[i].bookmark = nil
+            }
+        }
+        return p
+    }
+
+    static func uniqueName(for original: String, taken: inout Set<String>) -> String {
+        // Keep names portable: no slashes or colons, no leading dot.
+        var base = original.replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: "-")
+        while base.hasPrefix(".") { base.removeFirst() }
+        if base.isEmpty { base = "audio" }
+        let ext = (base as NSString).pathExtension
+        let stem = (base as NSString).deletingPathExtension
+        var name = base
+        var n = 2
+        while taken.contains(name.lowercased()) {
+            name = ext.isEmpty ? "\(stem) \(n)" : "\(stem) \(n).\(ext)"
+            n += 1
+        }
+        taken.insert(name.lowercased())
+        return name
+    }
+}

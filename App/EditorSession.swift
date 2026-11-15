@@ -75,7 +75,23 @@ final class EditorSession {
         replace(with: newProject)
     }
 
+    /// Sources that now live inside the package. Applied to every project this
+    /// session installs, undo steps included, so undo never points back outside.
+    private var collected: [UUID: SourceRef] = [:]
+
+    /// After "collect and save": these sources are the package's copies from now on.
+    func adoptCollected(_ refs: [SourceRef]) {
+        for r in refs { collected[r.id] = r }
+        replace(with: project)
+    }
+
     private func replace(with newProject: Project) {
+        var newProject = newProject
+        if !collected.isEmpty {
+            for i in newProject.sources.indices {
+                if let r = collected[newProject.sources[i].id] { newProject.sources[i] = r }
+            }
+        }
         project = newProject
         if let s = selection { selection = s.clamped(to: 0..<max(1, project.length)) }
         playhead = min(playhead, project.length)
