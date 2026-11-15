@@ -40,6 +40,23 @@ public struct Origin: Codable, Hashable, Sendable {
     public var trackId: String?
     public var linkedShotId: String?
     public var exportVersion: String?
+    /// The sound of a video clip itself (Flimmer has no audio clip for it): `clipId` is the shot clip's.
+    public var videoAudio: Bool?
+    /// How the clip or track was when it came in, to tell later what has changed.
+    public var snapshot: Snapshot?
+
+    public struct Snapshot: Codable, Hashable, Sendable {
+        public var start: Frame = 0
+        public var sourceStart: Frame = 0
+        public var length: Frame = 0
+        public var gainDB: Double = 0
+        public var fadeIn: Frame = 0
+        public var fadeOut: Frame = 0
+        public var sourceID: UUID?
+        /// Tracks only.
+        public var muted: Bool?
+        public init() {}
+    }
 
     public init(app: String, clipId: String? = nil, trackId: String? = nil, linkedShotId: String? = nil, exportVersion: String? = nil) {
         self.app = app
@@ -217,6 +234,22 @@ public struct Project: Codable, Equatable, Sendable {
     public var speakers: [String] = []
     /// Who speaks when, per source, anchored in source frames like the words.
     public var speakerTurns: [SourceSpeakers] = []
+    /// Set when the document was imported from another program's timeline: what came in,
+    /// so the way back can say what is missing and whether the timing still holds.
+    public var imported: ImportRecord?
+
+    public struct ImportRecord: Codable, Equatable, Sendable {
+        public var app: String
+        public var exportVersion: String?
+        public var clipIds: [String]
+        public var length: Frame
+        public init(app: String, exportVersion: String?, clipIds: [String], length: Frame) {
+            self.app = app
+            self.exportVersion = exportVersion
+            self.clipIds = clipIds
+            self.length = length
+        }
+    }
 
     public init(sampleRate: Double, channels: Int, tracks: [Track] = [], markers: [Marker] = [], sources: [SourceRef] = [],
                 tempo: TempoMap = TempoMap(), transcripts: [SourceTranscript] = []) {
@@ -230,7 +263,7 @@ public struct Project: Codable, Equatable, Sendable {
         self.transcripts = transcripts
     }
 
-    private enum CodingKeys: String, CodingKey { case formatVersion, sampleRate, channels, tracks, markers, sources, tempo, transcripts, speakers, speakerTurns }
+    private enum CodingKeys: String, CodingKey { case formatVersion, sampleRate, channels, tracks, markers, sources, tempo, transcripts, speakers, speakerTurns, imported }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -243,6 +276,7 @@ public struct Project: Codable, Equatable, Sendable {
         tempo = try c.decodeIfPresent(TempoMap.self, forKey: .tempo) ?? TempoMap()
         transcripts = try c.decodeIfPresent([SourceTranscript].self, forKey: .transcripts) ?? []
         speakers = try c.decodeIfPresent([String].self, forKey: .speakers) ?? []
+        imported = try c.decodeIfPresent(ImportRecord.self, forKey: .imported)
         speakerTurns = try c.decodeIfPresent([SourceSpeakers].self, forKey: .speakerTurns) ?? []
     }
 

@@ -357,8 +357,16 @@ public enum FCPXMLImport {
                     warnings.append(Warning(code: "empty_clip", message: "\(c.name) starts at or after the end of its file and was left out.", clip: c.name))
                     continue
                 }
-                let clip = Clip(sourceID: source.id, sourceStart: sourceStart, start: max(0, c.start.frames(at: rate)), length: length, gainDB: c.gainDB,
+                var clip = Clip(sourceID: source.id, sourceStart: sourceStart, start: max(0, c.start.frames(at: rate)), length: length, gainDB: c.gainDB,
                                 fadeIn: min(length, c.fadeIn.frames(at: rate)), fadeOut: min(length, c.fadeOut.frames(at: rate)), fadeShape: .linear, origin: c.origin)
+                if clip.origin != nil {
+                    // How it came in, so the way back can tell what has changed since.
+                    var snap = Origin.Snapshot()
+                    snap.start = clip.start; snap.sourceStart = clip.sourceStart; snap.length = clip.length
+                    snap.gainDB = clip.gainDB; snap.fadeIn = clip.fadeIn; snap.fadeOut = clip.fadeOut; snap.sourceID = clip.sourceID
+                    clip.origin?.snapshot = snap
+                    if t.lane == 0 { clip.origin?.videoAudio = true }
+                }
                 // Clips on one track can't overlap here: one that does goes on a track of its own beside it.
                 let row = lanes.firstIndex { ($0.last?.end ?? 0) <= clip.start } ?? { lanes.append([]); return lanes.count - 1 }()
                 if row > 0, lanes[row].isEmpty {
@@ -369,12 +377,21 @@ public enum FCPXMLImport {
             for (i, clips) in lanes.enumerated() where !clips.isEmpty {
                 var track = Track(name: i == 0 ? t.name : "\(t.name) (\(i + 1))", clips: clips, gainDB: t.gainDB, isMuted: t.muted)
                 track.origin = t.origin
+                if track.origin != nil {
+                    var snap = Origin.Snapshot()
+                    snap.gainDB = t.gainDB; snap.muted = t.muted
+                    track.origin?.snapshot = snap
+                }
                 project.tracks.append(track)
             }
         }
         guard project.tracks.contains(where: { !$0.clips.isEmpty }) else { throw .noAudio }
         project.markers = timeline.shots.filter { !$0.name.isEmpty }.map {
             Marker(position: $0.start.frames(at: rate), length: $0.duration.frames(at: rate), name: $0.name, kind: .shot)
+        }
+        if let version = timeline.flimmerExportVersion {
+            let ids = project.tracks.flatMap { $0.clips.compactMap { $0.origin?.videoAudio == true ? nil : $0.origin?.clipId } }
+            project.imported = .init(app: "flimmer", exportVersion: version, clipIds: ids, length: project.length)
         }
         return Result(project: project, name: timeline.name, warnings: warnings, shots: timeline.shots, flimmerExportVersion: timeline.flimmerExportVersion)
     }

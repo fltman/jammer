@@ -163,9 +163,11 @@ struct FCPXMLImportTests {
         let sr = 48_000.0
         // Dialog: 4.5 s exactly (the FCPXML says 108/24 too, but 6.249 s isn't a whole number of pictures).
         let d = p.tracks[0]
-        #expect(abs(d.gainDB - -1.94) < 0.005 && !d.isMuted && d.origin == Origin(app: "flimmer", trackId: "T1", exportVersion: "1"))
+        #expect(abs(d.gainDB - -1.94) < 0.005 && !d.isMuted && d.origin?.trackId == "T1" && d.origin?.app == "flimmer" && d.origin?.exportVersion == "1")
         #expect(d.clips[0].start == Frame(4.5 * sr) && d.clips[0].length == Frame((6.249 * sr).rounded()) && abs(d.clips[0].gainDB - -4.44) < 0.005)
-        #expect(d.clips[0].origin == Origin(app: "flimmer", clipId: "C1", trackId: "T1", linkedShotId: "S1", exportVersion: "1"))
+        let o = try #require(d.clips[0].origin)
+        #expect(o.clipId == "C1" && o.trackId == "T1" && o.linkedShotId == "S1" && o.exportVersion == "1" && o.videoAudio == nil)
+        #expect(o.snapshot?.start == d.clips[0].start && o.snapshot?.length == d.clips[0].length && o.snapshot?.gainDB == d.clips[0].gainDB)
         // Musik: muted as a track; a silent clip is −96 dB, not mute; stored fades when they fit.
         let m = p.tracks[1]
         #expect(m.isMuted && m.gainDB == 0 && m.clips.count == 2)
@@ -176,7 +178,57 @@ struct FCPXMLImportTests {
         // The film's sound: only where videoAudio is 1, under its picture, from the same in-point.
         let v = p.tracks[2]
         #expect(v.clips.count == 1 && v.clips[0].start == Frame(204.0 / 24 * sr) && v.clips[0].sourceStart == Frame(0.5 * sr) && v.clips[0].length == Frame(3 * sr) && v.clips[0].gainDB == 0)
-        #expect(v.clips[0].origin == Origin(app: "flimmer", clipId: "K4", linkedShotId: "S4", exportVersion: "1"))
+        #expect(v.clips[0].origin?.clipId == "K4" && v.clips[0].origin?.linkedShotId == "S4" && v.clips[0].origin?.videoAudio == true)
+        #expect(p.imported == Project.ImportRecord(app: "flimmer", exportVersion: "1", clipIds: ["C1", "C2", "C3"], length: p.length))
+
+        // The way back, first half: what has changed since it came in.
+        let sr48 = Frame(48_000)
+        var plan = try FlimmerReturn.plan(p)
+        #expect(plan.isEmpty && plan.unchanged == ["C1", "C2", "C3"] && plan.missing.isEmpty && plan.videoChanged.isEmpty && plan.lengthChangedBy == 0)
+        // A level change in the middle of C1 splits it in three: one take over the whole clip, in place.
+        var e = p
+        try e.changeGain(Frame(5 * sr)..<Frame(6 * sr), by: -3)
+        plan = try FlimmerReturn.plan(e)
+        #expect(plan.takes.count == 1 && plan.takes[0].clipId == "C1" && plan.takes[0].pieces == 3 && plan.takes[0].movedBy == 0 && !plan.takes[0].changedTrack)
+        #expect(plan.takes[0].range == d.clips[0].start..<d.clips[0].end && plan.takes[0].linkedShotId == "S1" && plan.unchanged == ["C2", "C3"])
+        // Moved half a second later: a take that carries its new position.
+        e = p
+        e.tracks[1].clips[1].start += sr48 / 2
+        plan = try FlimmerReturn.plan(e)
+        #expect(plan.takes.map(\.clipId) == ["C3"] && plan.takes[0].movedBy == sr48 / 2 && plan.takes[0].pieces == 1)
+        // Removed: listed as missing, nothing else. A clip on another track: said, and still one take.
+        e = p
+        let moved = e.tracks[1].clips.removeLast()
+        e.tracks[0].clips.append(moved)
+        e.tracks[1].clips.removeAll()
+        plan = try FlimmerReturn.plan(e)
+        #expect(plan.missing == ["C2"] && plan.takes.map(\.clipId) == ["C3"] && plan.takes[0].changedTrack && plan.takes[0].movedBy == 0)
+        // Sound added here has no origin: a new clip, on the Flimmer track it sits on.
+        e = p
+        e.tracks[0].clips.append(Clip(sourceID: d.clips[0].sourceID, start: 15 * sr48, length: sr48))
+        e.tracks.append(Track(name: "Foley", clips: [Clip(sourceID: d.clips[0].sourceID, start: 0, length: sr48)]))
+        plan = try FlimmerReturn.plan(e)
+        #expect(plan.new.map(\.trackId) == ["T1", nil] && plan.new[1].trackName == "Foley" && plan.new[0].range == 15 * sr48..<16 * sr48 && plan.takes.isEmpty)
+        // Track level and mute are values, not takes; a plugin on the track makes its clips takes.
+        e = p
+        e.tracks[0].gainDB = -6
+        e.tracks[1].isMuted = false
+        plan = try FlimmerReturn.plan(e)
+        #expect(plan.tracks == [.init(trackId: "T1", name: "Dialog", gainDB: -6, muted: false), .init(trackId: "T2", name: "Musik", gainDB: 0, muted: false)] && plan.takes.isEmpty)
+        e = p
+        e.tracks[0].inserts = [Insert(plugin: .init(type: 1, subtype: 2, manufacturer: 3), name: "EQ")]
+        #expect(try FlimmerReturn.plan(e).takes.map(\.clipId) == ["C1"])
+        // The film's own sound changed: reported, not a take. A ripple cut: the length says so.
+        e = p
+        e.tracks[2].clips[0].gainDB = -3
+        plan = try FlimmerReturn.plan(e)
+        #expect(plan.videoChanged == ["K4"] && plan.takes.isEmpty)
+        e = p
+        e.tracks[1].clips.removeAll()
+        e.tracks[2].clips.removeAll()
+        #expect(try FlimmerReturn.plan(e).lengthChangedBy < 0)
+        // A document that didn't come from Flimmer has nowhere to go back to.
+        #expect(throws: FlimmerReturn.PlanError.notFromFlimmer) { try FlimmerReturn.plan(Project(sampleRate: 48_000, channels: 2)) }
         // Origins survive edits and saving.
         var q = p
         try q.changeGain(Frame(5 * sr)..<Frame(6 * sr), by: -3)
