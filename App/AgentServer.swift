@@ -1,6 +1,7 @@
 import AppKit
 import JammerAgent
 import JammerCore
+import JammerPlugins
 import JammerStems
 import Network
 import OSLog
@@ -288,11 +289,23 @@ enum AgentRouter {
         case ["api", "v1", "plugins"]:
             try only("GET")
             let q = r.query["q"]?.lowercased()
-            let list = PluginCatalog.effects().filter { q == nil || q!.isEmpty || $0.name.lowercased().contains(q!) || $0.manufacturer.lowercased().contains(q!) }
-            return .json(["plugins": list.map { ["id": $0.id.description, "name": $0.name, "manufacturer": $0.manufacturer, "kind": $0.kind,
+            let format = r.query["format"]?.lowercased()
+            if let format, PluginID.Format(rawValue: format) == nil { throw APIError.badRequest("format must be au, vst3 or clap.") }
+            let list = PluginCatalog.effects().filter { (q == nil || q!.isEmpty || $0.name.lowercased().contains(q!) || $0.manufacturer.lowercased().contains(q!))
+                && (format == nil || $0.format.rawValue == format) }
+            // No file paths: where a plugin is installed is the user's business.
+            return .json(["plugins": list.map { ["id": $0.id.description, "format": $0.format.rawValue, "name": $0.name, "manufacturer": $0.manufacturer, "kind": $0.kind,
                                                   "version": $0.version, "v3": $0.isV3] as [String: Any] },
+                          "scan": scanJSON(HostedPlugins.current()),
                           "safeMode": EditorSession.pluginSafeMode,
-                          "note": "Plugins are third-party code that runs with Jämmer's rights. If one crashes or misbehaves, turn on Safe Mode in Jämmer (Audio › Plugins) so every plugin runs in macOS's separate plugin host process instead of inside Jämmer."])
+                          "note": "Plugins are third-party code. VST 3 and CLAP plugins each run in a helper process of their own, never inside Jämmer; if one crashes or stops answering, its track plays without it and the plugin is switched off until the user switches it on again. Audio Units run inside Jämmer unless Safe Mode is on (Audio › Plugins), which runs every Audio Unit in macOS's separate plugin host process."])
+        case ["api", "v1", "plugins", "scan"]:
+            try only("POST")
+            guard HostedPluginsController.available else { throw APIError.notAvailable("This copy of Jämmer can't scan for VST 3 and CLAP plugins.") }
+            let body = try json(r)
+            if let unknown = body.keys.first(where: { $0 != "force" }) { throw APIError.badRequest("Unknown field \"\(unknown)\". plugins/scan takes: force.") }
+            if let f = body["force"], !(f is Bool) { throw APIError.badRequest("force must be true or false.") }
+            return .json(["job": JobRegistry.shared.startPluginScan(force: body["force"] as? Bool ?? false).json], status: 202)
         case ["api", "v1", "operations"]:
             try only("GET")
             return .json(["operations": AgentAPI.operations])
@@ -514,23 +527,29 @@ enum AgentRouter {
         guard let i = t.inserts.first(where: { $0.id.uuidString == insert.uppercased() }) else {
             throw APIError.notFound("The track has no insert with id \(insert).")
         }
-        let unit: PluginInstance
+        let unit: any InsertUnit
         if let live = session.inserts.instance(i.id) {
             unit = live
         } else {
             do {
-                unit = try await PluginInstance.make(i.plugin, channels: session.project.channels, sampleRate: session.project.sampleRate,
+                unit = try await InsertUnits.make(i.plugin, channels: session.project.channels, sampleRate: session.project.sampleRate,
                                                      state: i.state, outOfProcess: EditorSession.pluginSafeMode)
             } catch let e as PluginError {
                 throw APIError.unprocessable(e.reason, e.localizedDescription)
             }
         }
-        return .json(["insert": ["id": i.id.uuidString, "plugin": i.plugin.description, "name": i.name, "bypass": i.bypass,
+        return .json(["insert": ["id": i.id.uuidString, "plugin": i.plugin.description, "format": i.plugin.format.rawValue, "name": i.name, "bypass": i.bypass,
                                  "latencyMs": (Double(unit.latency) / session.project.sampleRate * 100_000).rounded() / 100,
                                  "factoryPresets": unit.factoryPresets,
                                  "params": unit.parameters.map { p -> [String: Any] in
                                      ["identifier": p.identifier, "name": p.name, "unit": p.unit ?? NSNull(), "min": p.min, "max": p.max, "value": p.value]
                                  }] as [String: Any]])
+    }
+
+    /// What the last scan for VST 3 and CLAP plugins found and what it couldn't use.
+    static func scanJSON(_ c: PluginCatalogue) -> [String: Any] {
+        ["state": HostedPluginsController.scanning ? "running" : "idle", "found": c.plugins.count,
+         "failed": c.failed.map { ["name": $0.name, "format": $0.format.rawValue, "reason": $0.reason] as [String: Any] }]
     }
 
     private static func json(_ r: AgentAPI.Request) throws -> [String: Any] {

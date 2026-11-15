@@ -2,6 +2,7 @@ import Foundation
 import JammerAgent
 import Observation
 import JammerCore
+import JammerPlugins
 import JammerStems
 import JammerSpeech
 import JammerWhisper
@@ -164,6 +165,31 @@ final class JobRegistry {
                           "speakers": .array(diarized.speakers.map { .string($0) }),
                           "seconds": .array(diarized.speakers.indices.map { .number(((seconds[$0] ?? 0) * 10).rounded() / 10) }),
                           "turns": .number(Double(diarized.placedTurns().count))]
+            self?.finish(job)
+        }
+        return job
+    }
+
+    /// Looks for VST 3 and CLAP plugins again (Audio › Plugins…, POST /api/v1/plugins/scan).
+    func startPluginScan(force: Bool) -> Job {
+        var job = Job(kind: "plugin_scan")
+        jobs[job.id] = job
+        let id = job.id
+        tasks[id] = Task { [weak self] in
+            job.status = .running
+            self?.update(job)
+            let c = await HostedPluginsController.scan(force: force, progress: { p in
+                Task { @MainActor in
+                    guard var j = self?.jobs[id], !j.isFinished else { return }
+                    j.progress = min(0.99, p)
+                    self?.update(j)
+                }
+            }, cancelled: { Task.isCancelled })
+            guard self?.jobs[id]?.status != .cancelled else { return }
+            job.status = .done
+            job.progress = 1
+            // The list of what failed is in GET /api/v1/plugins (`scan.failed`).
+            job.result = ["found": .number(Double(c.plugins.count)), "failed": .number(Double(c.failed.count))]
             self?.finish(job)
         }
         return job

@@ -4,6 +4,7 @@ import JammerPluginHost
 import JammerPlugins
 import JammerCore
 import JammerEngine
+import JammerAgent
 
 /// A real CLAP effect, compiled for the test: a gain with a 64-sample delay (so it has
 /// latency), one automatable parameter, one read-only one, and saved state.
@@ -570,6 +571,130 @@ struct ChainTests {
         #expect(firstPlain > 10_000 && firstPlain < 60_000, "died at sample \(firstPlain / 2)")
         #expect(Array(out[firstPlain...]) == Array(x[firstPlain...]))
         #expect(Array(out[..<firstPlain]) == x[..<firstPlain].map { $0 * 0.5 })
+    }
+}
+
+/// The whole way: scanned, listed, put on a track by a step, changed, rendered, saved.
+@Suite("VST 3 and CLAP plugins on tracks", .serialized)
+struct HostedPluginTests {
+    static let probe = Bundle(for: HostProcessTests.Anchor.self).bundleURL.deletingLastPathComponent().appending(path: "jammer-plugin-probe")
+    let id = "clap:com.brattoo.test.fx"
+
+    /// A folder of test plugins, scanned and installed as the app does at launch.
+    func install(_ dir: URL, defines: [String] = []) throws -> PluginCatalogue {
+        let clap = dir.appending(path: "CLAP")
+        try FileManager.default.createDirectory(at: clap, withIntermediateDirectories: true)
+        _ = try TestEffect.build("Fx", defines: defines, in: clap)
+        var c = PluginCatalogue()
+        c.scan(with: PluginScanner(probe: Self.probe), folders: [.clap: [clap]])
+        HostedPlugins.install(helper: HostProcessTests.helper, catalogue: c)
+        return c
+    }
+
+    func state() -> (EditState, [Float]) {
+        let n = 48_000 * 2
+        let x = (0..<n).flatMap { i -> [Float] in let v = Float(sin(Double(i) * 0.0137) * 0.4); return [v, -v] }
+        let info = AudioFileInfo(container: .wav, sampleFormat: .float32, bigEndian: false, channels: 2, sampleRate: 48_000,
+                                 channelMask: nil, dataOffset: 0, frames: Int64(n), chunks: [], bext: nil, ixml: nil, markers: [])
+        let ref = SourceRef(name: "t", path: "/dev/null", info: info)
+        let pool = SourcePool()
+        pool.register(ref.id, memory: x, channels: 2)
+        return (EditState(project: Project(source: ref), pool: pool, media: FileManager.default.temporaryDirectory), x)
+    }
+
+    let measure: StepRunner.Measure = { _, _ in LoudnessResult(integrated: nil, range: nil, maxMomentary: nil, maxShortTerm: nil, samplePeak: 0, truePeak: 0, duration: 0) }
+
+    func run(_ s: inout EditState, _ op: String, _ params: [String: JSONValue]) -> StepResult {
+        StepRunner.run([Step(op: op, params: params)], on: &s, measure: measure)[0]
+    }
+
+    @Test("Identity: the three written forms, and projects from before the formats")
+    func identity() throws {
+        #expect(PluginID("clap:com.x.y")?.format == .clap && PluginID("clap:com.x.y")?.uid == "com.x.y" && PluginID("clap:com.x.y")?.description == "clap:com.x.y")
+        #expect(PluginID("vst3:A0A1A2A3A4A5A6A7A8A9AAABACADAEAF")?.format == .vst3 && PluginID("aufx/lmtr/appl")?.format == .au && PluginID("aufx/lmtr/appl")?.description == "aufx/lmtr/appl")
+        #expect(PluginID("clap:") == nil && PluginID("nonsense") == nil)
+        let old = try JSONDecoder().decode(Insert.self, from: Data(#"{"id":"\#(UUID().uuidString)","plugin":"aufx/lmtr/appl","name":"AUPeakLimiter","bypass":false}"#.utf8))
+        #expect(old.plugin == PluginID(type: 0x61756678, subtype: 0x6C6D7472, manufacturer: 0x6170706C))
+        let new = Insert(plugin: PluginID(format: .clap, uid: "com.x.y"), name: "Y")
+        #expect(try JSONDecoder().decode(Insert.self, from: JSONEncoder().encode(new)) == new)
+    }
+
+    @Test("Scanned, listed, put on a track by a step, changed, rendered, and the settings survive saving")
+    func onATrack() throws {
+        let dir = FileManager.default.temporaryDirectory.appending(path: "jammer-hostp-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        _ = try install(dir)
+        let listed = try #require(PluginCatalog.effects().first { $0.id.description == id })
+        #expect(listed.name == "Delay Gain" && listed.manufacturer == "Brattoo Tests" && listed.format == .clap && listed.version == "1.0")
+        #expect(PluginCatalog.find(id)?.id == listed.id && PluginCatalog.find("delay gain")?.id == listed.id)
+        var (s, x) = state()
+        let track = s.project.tracks[0].id.uuidString
+        var r = run(&s, "add_insert", ["track": .string(track), "plugin": .string(id)])
+        #expect(r.status == .done && r.info["latencyMs"] == 1.33 && s.project.tracks[0].inserts.map(\.plugin.description) == [id], "\(r.error ?? "")")
+        // Unchanged, the plugin's gain is 1: the export is the source, in time (64 samples of latency made up for).
+        #expect(PlanCompiler.mixBlocking(s.project, pool: s.pool!).render(from: 0, frames: Int(s.project.length)) == x)
+        // By parameter id, and by name; outside the range and read-only are refused before anything changes.
+        r = run(&s, "set_insert", ["track": .string(track), "insert": .string("Delay Gain"), "parameter": .string("7"), "value": .number(0.5)])
+        #expect(r.status == .done, "\(r.error ?? "")")
+        #expect(PlanCompiler.mixBlocking(s.project, pool: s.pool!).render(from: 0, frames: Int(s.project.length)) == x.map { $0 * 0.5 })
+        r = run(&s, "set_insert", ["track": .string(track), "insert": .string("Delay Gain"), "parameter": .string("Gain"), "value": .number(0.25)])
+        #expect(r.status == .done)
+        #expect(run(&s, "set_insert", ["track": .string(track), "insert": .string("Delay Gain"), "parameter": .string("7"), "value": .number(3)]).reason == "out_of_range")
+        #expect(run(&s, "set_insert", ["track": .string(track), "insert": .string("Delay Gain"), "parameter": .string("9"), "value": .number(0.5)]).reason == "out_of_range")
+        #expect(run(&s, "set_insert", ["track": .string(track), "insert": .string("Delay Gain"), "parameter": .string("nope"), "value": .number(0.5)]).reason == "not_found")
+        // Saved and opened again: the same sound, from the state in the document.
+        let saved = try JSONDecoder().decode(Project.self, from: JSONEncoder().encode(s.project))
+        #expect(saved.tracks[0].inserts[0].state?.count == 8)
+        #expect(PlanCompiler.mixBlocking(saved, pool: s.pool!).render(from: 0, frames: Int(saved.length)) == x.map { $0 * 0.25 })
+        // Bypassed and removed.
+        #expect(run(&s, "set_insert", ["track": .string(track), "insert": .string("Delay Gain"), "bypass": .bool(true)]).status == .done)
+        #expect(PlanCompiler.mixBlocking(s.project, pool: s.pool!).render(from: 0, frames: 1_000) == Array(x[0..<2_000]))
+        #expect(run(&s, "remove_insert", ["track": .string(track), "insert": .string("Delay Gain")]).status == .done && s.project.tracks[0].inserts.isEmpty)
+        #expect(run(&s, "add_insert", ["track": .string(track), "plugin": .string("clap:not.installed")]).reason == "plugin_not_found")
+        // Nothing is left running when the plans are gone.
+        usleep(400_000)
+        #expect(HostedPlugins.runningCount == 0)
+    }
+
+    @Test("The cap on helper processes is said in words; a blocked plugin is refused until it is switched on again; a death is told with the plugin's name")
+    func limitsAndDeaths() throws {
+        let dir = FileManager.default.temporaryDirectory.appending(path: "jammer-hostp-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        var c = try install(dir, defines: ["CRASH_AT_BLOCK=30"])
+        let plugin = try #require(PluginID(id))
+        // Two at most: the third says why and what to do.
+        HostedPlugins.limit = 2
+        defer { HostedPlugins.limit = 64 }
+        do {
+            let a = try InsertUnits.makeBlocking(plugin, channels: 2, sampleRate: 48_000), b = try InsertUnits.makeBlocking(plugin, channels: 2, sampleRate: 48_000)
+            #expect(HostedPlugins.runningCount == 2)
+            #expect(throws: PluginError.failed("2 VST 3 and CLAP plugins are already running, which is the most Jämmer starts at once (each runs in a process of its own). Remove or bypass some to add Delay Gain.")) {
+                _ = try InsertUnits.makeBlocking(plugin, channels: 2, sampleRate: 48_000)
+            }
+            _ = (a, b)
+        }
+        #expect(HostedPlugins.runningCount == 0)
+        #expect(throws: PluginError.unsupportedFormat("Delay Gain: The plugin doesn't take mono audio.")) { _ = try InsertUnits.makeBlocking(plugin, channels: 1, sampleRate: 48_000) }
+        #expect(HostedPlugins.runningCount == 0, "a plugin that didn't start doesn't count")
+        // It crashes in its 30th block of an export: the callback names it, the export finishes with the rest unprocessed.
+        final class Told: @unchecked Sendable { var said: [String] = [] }
+        let told = Told()
+        HostedPlugins.onDeath = { p, name, death in told.said.append("\(p) \(name) \(death.description)") }
+        defer { HostedPlugins.onDeath = nil }
+        var (s, x) = state()
+        #expect(run(&s, "add_insert", ["track": .string(s.project.tracks[0].id.uuidString), "plugin": .string(id)]).status == .done)
+        let out = PlanCompiler.mixBlocking(s.project, pool: s.pool!).render(from: 0, frames: Int(s.project.length))
+        #expect(told.said == ["clap:com.brattoo.test.fx Delay Gain crashed"] && out == x, "\(told.said)")
+        // Blocked (as the app does after such a death): not listed, refused with what to do, and back when unblocked.
+        c.blocked.insert(id)
+        HostedPlugins.update(c)
+        #expect(PluginCatalog.find(id) == nil)
+        #expect(throws: PluginError.failed("clap:com.brattoo.test.fx is switched off because it failed while it was in use. Switch it on again in Audio › Plugins….")) {
+            _ = try InsertUnits.makeBlocking(plugin, channels: 2, sampleRate: 48_000)
+        }
+        c.blocked.removeAll()
+        HostedPlugins.update(c)
+        #expect(PluginCatalog.find(id) != nil)
     }
 }
 

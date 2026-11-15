@@ -99,7 +99,7 @@ if hasCLAP {
                 linkerSettings: [.linkedFramework("CoreFoundation")]),
         // The process that holds one plugin while it works (one per plugin).
         .executableTarget(name: "PluginHostHelper", dependencies: ["JammerPluginHost"], path: "Sources/PluginHostHelper"),
-        .testTarget(name: "JammerPluginHostTests", dependencies: ["JammerPluginHost", "JammerPlugins", "PluginHostHelper", "JammerCore", "JammerEngine"]),
+        .testTarget(name: "JammerPluginHostTests", dependencies: ["JammerPluginHost", "JammerPlugins", "PluginHostHelper", "PluginProbe", "JammerCore", "JammerEngine", "JammerAgent"]),
     ]
 }
 

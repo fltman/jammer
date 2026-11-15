@@ -3,6 +3,7 @@ import AudioToolbox
 import CoreAudioKit
 import JammerAgent
 import JammerCore
+import JammerPlugins
 import SwiftUI
 
 /// Audio › Plugins…: the inserts on each track, safe mode, and the warning that plugins
@@ -12,6 +13,8 @@ struct PluginsSheet: View {
     let done: () -> Void
     @State private var trackID: UUID?
     @State private var catalogue: [PluginInfo] = []
+    @State private var failed: [PluginCatalogue.Failure] = []
+    @State private var scanning = false
     @State private var safeMode = EditorSession.pluginSafeMode
 
     private var track: Track? {
@@ -50,13 +53,43 @@ struct PluginsSheet: View {
                 }
                 .fixedSize()
             }
+            if HostedPluginsController.available {
+                HStack {
+                    Button(scanning ? "Scanning…" : "Scan for CLAP Plugins") {
+                        scanning = true
+                        Task {
+                            await HostedPluginsController.scan(force: true)
+                            catalogue = await Task.detached { PluginCatalog.effects() }.value
+                            failed = HostedPlugins.current().failed
+                            scanning = false
+                        }
+                    }
+                    .disabled(scanning)
+                    .help("Looks in the CLAP plugin folders again. Each plugin is loaded in a helper process, so one that crashes can't affect Jämmer.")
+                    Spacer()
+                }
+                ForEach(failed, id: \.name) { f in
+                    HStack {
+                        Text(f.reason == "blocked" ? "\(f.name) is switched off: it failed while it was in use." : "\(f.name) couldn't be used (\(f.reason == "timed_out" ? "it didn't answer" : f.reason)).")
+                            .font(.callout).foregroundStyle(.orange)
+                        Spacer()
+                        if f.reason == "blocked", let key = HostedPlugins.current().blocked.first(where: { k in HostedPlugins.current().entries.flatMap(\.plugins).contains { PluginCatalogue.key($0) == k && $0.name == f.name } }) {
+                            Button("Switch On") {
+                                HostedPluginsController.unblock(key)
+                                failed = HostedPlugins.current().failed
+                                Task { catalogue = await Task.detached { PluginCatalog.effects() }.value }
+                            }
+                        }
+                    }
+                }
+            }
             Divider()
-            Toggle("Safe mode: run every plugin in a separate process", isOn: $safeMode)
+            Toggle("Safe mode: run every Audio Unit in a separate process", isOn: $safeMode)
                 .onChange(of: safeMode) { _, on in
                     EditorSession.pluginSafeMode = on
                     session.restartPlugins()
                 }
-            Text("Plugins are third-party code that runs with Jämmer's rights. If one crashes or misbehaves, turn on safe mode: every plugin then runs in macOS's separate plugin host process instead of inside Jämmer. Plugins play 0.3 s ahead, so a change is heard a moment later.")
+            Text("Plugins are third-party code. CLAP plugins each run in a helper process of their own, never inside Jämmer. Audio Units run inside Jämmer; if one crashes or misbehaves, turn on safe mode: every Audio Unit then runs in macOS's separate plugin host process. Plugins play 0.3 s ahead, so a change is heard a moment later.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -67,7 +100,10 @@ struct PluginsSheet: View {
         }
         .padding(20)
         .frame(width: 500)
-        .task { catalogue = await Task.detached { PluginCatalog.effects() }.value }
+        .task {
+            catalogue = await Task.detached { PluginCatalog.effects() }.value
+            failed = HostedPlugins.current().failed
+        }
     }
 
     private func row(_ track: Track, _ insert: Insert) -> some View {
@@ -123,11 +159,13 @@ final class PluginWindowController: NSWindowController, NSWindowDelegate {
     private weak var session: EditorSession?
     private let track: UUID
     private let insert: UUID
-    private let unit: PluginInstance
+    private let unit: any InsertUnit
+    /// The Audio Unit, when it is one (its own view and parameter observer); nil for VST 3 and CLAP.
+    private var audioUnit: PluginInstance? { unit as? PluginInstance }
     private var token: AUParameterObserverToken?
     private var pending: Task<Void, Never>?
 
-    init(session: EditorSession, track: UUID, insert: UUID, unit: PluginInstance, title: String) {
+    init(session: EditorSession, track: UUID, insert: UUID, unit: any InsertUnit, title: String) {
         self.session = session
         self.track = track
         self.insert = insert
@@ -139,12 +177,19 @@ final class PluginWindowController: NSWindowController, NSWindowDelegate {
         super.init(window: w)
         w.delegate = self
         w.center()
-        unit.au.requestViewController { [weak self] vc in
-            DispatchQueue.main.async { self?.install(vc) }
+        if let au = audioUnit {
+            au.au.requestViewController { [weak self] vc in
+                DispatchQueue.main.async { self?.install(vc) }
+            }
+            token = au.au.parameterTree?.token(byAddingParameterObserver: { [weak self] _, _ in
+                DispatchQueue.main.async { self?.schedule() }
+            })
+        } else {
+            // VST 3 and CLAP run in a helper process; their own windows come later. Sliders from the parameter list.
+            let host = NSHostingController(rootView: HostedPluginView(unit: unit) { [weak self] in self?.schedule() })
+            w.contentViewController = host
+            w.setContentSize(host.view.fittingSize)
         }
-        token = unit.au.parameterTree?.token(byAddingParameterObserver: { [weak self] _, _ in
-            DispatchQueue.main.async { self?.schedule() }
-        })
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -156,7 +201,8 @@ final class PluginWindowController: NSWindowController, NSWindowDelegate {
             window.contentViewController = vc
             if size.width > 0, size.height > 0 { window.setContentSize(size) }
         } else {
-            let host = NSHostingController(rootView: GenericPluginView(unit: unit))
+            guard let au = audioUnit else { return }
+            let host = NSHostingController(rootView: GenericPluginView(unit: au))
             window.contentViewController = host
             window.setContentSize(host.view.fittingSize)
         }
@@ -178,7 +224,7 @@ final class PluginWindowController: NSWindowController, NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
         pending?.cancel()
         commit()
-        if let token { unit.au.parameterTree?.removeParameterObserver(token) }
+        if let token { audioUnit?.au.parameterTree?.removeParameterObserver(token) }
         PluginWindows.open[insert] = nil
     }
 }
@@ -209,5 +255,47 @@ struct GenericPluginView: View {
         .formStyle(.grouped)
         .frame(width: 440)
         .frame(minHeight: 120)
+    }
+}
+
+/// Sliders for a VST 3 or CLAP plugin, from its parameter list (the plugin itself lives in a
+/// helper process, so there is no view of its own to embed).
+struct HostedPluginView: View {
+    let unit: any InsertUnit
+    var changed: () -> Void
+    @State private var params: [PluginParameter] = []
+    @State private var problem: String?
+
+    var body: some View {
+        Form {
+            if params.isEmpty { Text("This plugin has no parameters to show.").foregroundStyle(.secondary) }
+            ForEach(params, id: \.identifier) { p in
+                LabeledContent(p.name) {
+                    HStack {
+                        Slider(value: Binding(get: { p.value }, set: { set(p, $0) }), in: p.min...max(p.max, p.min + 0.0001))
+                            .frame(width: 200)
+                            .accessibilityLabel(p.name)
+                            .accessibilityValue(p.value.formatted(.number.precision(.fractionLength(0...3))))
+                        Text(p.value.formatted(.number.precision(.fractionLength(0...3)))).monospacedDigit().frame(width: 80, alignment: .trailing)
+                    }
+                }
+            }
+            if let problem { Text(problem).foregroundStyle(.orange) }
+        }
+        .formStyle(.grouped)
+        .frame(width: 440)
+        .frame(minHeight: 120)
+        .onAppear { params = unit.parameters }
+    }
+
+    private func set(_ p: PluginParameter, _ value: Double) {
+        do {
+            try unit.set(p.identifier, to: value)
+            if let i = params.firstIndex(where: { $0.identifier == p.identifier }) { params[i].value = value }
+            problem = nil
+            changed()
+        } catch {
+            problem = error.localizedDescription
+        }
     }
 }

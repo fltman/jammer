@@ -84,6 +84,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let model = Bundle.main.url(forResource: "DeepFilterNet3_onnx", withExtension: "tar.gz"), let d = try? Denoiser(modelPath: model) {
             d.register()
         }
+        // VST 3 and CLAP: found by a scan in a helper process, run in helper processes.
+        HostedPluginsController.start()
         // MP3 through LAME, a separate dynamic framework (LGPL).
         MP3Writer.register()
         // Diarisation: the Community-1 model, fetched from the user's model source on first use.

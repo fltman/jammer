@@ -3,16 +3,35 @@ import AudioToolbox
 import Foundation
 import JammerEngine
 
-/// An Audio Unit component: type, subtype and manufacturer, written "aufx/lmtr/appl".
+/// A plugin's identity. An Audio Unit is its component's type, subtype and manufacturer,
+/// written "aufx/lmtr/appl"; a VST 3 plugin is "vst3:" and its class id (32 hex digits); a CLAP
+/// plugin is "clap:" and its id. Projects saved before the other formats existed hold the
+/// Audio Unit form and open unchanged.
 public struct PluginID: Hashable, Sendable, Codable, CustomStringConvertible {
+    public enum Format: String, Sendable, Codable, CaseIterable { case au, vst3, clap }
+
+    public var format: Format
+    /// Audio Units only (0 otherwise).
     public var type: OSType
     public var subtype: OSType
     public var manufacturer: OSType
+    /// VST 3 and CLAP only: the format's own id.
+    public var uid: String
 
     public init(type: OSType, subtype: OSType, manufacturer: OSType) {
+        format = .au
         self.type = type
         self.subtype = subtype
         self.manufacturer = manufacturer
+        uid = ""
+    }
+
+    public init(format: Format, uid: String) {
+        self.format = format
+        type = 0
+        subtype = 0
+        manufacturer = 0
+        self.uid = uid
     }
 
     public init(_ d: AudioComponentDescription) {
@@ -20,12 +39,20 @@ public struct PluginID: Hashable, Sendable, Codable, CustomStringConvertible {
     }
 
     public init?(_ string: String) {
+        for f in [Format.vst3, .clap] where string.hasPrefix(f.rawValue + ":") {
+            let uid = String(string.dropFirst(f.rawValue.count + 1))
+            guard !uid.isEmpty else { return nil }
+            self.init(format: f, uid: uid)
+            return
+        }
         let parts = string.split(separator: "/", omittingEmptySubsequences: false)
         guard parts.count == 3, let t = Self.code(parts[0]), let s = Self.code(parts[1]), let m = Self.code(parts[2]) else { return nil }
         self.init(type: t, subtype: s, manufacturer: m)
     }
 
-    public var description: String { [type, subtype, manufacturer].map(Self.text).joined(separator: "/") }
+    public var description: String {
+        format == .au ? [type, subtype, manufacturer].map(Self.text).joined(separator: "/") : "\(format.rawValue):\(uid)"
+    }
 
     public var componentDescription: AudioComponentDescription {
         AudioComponentDescription(componentType: type, componentSubType: subtype, componentManufacturer: manufacturer,
@@ -84,6 +111,16 @@ public struct PluginInfo: Sendable, Codable, Hashable {
     public var kind: String
     public var version: String
     public var isV3: Bool
+    public var format: PluginID.Format { id.format }
+
+    public init(id: PluginID, name: String, manufacturer: String, kind: String, version: String, isV3: Bool) {
+        self.id = id
+        self.name = name
+        self.manufacturer = manufacturer
+        self.kind = kind
+        self.version = version
+        self.isV3 = isV3
+    }
 }
 
 public enum PluginError: Error, LocalizedError, Equatable {
@@ -112,8 +149,21 @@ public enum PluginError: Error, LocalizedError, Equatable {
 }
 
 public enum PluginCatalog {
-    /// Installed effects (aufx and aumf), sorted by manufacturer and name.
+    /// VST 3 and CLAP plugins come from the app's scan (they are never loaded in this process);
+    /// the app plugs its catalogue in here. nil: only Audio Units.
+    nonisolated(unsafe) public static var external: (@Sendable () -> [PluginInfo])?
+
+    /// Why a plugin that isn't offered can't be used, when the app knows (it is switched off
+    /// after failing). nil: it simply isn't installed.
+    nonisolated(unsafe) public static var whyUnavailable: (@Sendable (_ idOrName: String) -> String?)?
+
+    /// Every installed effect: Audio Units, then what the scan found, sorted by manufacturer and name.
     public static func effects() -> [PluginInfo] {
+        (audioUnits() + (external?() ?? [])).sorted { ($0.manufacturer, $0.name, $0.id.description) < ($1.manufacturer, $1.name, $1.id.description) }
+    }
+
+    /// Installed Audio Unit effects (aufx and aumf).
+    public static func audioUnits() -> [PluginInfo] {
         let manager = AVAudioUnitComponentManager.shared()
         return [kAudioUnitType_Effect, kAudioUnitType_MusicEffect].flatMap { type in
             manager.components(matching: AudioComponentDescription(componentType: type, componentSubType: 0, componentManufacturer: 0,
@@ -128,7 +178,7 @@ public enum PluginCatalog {
         .sorted { ($0.manufacturer, $0.name) < ($1.manufacturer, $1.name) }
     }
 
-    /// By id ("aufx/lmtr/appl") or by name, ignoring case ("AUPeakLimiter").
+    /// By id ("aufx/lmtr/appl", "clap:…", "vst3:…") or by name, ignoring case ("AUPeakLimiter").
     public static func find(_ s: String, in list: [PluginInfo] = effects()) -> PluginInfo? {
         if let id = PluginID(s), let hit = list.first(where: { $0.id == id }) { return hit }
         return list.first { $0.name.caseInsensitiveCompare(s) == .orderedSame }
@@ -144,15 +194,73 @@ public struct PluginParameter: Sendable, Codable, Hashable {
     public var min: Double
     public var max: Double
     public var value: Double
+
+    public init(identifier: String, name: String, unit: String?, min: Double, max: Double, value: Double) {
+        self.identifier = identifier
+        self.name = name
+        self.unit = unit
+        self.min = min
+        self.max = max
+        self.value = value
+    }
+}
+
+/// A running effect on a track, whatever its format: what the insert host, the steps and the
+/// agent API need of it.
+public protocol InsertUnit: AnyObject, Sendable {
+    var plugin: PluginID { get }
+    var displayName: String { get }
+    /// The engine's handle (`jm_unit`); chains keep the unit alive through it.
+    var unit: OpaquePointer { get }
+    /// Latency in frames at the project rate.
+    var latency: Int64 { get }
+    /// How long it rings after the input stops, in frames.
+    var tail: Int64 { get }
+    func captureState() -> Data?
+    func apply(_ state: Data) throws
+    var parameters: [PluginParameter] { get }
+    /// Sets a parameter by identifier (or display name). Refuses values outside its range.
+    func set(_ identifier: String, to value: Double) throws
+    var factoryPresets: [String] { get }
+    func loadPreset(_ name: String) throws
+}
+
+public enum InsertUnits {
+    /// Starts a VST 3 or CLAP plugin (in a helper process; the app plugs this in). nil: this
+    /// build hosts only Audio Units.
+    nonisolated(unsafe) public static var external: (@Sendable (_ plugin: PluginID, _ channels: Int, _ sampleRate: Double, _ state: Data?) throws -> any InsertUnit)?
+
+    static func makeExternal(_ plugin: PluginID, channels: Int, sampleRate: Double, state: Data?) throws -> any InsertUnit {
+        guard let external else { throw PluginError.notFound("This build can't run \(plugin.format.rawValue.uppercased()) plugins.") }
+        do { return try external(plugin, channels, sampleRate, state) } catch let e as PluginError { throw e } catch {
+            throw PluginError.failed(error.localizedDescription)
+        }
+    }
+
+    /// A running unit for `plugin` at the project's rate and channel count.
+    public static func make(_ plugin: PluginID, channels: Int, sampleRate: Double, state: Data? = nil, outOfProcess: Bool = false) async throws -> any InsertUnit {
+        if plugin.format != .au {
+            // Starting a helper process can take a moment: not on the caller's thread.
+            return try await Task.detached(priority: .userInitiated) { try makeExternal(plugin, channels: channels, sampleRate: sampleRate, state: state) }.value
+        }
+        return try await PluginInstance.make(plugin, channels: channels, sampleRate: sampleRate, state: state, outOfProcess: outOfProcess)
+    }
+
+    /// The same, waiting on this thread (background only).
+    public static func makeBlocking(_ plugin: PluginID, channels: Int, sampleRate: Double, state: Data? = nil, outOfProcess: Bool = false) throws -> any InsertUnit {
+        if plugin.format != .au { return try makeExternal(plugin, channels: channels, sampleRate: sampleRate, state: state) }
+        return try PluginInstance.makeBlocking(plugin, channels: channels, sampleRate: sampleRate, state: state, outOfProcess: outOfProcess)
+    }
 }
 
 /// A running Audio Unit, set up for the project's rate and channels.
-public final class PluginInstance: @unchecked Sendable {
+public final class PluginInstance: InsertUnit, @unchecked Sendable {
+    public var displayName: String { avUnit.name }
     public let plugin: PluginID
     public let avUnit: AVAudioUnit
     public let sampleRate: Double
     /// The engine's handle; chains keep the unit alive through it.
-    let unit: OpaquePointer
+    public let unit: OpaquePointer
 
     public var audioUnit: AudioUnit { avUnit.audioUnit }
     public var au: AUAudioUnit { avUnit.auAudioUnit }
@@ -327,7 +435,7 @@ public final class InsertHost: ChainProvider, @unchecked Sendable {
     public let outOfProcess: Bool
 
     private struct Entry {
-        var instance: PluginInstance
+        var instance: any InsertUnit
         var applied: Data?
     }
 
@@ -356,8 +464,8 @@ public final class InsertHost: ChainProvider, @unchecked Sendable {
         let host = InsertHost(channels: project.channels, sampleRate: project.sampleRate, outOfProcess: outOfProcess)
         for insert in project.tracks.flatMap(\.inserts) where !insert.bypass {
             do {
-                let i = try PluginInstance.makeBlocking(insert.plugin, channels: project.channels, sampleRate: project.sampleRate,
-                                                        state: insert.state, outOfProcess: outOfProcess)
+                let i = try InsertUnits.makeBlocking(insert.plugin, channels: project.channels, sampleRate: project.sampleRate,
+                                                     state: insert.state, outOfProcess: outOfProcess)
                 host.entries[insert.id] = Entry(instance: i, applied: insert.state)
             } catch {
                 host.failed[insert.id] = error as? PluginError ?? .failed(error.localizedDescription)
@@ -394,8 +502,8 @@ public final class InsertHost: ChainProvider, @unchecked Sendable {
             }
             if lock.withLock({ failed[insert.id] }) != nil { continue }
             do {
-                let instance = try await PluginInstance.make(insert.plugin, channels: channels, sampleRate: sampleRate,
-                                                             state: insert.state, outOfProcess: outOfProcess)
+                let instance = try await InsertUnits.make(insert.plugin, channels: channels, sampleRate: sampleRate,
+                                                          state: insert.state, outOfProcess: outOfProcess)
                 lock.withLock { entries[insert.id] = Entry(instance: instance, applied: insert.state) }
             } catch let e as PluginError {
                 lock.withLock { failed[insert.id] = e }
@@ -410,7 +518,7 @@ public final class InsertHost: ChainProvider, @unchecked Sendable {
     /// No units running and none failed.
     public var isEmpty: Bool { lock.withLock { entries.isEmpty && failed.isEmpty } }
 
-    public func instance(_ insert: UUID) -> PluginInstance? { lock.withLock { entries[insert]?.instance } }
+    public func instance(_ insert: UUID) -> (any InsertUnit)? { lock.withLock { entries[insert]?.instance } }
     public func failure(_ insert: UUID) -> PluginError? { lock.withLock { failed[insert] } }
 
     /// True when every insert in `project` is running or has failed (nothing is pending).

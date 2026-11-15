@@ -8,7 +8,7 @@
 | Playback volume | The slider in the transport bar | How loud Jämmer plays. It doesn't affect exports or measurements. |
 | Transcription language | The menu in the transcript panel | The language Transcribe uses |
 | Assistant model | The gear in the assistant panel | The model on this Mac, or your own OpenRouter model and key |
-| Safe mode for plugins | Audio › Plugins… | Runs every plugin in macOS's separate plugin host process instead of inside Jämmer |
+| Safe mode for plugins | Audio › Plugins… | Runs every Audio Unit in macOS's separate plugin host process instead of inside Jämmer (CLAP plugins always run outside it) |
 
 Window size and position are remembered too.
 

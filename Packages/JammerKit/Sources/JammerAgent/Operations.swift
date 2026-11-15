@@ -193,7 +193,7 @@ public enum Operations {
         .init("rename_speaker", "Rename Speaker", "Gives a speaker a name, e.g. after diarize. Use it to pair up speakers found on different tracks.",
               params: [.init("speaker", .string, "The speaker's id as a string (\"0\", \"1\", …) or current name.", required: true),
                        .init("name", .string, "The new name.", required: true)]),
-        .init("add_insert", "Add Plugin", "Puts an Audio Unit effect on a track, last in its chain unless position says otherwise; its latency is compensated. Plugins are third-party code running with Jämmer's rights. GET /api/v1/plugins lists what's installed. info has latencyMs; ids has the new insert's id.",
+        .init("add_insert", "Add Plugin", "Puts an effect (an Audio Unit or a CLAP plugin) on a track, last in its chain unless position says otherwise; its latency is compensated. Plugins are third-party code; a CLAP plugin runs in a helper process of its own. GET /api/v1/plugins lists what's installed. info has latencyMs; ids has the new insert's id.",
               params: [.init("track", .string, "Track id.", required: true),
                        .init("plugin", .string, "Plugin id from GET /api/v1/plugins (e.g. aufx/lmtr/appl) or its exact name.", required: true),
                        .init("position", .number, "Place in the chain, 0 first. Default: last.", range: 0...64),
@@ -290,6 +290,9 @@ public enum Operations {
                        OperationSpec.Param("suffix", .string, "Added to each name. Default “ (Jämmer)”."),
                        OperationSpec.Param("overwrite", .boolean, "Replace results that are already there. Default false.")],
               call: ("POST", "/api/v1/batch"), startsJob: true),
+        .init("scan_plugins", "Scan for Plugins", "Looks for CLAP plugins again, as a job: each bundle is loaded in a helper process with a time limit, so one that crashes or hangs is noted (GET /api/v1/plugins, scan.failed) and the scan goes on.",
+              params: [OperationSpec.Param("force", .boolean, "Load every bundle again, not only new and changed ones. Default false.")],
+              call: ("POST", "/api/v1/plugins/scan"), startsJob: true),
         .init("import_fcpxml", "Import Final Cut Pro XML", "Opens the sound of a film timeline (FCPXML from Flimmer, Final Cut Pro or DaVinci Resolve) as a new document: one track per lane with each clip's position, trim, level, linear fades and mute; the pictures become shot markers (shown on the timeline, not chapters). The file and every media file it uses must lie in a folder the user allows in Jämmer's Settings (reason folder_not_allowed otherwise). Nothing in those files is changed.",
               params: [OperationSpec.Param("path", .string, "Absolute path of the .fcpxml file (or .fcpxmld bundle).", required: true)],
               call: ("POST", "/api/v1/import/fcpxml")),
@@ -839,7 +842,7 @@ extension StepRunner {
             if let e = e as? PluginError { return StepFailure("\(step.op): \(e.localizedDescription)", reason: e.reason) }
             return StepFailure("\(step.op): \(e.localizedDescription)", reason: "plugin_failed")
         }
-        func latencyMs(_ i: PluginInstance) -> Double { (Double(i.latency) / project.sampleRate * 100_000).rounded() / 100 }
+        func latencyMs(_ i: any InsertUnit) -> Double { (Double(i.latency) / project.sampleRate * 100_000).rounded() / 100 }
         func insertIndex() throws -> Int {
             let key = p["insert"]?.string ?? ""
             let inserts = project.tracks[t].inserts
@@ -853,10 +856,11 @@ extension StepRunner {
         case "add_insert":
             let name = p["plugin"]?.string ?? ""
             guard let info = PluginCatalog.find(name) else {
-                throw StepFailure("add_insert: no Audio Unit effect \(name) is installed (GET /api/v1/plugins lists them).", reason: "plugin_not_found")
+                if let why = PluginCatalog.whyUnavailable?(name) { throw StepFailure("add_insert: \(why)", reason: "plugin_blocked") }
+                throw StepFailure("add_insert: no effect \(name) is installed (GET /api/v1/plugins lists them).", reason: "plugin_not_found")
             }
             do {
-                let unit = try PluginInstance.makeBlocking(info.id, channels: project.channels, sampleRate: project.sampleRate)
+                let unit = try InsertUnits.makeBlocking(info.id, channels: project.channels, sampleRate: project.sampleRate)
                 var insert = Insert(plugin: info.id, name: info.name)
                 if let preset = p["preset"]?.string {
                     try unit.loadPreset(preset)
@@ -876,7 +880,7 @@ extension StepRunner {
             var info: [String: Double] = [:]
             if p["preset"] != nil || p["parameter"] != nil {
                 do {
-                    let unit = try PluginInstance.makeBlocking(insert.plugin, channels: project.channels, sampleRate: project.sampleRate, state: insert.state)
+                    let unit = try InsertUnits.makeBlocking(insert.plugin, channels: project.channels, sampleRate: project.sampleRate, state: insert.state)
                     if let preset = p["preset"]?.string { try unit.loadPreset(preset) }
                     if let name = p["parameter"]?.string, let v = p["value"]?.double { try unit.set(name, to: v) }
                     insert.state = unit.captureState()
