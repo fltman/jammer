@@ -11,12 +11,22 @@ public enum FCPXMLImport {
     public struct Time: Sendable, Equatable {
         public var n: Int64, d: Int64
         public static let zero = Time(n: 0, d: 1)
+        /// The largest time kept exact; beyond it (only a hostile file gets there) values saturate.
+        static let limit = 1e12
+
         public init(n: Int64, d: Int64) {
+            // Int64.min has no positive counterpart; nothing real is that far out.
+            let n = max(n, -Int64.max), d = max(d, -Int64.max)
+            guard d != 0 else { self.n = 0; self.d = 1; return }
             let g = Time.gcd(abs(n), abs(d))
             self.n = (d < 0 ? -n : n) / max(1, g)
             self.d = abs(d) / max(1, g)
         }
-        static func gcd(_ a: Int64, _ b: Int64) -> Int64 { b == 0 ? a : gcd(b, a % b) }
+        static func gcd(_ a: Int64, _ b: Int64) -> Int64 {
+            var a = a, b = b
+            while b != 0 { (a, b) = (b, a % b) }
+            return a
+        }
         /// "84/24s", "1001/24000s", "5s", "2.5s"; nil when it isn't a time.
         public init?(_ text: String?) {
             guard var t = text?.trimmingCharacters(in: .whitespaces), t.hasSuffix("s") else { return nil }
@@ -28,11 +38,30 @@ public enum FCPXMLImport {
             else { return nil }
         }
         /// A decimal number of seconds (metadata), kept exact to the microsecond.
-        public init(seconds: Double) { self.init(n: Int64((seconds * 1_000_000).rounded()), d: 1_000_000) }
+        public init(seconds: Double) {
+            guard !seconds.isNaN else { self.init(n: 0, d: 1); return }
+            let v = min(Time.limit, max(-Time.limit, seconds))
+            self.init(n: Int64((v * 1_000_000).rounded()), d: 1_000_000)
+        }
         public var seconds: Double { Double(n) / Double(d) }
-        public static func + (a: Time, b: Time) -> Time { Time(n: a.n * b.d + b.n * a.d, d: a.d * b.d) }
-        public static func - (a: Time, b: Time) -> Time { Time(n: a.n * b.d - b.n * a.d, d: a.d * b.d) }
-        public func frames(at rate: Double) -> Frame { Frame((Double(n) * rate / Double(d)).rounded()) }
+        /// Exact while the numbers fit; a sum that would overflow (a file with absurd times) is
+        /// worked out in floating point and saturates rather than trapping.
+        static func combine(_ a: Time, _ b: Time, sign: Int64) -> Time {
+            let (x, o1) = a.n.multipliedReportingOverflow(by: b.d)
+            let (y, o2) = b.n.multipliedReportingOverflow(by: a.d)
+            let (y2, o3) = y.multipliedReportingOverflow(by: sign)
+            let (num, o4) = x.addingReportingOverflow(y2)
+            let (den, o5) = a.d.multipliedReportingOverflow(by: b.d)
+            if o1 || o2 || o3 || o4 || o5 { return Time(seconds: a.seconds + Double(sign) * b.seconds) }
+            return Time(n: num, d: den)
+        }
+        public static func + (a: Time, b: Time) -> Time { combine(a, b, sign: 1) }
+        public static func - (a: Time, b: Time) -> Time { combine(a, b, sign: -1) }
+        public func frames(at rate: Double) -> Frame {
+            let v = (Double(n) * rate / Double(d)).rounded()
+            guard v.isFinite else { return 0 }
+            return v >= 9.2e18 ? Frame.max : (v <= -9.2e18 ? Frame.min : Frame(v))
+        }
     }
 
     public struct Warning: Sendable, Equatable {
@@ -90,13 +119,14 @@ public enum FCPXMLImport {
     public enum ImportError: Error, LocalizedError, Equatable {
         case unreadable(String)
         case noSequence
-        case noAudio
+        /// With the first reason a clip was left out, when there was one.
+        case noAudio(String?)
 
         public var errorDescription: String? {
             switch self {
             case .unreadable(let why): "The file isn't FCPXML that can be read: \(why)"
             case .noSequence: "The file has no sequence (a project timeline) to import."
-            case .noAudio: "The timeline has no audio clips whose files can be found."
+            case .noAudio(let why): "The timeline has no audio clips that could be opened." + (why.map { " \($0)" } ?? "")
             }
         }
         public var reason: String {
@@ -135,15 +165,38 @@ public enum FCPXMLImport {
         }
     }
 
+    /// No timeline file is this large (Flimmer's sample is 15 kB); more is refused unparsed.
+    public static let maxBytes = 64 << 20
+    static let maxDepth = 256
+    static let maxElements = 2_000_000
+
     final class Builder: NSObject, XMLParserDelegate {
         var root: Node?
         var stack: [Node] = []
+        var count = 0
+        /// Why parsing was stopped, when it was.
+        var refused: String?
+
+        func stop(_ parser: XMLParser, _ why: String) {
+            refused = refused ?? why
+            parser.abortParsing()
+        }
+        // A timeline has no business declaring entities: an internal one can expand to gigabytes,
+        // an external one names a file or an address to read. Either ends the import.
+        func parser(_ parser: XMLParser, foundInternalEntityDeclarationWithName name: String, value: String?) { stop(parser, "it declares entities, which a timeline doesn't need and Jämmer doesn't follow.") }
+        func parser(_ parser: XMLParser, foundExternalEntityDeclarationWithName name: String, publicID: String?, systemID: String?) { stop(parser, "it points at other files or addresses (external entities), which Jämmer doesn't follow.") }
+        func parser(_ parser: XMLParser, foundUnparsedEntityDeclarationWithName name: String, publicID: String?, systemID: String?, notationName: String?) { stop(parser, "it points at other files or addresses (external entities), which Jämmer doesn't follow.") }
+        func parser(_ parser: XMLParser, resolveExternalEntityName name: String, systemID: String?) -> Data? { stop(parser, "it points at other files or addresses (external entities), which Jämmer doesn't follow."); return nil }
+
         func parser(_ parser: XMLParser, didStartElement name: String, namespaceURI: String?, qualifiedName: String?, attributes: [String: String] = [:]) {
+            count += 1
+            guard stack.count < FCPXMLImport.maxDepth else { return stop(parser, "its elements are nested deeper than any timeline's.") }
+            guard count <= FCPXMLImport.maxElements else { return stop(parser, "it has more elements than any timeline.") }
             let n = Node(name, attributes)
             if let top = stack.last { top.children.append(n) } else { root = n }
             stack.append(n)
         }
-        func parser(_ parser: XMLParser, didEndElement name: String, namespaceURI: String?, qualifiedName: String?) { stack.removeLast() }
+        func parser(_ parser: XMLParser, didEndElement name: String, namespaceURI: String?, qualifiedName: String?) { if !stack.isEmpty { stack.removeLast() } }
     }
 
     // MARK: Reading
@@ -152,18 +205,31 @@ public enum FCPXMLImport {
 
     /// Reads the first sequence of the file at `url`. Media paths are resolved against the file's folder.
     public static func read(_ url: URL) throws(ImportError) -> Timeline {
+        let size = ((try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? NSNumber)?.intValue ?? 0
+        guard size <= maxBytes else { throw .unreadable("it is \(size >> 20) MB, far larger than a timeline file.") }
         guard let data = try? Data(contentsOf: url) else { throw .unreadable("it can't be opened.") }
         return try read(data, base: url.deletingLastPathComponent(), name: url.deletingPathExtension().lastPathComponent)
     }
 
     public static func read(_ data: Data, base: URL, name fallbackName: String) throws(ImportError) -> Timeline {
+        guard data.count <= maxBytes else { throw .unreadable("it is \(data.count >> 20) MB, far larger than a timeline file.") }
+        // A timeline has no business declaring entities: an internal one can expand to gigabytes, an
+        // external one names a file or an address to read. Looked for before the parser sees the file
+        // (declarations sit in the prolog, ahead of the first element), and again by the parser's own hooks.
+        let prolog = data.prefix(1 << 20)
+        if prolog.range(of: Data("<!ENTITY".utf8)) != nil {
+            throw .unreadable("it declares entities, which a timeline doesn't need and Jämmer doesn't follow.")
+        }
         let parser = XMLParser(data: data)
         // Never fetch anything a file names (DTDs, entities).
         parser.shouldResolveExternalEntities = false
         let builder = Builder()
         parser.delegate = builder
-        guard parser.parse(), let root = builder.root, root.name == "fcpxml" else {
-            throw .unreadable(parser.parserError?.localizedDescription ?? "it has no fcpxml element.")
+        let parsed = parser.parse()
+        if let refused = builder.refused { throw .unreadable(refused) }
+        guard parsed, let root = builder.root, root.name == "fcpxml" else {
+            // The parser's own text is an error number; say what it means.
+            throw .unreadable(parser.parserError == nil ? "it has no fcpxml element." : "it isn't well-formed XML (line \(parser.lineNumber)).")
         }
         guard let sequence = root.find("sequence"), let spine = sequence.first("spine") else { throw .noSequence }
         let project = root.find("project")
@@ -190,10 +256,14 @@ public enum FCPXMLImport {
         let exportVersion = sequence.metadata[flimmer + "exportVersion"]
         let isFlimmer = exportVersion != nil
 
-        func db(_ linear: Double) -> Double { linear <= 0.000_016 ? -96 : (20 * log10(linear) * 100).rounded() / 100 }
+        func db(_ linear: Double) -> Double {
+            guard linear.isFinite, linear > 0.000_016 else { return -96 }
+            return min(24, (20 * log10(linear) * 100).rounded() / 100)
+        }
         func amount(_ node: Node) -> Double {
-            guard let a = node.first("adjust-volume")?["amount"] else { return 0 }
-            return Double(a.replacingOccurrences(of: "dB", with: "").trimmingCharacters(in: .whitespaces)) ?? 0
+            guard let a = node.first("adjust-volume")?["amount"],
+                  let v = Double(a.replacingOccurrences(of: "dB", with: "").trimmingCharacters(in: .whitespaces)), v.isFinite else { return 0 }
+            return min(24, max(-96, v))
         }
 
         struct Found { var lane: Int; var role: String?; var item: ClipItem; var md: [String: String] }
@@ -356,14 +426,20 @@ public enum FCPXMLImport {
                 guard let source = sources[c.media] else { continue }
                 if project.source(source.id) == nil { project.sources.append(source) }
                 let sourceStart = max(0, c.sourceStart.frames(at: rate))
+                let start = max(0, c.start.frames(at: rate))
+                // A day is longer than any film; a clip placed beyond it is a broken or hostile file.
+                guard start <= Frame(86_400 * rate) else {
+                    warnings.append(Warning(code: "out_of_range", message: "\(c.name) is placed \(Int(Double(start) / rate / 3_600)) hours into the timeline and was left out.", clip: c.name))
+                    continue
+                }
                 // Never past the end of the file (a clip can be a picture frame short of its stored times).
-                let length = min(c.duration.frames(at: rate), source.info.frames - sourceStart)
+                let length = sourceStart >= source.info.frames ? 0 : min(c.duration.frames(at: rate), source.info.frames - sourceStart)
                 guard length > 0 else {
                     warnings.append(Warning(code: "empty_clip", message: "\(c.name) starts at or after the end of its file and was left out.", clip: c.name))
                     continue
                 }
-                var clip = Clip(sourceID: source.id, sourceStart: sourceStart, start: max(0, c.start.frames(at: rate)), length: length, gainDB: c.gainDB,
-                                fadeIn: min(length, c.fadeIn.frames(at: rate)), fadeOut: min(length, c.fadeOut.frames(at: rate)), fadeShape: .linear, origin: c.origin)
+                var clip = Clip(sourceID: source.id, sourceStart: sourceStart, start: start, length: length, gainDB: c.gainDB.isFinite ? c.gainDB : 0,
+                                fadeIn: min(length, max(0, c.fadeIn.frames(at: rate))), fadeOut: min(length, max(0, c.fadeOut.frames(at: rate))), fadeShape: .linear, origin: c.origin)
                 if clip.origin != nil {
                     // How it came in, so the way back can tell what has changed since.
                     var snap = Origin.Snapshot()
@@ -390,9 +466,11 @@ public enum FCPXMLImport {
                 project.tracks.append(track)
             }
         }
-        guard project.tracks.contains(where: { !$0.clips.isEmpty }) else { throw .noAudio }
-        project.markers = timeline.shots.filter { !$0.name.isEmpty }.map {
-            Marker(position: $0.start.frames(at: rate), length: $0.duration.frames(at: rate), name: $0.name, kind: .shot)
+        guard project.tracks.contains(where: { !$0.clips.isEmpty }) else { throw .noAudio(warnings.first?.message) }
+        project.markers = timeline.shots.filter { !$0.name.isEmpty }.compactMap {
+            let at = $0.start.frames(at: rate), length = $0.duration.frames(at: rate)
+            guard at >= 0, at <= Frame(86_400 * rate) else { return nil }
+            return Marker(position: at, length: min(max(0, length), Frame(86_400 * rate)), name: String($0.name.prefix(200)), kind: .shot)
         }
         if let version = timeline.flimmerExportVersion {
             let ids = project.tracks.flatMap { $0.clips.compactMap { $0.origin?.videoAudio == true ? nil : $0.origin?.clipId } }

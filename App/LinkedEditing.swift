@@ -40,7 +40,12 @@ enum LinkedEditing {
             // never changes what the edit list reads.
             let copy = MediaStore.folder.appending(path: "\(UUID().uuidString.prefix(8)) \(url.lastPathComponent)")
             try FileManager.default.copyItem(at: url, to: copy)
-            let r = try AudioImporter.importFile(copy, mediaFolder: MediaStore.folder)
+            let r: AudioImporter.Result
+            do { r = try AudioImporter.importFile(copy, mediaFolder: MediaStore.folder) } catch {
+                // A file that can't be opened doesn't leave its copy behind.
+                try? FileManager.default.removeItem(at: copy)
+                throw error
+            }
             var source = r.source
             source.name = url.deletingPathExtension().lastPathComponent
             var project = Project(source: source)
@@ -48,6 +53,7 @@ enum LinkedEditing {
             guard let controller = NSDocumentController.shared as? JammerDocumentController else { return false }
             let doc = controller.open(project, name: url.deletingPathExtension().lastPathComponent)
             doc.session?.linkedFile = link
+            if let w = r.warning { doc.session?.status = w.replacingOccurrences(of: copy.lastPathComponent, with: url.lastPathComponent) }
             doc.windowControllers.first?.window?.makeKeyAndOrderFront(nil)
             NSApp.activate()
             return true

@@ -246,7 +246,114 @@ struct FCPXMLImportTests {
         #expect(throws: FCPXMLImport.ImportError.self) { try FCPXMLImport.read(Data("not xml".utf8), base: base, name: "x") }
         #expect(throws: FCPXMLImport.ImportError.noSequence) { try FCPXMLImport.read(Data("<fcpxml version=\"1.11\"><resources/></fcpxml>".utf8), base: base, name: "x") }
         let empty = try FCPXMLImport.read(Data("<fcpxml version=\"1.11\"><resources/><library><event><project name=\"P\"><sequence><spine><gap offset=\"0s\" duration=\"5s\"/></spine></sequence></project></event></library></fcpxml>".utf8), base: base, name: "x")
-        #expect(throws: FCPXMLImport.ImportError.noAudio) { try FCPXMLImport.build(empty, mediaFolder: base) }
+        #expect(throws: FCPXMLImport.ImportError.noAudio(nil)) { try FCPXMLImport.build(empty, mediaFolder: base) }
+    }
+}
+
+/// A timeline file is untrusted input like any other: it must not read other files, fetch
+/// anything, blow up in memory, overflow, or hang.
+@Suite("Hostile FCPXML")
+struct HostileFCPXMLTests {
+    typealias Time = FCPXMLImport.Time
+    let base = FileManager.default.temporaryDirectory
+
+    func timeline(_ spine: String, resources: String = "<asset id=\"a\" name=\"a.wav\" hasAudio=\"1\"><media-rep kind=\"original-media\" src=\"media/a.wav\"/></asset>", doctype: String = "") -> Data {
+        Data("<?xml version=\"1.0\"?>\(doctype)<fcpxml version=\"1.11\"><resources>\(resources)</resources><library><event><project name=\"P\"><sequence audioRate=\"48k\"><spine>\(spine)</spine></sequence></project></event></library></fcpxml>".utf8)
+    }
+
+    func outcome(_ data: Data) -> String {
+        let t0 = Date()
+        defer { #expect(Date().timeIntervalSince(t0) < 10, "took \(Date().timeIntervalSince(t0)) s") }
+        do { let t = try FCPXMLImport.read(data, base: base, name: "x"); return "read \(t.tracks.flatMap(\.clips).count) clips, name \(t.name)" } catch { return "refused: \(error.reason)" }
+    }
+
+    @Test("External entities are never read or fetched, and entity expansion doesn't blow up")
+    func entities() throws {
+        // A secret on disk that an external entity points at: it must not end up in anything the import returns.
+        let secret = base.appending(path: "jammer-xxe-\(UUID().uuidString).txt")
+        try "TOP-SECRET-CONTENT".write(to: secret, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: secret) }
+        let xxe = Data("""
+        <?xml version="1.0"?><!DOCTYPE fcpxml [<!ENTITY leak SYSTEM "file://\(secret.path)"><!ENTITY net SYSTEM "http://127.0.0.1:9/never">]>
+        <fcpxml version="1.11"><resources><asset id="a" name="&leak;" hasAudio="1"><media-rep kind="original-media" src="media/&leak;.wav"/></asset></resources>
+        <library><event><project name="&leak;&net;"><sequence audioRate="48k"><spine><gap offset="0s" duration="4s" name="&leak;">
+        <asset-clip ref="a" lane="-1" offset="0s" duration="1s" name="&leak;" audioRole="&leak;"/></gap></spine></sequence></project></event></library></fcpxml>
+        """.utf8)
+        var everything = ""
+        do {
+            let t = try FCPXMLImport.read(xxe, base: base, name: "x")
+            everything = "\(t)"
+        } catch { everything = "\(error)" }
+        #expect(!everything.contains("TOP-SECRET"), "an external entity was read: \(everything.prefix(300))")
+        // And it is refused in words, not with a parser's error number.
+        #expect(everything.contains("declares entities"), "\(everything.prefix(200))")
+        #expect(throws: FCPXMLImport.ImportError.unreadable("it isn't well-formed XML (line 1).")) { try FCPXMLImport.read(Data("<fcpxml><unclosed></fcpxml>".utf8), base: base, name: "x") }
+        // A billion laughs: ten levels of tenfold expansion would be gigabytes. Refused, quickly.
+        var doctype = "<!DOCTYPE fcpxml [<!ENTITY a0 \"ha\">"
+        for i in 1...10 { doctype += "<!ENTITY a\(i) \"" + String(repeating: "&a\(i - 1);", count: 10) + "\">" }
+        doctype += "]>"
+        let laughs = timeline("<gap offset=\"0s\" duration=\"4s\" name=\"&a10;\"/>", doctype: doctype)
+        let o = outcome(laughs)
+        #expect(o.hasPrefix("refused") || o.count < 1_000, "\(o.prefix(200))")
+        // A quadratic one (one long entity used many times) stays small too.
+        let long = "<!DOCTYPE fcpxml [<!ENTITY b \"" + String(repeating: "b", count: 50_000) + "\">]>"
+        let quadratic = outcome(timeline("<gap offset=\"0s\" duration=\"4s\" name=\"" + String(repeating: "&b;", count: 20_000) + "\"/>", doctype: long))
+        #expect(quadratic.hasPrefix("refused") || quadratic.count < 1_000)
+    }
+
+    @Test("Nesting a hundred thousand deep, a hundred thousand clips, megabyte attributes: refused or read, never a crash or a hang")
+    func shapes() {
+        let deep = String(repeating: "<gap offset=\"0s\" duration=\"1s\">", count: 100_000) + String(repeating: "</gap>", count: 100_000)
+        #expect(outcome(timeline(deep)).hasPrefix("refused"))
+        // Lawful depth still reads.
+        let nested = String(repeating: "<gap offset=\"0s\" duration=\"1s\">", count: 40) + String(repeating: "</gap>", count: 40)
+        #expect(outcome(timeline(nested)).hasPrefix("read"))
+        let many = (0..<100_000).map { "<asset-clip ref=\"a\" lane=\"-1\" offset=\"\($0)s\" duration=\"1s\"/>" }.joined()
+        #expect(outcome(timeline("<gap offset=\"0s\" duration=\"100000s\">\(many)</gap>")) != "")
+        let fat = String(repeating: "x", count: 8 << 20)
+        #expect(outcome(timeline("<gap offset=\"0s\" duration=\"1s\" name=\"\(fat)\"/>")) != "")
+        #expect(outcome(Data(repeating: 60, count: 1 << 20)).hasPrefix("refused"))
+        #expect(outcome(Data()).hasPrefix("refused"))
+        // Larger than any timeline: refused before it is parsed.
+        #expect(outcome(Data(count: FCPXMLImport.maxBytes + 1)) == "refused: unreadable")
+    }
+
+    @Test("Times that overflow, divide by zero or aren't numbers don't crash the arithmetic")
+    func times() throws {
+        #expect(Time("9223372036854775807/1s") != nil && Time("1/0s") == nil && Time("-5/3s") == Time(n: -5, d: 3))
+        #expect(Time("1e999s") == nil && Time("nans") == nil && Time("infs") == nil)
+        // A number too large for an integer is read as a decimal and saturates at a trillion seconds.
+        #expect(Time("99999999999999999999999s")?.seconds == 1e12)
+        // Sums and differences that don't fit saturate instead of trapping.
+        let huge = Time(n: Int64.max, d: 1), odd = Time(n: Int64.max - 1, d: Int64.max)
+        _ = huge + huge
+        _ = huge - Time(n: Int64.min + 1, d: 1)
+        _ = odd + Time(n: 1, d: Int64.max - 2)
+        _ = Time(n: Int64.min, d: 1)
+        #expect((huge + huge).seconds == 1e12 && huge.frames(at: 768_000) == Frame.max)
+        #expect(Time(seconds: 1e300).seconds == 1e12 && Time(seconds: -.infinity).seconds == -1e12 && Time(seconds: .nan) == .zero)
+        // In a file: clips placed at the end of time, with negative and absurd lengths.
+        let dir = FileManager.default.temporaryDirectory.appending(path: "jammer-fcpxml-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir.appending(path: "media"), withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try writeWAV([Float](repeating: 0.1, count: 48_000), to: dir.appending(path: "media/a.wav"), channels: 1, sampleRate: 48_000, encoding: .int16)
+        let spine = """
+        <gap offset="9223372036854775807/1s" start="-9223372036854775807/1s" duration="9223372036854775807/1s">
+          <asset-clip ref="a" lane="-1" offset="9223372036854775807/1s" start="9223372036854775807/1s" duration="9223372036854775807/1s"/>
+          <asset-clip ref="a" lane="-2" offset="-9223372036854775807/3s" start="-1s" duration="-5s"><adjust-volume amount="1e999dB"/></asset-clip>
+          <asset-clip ref="a" lane="-3" offset="0s" start="0s" duration="1/2s"><adjust-volume amount="nandB"><param name="amount"><fadeIn type="linear" duration="9223372036854775807/1s"/></param></adjust-volume></asset-clip>
+          <asset-clip ref="a" lane="99999999999999999999" offset="0s" duration="1s"/>
+        </gap>
+        """
+        let t = try FCPXMLImport.read(timeline(spine), base: dir, name: "x")
+        // Whatever of it can be placed is placed inside the file and the timeline; the rest is left out with a note.
+        let r = try? FCPXMLImport.build(t, mediaFolder: dir.appending(path: "decoded"))
+        if let r {
+            for c in r.project.tracks.flatMap(\.clips) {
+                #expect(c.length > 0 && c.sourceStart >= 0 && c.sourceStart + c.length <= 48_000 && c.start >= 0 && c.start < Frame(1) << 50 && c.gainDB.isFinite && c.fadeIn <= c.length)
+            }
+            #expect(r.project.length < Frame(1) << 51)
+        }
     }
 }
 

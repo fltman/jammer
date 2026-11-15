@@ -34,3 +34,30 @@
 | Memory after export (max RSS) | 169 MB |  |
 | Null test, export vs source | identical | 110.6 s to compare 2.07 GB |
 | Memory at the end (max RSS) | 169 MB |  |
+
+## Hostile and broken files (2026-11-15)
+
+Files come from the net, from siblings and from agents, so opening one is untrusted input. The test suite makes its own (nothing is downloaded) and feeds them through the importer that every route in shares: `HostileFileTests` and `HostileFCPXMLTests` in `JammerCoreTests`.
+
+| What | How many | Result |
+|---|---|---|
+| WAV cut at 18 offsets; data size 0xFFFFFFFF and past the end; channels 0, 1000, 65535; rate 0, 1, 3 MHz, 4 billion; bits 0, 65535; cue list claiming 4 billion points; label, iXML, bext and JUNK chunks larger than the file; 5000 chunks; RF64 with 64-bit sizes up to the maximum; empty, one byte, zeros, noise, text; 300 headers with random bytes changed | about 350 files | each refused in words or opened as sound that is in the file |
+| AIFF cut at 14 offsets; frame count past the end; channels 0 and 65535; bits 0; sample rate 0, infinity, not-a-number, negative, 1e300, tiny; sound offset past the end; 300 random headers | about 330 | the same |
+| FLAC, AAC, Apple Lossless (M4A and CAF), CAF PCM: cut at 13 offsets each, 150 files each with header bytes changed, and the right bytes under the wrong name | about 830 | the same; a refusal leaves no half-decoded file |
+| MP3-shaped garbage: an ID3 tag claiming 256 MB, frame headers over noise | 7 | refused |
+| Decoded size: a FLAC against a 1 MB limit | 1 | refused before anything is kept; opens whole when there is room |
+| FCPXML: external entities pointing at a file and an address; a billion laughs; a quadratic entity; nesting 100 000 deep; 100 000 clips; an 8 MB attribute; 65 MB of input; times at the limits of 64-bit integers, zero denominators, infinities | 14 | refused in words or read; the secret file's content never appears; no clip lands outside its file or more than a day into the timeline |
+
+What they found and what was changed:
+
+- A header claiming a sample rate too large for an integer crashed Jämmer while it was writing the refusal. Fixed.
+- A WAV or AIFF that Jämmer's own reader refused as absurd was then handed to the system's decoder, which sometimes took it. Now a refusal by the reader stands.
+- Header-only files opened as empty documents. Now refused.
+- RF64 sizes above the 64-bit signed range would have trapped. Now clamped; every chunk is clamped to the file.
+- Channels are limited to 32 and sample rates to 8–768 kHz, for files read directly and for what the system's decoder reports.
+- Decoding stops at a size limit (free space less 2 GB, at most 64 GB), checked against what the file claims before anything is written and against what actually comes out while it is.
+- A decode that fails removes its partial file. A linked file that can't be opened no longer leaves its copy in the media folder.
+- A cut-off WAV or AIFF opens with a warning (status bar, `warning` in the API answer, `warnings` in a batch result); a compressed file that ends early is refused with "is cut short".
+- FCPXML: any entity declaration is refused before parsing; size, depth and element count are limited; time arithmetic saturates instead of overflowing; gains are bounded; clips placed beyond a day are left out with a note.
+
+Tried in the running app as well, through `POST /documents`, an upload in two parts, `POST /import/fcpxml` and a batch over a folder of ten such files: every refusal in words, no leftover files in the media folder, the app still answering afterwards. Not tried by hand: File › Open and a linked file from Flimmer with such files (both use the same importer). Project packages (`.jammer`) with hostile contents are not covered here.

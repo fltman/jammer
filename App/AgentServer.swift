@@ -592,19 +592,23 @@ enum AgentRouter {
     }
 
     private static func createDocument(_ r: AgentAPI.Request) async throws -> Response {
-        let source = try await importedSource(r)
+        let (source, warning) = try await importedSource(r)
         guard let controller = NSDocumentController.shared as? JammerDocumentController else {
             throw APIError.internalError("The document controller isn't Jämmer's.")
         }
         let doc = controller.open(Project(source: source), name: source.name)
         guard let session = doc.session else { throw APIError.internalError("The document window didn't open.") }
+        if let warning { session.status = warning }
         // A sibling that makes a document is shown too, not only one that changes it.
         if let sib = r.headers["x-sibling"]?.lowercased() { session.status = "Requested by \(siblingNames[sib] ?? sib)" }
-        return .json(["document": detail(session)], status: 201)
+        var answer: [String: Any] = ["document": detail(session)]
+        if let warning { answer["warning"] = warning }
+        return .json(answer, status: 201)
     }
 
     /// Audio from a request (raw bytes, base64 JSON or an upload), imported as a source.
-    private static func importedSource(_ r: AgentAPI.Request) async throws -> SourceRef {
+    /// Also what the user (and the agent) should know about it, e.g. that the file was cut short.
+    private static func importedSource(_ r: AgentAPI.Request) async throws -> (source: SourceRef, warning: String?) {
         let type = (r.headers["content-type"] ?? "").lowercased()
         var name = r.query["name"]
         let fileURL: URL
@@ -641,12 +645,21 @@ enum AgentRouter {
             }.value
         } catch {
             try? FileManager.default.removeItem(at: fileURL)
-            throw APIError.badRequest("Jämmer couldn't read the audio (\(error.localizedDescription)). Send WAV, AIFF, MP3, AAC/M4A, FLAC, ALAC or CAF.")
+            // In the caller's words: the file's name here is one Jämmer made up for the bytes it was sent.
+            var why = error.localizedDescription
+            for lead in ["Jämmer can't open \(fileURL.lastPathComponent). ", "Jämmer can't read \(fileURL.lastPathComponent): ", "Jämmer can't read \(fileURL.lastPathComponent). "] where why.hasPrefix(lead) {
+                why = String(why.dropFirst(lead.count))
+            }
+            why = why.replacingOccurrences(of: fileURL.lastPathComponent, with: "The audio")
+            why = why.prefix(1).uppercased() + why.dropFirst()
+            throw APIError.badRequest("Jämmer couldn't open the audio. \(why) Jämmer takes WAV, AIFF, MP3, AAC/M4A, FLAC, ALAC and CAF.")
         }
         if result.decoded { try? FileManager.default.removeItem(at: fileURL) }
         var source = result.source
         source.name = name ?? "Agent audio"
-        return source
+        // The warning names the temporary file; say the document's name instead.
+        let warning = result.warning.map { w in w.replacingOccurrences(of: fileURL.lastPathComponent, with: "The audio") }
+        return (source, warning)
     }
 
     /// A header-safe file name.
@@ -684,11 +697,16 @@ enum AgentRouter {
 
     /// Adds a track from audio sent like POST /documents (bytes, base64 JSON or upload).
     private static func addTrack(_ session: EditorSession, _ r: AgentAPI.Request) async throws -> Response {
-        let source = try await importedSource(r)
+        let (source, warning) = try await importedSource(r)
         var p = session.project
         let track = p.addTrack(source: source, name: r.query["name"] ?? source.name)
         session.commit(p, action: "Add Track")
-        return .json(["track": ["id": track.id.uuidString, "name": track.name], "document": detail(session)], status: 201)
+        var answer: [String: Any] = ["track": ["id": track.id.uuidString, "name": track.name], "document": detail(session)]
+        if let warning {
+            answer["warning"] = warning
+            session.status = warning
+        }
+        return .json(answer, status: 201)
     }
 
     private static func transcript(_ session: EditorSession, _ r: AgentAPI.Request) throws -> Response {

@@ -117,11 +117,12 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
             Task {
                 session.status = "Importing \(urls.count) track\(urls.count == 1 ? "" : "s")…"
                 var p = session.project
-                var added: [UUID] = []
+                var added: [UUID] = [], short: [String] = []
                 for url in urls {
                     do {
                         let r = try await Task.detached { try AudioImporter.importFile(url, mediaFolder: MediaStore.folder) }.value
                         added.append(p.addTrack(source: r.source, name: url.deletingPathExtension().lastPathComponent).id)
+                        if let w = r.warning { short.append(w) }
                     } catch {
                         session.status = "Couldn't import \(url.lastPathComponent): \(error.localizedDescription)"
                         return
@@ -129,7 +130,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
                 }
                 guard p.tracks.count > 1 else {
                     session.commit(p, action: "Import Tracks")
-                    session.status = "Imported \(added.count) tracks."
+                    session.status = (["Imported \(added.count) tracks."] + short).joined(separator: " ")
                     return
                 }
                 session.status = "Lining up the tracks…"
@@ -158,7 +159,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
                     return (q, notes)
                 }.value
                 session.commit(aligned, action: "Import Tracks")
-                session.status = "Imported and lined up: " + notes.joined(separator: "; ")
+                session.status = (short + ["Imported and lined up: " + notes.joined(separator: "; ")]).joined(separator: " ")
             }
         }
     }

@@ -182,11 +182,14 @@ public struct BatchResult: Sendable, Equatable {
     public var loudnessFrom: [String] = []
     public var failed: [Failure] = []
     public var skipped: [String] = []
+    /// What went in short: files that were cut off and opened with what was there.
+    public var warnings: [String] = []
 
     public var json: [String: JSONValue] {
         ["done": .number(Double(outputs.count)), "outputs": .array(outputs.map { .string($0) }), "skipped": .array(skipped.map { .string($0) }),
          "loudness": .array(loudness.map { $0.map { .number(($0 * 10).rounded() / 10) } ?? .null }), "limitedByPeak": .array(limitedByPeak.map { .bool($0) }),
          "compensatedDB": .array(compensatedDB.map { .number($0) }), "loudnessFrom": .array(loudnessFrom.map { .string($0) }),
+         "warnings": .array(warnings.map { .string($0) }),
          "failed": .array(failed.map { .string("\($0.file): \($0.reason): \($0.message)") })]
     }
 }
@@ -214,6 +217,7 @@ public enum BatchRunner {
                 do { imported = try AudioImporter.importFile(input, mediaFolder: media) } catch {
                     throw BatchError("unreadable", error.localizedDescription)
                 }
+                if let w = imported.warning { result.warnings.append(w) }
                 var state = EditState(project: Project(source: imported.source), pool: SourcePool(), media: media)
                 let pool = state.pool!
                 let results = StepRunner.run(request.steps, on: &state) { p, r in LoudnessMeter.measure(PlanCompiler.mixBlocking(p, pool: pool), r) }

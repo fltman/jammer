@@ -25,6 +25,8 @@ final class JammerDocument: NSDocument {
     nonisolated(unsafe) private var mediaWrapper: FileWrapper?
     /// Set before the window opens for documents created from audio.
     var pendingProject: Project?
+    /// Something to say in the status bar once the window is up (the file opened cut short).
+    var pendingStatus: String?
     /// A history read from the package before the window opened.
     var pendingHistory: History?
     static let historyFile = "history.json"
@@ -40,6 +42,8 @@ final class JammerDocument: NSDocument {
         let s = session ?? EditorSession(project: project)
         if session == nil, let h = pendingHistory { s.load(project, history: h) }
         s.document = self
+        if let pendingStatus { s.status = pendingStatus }
+        pendingStatus = nil
         session = s
         let wc = EditorWindowController(session: s)
         addWindowController(wc)
@@ -177,6 +181,7 @@ final class JammerDocumentController: NSDocumentController {
         let result = try AudioImporter.importFile(url, mediaFolder: MediaStore.folder)
         let doc = JammerDocument()
         doc.pendingProject = Project(source: result.source)
+        doc.pendingStatus = result.warning
         doc.displayName = url.deletingPathExtension().lastPathComponent
         return doc
     }

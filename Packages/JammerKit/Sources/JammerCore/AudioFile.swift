@@ -7,6 +7,23 @@ import JammerEngine
 public struct AudioFileInfo: Sendable, Equatable, Codable {
     public enum Container: String, Sendable, Codable { case wav, rf64, bw64, aiff, aifc }
 
+    /// What a file may claim and still be opened. A header is untrusted input: one that says
+    /// 65 535 channels or a sample rate of four billion is refused, not believed.
+    public static let maxChannels = 32
+    public static let sampleRates: ClosedRange<Double> = 8_000...768_000
+
+    /// Nil when the format is one Jämmer can work with; else why not, in words.
+    public static func refusal(channels: Int, sampleRate: Double) -> String? {
+        guard channels >= 1 else { return "The file says it has no channels." }
+        guard channels <= maxChannels else { return "The file says it has \(channels) channels; Jämmer takes up to \(maxChannels)." }
+        guard sampleRate.isFinite, sampleRates.contains(sampleRate) else {
+            // Formatted as text: a rate like 1e300 doesn't fit in any integer.
+            let said = sampleRate.isFinite ? String(format: "%.0f Hz", sampleRate) : "not a number"
+            return "The file says its sample rate is \(said); Jämmer takes \(Int(sampleRates.lowerBound)) to \(Int(sampleRates.upperBound)) Hz."
+        }
+        return nil
+    }
+
     public enum SampleFormat: String, Sendable, Codable {
         case uint8, int8, int16, int24, int32, float32, float64
 
@@ -55,6 +72,9 @@ public struct AudioFileInfo: Sendable, Equatable, Codable {
     public var bext: BroadcastExtension?
     public var ixml: String?
     public var markers: [FileMarker]
+    /// Set when the header says the file holds more sound than it does (it was cut off):
+    /// the number of frames it claims. `frames` is what is really there.
+    public var claimedFrames: Int64?
 
     public init(container: Container, sampleFormat: SampleFormat, bigEndian: Bool, channels: Int, sampleRate: Double,
                 channelMask: UInt32? = nil, dataOffset: Int64, frames: Int64, chunks: [Chunk] = [],
@@ -164,33 +184,40 @@ public enum AudioFileReader {
         var ds64Data: Int64?
         var ds64Table: [String: Int64] = [:]
         var chunks: [AudioFileInfo.Chunk] = []
+        var claimedData: Int64?
         var pos: Int64 = 12
         while pos + 8 <= r.size {
             let id = try r.fourCC(at: pos)
             var size = Int64(try r.u32le(at: pos + 4))
             let payload = pos + 8
             if is64, id == "ds64" {
-                ds64Data = Int64(try r.u64le(at: payload + 8))
+                // 64-bit sizes are whatever the file says: clamped, never trusted to fit.
+                ds64Data = Int64(clamping: try r.u64le(at: payload + 8))
                 let tableCount = Int(try r.u32le(at: payload + 24))
                 for i in 0..<min(tableCount, 64) {
                     let e = payload + 28 + Int64(i) * 12
-                    ds64Table[try r.fourCC(at: e)] = Int64(try r.u64le(at: e + 4))
+                    guard e + 12 <= payload + size, e + 12 <= r.size else { break }
+                    ds64Table[try r.fourCC(at: e)] = Int64(clamping: try r.u64le(at: e + 4))
                 }
             }
             if is64, size == 0xFFFF_FFFF {
                 size = id == "data" ? (ds64Data ?? (r.size - payload)) : (ds64Table[id] ?? 0)
             }
-            if id == "data", !is64, size > r.size - payload {
-                size = r.size - payload // truncated recording: use what's there
-            }
+            // No chunk is larger than what is left of the file, whatever its header says. For the
+            // audio that also covers a recording that was cut off: what is there is used.
+            // (0xFFFFFFFF is what recorders write when they don't know the length yet: not a claim.)
+            if id == "data", size != 0xFFFF_FFFF, size > r.size - payload { claimedData = size }
+            size = max(0, min(size, r.size - payload))
             chunks.append(.init(id: id, offset: payload, size: size))
+            // A file made of nothing but headers doesn't get to keep us here.
+            guard chunks.count <= 100_000 else { throw AudioFileError.unreadable("The file has too many chunks to be a recording.") }
             pos = payload + size + (size & 1)
         }
         guard let fmt = chunks.first(where: { $0.id == "fmt " }), fmt.size >= 16 else {
-            throw AudioFileError.unreadable("The file has no fmt chunk.")
+            throw AudioFileError.unreadable("The file is cut off or damaged: the part that says what kind of audio it holds is missing.")
         }
         guard let data = chunks.first(where: { $0.id == "data" }) else {
-            throw AudioFileError.unreadable("The file has no audio data.")
+            throw AudioFileError.unreadable("The file is cut off or damaged: it has no audio in it.")
         }
         var tag = try r.u16le(at: fmt.offset)
         let channels = Int(try r.u16le(at: fmt.offset + 2))
@@ -211,12 +238,13 @@ public enum AudioFileReader {
         case (3, 64): sampleFormat = .float64
         default: throw AudioFileError.notPCM("WAV format \(tag) with \(bits) bits isn't plain PCM.")
         }
-        guard channels > 0, rate > 0 else { throw AudioFileError.unreadable("The fmt chunk is invalid.") }
+        if let no = AudioFileInfo.refusal(channels: channels, sampleRate: rate) { throw AudioFileError.unreadable(no) }
         let frameBytes = Int64(bits / 8 * channels)
         var info = AudioFileInfo(container: magic == "RIFF" ? .wav : (magic == "RF64" ? .rf64 : .bw64),
                                  sampleFormat: sampleFormat, bigEndian: false, channels: channels, sampleRate: rate,
                                  channelMask: mask, dataOffset: data.offset, frames: data.size / frameBytes,
                                  chunks: chunks, bext: nil, ixml: nil, markers: [])
+        if let claimedData, claimedData / frameBytes > info.frames { info.claimedFrames = claimedData / frameBytes }
         if let b = chunks.first(where: { $0.id == "bext" }), b.size >= 602 {
             info.bext = try parseBext(&r, b)
         }
@@ -301,13 +329,14 @@ public enum AudioFileReader {
             let id = try r.fourCC(at: pos)
             let size = Int64(try r.u32be(at: pos + 4))
             chunks.append(.init(id: id, offset: pos + 8, size: min(size, r.size - pos - 8)))
+            guard chunks.count <= 100_000 else { throw AudioFileError.unreadable("The file has too many chunks to be a recording.") }
             pos += 8 + size + (size & 1)
         }
         guard let comm = chunks.first(where: { $0.id == "COMM" }), comm.size >= 18 else {
-            throw AudioFileError.unreadable("The AIFF file has no COMM chunk.")
+            throw AudioFileError.unreadable("The file is cut off or damaged: the part that says what kind of audio it holds is missing.")
         }
         guard let ssnd = chunks.first(where: { $0.id == "SSND" }), ssnd.size >= 8 else {
-            throw AudioFileError.unreadable("The AIFF file has no audio data.")
+            throw AudioFileError.unreadable("The file is cut off or damaged: it has no audio in it.")
         }
         let channels = Int(try r.u16be(at: comm.offset))
         let frames = Int64(try r.u32be(at: comm.offset + 2))
@@ -329,14 +358,16 @@ public enum AudioFileReader {
         case ("fl64", _), ("FL64", _): format = .float64
         default: throw AudioFileError.notPCM("AIFF-C compression \(compression) isn't plain PCM.")
         }
-        guard channels > 0, rate > 0 else { throw AudioFileError.unreadable("The COMM chunk is invalid.") }
+        if let no = AudioFileInfo.refusal(channels: channels, sampleRate: rate) { throw AudioFileError.unreadable(no) }
         let ssndOffset = Int64(try r.u32be(at: ssnd.offset))
-        let dataOffset = ssnd.offset + 8 + ssndOffset
+        // An offset that points past the sound leaves nothing to play, not a position outside the file.
+        let dataOffset = min(ssnd.offset + 8 + ssndOffset, ssnd.offset + ssnd.size)
         let frameBytes = Int64(format.bitsPerSample / 8 * channels)
         let available = max(0, (ssnd.offset + ssnd.size - dataOffset) / frameBytes)
         var info = AudioFileInfo(container: kind == "AIFF" ? .aiff : .aifc, sampleFormat: format, bigEndian: bigEndian,
                                  channels: channels, sampleRate: rate, channelMask: nil, dataOffset: dataOffset,
                                  frames: min(frames, available), chunks: chunks, bext: nil, ixml: nil, markers: [])
+        if frames > available { info.claimedFrames = frames }
         if let mark = chunks.first(where: { $0.id == "MARK" }), mark.size >= 2 {
             let count = Int(try r.u16be(at: mark.offset))
             var p = mark.offset + 2
@@ -360,6 +391,8 @@ public enum AudioFileReader {
         var mantissa: UInt64 = 0
         for i in 2..<10 { mantissa = (mantissa << 8) | UInt64(bytes[i]) }
         if exponent == 0 && mantissa == 0 { return 0 }
+        // The format's infinity and not-a-number: no sample rate.
+        if exponent == 0x7FFF { return .nan }
         let value = Double(mantissa) * pow(2.0, Double(exponent - 16383 - 63))
         return sign ? -value : value
     }
