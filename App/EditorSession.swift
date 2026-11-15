@@ -83,6 +83,7 @@ final class EditorSession {
         output.setPlan(plan)
         version += 1
         loadPeaks()
+        document?.invalidateRestorableState()
         // Keep playing: restart where we are so the change is heard at once.
         if isPlaying { try? output.play(from: output.playhead) }
     }

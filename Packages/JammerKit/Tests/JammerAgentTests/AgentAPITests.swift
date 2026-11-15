@@ -174,3 +174,27 @@ struct JSONOutputTests {
         #expect(text.contains("-0.9"))
     }
 }
+
+/// site/agents.md is the guide the app serves, generated, never hand-edited.
+/// `scripts/export-agents-guide.sh` rewrites it; this test fails when it drifts.
+@Suite("Site copy of the guide")
+struct SiteGuideTests {
+    static let repo = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../../../..").standardized
+
+    static var appVersion: String {
+        let yml = (try? String(contentsOf: repo.appending(path: "project.yml"), encoding: .utf8)) ?? ""
+        let line = yml.split(separator: "\n").first { $0.contains("MARKETING_VERSION:") } ?? ""
+        return line.split(separator: "\"").dropFirst().first.map(String.init) ?? "?"
+    }
+
+    @Test("site/agents.md matches GET /jammer")
+    func siteGuide() throws {
+        let url = Self.repo.appending(path: "site/agents.md")
+        let guide = AgentAPI.guide(port: AgentAPI.ports[0], appVersion: Self.appVersion)
+        if ProcessInfo.processInfo.environment["JAMMER_WRITE_GUIDE"] == "1" {
+            try guide.write(to: url, atomically: true, encoding: .utf8)
+        }
+        let onDisk = try String(contentsOf: url, encoding: .utf8)
+        #expect(onDisk == guide, "site/agents.md is stale: run scripts/export-agents-guide.sh")
+    }
+}

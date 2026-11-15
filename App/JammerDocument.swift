@@ -48,6 +48,30 @@ final class JammerDocument: NSDocument {
         super.close()
     }
 
+    // A project opened from an audio file has nothing autosaved until it's edited,
+    // so the project travels in the window restoration state too.
+    private static let restoreKey = "jammer.project"
+
+    override func encodeRestorableState(with coder: NSCoder) {
+        super.encodeRestorableState(with: coder)
+        let project = MainActor.assumeIsolated { session?.project ?? pendingProject }
+        if let project, let data = try? ProjectPackage.encode(project) {
+            coder.encode(data as NSData, forKey: Self.restoreKey)
+            coder.encode(displayName as NSString, forKey: Self.restoreKey + ".name")
+        }
+    }
+
+    override func restoreState(with coder: NSCoder) {
+        super.restoreState(with: coder)
+        guard fileURL == nil, !isDocumentEdited,
+              let data = coder.decodeObject(of: NSData.self, forKey: Self.restoreKey) as Data?,
+              let project = try? ProjectPackage.decode(data) else { return }
+        if let name = coder.decodeObject(of: NSString.self, forKey: Self.restoreKey + ".name") as String? { displayName = name }
+        MainActor.assumeIsolated {
+            if let session { session.load(project) } else { pendingProject = project }
+        }
+    }
+
     override func read(from fileWrapper: FileWrapper, ofType typeName: String) throws {
         guard typeName == UTType.jammerProject.identifier || UTType(typeName)?.conforms(to: .jammerProject) == true else {
             throw CocoaError(.fileReadUnsupportedScheme)

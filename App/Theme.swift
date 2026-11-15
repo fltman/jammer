@@ -18,9 +18,10 @@ enum Theme {
 
 /// Seconds as h:mm:ss.mmm (or m:ss.mmm under an hour).
 func formatTime(_ seconds: Double, millis: Bool = true) -> String {
-    let s = max(0, seconds)
-    let h = Int(s) / 3_600, m = (Int(s) / 60) % 60, sec = Int(s) % 60
-    let ms = Int(((s - floor(s)) * 1_000).rounded(.down))
+    // Round to whole milliseconds first, so 3.4 s shows as 0:03.400, not 0:03.399.
+    let total = Int((max(0, seconds) * 1_000).rounded())
+    let ms = total % 1_000, s = total / 1_000
+    let h = s / 3_600, m = (s / 60) % 60, sec = s % 60
     let base = h > 0 ? String(format: "%d:%02d:%02d", h, m, sec) : String(format: "%d:%02d", m, sec)
     return millis ? base + String(format: ".%03d", ms) : base
 }

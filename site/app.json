@@ -1,0 +1,45 @@
+{
+  "name": "Jämmer",
+  "slug": "jammer",
+  "tagline": "An audio editor for the Mac that agents can drive too.",
+  "summary": "Jämmer is a native macOS audio editor for speech, restoration and post. Edits are non-destructive and untouched audio stays bit-exact; loudness is measured to EBU R 128. AI agents can open, measure, edit and export audio through a local API.",
+  "kind": "audio",
+  "version": "0.1.0",
+  "requires": "macOS 27 or later, Apple silicon",
+  "hero": "screens/hero.webp",
+  "features": [
+    {
+      "title": "Non-destructive editing",
+      "text": "Cut, copy, paste, delete, crop, silence, gain and fades work on clips that play from your original files. Undo goes all the way back, and the files are never touched.",
+      "screen": "screens/hero.webp"
+    },
+    {
+      "title": "Bit-exact by default",
+      "text": "Audio you haven't changed comes out exactly as it went in. Jämmer's tests check it sample by sample."
+    },
+    {
+      "title": "Loudness you can trust",
+      "text": "Integrated loudness, loudness range, momentary, short-term, sample and true peak per ITU-R BS.1770-5 and EBU R 128, tested against the EBU test signals. Normalize to −16 LUFS for podcasts or −23 LUFS for broadcast in one step."
+    },
+    {
+      "title": "Broadcast metadata survives",
+      "text": "WAV, RF64/BW64 and AIFF are read and written with their Broadcast Wave (bext) description and timecode, iXML and markers intact."
+    },
+    {
+      "title": "Hours of audio, smoothly",
+      "text": "Waveform overviews are built once and cached, so a three-hour recording zooms and scrolls as easily as a short clip. Drawing runs on the GPU."
+    },
+    {
+      "title": "Agents can drive it",
+      "text": "Copy one line from the splash into Claude or another agent. It reads the guide Jämmer serves on your Mac and can open, measure, edit and export audio in your windows, one undoable step at a time."
+    },
+    {
+      "title": "Every command from the keyboard",
+      "text": "The command palette (⌘K) finds any command by name. Menus, the palette and the agent API share one list of operations."
+    },
+    {
+      "title": "Built for real-time",
+      "text": "Playback runs on a C++ engine whose audio-thread code the compiler proves never allocates, locks or blocks."
+    }
+  ]
+}
