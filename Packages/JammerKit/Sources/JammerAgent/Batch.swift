@@ -263,7 +263,7 @@ public enum BatchRunner {
         if request.export.format == .wav {
             var o = WAVWriter.Options(encoding: request.export.bitDepth == 16 ? .int16 : (request.export.bitDepth == 32 ? .float32 : .int24),
                                       channels: project.channels, sampleRate: project.sampleRate)
-            o.markers = project.markers.map { FileMarker(position: $0.position, length: $0.length, name: $0.name) }
+            o.markers = project.markers.map { FileMarker(position: $0.position, length: $0.length, name: $0.cueLabel) }
             o.bext = project.sources.first?.info.bext
             o.ixml = project.sources.first?.info.ixml
             let w = try WAVWriter(url: tmp, options: o)

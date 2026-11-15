@@ -523,7 +523,7 @@ final class EditorSession {
             wav.ixml = first?.ixml
         }
         wav.markers = project.markers.filter { range.contains($0.position) }
-            .map { FileMarker(position: $0.position - range.lowerBound, length: $0.length, name: $0.name) }
+            .map { FileMarker(position: $0.position - range.lowerBound, length: $0.length, name: $0.cueLabel) }
         let finalOptions = wav
         try await Task.detached(priority: .userInitiated) {
             let writer = try WAVWriter(url: url, options: finalOptions)

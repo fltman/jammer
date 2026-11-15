@@ -63,7 +63,7 @@ extension EditorSession {
     func saveBack() {
         guard let link = linkedFile else { return }
         let project = self.project, pool = self.pool
-        let markers = project.markers.map { FileMarker(position: $0.position, length: $0.length, name: $0.name) }
+        let markers = project.markers.map { FileMarker(position: $0.position, length: $0.length, name: $0.cueLabel) }
         status = "Saving \(link.fileName)…"
         Task {
             do {

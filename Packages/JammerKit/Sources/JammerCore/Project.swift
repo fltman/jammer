@@ -159,6 +159,9 @@ public struct Marker: Codable, Hashable, Sendable, Identifiable {
     /// shown on the timeline, but not a chapter.
     public var kind: Kind?
     public enum Kind: String, Codable, Sendable { case shot }
+    /// The name written into a file (WAV cue points): shots say what they are, so another
+    /// program can tell them from the user's own markers.
+    public var cueLabel: String { kind == .shot ? "Shot: \(name)" : name }
 
     public init(id: UUID = UUID(), position: Frame, length: Frame = 0, name: String, kind: Kind? = nil) {
         self.id = id

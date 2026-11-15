@@ -98,6 +98,8 @@ struct FCPXMLImportTests {
         // Shot markers show where the pictures were, and are not chapters.
         #expect(p.markers.map(\.name) == ["Opening", "Still"] && p.markers.allSatisfy { $0.kind == .shot } && p.markers[1].position == f(192) && p.markers[1].length == f(48))
         #expect(p.chapters().isEmpty)
+        // In a file (WAV cue points) a shot says what it is; an ordinary marker keeps its name.
+        #expect(p.markers[0].cueLabel == "Shot: Opening" && Marker(position: 0, name: "Intro").cueLabel == "Intro")
     }
 
     @Test("A Flimmer export: exact times and separate levels from the metadata, origins carried, the film's sound when it says so")

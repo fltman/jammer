@@ -10,9 +10,11 @@
 - **Each clip where it was**, with its trim, its level and its fades. Fades come in as straight (linear) fades, as film editors draw them.
 - **Track level and mute.** A muted track stays muted.
 - **The sound of the video clips themselves** on a track called **Video**, under the picture it belongs to.
-- **A marker for each picture** (shot), with its name, so you can see what the sound sits under. These shot markers are not chapters: they don't end up in an exported MP3 or M4A.
+- **A marker for each picture** (shot), with its name, so you can see what the sound sits under. These shot markers are never chapters: they don't end up in an exported MP3 or M4A. In an exported WAV they are written as cue points labelled "Shot: " and the name, so another program can tell them from your own markers.
 
 The picture itself isn't shown.
+
+**What it has been tried with:** Flimmer's exports, and FCPXML files written by hand to the format's rules. It has not yet been tried with files that Final Cut Pro or DaVinci Resolve wrote, so expect rough edges there, and check the result against the original.
 
 Files from Flimmer carry exact times and separate levels for clips and tracks, and Jämmer uses those. From other programs the times are whole picture frames and a clip's level is all on the clip.
 

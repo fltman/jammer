@@ -36,7 +36,7 @@ Because its weights aren't free to use. The Demucs code is MIT, but its author h
 
 ## Which files can I open?
 
-WAV (including RF64 and BW64 for files over 4 GB), AIFF and AIFF-C are edited straight from the file. MP3, AAC/M4A, FLAC, ALAC and CAF are decoded once into a 32-bit float WAV that Jämmer keeps in its Application Support folder. A film timeline exported as Final Cut Pro XML (from Flimmer, Final Cut Pro or DaVinci Resolve) opens with **File › Import Final Cut Pro XML…**: its sound becomes tracks, with a marker for each picture.
+WAV (including RF64 and BW64 for files over 4 GB), AIFF and AIFF-C are edited straight from the file. MP3, AAC/M4A, FLAC, ALAC and CAF are decoded once into a 32-bit float WAV that Jämmer keeps in its Application Support folder. A film timeline exported as Final Cut Pro XML (from Flimmer, Final Cut Pro or DaVinci Resolve) opens with **File › Import Final Cut Pro XML…**: its sound becomes tracks, with a marker for each picture. The import has been tried with Flimmer's exports and hand-written FCPXML, not yet with files written by Final Cut Pro or DaVinci Resolve.
 
 ## Which files can I export?
 

@@ -162,6 +162,22 @@ struct BatchTests {
         #expect(reason(["path": dir.appending(path: "none.fcpxml").path]) == "not_found")
         try Data("nope".utf8).write(to: dir.appending(path: "bad.fcpxml"))
         #expect(reason(["path": dir.appending(path: "bad.fcpxml").path]) == "unreadable")
+        // Final Cut's bundle: a folder with Info.fcpxml inside. The rule covers the bundle and each media file.
+        func bundle(_ at: URL, _ src: String) throws -> URL {
+            try FileManager.default.createDirectory(at: at.appending(path: "media"), withIntermediateDirectories: true)
+            try fcpxml(src).write(to: at.appending(path: "Info.fcpxml"))
+            return at
+        }
+        let inside = try bundle(dir.appending(path: "Film.fcpxmld"), "media/b.wav")
+        try tone(inside.appending(path: "media/b.wav"), db: -20)
+        let b = try TimelineImport.check(["path": inside.path], policy: policy)
+        #expect(b.media == [inside.appending(path: "media/b.wav")] && b.tracks[0].clips.count == 1)
+        let built = try FCPXMLImport.build(b, mediaFolder: dir.appending(path: "decoded"))
+        #expect(built.clips == 1 && built.project.tracks[0].clips[0].start == 48_000 && built.project.tracks[0].clips[0].length == 96_000)
+        #expect(reason(["path": try bundle(dir.appending(path: "Leaky.fcpxmld"), "file://\(outside.path)/secret.wav").path]) == "folder_not_allowed")
+        #expect(reason(["path": try bundle(outside.appending(path: "Out.fcpxmld"), "media/b.wav").path]) == "folder_not_allowed")
+        try FileManager.default.createDirectory(at: dir.appending(path: "Empty.fcpxmld"), withIntermediateDirectories: true)
+        #expect(reason(["path": dir.appending(path: "Empty.fcpxmld").path]) == "unreadable")
         // The menu command has no policy: the user chose the file.
         #expect(try TimelineImport.check(["path": leaks.path], policy: nil).media.count == 1)
     }
