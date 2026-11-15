@@ -151,7 +151,13 @@ final class WaveformMetalView: MTKView, MTKViewDelegate {
     private var queue: MTLCommandQueue?
     private var pipeline: MTLRenderPipelineState?
     private var columnBuffer: MTLBuffer?
-    private var cacheKey: [Double] = []
+    /// What `columnBuffer` shows.
+    private var shownKey: [Double] = []
+    /// Zoomed in past the peak index, exact samples come from the files on a
+    /// background task (one at a time, always the latest view) and replace the
+    /// block-level picture drawn meanwhile. The main thread never reads a file.
+    private var exactInFlight = false
+    private var wantedExact: (key: [Double], job: @Sendable () -> [SIMD2<Float>])?
 
     init(session: EditorSession, viewport: Viewport) {
         self.session = session
@@ -179,6 +185,46 @@ final class WaveformMetalView: MTKView, MTKViewDelegate {
 
     func invalidate() { needsDisplay = true }
 
+    nonisolated static func columnValues(_ project: Project, start: Double, fpc: Double, columns: Int, lanes: Int, channels: Int,
+                                         peaks: [UUID: PeakIndex], pool: SourcePool, allowRaw: Bool) -> [SIMD2<Float>] {
+        var values = [SIMD2<Float>](repeating: SIMD2(1, -1), count: lanes * channels * columns)
+        for t in 0..<project.tracks.count {
+            let cols = Waveform.columns(project, track: t, start: start, framesPerColumn: fpc, count: columns,
+                                        peaks: peaks, pool: pool, allowRaw: allowRaw)
+            for ch in 0..<min(channels, cols.count) {
+                let base = (t * channels + ch) * columns
+                for c in 0..<columns {
+                    let col = cols[ch][c]
+                    values[base + c] = col == .empty ? SIMD2(1, -1) : SIMD2(max(-1, col.min), min(1, col.max))
+                }
+            }
+        }
+        return values
+    }
+
+    private func requestExact(_ key: [Double], _ job: @escaping @Sendable () -> [SIMD2<Float>]) {
+        wantedExact = (key, job)
+        if !exactInFlight { startExact() }
+    }
+
+    private func startExact() {
+        guard let (key, job) = wantedExact else { return }
+        wantedExact = nil
+        exactInFlight = true
+        Task.detached(priority: .userInitiated) { [weak self] in
+            let values = job()
+            await MainActor.run {
+                guard let self else { return }
+                self.exactInFlight = false
+                if self.shownKey == key {
+                    self.columnBuffer = self.device?.makeBuffer(bytes: values, length: values.count * MemoryLayout<SIMD2<Float>>.stride)
+                    self.needsDisplay = true
+                }
+                if let next = self.wantedExact, next.key != key { self.startExact() } else { self.wantedExact = nil }
+            }
+        }
+    }
+
     func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) { needsDisplay = true }
 
     func draw(in view: MTKView) {
@@ -190,21 +236,19 @@ final class WaveformMetalView: MTKView, MTKViewDelegate {
         let channels = max(1, project.channels)
         let fpc = viewport.framesPerPoint / scale
         let key = [Double(session.version), viewport.start, fpc, Double(columns), Double(session.peaks.count)]
-        if key != cacheKey || columnBuffer == nil {
-            var values = [SIMD2<Float>](repeating: SIMD2(1, -1), count: lanes * channels * columns)
-            for t in 0..<project.tracks.count {
-                let cols = Waveform.columns(project, track: t, start: viewport.start, framesPerColumn: fpc, count: columns,
-                                            peaks: session.peaks, pool: session.pool)
-                for ch in 0..<channels {
-                    let base = (t * channels + ch) * columns
-                    for c in 0..<columns {
-                        let col = cols[ch][c]
-                        values[base + c] = col == .empty ? SIMD2(1, -1) : SIMD2(max(-1, col.min), min(1, col.max))
-                    }
+        if key != shownKey || columnBuffer == nil {
+            let start = viewport.start, peaks = session.peaks, pool = session.pool
+            let needsFiles = fpc < Double(PeakIndex.baseBlock)
+            let values = Self.columnValues(project, start: start, fpc: fpc, columns: columns, lanes: lanes, channels: channels,
+                                           peaks: peaks, pool: pool, allowRaw: !needsFiles)
+            columnBuffer = device?.makeBuffer(bytes: values, length: values.count * MemoryLayout<SIMD2<Float>>.stride)
+            shownKey = key
+            if needsFiles {
+                requestExact(key) {
+                    Self.columnValues(project, start: start, fpc: fpc, columns: columns, lanes: lanes, channels: channels,
+                                      peaks: peaks, pool: pool, allowRaw: true)
                 }
             }
-            columnBuffer = device?.makeBuffer(bytes: values, length: values.count * MemoryLayout<SIMD2<Float>>.stride)
-            cacheKey = key
         }
         guard let columnBuffer else { return }
         func rgba(_ c: NSColor, _ a: CGFloat? = nil) -> SIMD4<Float> {

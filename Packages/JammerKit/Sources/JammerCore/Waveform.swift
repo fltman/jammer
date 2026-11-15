@@ -14,8 +14,11 @@ public enum Waveform {
     /// - Parameters:
     ///   - start: first timeline frame (fractional, so zooming is smooth).
     ///   - framesPerColumn: may be below 1 when zoomed in past single samples.
+    ///   - allowRaw: false never touches the files: below one peak block a column
+    ///     shows its block's min/max (or nothing without an index). For the main
+    ///     thread, which mustn't wait for a disk.
     public static func columns(_ project: Project, track: Int, start: Double, framesPerColumn: Double, count: Int,
-                               peaks: [UUID: PeakIndex], pool: SourcePool) -> [[Column]] {
+                               peaks: [UUID: PeakIndex], pool: SourcePool, allowRaw: Bool = true) -> [[Column]] {
         let channels = project.channels
         var out = Array(repeating: Array(repeating: Column.empty, count: count), count: channels)
         guard track < project.tracks.count, count > 0, framesPerColumn > 0 else { return out }
@@ -35,7 +38,8 @@ public enum Waveform {
             let lastCol = Swift.min(count - 1, Int(((Double(clip.end) - start) / framesPerColumn).rounded(.up)))
             guard firstCol <= lastCol else { continue }
             let index = peaks[ref.id]
-            let usePeaks = index != nil && framesPerColumn >= Double(PeakIndex.baseBlock)
+            let usePeaks = index != nil && (framesPerColumn >= Double(PeakIndex.baseBlock) || !allowRaw)
+            if !usePeaks && !allowRaw { continue }
             // Raw mode: read the visible part of the clip once.
             var raw: [Float] = []
             var rawStart: Frame = 0

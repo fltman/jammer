@@ -146,4 +146,23 @@ struct WaveformTests {
         #expect(zoomed[1][0].max == s[150_000 * 2 + 1])
         #expect(zoomed[1][4].max == s[150_001 * 2 + 1])
     }
+
+    @Test("Without file reads, fine zoom falls back to the peak block around each column")
+    func noFileReads() throws {
+        let frames = 20_000
+        let s = noise(count: frames * 2, seed: 9)
+        let (p, pool) = memoryProject(s)
+        let ref = p.sources[0]
+        let index = try #require(PeakIndex.build(reading: { at, n in pool.read(ref, from: at, count: n) }, channels: 2, frames: Int64(frames)))
+        // 10 frames per column, starting inside block 4 (frames 1024..<1280).
+        let cols = Waveform.columns(p, track: 0, start: 1_100, framesPerColumn: 10, count: 5, peaks: [ref.id: index], pool: pool, allowRaw: false)
+        let block = index.minMax(channel: 0, 1_024..<1_280)!
+        #expect(cols[0].allSatisfy { $0 == Waveform.Column(min: block.0, max: block.1) })
+        // No index and no file reads: nothing to draw yet.
+        let none = Waveform.columns(p, track: 0, start: 1_100, framesPerColumn: 10, count: 5, peaks: [:], pool: pool, allowRaw: false)
+        #expect(none[0].allSatisfy { $0 == .empty })
+        // Coarse zoom is unaffected.
+        #expect(Waveform.columns(p, track: 0, start: 0, framesPerColumn: 1_000, count: 20, peaks: [ref.id: index], pool: pool, allowRaw: false)
+                == Waveform.columns(p, track: 0, start: 0, framesPerColumn: 1_000, count: 20, peaks: [ref.id: index], pool: pool))
+    }
 }
