@@ -176,6 +176,12 @@ public enum Operations {
               call: ("GET", "/api/v1/documents/{id}/analysis/restoration")),
         .init("restore_preview", "Preview Repair", "The repaired audio of at most 30 s, without changing the document; with Accept: application/json the measurements before and after.",
               params: restoreParams, edits: false, call: ("POST", "/api/v1/documents/{id}/restore/preview")),
+        .init("export", "Export Audio", "The rendered audio as bytes (at most 2 GB per response; export a range for more).",
+              params: [.init("format", .string, "File format. Default wav.", options: ExportFormat.allCases.map(\.rawValue)),
+                       .init("bitDepth", .number, "wav 16, 24 or 32 (float); aiff, flac and alac 16 or 24. Default 24.", options: nil, range: 16...32),
+                       .init("bitRate", .number, "aac only, bits per second. Default 192000.", range: 64_000...320_000),
+                       start, end, .init("dither", .boolean, "TPDF dither when writing 16 or 24-bit wav.")],
+              edits: false, call: ("POST", "/api/v1/documents/{id}/export")),
         .init("restore", "Repair", "Removes hum, repairs clipping, removes clicks or reduces noise. Answers with a job; one undo step brings the original back.",
               params: restoreParams, call: ("POST", "/api/v1/documents/{id}/restore"), startsJob: true),
     ]

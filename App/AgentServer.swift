@@ -649,16 +649,33 @@ enum AgentRouter {
 
     private static func export(_ session: EditorSession, _ r: AgentAPI.Request) async throws -> Response {
         let obj = try json(r)
-        let format = (obj["format"] as? String ?? "wav").lowercased()
-        guard format == "wav" else { throw APIError.badRequest("format must be \"wav\" (more formats come later).") }
-        let bits = obj["bitDepth"] as? Int ?? 24
-        let encoding: WAVWriter.Encoding
-        switch bits {
-        case 16: encoding = .int16
-        case 24: encoding = .int24
-        case 32: encoding = .float32
-        default: throw APIError.badRequest("bitDepth must be 16, 24 or 32.")
+        let formatName = (obj["format"] as? String ?? "wav").lowercased()
+        guard let format = ExportFormat(rawValue: formatName) else {
+            throw APIError.badRequest("format must be one of \(ExportFormat.allCases.map(\.rawValue).joined(separator: ", ")).")
         }
+        let bits = obj["bitDepth"] as? Int ?? 24
+        var encoding: WAVWriter.Encoding = .int24
+        var encoded: EncodedExportOptions?
+        switch format {
+        case .wav:
+            switch bits {
+            case 16: encoding = .int16
+            case 24: encoding = .int24
+            case 32: encoding = .float32
+            default: throw APIError.badRequest("bitDepth must be 16, 24 or 32 for wav.")
+            }
+        case .aac:
+            if obj["bitDepth"] != nil { throw APIError.badRequest("aac has no bitDepth; use bitRate.") }
+            let rate = obj["bitRate"] as? Int ?? 192_000
+            guard (64_000...320_000).contains(rate) else { throw APIError.badRequest("bitRate must be 64000–320000.") }
+            encoded = EncodedExportOptions(format: .aac, bitRate: rate)
+        default:
+            guard format.bitDepths.contains(bits) else {
+                throw APIError.badRequest("bitDepth must be \(format.bitDepths.map(String.init).joined(separator: " or ")) for \(format.rawValue).")
+            }
+            encoded = EncodedExportOptions(format: format, bitDepth: bits)
+        }
+        if format != .aac, obj["bitRate"] != nil { throw APIError.badRequest("bitRate is for aac only.") }
         var range: Range<Frame>? = nil
         if let a = obj["start"] as? Double, let b = obj["end"] as? Double {
             guard a >= 0, b > a else { throw APIError.badRequest("start and end must be seconds with end after start.") }
@@ -670,12 +687,13 @@ enum AgentRouter {
         guard bytes <= AgentAPI.maxExport else {
             throw APIError.tooLarge(String(format: "That export would be %.1f GB; the limit is 2 GB per response. Export a range (start, end).", Double(bytes) / 1_073_741_824))
         }
-        let tmp = FileManager.default.temporaryDirectory.appending(path: "jammer-export-\(UUID().uuidString).wav")
+        let tmp = FileManager.default.temporaryDirectory.appending(path: "jammer-export-\(UUID().uuidString).\(format.fileExtension)")
         try UploadStore.checkSpace(for: bytes, at: tmp.deletingLastPathComponent())
         defer { try? FileManager.default.removeItem(at: tmp) }
-        try await session.export(to: tmp, options: .init(encoding: encoding, range: range, dither: obj["dither"] as? Bool ?? false))
+        try await session.export(to: tmp, options: .init(encoding: encoding, range: range, dither: obj["dither"] as? Bool ?? false, encoded: encoded))
         let data = try Data(contentsOf: tmp, options: .mappedIfSafe)
-        return Response(status: 200, contentType: "audio/wav", body: data,
-                        extraHeaders: ["Content-Disposition": "attachment; filename=\"\(asciiName(session.name)).wav\""])
+        let types: [ExportFormat: String] = [.wav: "audio/wav", .aiff: "audio/aiff", .flac: "audio/flac", .alac: "audio/mp4", .aac: "audio/mp4"]
+        return Response(status: 200, contentType: types[format] ?? "application/octet-stream", body: data,
+                        extraHeaders: ["Content-Disposition": "attachment; filename=\"\(asciiName(session.name)).\(format.fileExtension)\""])
     }
 }
