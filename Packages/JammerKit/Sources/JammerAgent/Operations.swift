@@ -14,6 +14,8 @@ public struct OperationSpec: Sendable, Identifiable {
         public var options: [String]?
         /// Allowed values for numbers, checked before a step runs and published in the schema.
         public var range: ClosedRange<Double>?
+        /// For endpoints: where the value goes ("path" or "query"); nil is the body.
+        public var location: String?
 
         public init(_ name: String, _ kind: Kind, _ description: String, required: Bool = false, options: [String]? = nil,
                     range: ClosedRange<Double>? = nil) {
@@ -38,8 +40,11 @@ public struct OperationSpec: Sendable, Identifiable {
             if let range, kind != .seconds || range.lowerBound != 0 { d["minimum"] = range.lowerBound }
             if let range { d["maximum"] = range.upperBound }
             if let options { d["enum"] = options }
+            if let location { d["x-in"] = location }
             return d
         }
+
+        func at(_ location: String) -> Param { var p = self; p.location = location; return p }
     }
 
     public var name: String
@@ -57,11 +62,18 @@ public struct OperationSpec: Sendable, Identifiable {
 
     public var id: String { name }
 
-    /// `params` as a JSON Schema object (SIBLINGS.md §3).
+    /// Every parameter including the document id in the path, for endpoints; GET parameters go in the query.
+    public var allParams: [Param] {
+        guard let call else { return params }
+        let id = Param("id", .string, "The document id (GET /api/v1/documents lists them).", required: true).at("path")
+        return [id] + (call.method == "GET" ? params.map { $0.at("query") } : params)
+    }
+
+    /// `params` as a JSON Schema object (SIBLINGS.md §3); `x-in` marks path and query values.
     public var schema: [String: Any] {
         var props: [String: Any] = [:]
-        for p in params { props[p.name] = p.schema }
-        return ["type": "object", "properties": props, "required": params.filter(\.required).map(\.name), "additionalProperties": false]
+        for p in allParams { props[p.name] = p.schema }
+        return ["type": "object", "properties": props, "required": allParams.filter(\.required).map(\.name), "additionalProperties": false]
     }
 
     init(_ name: String, _ title: String, _ description: String, params: [Param] = [], paid: Bool = false, edits: Bool = true,
