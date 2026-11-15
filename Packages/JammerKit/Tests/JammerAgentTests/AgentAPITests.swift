@@ -127,7 +127,7 @@ struct StepRunnerTests {
             ("paste", [:]), // empty clipboard
             ("delete", [:]),
         ]), on: &s, measure: fakeMeasure)
-        #expect(r.map(\.status) == [.done, .failed, .skipped])
+        #expect(r.map(\.status) == [.reverted, .failed, .skipped])
         #expect(r[1].error?.contains("clipboard") == true)
     }
 
@@ -157,5 +157,20 @@ struct StepRunnerTests {
         #expect(r.allSatisfy { $0.status == .done })
         #expect(s.project.length == 10 * 48_000)
         #expect(s.selection == Frame(9 * 48_000)..<Frame(10 * 48_000))
+    }
+}
+
+@Suite("JSON output")
+struct JSONOutputTests {
+    @Test("Doubles print short, ints and bools stay as they are")
+    func tidy() {
+        let r = AgentAPI.Response.json(["a": 7.624292, "b": 365_966 as Int64, "c": true, "d": [0.1, 2.5], "e": -0.9])
+        let text = String(decoding: r.body, as: UTF8.self)
+        #expect(text.contains("7.624292"))
+        #expect(!text.contains("7.62429199"))
+        #expect(text.contains("365966"))
+        #expect(text.contains("true"))
+        #expect(text.contains("0.1,") || text.contains("0.1\n") || text.contains("0.1 "))
+        #expect(text.contains("-0.9"))
     }
 }

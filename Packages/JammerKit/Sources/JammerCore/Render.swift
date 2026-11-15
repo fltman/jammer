@@ -1,34 +1,42 @@
 import Foundation
 import JammerEngine
 
-/// Open engine sources, one per project source, shared by plans.
-/// Not thread-safe; owned by one editor session.
-public final class SourcePool {
+/// Open engine sources, one per project source, shared by plans. Thread-safe:
+/// engine sources read with pread, and the table is behind a lock.
+public final class SourcePool: @unchecked Sendable {
+    private let lock = NSLock()
     private var open: [UUID: OpaquePointer] = [:]
-    public private(set) var missing: Set<UUID> = []
+    private var missingIDs: Set<UUID> = []
 
     public init() {}
 
     deinit { for (_, s) in open { jm_source_release(s) } }
 
+    public var missing: Set<UUID> { lock.withLock { missingIDs } }
+
     /// The engine source for `ref`, opened on first use. nil if the file is gone.
     public func source(for ref: SourceRef) -> OpaquePointer? {
-        if let s = open[ref.id] { return s }
-        let url = Self.resolve(ref)
-        guard let s = AudioFileReader.openSource(ref.info, at: url) else {
-            missing.insert(ref.id)
-            return nil
+        lock.withLock {
+            if let s = open[ref.id] { return s }
+            let url = Self.resolve(ref)
+            guard let s = AudioFileReader.openSource(ref.info, at: url) else {
+                missingIDs.insert(ref.id)
+                return nil
+            }
+            missingIDs.remove(ref.id)
+            open[ref.id] = s
+            return s
         }
-        missing.remove(ref.id)
-        open[ref.id] = s
-        return s
     }
 
     /// Adds an in-memory source (generated audio, tests).
     public func register(_ id: UUID, memory: [Float], channels: Int) {
         let frames = memory.count / max(1, channels)
-        open[id].map { jm_source_release($0) }
-        open[id] = memory.withUnsafeBufferPointer { jm_source_create_memory($0.baseAddress!, Int64(frames), Int32(channels)) }
+        let s = memory.withUnsafeBufferPointer { jm_source_create_memory($0.baseAddress!, Int64(frames), Int32(channels)) }
+        lock.withLock {
+            open[id].map { jm_source_release($0) }
+            open[id] = s
+        }
     }
 
     public static func resolve(_ ref: SourceRef) -> URL {

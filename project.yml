@@ -1,0 +1,85 @@
+name: Jammer
+options:
+  bundleIdPrefix: com.brattoo
+  deploymentTarget:
+    macOS: "27.0"
+  createIntermediateGroups: true
+  developmentLanguage: en
+  groupSortPosition: top
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MACOSX_DEPLOYMENT_TARGET: "27.0"
+    ARCHS: arm64
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    LOCALIZATION_PREFERS_STRING_CATALOGS: YES
+
+packages:
+  JammerKit:
+    path: Packages/JammerKit
+
+targets:
+  Jammer:
+    type: application
+    platform: macOS
+    sources:
+      - App
+    dependencies:
+      - package: JammerKit
+        product: JammerEngine
+      - package: JammerKit
+        product: JammerCore
+      - package: JammerKit
+        product: JammerAudio
+      - package: JammerKit
+        product: JammerAgent
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.brattoo.jammer
+        PRODUCT_NAME: Jammer
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_IDENTITY: "-"
+        ENABLE_HARDENED_RUNTIME: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    entitlements:
+      path: App/Jammer.entitlements
+      properties:
+        # Developer ID first; the sandbox is decided after the plugin-hosting prototype.
+        com.apple.security.app-sandbox: false
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleName: Jammer
+        CFBundleDisplayName: Jämmer
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundleDevelopmentRegion: en
+        LSApplicationCategoryType: public.app-category.music
+        NSHumanReadableCopyright: "© 2026 Anders Bjarby. MIT licence."
+        NSPrincipalClass: NSApplication
+        JammerHomepage: https://jammer.brattoo.com
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: Jammer Project
+            CFBundleTypeRole: Editor
+            LSHandlerRank: Owner
+            LSTypeIsPackage: true
+            NSDocumentClass: $(PRODUCT_MODULE_NAME).JammerDocument
+            LSItemContentTypes:
+              - com.brattoo.jammer.project
+          - CFBundleTypeName: Audio
+            CFBundleTypeRole: Editor
+            LSHandlerRank: Alternate
+            NSDocumentClass: $(PRODUCT_MODULE_NAME).JammerDocument
+            LSItemContentTypes:
+              - public.audio
+        UTExportedTypeDeclarations:
+          - UTTypeIdentifier: com.brattoo.jammer.project
+            UTTypeDescription: Jammer Project
+            UTTypeConformsTo:
+              - com.apple.package
+              - public.composite-content
+            UTTypeTagSpecification:
+              public.filename-extension:
+                - jammer

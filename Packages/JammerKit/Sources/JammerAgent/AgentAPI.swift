@@ -20,6 +20,10 @@ public enum AgentAPI {
     public static let maxUpload: Int64 = 16 * 1024 * 1024 * 1024
     /// Largest export returned in one response.
     public static let maxExport: Int64 = 2 * 1024 * 1024 * 1024
+    /// Uploads untouched for this long are deleted.
+    public static let uploadIdleLimit: TimeInterval = 3_600
+    /// Free space to keep on the disk after an upload chunk.
+    public static let diskReserve: Int64 = 2 * 1024 * 1024 * 1024
 
     public static func agentPrompt(port: UInt16) -> String {
         "Learn all about Jämmer and how to interact with it: fetch and follow this guide http://127.0.0.1:\(port)\(guidePath)"
@@ -106,8 +110,18 @@ public enum AgentAPI {
         }
 
         public static func json(_ object: Any, status: Int = 200) -> Response {
-            let data = (try? JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])) ?? Data("{}".utf8)
+            let data = (try? JSONSerialization.data(withJSONObject: tidy(object), options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])) ?? Data("{}".utf8)
             return Response(status: status, contentType: "application/json; charset=utf-8", body: data + Data("\n".utf8))
+        }
+
+        /// Doubles print with their shortest exact form (7.624292, not 7.6242919999999996).
+        static func tidy(_ value: Any) -> Any {
+            if type(of: value) == Double.self, let d = value as? Double, d.isFinite {
+                return NSDecimalNumber(string: "\(d)")
+            }
+            if let dict = value as? [String: Any] { return dict.mapValues(tidy) }
+            if let array = value as? [Any] { return array.map(tidy) }
+            return value
         }
 
         public static func text(_ string: String, contentType: String = "text/markdown; charset=utf-8", status: Int = 200) -> Response {
@@ -131,7 +145,7 @@ public enum AgentAPI {
         static func reason(_ status: Int) -> String {
             [200: "OK", 201: "Created", 400: "Bad Request", 402: "Payment Required", 403: "Forbidden",
              404: "Not Found", 405: "Method Not Allowed", 409: "Conflict", 413: "Payload Too Large",
-             422: "Unprocessable Content", 500: "Internal Server Error", 503: "Service Unavailable"][status] ?? "Status"
+             422: "Unprocessable Content", 500: "Internal Server Error", 503: "Service Unavailable", 507: "Insufficient Storage"][status] ?? "Status"
         }
     }
 
@@ -154,6 +168,7 @@ public enum AgentAPI {
         public static func notAvailable(_ m: String) -> APIError { APIError(409, "not_available", m) }
         public static func paidNotAllowed(_ m: String) -> APIError { APIError(402, "paid_not_allowed", m) }
         public static func tooLarge(_ m: String) -> APIError { APIError(413, "too_large", m) }
+        public static func insufficientStorage(_ m: String) -> APIError { APIError(507, "insufficient_storage", m) }
         public static func internalError(_ m: String) -> APIError { APIError(500, "internal", m) }
     }
 
@@ -237,7 +252,7 @@ public enum AgentAPI {
 
         Jämmer \(appVersion) is a native macOS audio editor (speech, restoration, post). This page tells an agent how to drive the running app through its local HTTP API. Everything here works today; nothing else does yet.
 
-        - Base URL: `\(base)` (this Mac only; the server listens on loopback). Check that `app.name` in `GET /api/v1/status` is `"Jammer"` before you change anything: Glimmer and Flimmer run similar APIs on nearby ports.
+        - Base URL: `\(base)` (this Mac only; the server listens on loopback). Before you change anything, check that `app.name` in `GET /api/v1/status` is exactly `"Jammer"` (ASCII, no ä). The window and splash say "Jämmer"; it's the same app. Glimmer and Flimmer run similar APIs on nearby ports.
         - Every request that isn't a GET needs the header **`\(h): 1`**. Without it you get `403 forbidden`.
         - Don't send an `Origin` header: requests that look like they come from a web page are refused.
         - Audio travels in request and response bodies. The API never reads or writes file paths.
@@ -299,6 +314,7 @@ public enum AgentAPI {
         | POST | `/api/v1/uploads` | Starts an upload for a big file. Answers `{"upload": {"id": "…", "size": 0}}`. |
         | PUT | `/api/v1/uploads/{id}?offset=N` | Appends a chunk (≤ 256 MB). `offset` must equal the bytes received so far. |
         | GET | `/api/v1/uploads/{id}` | How many bytes have arrived. |
+        | DELETE | `/api/v1/uploads/{id}` | Throws an upload away. |
 
         Document ids are stable while the window is open. `GET /api/v1/documents` also lists documents the user opened.
 
@@ -314,11 +330,11 @@ public enum AgentAPI {
         curl -s -X POST -H '\(h): 1' -H 'Content-Type: application/json' -d "{\\"upload\\": \\"$UP\\"}" $BASE/api/v1/documents
         ```
 
-        Uploads are kept until they're opened or the app quits.
+        Uploads are deleted once they're opened, after an hour without new chunks, or when Jämmer quits. Jämmer checks free disk space before taking a chunk and answers `507 insufficient_storage` instead of filling the disk.
 
         ### Steps
 
-        A steps request runs every step in order and stops at the first failure; later steps are reported as `skipped`, and nothing from that request is applied. The reply lists each step:
+        A steps request runs every step in order and stops at the first failure. Then nothing from the request is applied: steps that had run are reported as `reverted`, later ones as `skipped`. The reply lists each step:
 
         ```json
         {"results": [{"index": 0, "op": "delete", "status": "done"},
@@ -340,7 +356,8 @@ public enum AgentAPI {
         | 404 | `not_found` | No such document, upload, path or operation. |
         | 405 | `method_not_allowed` | Wrong HTTP method for the path. |
         | 409 | `not_available` | Not possible right now: nothing to undo, the window isn't visible for playback, the upload offset is wrong. |
-        | 413 | `too_large` | A body over 256 MB (use uploads), or an export over 2 GB (export a range). |
+        | 413 | `too_large` | A body over 256 MB (use uploads), an upload over 16 GB, or an export over 2 GB (export a range). |
+        | 507 | `insufficient_storage` | Not enough free disk space for the upload or export. |
         | 422 | `step_failed` | A step ran and failed. `error.step` is its index; `results` has the status of every step. |
         | 500 | `internal` | Jämmer failed unexpectedly. The message has the detail. |
 

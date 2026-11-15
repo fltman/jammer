@@ -148,7 +148,7 @@ public struct EditState: Sendable {
 }
 
 public struct StepResult: Sendable, Equatable {
-    public enum Status: String, Sendable { case done, failed, skipped }
+    public enum Status: String, Sendable { case done, failed, skipped, reverted }
     public var op: String
     public var status: Status
     public var error: String?
@@ -183,6 +183,8 @@ public enum StepRunner {
             } catch {
                 results.append(StepResult(op: step.op, status: .failed, error: error.localizedDescription))
                 failed = true
+                // Nothing from a failed request is kept.
+                for i in results.indices where results[i].status == .done { results[i].status = .reverted }
             }
         }
         return results

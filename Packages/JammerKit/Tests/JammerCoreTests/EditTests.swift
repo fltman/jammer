@@ -122,3 +122,28 @@ struct EditTests {
         #expect(back.levels == index.levels)
     }
 }
+
+@Suite("Waveform columns")
+struct WaveformTests {
+    @Test("Peak mode and sample mode agree, and edits show up")
+    func columns() throws {
+        let frames = 200_000
+        let s = noise(count: frames * 2, seed: 5)
+        var (p, pool) = memoryProject(s)
+        let ref = p.sources[0]
+        let index = try #require(PeakIndex.build(reading: { at, n in pool.read(ref, from: at, count: n) }, channels: 2, frames: Int64(frames)))
+        // 1024 frames per column: peaks and raw must give the same envelope.
+        let viaPeaks = Waveform.columns(p, track: 0, start: 0, framesPerColumn: 1_024, count: 100, peaks: [ref.id: index], pool: pool)
+        let viaRaw = Waveform.columns(p, track: 0, start: 0, framesPerColumn: 1_024, count: 100, peaks: [:], pool: pool)
+        #expect(viaPeaks == viaRaw)
+        // Silence the first half: those columns go flat.
+        try p.silence(0..<100_000)
+        let after = Waveform.columns(p, track: 0, start: 0, framesPerColumn: 1_024, count: 195, peaks: [ref.id: index], pool: pool)
+        #expect(after[0][10] == .empty)
+        #expect(after[0][150].max > 0.5)
+        // Zoomed past single samples, a column shows the sample under it.
+        let zoomed = Waveform.columns(p, track: 0, start: 150_000, framesPerColumn: 0.25, count: 8, peaks: [:], pool: pool)
+        #expect(zoomed[1][0].max == s[150_000 * 2 + 1])
+        #expect(zoomed[1][4].max == s[150_001 * 2 + 1])
+    }
+}
