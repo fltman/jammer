@@ -2,7 +2,7 @@
 
 Jämmer is an audio editor for speech, restoration and post-production. This chapter takes you from launch to your first export.
 
-![The Jämmer window with a speech recording, a marker and a selection](../screens/hero.webp)
+![The Jämmer window: a Swedish recording with chapter markers, a selection, and its transcript below](../screens/hero.webp)
 
 ## The first launch
 

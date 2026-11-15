@@ -16,6 +16,9 @@ struct ParakeetWordTests {
                  TokenTiming(token: ".", tokenId: 5, startTime: 0.80, endTime: 0.82, confidence: 0.99)]
         let w = ParakeetEngine.words(t, sampleRate: 48_000)
         #expect(w.map(\.text) == ["Hej", "välkommen."])
+        // FluidAudio's tokens mark a new word with a leading space.
+        let spaced = t.map { TokenTiming(token: $0.token.replacingOccurrences(of: "▁", with: " "), tokenId: $0.tokenId, startTime: $0.startTime, endTime: $0.endTime, confidence: $0.confidence) }
+        #expect(ParakeetEngine.words(spaced, sampleRate: 48_000).map(\.text) == ["Hej", "välkommen."])
         #expect(w[1].start == 19_200 && w[1].end == 39_360)
         #expect(abs((w[1].confidence ?? 0) - (0.8 + 0.6 + 0.95 + 0.99) / 4) < 1e-6)
     }
@@ -68,6 +71,8 @@ struct ParakeetBenchmark {
             wall += Double(d.components.seconds) + Double(d.components.attoseconds) / 1e18
             audio += Double(info.frames) / info.sampleRate
             timingOK = timingOK && t.words.allSatisfy { $0.start <= $0.end && $0.end <= info.frames + 4_800 }
+            // One word per spoken word, not one per sentence (give or take a few misheard joins).
+            timingOK = timingOK && abs(t.words.count - s.split(separator: " ").count) <= 3
             let hyp = t.words.map(\.text).joined(separator: " ")
             let w = WordErrorRate.compute(reference: s, hypothesis: hyp)
             if w.errors > 0 { print("BENCH  \(voice) \(rate): \"\(s)\" → \"\(hyp)\"") }

@@ -1,15 +1,20 @@
 # Settings
 
-Jämmer has no settings window yet. Two choices are remembered:
+**Jämmer › Settings…** (⌘,) holds the speech models (below). A few other choices are remembered where you make them:
 
 | Setting | Where | What it does |
 |---|---|---|
 | Show at launch | The splash (Help › Agent Access…) | Whether the splash appears when Jämmer starts |
 | Playback volume | The slider in the transport bar | How loud Jämmer plays. It doesn't affect exports or measurements. |
+| Transcription language | The menu in the transcript panel | The language Transcribe uses |
+| Assistant model | The gear in the assistant panel | The model on this Mac, or your own OpenRouter model and key |
+| Safe mode for plugins | Audio › Plugins… | Runs every plugin in a process of its own |
 
 Window size and position are remembered too.
 
 ## Models
+
+![Settings, Models: KB-Whisper small and medium, Parakeet and the speaker model, each with size, licence and a Download or Remove button](../screens/models.webp)
 
 **Jämmer › Settings… › Models** (⌘,) lists the speech models Jämmer can use. Each shows what it's for, its download size and its licence before you download it, and each can be removed again:
 

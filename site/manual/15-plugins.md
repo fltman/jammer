@@ -1,5 +1,7 @@
 # Plugins
 
+![The Plugins sheet with three Audio Units on a track, each with a switch, Edit and a bin, and the safe mode option](../screens/plugins.webp)
+
 A track can run through Audio Unit effects (AUv2 and AUv3) after its clips and before its gain: an EQ, a compressor, a de-esser, a limiter.
 
 ## Add one

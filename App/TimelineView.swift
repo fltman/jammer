@@ -390,7 +390,8 @@ final class TimelineOverlay: NSView {
             }
             let nameAttrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 11, weight: .semibold),
                                                             .foregroundColor: Theme.text]
-            (track.name as NSString).draw(at: NSPoint(x: 8, y: y + 6), withAttributes: nameAttrs)
+            // Below the row where marker flags sit, so a marker near the start doesn't cover it.
+            (track.name as NSString).draw(at: NSPoint(x: 8, y: y + 22), withAttributes: nameAttrs)
             if session.peaks.isEmpty, !session.peakProgress.isEmpty, session.project.length > Frame(project.sampleRate * 600) {
                 let p = session.peakProgress.values.first ?? 0
                 ("Reading waveform… \(Int(p * 100)) %" as NSString).draw(at: NSPoint(x: 8, y: y + 24), withAttributes: nameAttrs)

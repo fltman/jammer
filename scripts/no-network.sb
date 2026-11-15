@@ -1,0 +1,8 @@
+; A sandbox profile for testing Jämmer offline without touching the Mac's network:
+; everything is allowed except network connections that leave this machine.
+;   JAMMER_WRAP="sandbox-exec -f scripts/no-network.sb" <lock tool> jammer -- scripts/with-app.sh <test>
+(version 1)
+(allow default)
+(deny network-outbound)
+(allow network-outbound (remote ip "localhost:*"))
+(allow network-outbound (remote unix-socket))

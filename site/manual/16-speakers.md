@@ -1,5 +1,7 @@
 # Speakers
 
+![Two tracks, Flo and Daniel, with the transcript below split into paragraphs under each speaker's name](../screens/speakers.webp)
+
 **Audio › Find Speakers › Automatically** works out who speaks when. The transcript then starts a new paragraph with the speaker's name each time someone else talks, and agents can ask who said what.
 
 ## Two ways

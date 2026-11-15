@@ -101,12 +101,14 @@ public final class ParakeetEngine: TranscriptionEngine, @unchecked Sendable {
             confs = []
         }
         for tok in tokens {
+            // A word starts at "▁" (SentencePiece) or a leading space (how FluidAudio hands tokens over).
             let piece = tok.token
-            if piece.hasPrefix("▁") || text.isEmpty {
+            let startsWord = piece.hasPrefix("▁") || piece.hasPrefix(" ")
+            if startsWord || text.isEmpty {
                 flush()
                 start = tok.startTime
             }
-            text += piece.replacingOccurrences(of: "▁", with: piece.hasPrefix("▁") && text.isEmpty ? "" : " ")
+            text += piece.replacingOccurrences(of: "▁", with: " ")
             end = tok.endTime
             confs.append(tok.confidence)
         }

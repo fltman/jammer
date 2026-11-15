@@ -12,7 +12,9 @@ app="$root/build/dd/Build/Products/Debug/Jammer.app/Contents/MacOS/Jammer"
 [[ -x "$app" ]] || { echo "with-app: build the app first (xcodebuild … -derivedDataPath build/dd)." >&2; exit 1; }
 # JAMMER_ARGS: extra launch arguments, e.g. "-linkAnyOpen Flimmer" (debug builds).
 # JAMMER_LOG: a file for the app's output (default: discarded).
-env -u OPENROUTER_API_KEY "$app" ${=JAMMER_ARGS:-} >"${JAMMER_LOG:-/dev/null}" 2>&1 &
+# JAMMER_WRAP: a command to run the app under, e.g. "sandbox-exec -f scripts/no-network.sb"
+# to prove it works without a network (loopback stays open for the agent API).
+env -u OPENROUTER_API_KEY ${=JAMMER_WRAP:-} "$app" ${=JAMMER_ARGS:-} >"${JAMMER_LOG:-/dev/null}" 2>&1 &
 pid=$!
 trap 'kill $pid 2>/dev/null; wait $pid 2>/dev/null' EXIT INT TERM HUP
 export JAMMER_PID=$pid JAMMER_APP="${app%/Contents/MacOS/Jammer}"

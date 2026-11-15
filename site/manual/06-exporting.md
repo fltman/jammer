@@ -20,4 +20,6 @@ Besides WAV, **File › Export Audio…** writes **AIFF** (24-bit), **FLAC** (16
 
 ## Chapters
 
+![The export dialog with MP3 chosen and Chapters from markers ticked](../screens/export.webp)
+
 Markers are chapters. Each marker starts a chapter that runs to the next marker (or the end). **MP3** gets ID3 chapter frames, **AAC and ALAC** (.m4a) a chapter track like the ones Apple Podcasts and QuickTime show, and **Opus** CHAPTER comments, which ffmpeg-based players read; if the first marker comes after the start, a chapter called "Start" covers the beginning. **Also save chapters as JSON** writes the same chapters as a Podcasting 2.0 chapters file (`name.chapters.json`) next to the audio, for hosts that take a separate file. WAV keeps markers as cue points, as before; AIFF and FLAC get no chapters.

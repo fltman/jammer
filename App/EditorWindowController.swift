@@ -552,7 +552,12 @@ final class ExportChoices {
         var encoding: WAVWriter.Encoding { self == .wav16 ? .int16 : (self == .wavFloat ? .float32 : .int24) }
         var fileExtension: String { encoded?.format.fileExtension ?? "wav" }
     }
-    var choice: Choice = .wav24
+    /// The format is remembered between exports.
+    var choice: Choice = UserDefaults.standard.string(forKey: "export.format").flatMap(Choice.init(rawValue:)) ?? .wav24 {
+        didSet { UserDefaults.standard.set(choice.rawValue, forKey: "export.format") }
+    }
+    /// MP3 (ID3), AAC and ALAC (a chapter track) and Opus (comments) carry chapters.
+    var takesChapters: Bool { [.mp3, .aac, .alac24, .opus].contains(choice) }
     var chapters = true
     var chaptersJSON = false
     var encoding: WAVWriter.Encoding = .int24
@@ -578,7 +583,7 @@ struct ExportAccessory: View {
                 Text("Broadcast Wave metadata and markers are kept in WAV only.").font(.caption).foregroundStyle(.secondary)
             }
             Toggle("Selection only", isOn: $model.selectionOnly).disabled(!model.hasSelection)
-            Toggle("Chapters from markers (MP3)", isOn: $model.chapters).disabled(model.choice != .mp3)
+            Toggle("Chapters from markers (MP3, M4A, Opus)", isOn: $model.chapters).disabled(!model.takesChapters)
             Toggle("Also save chapters as JSON (Podcasting 2.0)", isOn: $model.chaptersJSON)
         }
         .padding(12)

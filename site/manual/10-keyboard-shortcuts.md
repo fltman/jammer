@@ -7,9 +7,11 @@
 | ⌘N | New |
 | ⌘O | Open… |
 | ⌘W | Close |
-| ⌘S | Save… |
-| ⇧⌘S | Duplicate |
+| ⌘S | Save… (for a clip from Flimmer: Save Back to the clip) |
+| ⇧⌘S | Duplicate (for a clip from Flimmer: Save a Jämmer Copy…) |
+| ⇧⌘I | Import Tracks… |
 | ⇧⌘E | Export Audio… |
+| ⌘, | Settings… |
 | ⌘Q | Quit Jämmer |
 
 ## Edit
@@ -20,7 +22,7 @@
 | ⌘X / ⌘C / ⌘V | Cut / Copy / Paste |
 | Delete | Delete the selection |
 | ⌘A | Select All |
-| Esc | Clear the selection |
+| Esc | Clear the selection (in the spectrogram: the drawn area first) |
 | ⌘K | Command Palette |
 
 ## Audio
@@ -34,6 +36,8 @@
 | ⌘] / ⌘[ | Gain +1 dB / −1 dB |
 | ⌥⌘L | Measure Loudness |
 | ⌥⌘M | Add Marker |
+| ⌥⇧⌘P | Plugins… |
+| B / L / P | In the spectrogram: box, lasso, brush |
 
 ## Transport
 
@@ -52,6 +56,9 @@
 | ⌘0 | Zoom to Fit |
 | ⌘E | Zoom to Selection |
 | ⌥⌘T | Show or Hide Transcript |
+| ⌥⌘A | Show or Hide Assistant |
+| ⌥⌘S | Spectrogram or Waveform |
+| ⌥⌘Y | Show History |
 | ⌃⌘F | Full Screen |
 | ⌘M | Minimize |
 
@@ -59,7 +66,7 @@
 
 | Gesture | Action |
 |---|---|
-| Drag in a lane | Select |
+| Drag in a lane | Select (in the spectrogram: draw an area with the current tool) |
 | Shift-click | Extend the selection |
 | Double-click | Select a clip |
 | Click in the ruler | Move the playhead |

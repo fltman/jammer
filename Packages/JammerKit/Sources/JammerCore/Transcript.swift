@@ -120,9 +120,11 @@ extension Project {
         guard tracks.count > 1, !speakerTurns.isEmpty else { return words }
         let turns = placedTurns()
         guard Set(turns.map(\.track)).count > 1 else { return words }
+        // The other tracks' turns count with 0.3 s to spare: bleed words sit right at their edges.
+        let margin = Frame(0.3 * sampleRate)
         func covered(_ w: PlacedWord, on sameTrack: Bool) -> Bool {
-            let mid = (w.start + w.end) / 2
-            return turns.contains { ($0.track == w.track) == sameTrack && $0.start <= mid && mid < $0.end }
+            let mid = (w.start + w.end) / 2, m = sameTrack ? 0 : margin
+            return turns.contains { ($0.track == w.track) == sameTrack && $0.start - m <= mid && mid < $0.end + m }
         }
         return words.filter { covered($0, on: true) || !covered($0, on: false) }
     }

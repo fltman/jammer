@@ -1,5 +1,7 @@
 # The assistant
 
+![The assistant panel with a request, the plan it made, what the plan will do, and Run and Cancel](../screens/assistant.webp)
+
 Ask Jämmer in Swedish or English and it does the editing: "ta bort alla ehm och tystnader längre än en sekund", "normalize to −16 LUFS", "ta bort brummet på talare 2", "fade in the first two seconds".
 
 ## Open it

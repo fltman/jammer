@@ -1,45 +1,71 @@
 {
   "name": "Jämmer",
   "slug": "jammer",
-  "tagline": "An audio editor for the Mac that agents can drive too.",
-  "summary": "Jämmer is a native macOS audio editor for speech, restoration and post. Edits are non-destructive and untouched audio stays bit-exact; loudness is measured to EBU R 128. AI agents can open, measure, edit and export audio through a local API.",
+  "tagline": "Edit speech by its words. Repair, level and publish it.",
+  "summary": "Jämmer is a native Mac audio editor for podcasts and other speech. Cut by deleting words in the transcript, repair hum, clicks and noise, find and level the speakers, and export at the right loudness with chapters. Everything runs on your Mac, it's free and open source, and AI agents can drive it too.",
   "kind": "audio",
   "version": "0.1.0",
   "requires": "macOS 27 or later, Apple silicon",
   "hero": "screens/hero.webp",
   "features": [
     {
-      "title": "Non-destructive editing",
-      "text": "Cut, copy, paste, delete, crop, silence, gain and fades work on clips that play from your original files. Undo goes all the way back, and the files are never touched.",
+      "title": "Edit the transcript, and the audio follows",
+      "text": "Transcribe on your Mac, in Swedish with KB-Whisper or in 25 languages with Parakeet, then delete words, filler words and long pauses as text. The transcript always reads exactly what plays.",
       "screen": "screens/hero.webp"
     },
     {
-      "title": "Bit-exact by default",
-      "text": "Audio you haven't changed comes out exactly as it went in. Jämmer's tests check it sample by sample."
+      "title": "Restoration you can hear before you commit",
+      "text": "Remove mains hum, repair clipping and clicks, and reduce noise with DeepFilterNet. Preview the repair against the original, and undo it any time: your files are never changed.",
+      "screen": "screens/restore.webp"
     },
     {
-      "title": "Loudness you can trust",
-      "text": "Integrated loudness, loudness range, momentary, short-term, sample and true peak per ITU-R BS.1770-5 and EBU R 128, tested against the EBU test signals. Normalize to −16 LUFS for podcasts or −23 LUFS for broadcast in one step."
+      "title": "Draw on the spectrogram",
+      "text": "Mark a cough, a click or a phone ringing by where it sits in time and pitch, with a box, a lasso or a brush, then heal it from the sound around it or turn it down.",
+      "screen": "screens/spectrogram.webp"
     },
     {
-      "title": "Broadcast metadata survives",
-      "text": "WAV, RF64/BW64 and AIFF are read and written with their Broadcast Wave (bext) description and timecode, iXML and markers intact."
+      "title": "Speakers found, levelled and cleaned",
+      "text": "Find who speaks when, one person per track or several on one. Bring everyone to the same loudness, ride a speaker who drifts, and remove the other voices bleeding into each microphone.",
+      "screen": "screens/speakers.webp"
     },
     {
-      "title": "Hours of audio, smoothly",
-      "text": "Waveform overviews are built once and cached, so a three-hour recording zooms and scrolls as easily as a short clip. Drawing runs on the GPU."
+      "title": "Loudness for where it's going",
+      "text": "Presets for Apple Podcasts, Spotify, YouTube, EBU R 128 and ATSC A/85, measured to ITU-R BS.1770 and tested against the EBU signals. Export WAV, FLAC, AAC, MP3 and Opus with chapters from your markers.",
+      "screen": "screens/export.webp"
+    },
+    {
+      "title": "An assistant that runs on your Mac",
+      "text": "Ask in Swedish or English: \"ta bort alla ehm och tystnader längre än en sekund\". The assistant turns it into Jämmer's own commands, shows what a plan will remove before it runs, and everything is one undo step.",
+      "screen": "screens/assistant.webp"
+    },
+    {
+      "title": "Works with Flimmer and Glimmer",
+      "text": "Send a clip's sound from Flimmer, edit it here and press ⌘S: it's saved back into the same file and Flimmer picks it up. The three apps can also call each other's commands.",
+      "screen": "screens/linked.webp"
     },
     {
       "title": "Agents can drive it",
-      "text": "Copy one line from the splash into Claude or another agent. It reads the guide Jämmer serves on your Mac and can open, measure, edit and export audio in your windows, one undoable step at a time."
+      "text": "Copy one line from the splash into Claude or another agent. It reads the guide Jämmer serves on your Mac and can open, measure, edit, repair and export audio in your windows, one undoable step at a time.",
+      "screen": "screens/splash.webp"
     },
     {
-      "title": "Every command from the keyboard",
-      "text": "The command palette (⌘K) finds any command by name. Menus, the palette and the agent API share one list of operations."
+      "title": "A history that keeps every branch",
+      "text": "Undo a few steps, try something else, and the steps you undid are still there. The history tree is saved with the project.",
+      "screen": "screens/history.webp"
     },
     {
-      "title": "Built for real-time",
-      "text": "Playback runs on a C++ engine whose audio-thread code the compiler proves never allocates, locks or blocks."
+      "title": "Your plugins, safely",
+      "text": "Audio Unit effects on any track, with latency compensated. Other developers' plugins run in their own process, so a crash can't take your session with it.",
+      "screen": "screens/plugins.webp"
+    },
+    {
+      "title": "Non-destructive and bit-exact",
+      "text": "Edits play from your original files, and audio you haven't changed comes out exactly as it went in; Jämmer's tests check it sample by sample. Broadcast Wave data, iXML and markers survive."
+    },
+    {
+      "title": "Models you choose",
+      "text": "Speech models are optional downloads, each shown with its size and licence first, and removable. Nothing is sent to a server of ours, because there isn't one.",
+      "screen": "screens/models.webp"
     }
   ]
 }

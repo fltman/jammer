@@ -79,7 +79,7 @@ final class ModelsModel {
                 let id = row.id
                 try await row.install { p in Task { @MainActor in self.progress[id] = p } }
             } catch {
-                errors[row.id] = error.localizedDescription
+                errors[row.id] = "The download didn't finish (\(error.localizedDescription)). Check the network and try again; everything else in Jämmer works without one."
             }
             progress[row.id] = nil
             tick += 1
@@ -98,8 +98,15 @@ struct ModelsSettings: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Models").font(.title2.bold())
-            Text("Speech models run on this Mac. Each is downloaded once, from \(SpeechEngines.store.source.host() ?? "the model source"), into \(SpeechEngines.store.folder.path).")
-                .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            HStack(alignment: .firstTextBaseline) {
+                Text("Speech models run on this Mac. Each is downloaded once, from \(SpeechEngines.store.source.host() ?? "the model source"), and can be removed again.")
+                    .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                Spacer()
+                Button("Show in Finder") {
+                    try? FileManager.default.createDirectory(at: SpeechEngines.store.folder, withIntermediateDirectories: true)
+                    NSWorkspace.shared.activateFileViewerSelecting([SpeechEngines.store.folder])
+                }
+            }
             ForEach(model.rows) { row in
                 HStack(alignment: .top, spacing: 12) {
                     VStack(alignment: .leading, spacing: 3) {

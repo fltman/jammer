@@ -116,6 +116,7 @@ public struct OpenRouterPlanner: AssistantPlanner {
         if let reply = PlanParser.guardrail(goal) { return AssistantPlan(reply: reply, steps: []) }
         guard let key = key(), !key.isEmpty else { throw AssistantError.noKey }
         var req = URLRequest(url: endpoint.appending(path: "chat/completions"))
+        req.timeoutInterval = 30 // offline or stalled: an error in the panel, never a hang
         req.httpMethod = "POST"
         req.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")

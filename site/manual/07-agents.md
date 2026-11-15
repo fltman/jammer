@@ -1,5 +1,7 @@
 # Agents
 
+![The splash with the line to paste into an agent and a Copy button](../screens/splash.webp)
+
 Jämmer serves a guide and a small HTTP API on your Mac, so an AI agent such as Claude can open, measure, edit and export audio in your open windows.
 
 ## Connect an agent

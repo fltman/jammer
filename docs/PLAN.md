@@ -38,7 +38,7 @@ Goal: open a WAV of several hours, zoom smoothly, play, cut, undo, export bit-ex
 | Restoration v1 DSP: de-hum, de-clip, de-click, golden renders | Done |
 | Restoration through new sources; analysis, preview, restore jobs in the API | Done, verified with curl |
 | App: transcript panel, Restore sheet with A/B preview | Done, checked in the app |
-| DeepFilterNet 3 (libDF) with amount control | Waiting for approval to build libDF |
+| DeepFilterNet 3 (libDF) with amount control | Done (Reduce Noise; `restore` kind denoise) |
 | KB-Whisper engine (1.7 % WER on synthetic Swedish) | Done |
 | Export: AIFF, FLAC, ALAC, AAC, Ogg Opus (own muxer), MP3 (LAME, dynamic) | Done |
 | Chapters from markers: ID3 CHAP in MP3, Podcasting 2.0 JSON, `GET …/chapters` | Done |

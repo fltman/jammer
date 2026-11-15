@@ -1,6 +1,6 @@
 ## What is Jämmer?
 
-A native macOS audio editor for speech, restoration and post-production. It's the audio sibling of Glimmer (images) and Flimmer (video). Version 0.1 is the foundation: non-destructive editing, loudness measurement and normalization, WAV/AIFF with their metadata, and a local API for AI agents.
+A native macOS audio editor for speech: podcasts, interviews, voice-overs and their clean-up. You edit by cutting the waveform or by deleting words in the transcript, repair hum, clicks, clipping and noise, find and level the speakers, set the loudness for the platform and export with chapters. It's the audio sibling of Glimmer (images) and Flimmer (video), and AI agents can drive it through a local API.
 
 ## What do I need to run it?
 
@@ -12,15 +12,27 @@ Yes. Jämmer is free and open source under the MIT licence. The source code will
 
 ## Does it cost anything to use the AI features?
 
-Nothing in Jämmer costs money today: everything runs on your Mac. If paid cloud features are added later, they will use your own OpenRouter key, and an agent can only use them when it explicitly allows paid steps.
+No, unless you choose to. Transcription, speaker finding, noise reduction and the built-in assistant all run on your Mac at no cost. The assistant can optionally use a cloud model through OpenRouter instead of the one on your Mac; that uses your own OpenRouter key (kept in the Keychain) and is billed by OpenRouter to you. An agent can only trigger paid steps when it explicitly allows them.
 
 ## What runs locally, and what leaves my Mac?
 
-Everything runs locally. Jämmer doesn't send your audio anywhere and doesn't need an account. The agent API listens only on your own Mac (127.0.0.1); other computers on your network can't reach it.
+Everything runs locally: editing, playback, loudness, restoration, transcription, speaker finding, export, and the assistant with the on-device model. Your audio is never sent anywhere and there's no account. Two things use the network, both only when you ask: downloading a speech model in Settings › Models (from Hugging Face, or a mirror you choose), and the assistant's optional OpenRouter model, which sends your request and a description of the document (not the audio) to OpenRouter. The agent API listens only on your own Mac (127.0.0.1); other computers can't reach it.
+
+## Does it work offline?
+
+Yes. Once the models you want are downloaded, Jämmer needs no network at all: it starts, opens, edits, repairs, transcribes, finds speakers, exports and answers agents on 127.0.0.1 with the network off. Without a network, downloading a model and the OpenRouter option say so instead of working; nothing else is affected. We test this by running Jämmer in a sandbox that blocks every connection off the Mac.
 
 ## Does Jämmer depend on a server?
 
-No. Jämmer doesn't rely on any service run by us. Future features that download models will fetch them from their original source, and you'll be able to point Jämmer at your own mirror.
+No. Jämmer doesn't rely on any service run by us. Models are fetched from their original source, and you can point Jämmer at your own mirror.
+
+## Which models does it use, and how big are they?
+
+Noise reduction (DeepFilterNet 3, 8 MB) ships inside the app. The rest are optional downloads under **Jämmer › Settings… › Models**, each shown with its size and licence before you download it, and removable there: KB-Whisper small (175 MB) or medium (539 MB) for the most accurate Swedish transcription, Parakeet TDT 0.6B v3 (about 630 MB) for 25 European languages, and the speaker model (about 20 MB). Without any download, transcription uses the Mac's own recogniser. The assistant uses the model built into macOS.
+
+## Why no HTDemucs stem separation?
+
+Because its weights aren't free to use. The Demucs code is MIT, but its author has said that the trained weights aren't covered by that licence and are for research only, and they were trained on a non-commercial dataset. Jämmer only ships and downloads models whose licence allows everyone to use them, so stem separation will come with models that do.
 
 ## Which files can I open?
 
@@ -28,11 +40,15 @@ WAV (including RF64 and BW64 for files over 4 GB), AIFF and AIFF-C are edited st
 
 ## Which files can I export?
 
-WAV at 16-bit, 24-bit or 32-bit float, with optional TPDF dither. More formats are planned.
+WAV (16-bit, 24-bit or 32-bit float, with optional dither, keeping Broadcast Wave data and markers), AIFF, FLAC, ALAC and AAC (.m4a), Ogg Opus and MP3. Markers become chapters in MP3, M4A and Opus, and can also be saved as a Podcasting 2.0 chapters file.
 
 ## Will Jämmer change my original files?
 
-No. Edits are stored in the project and played from the originals. Opening a WAV creates a new untitled project, so saving never overwrites the WAV.
+No. Edits are stored in the project and played from the originals; repairs and effects play from new files beside them. Opening a WAV creates a new untitled project, so saving never overwrites the WAV. The one exception is deliberate: a clip that Flimmer hands over to edit is saved back into that same file when you press ⌘S.
+
+## Can I use my plugins?
+
+Yes: Audio Unit effects (AUv2 and AUv3) can be put on any track. Plugins from developers other than Apple run in a process of their own, so one that crashes can't take Jämmer down.
 
 ## How do I let an AI agent use Jämmer?
 
@@ -40,7 +56,11 @@ When Jämmer starts, the splash shows a line under "For your agent". Click Copy 
 
 ## What can an agent do, and what can't it?
 
-It can open audio, read the document, measure loudness, look at the waveform, edit (every request is one undo step, and a request that fails changes nothing), and export. It can start playback only in a window you can see, and it can never start recording.
+It can do what the menus do: open audio, read the document and its transcript, measure loudness, edit, repair, transcribe, find and level speakers, add plugins, move through the history and export. Every request is one undo step, and a request that fails changes nothing. It can start playback only in a window you can see, it can't download models, and it can't open plugin windows.
+
+## Does it work with VoiceOver?
+
+Yes. Every control has a name, the timeline reads out the playhead, the selection and the drawn spectrogram area and moves with the VoiceOver increment and decrement gestures, and whatever can be drawn with the mouse (such as an area in the spectrogram) can also be typed in as numbers.
 
 ## Can I stop the splash from appearing?
 
@@ -48,4 +68,4 @@ Untick "Show at launch" on the splash. Help › Agent Access shows it again.
 
 ## How do I uninstall Jämmer?
 
-Quit Jämmer and move it to the Trash. To remove everything else, also delete `~/Library/Application Support/Jammer` (decoded audio), `~/Library/Caches/com.brattoo.jammer` (waveform caches) and `~/Library/Preferences/com.brattoo.jammer.plist`.
+Quit Jämmer and move it to the Trash. To remove everything else, also delete `~/Library/Application Support/Jammer` (decoded audio, repaired files and downloaded models), `~/Library/Caches/com.brattoo.jammer` (waveform caches) and `~/Library/Preferences/com.brattoo.jammer.plist`. If you saved an OpenRouter key, remove the "com.brattoo.jammer" item in Keychain Access.
