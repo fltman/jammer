@@ -284,6 +284,29 @@ Lines up separately recorded tracks (double-enders) by their sound. Use the call
 | `tracks` | list | Track ids to move. Default: all the others. |
 | `window` | seconds | Seconds from the start to compare. Default 120. |
 
+### `spectral_attenuate`
+
+Lowers a frequency band inside the range (the selection without one), per track, rendered into a new file; the original audio is one undo away.
+
+| Param | Type | Description |
+|---|---|---|
+| `low` | number | **Required.** Lower edge in Hz. |
+| `high` | number | **Required.** Upper edge in Hz. |
+| `db` | number | Change in dB, -80 to 0. Default -20. |
+| `start` | seconds | Range start in seconds. With `end`, overrides the selection. |
+| `end` | seconds | Range end in seconds. |
+| `tracks` | list | Track ids. Default: every track. |
+
+### `correct_drift`
+
+Resamples a separately recorded track whose recorder's clock ran fast or slow, so it stays in sync to the end. Without ppm the drift is measured against another track; an uncertain measurement fails with reason drift_uncertain instead of guessing.
+
+| Param | Type | Description |
+|---|---|---|
+| `track` | string | **Required.** The track to correct. |
+| `against` | string | Track to measure against (the call recording is best). Default: the best-matching track. |
+| `ppm` | number | The drift in parts per million (positive: it ran fast). Skips the measurement. |
+
 ### `loudness_preset`
 
 Brings the range (the whole document without a range or selection) to a delivery target in one step. Without a limiter, the gain stops where the true peak would pass the ceiling; info.limitedByPeak is then 1 and integratedAfter shows what was reached.

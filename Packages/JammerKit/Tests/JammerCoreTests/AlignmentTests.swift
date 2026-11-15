@@ -136,3 +136,28 @@ struct CallMixTests {
         #expect(abs(gotB - expectB) <= 3, "B: \(gotB) vs \(expectB), confidence \(results[p.tracks[1].id]?.confidence ?? -1)")
     }
 }
+
+@Suite("Drift correction")
+struct DriftCorrectionTests {
+    @Test("A track that ran 50 ppm fast measures close to 0 ppm after correction")
+    func correct() throws {
+        let n = 48_000 * 240
+        let ref = AlignmentTests().voice(n, seed: 7)
+        let fast = (0..<n).map { i -> Float in
+            let pos = Double(i) * (1 + 50e-6)
+            let k = Int(pos), f = Float(pos - Double(k))
+            return k + 1 < n ? ref[k] * (1 - f) + ref[k + 1] * f : 0
+        }
+        var (p, pool) = memoryProject(ref.flatMap { [$0, $0] })
+        let g = SourceRef(name: "Guest", path: "/dev/null", info: p.sources[0].info)
+        pool.register(g.id, memory: fast.flatMap { [$0, $0] }, channels: 2)
+        p.addTrack(source: g)
+        let before = try #require(p.drift(of: p.tracks[1].id, against: p.tracks[0].id, pool: pool))
+        #expect(abs(before.partsPerMillion - 50) < 3, "before \(before.partsPerMillion)")
+        let media = FileManager.default.temporaryDirectory.appending(path: "jammer-drift-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: media) }
+        let q = try p.correctingDrift(of: p.tracks[1].id, ppm: before.partsPerMillion, pool: pool, media: media)
+        let after = try #require(q.drift(of: q.tracks[1].id, against: q.tracks[0].id, pool: pool))
+        #expect(abs(after.partsPerMillion) < 3, "after \(after.partsPerMillion)")
+    }
+}

@@ -124,6 +124,15 @@ public enum Operations {
               params: [.init("reference", .string, "Track id to line up with. Default: the best-matching track."),
                        .init("tracks", .list, "Track ids to move. Default: all the others."),
                        .init("window", .seconds, "Seconds from the start to compare. Default 120.", range: 10...600)]),
+        .init("spectral_attenuate", "Attenuate Frequencies", "Lowers a frequency band inside the range (the selection without one), per track, rendered into a new file; the original audio is one undo away.",
+              params: [.init("low", .number, "Lower edge in Hz.", required: true, range: 0...96_000),
+                       .init("high", .number, "Upper edge in Hz.", required: true, range: 0...96_000),
+                       .init("db", .number, "Change in dB, -80 to 0. Default -20.", range: -80...0),
+                       start, end, .init("tracks", .list, "Track ids. Default: every track.")]),
+        .init("correct_drift", "Correct Drift", "Resamples a separately recorded track whose recorder's clock ran fast or slow, so it stays in sync to the end. Without ppm the drift is measured against another track; an uncertain measurement fails with reason drift_uncertain instead of guessing.",
+              params: [.init("track", .string, "The track to correct.", required: true),
+                       .init("against", .string, "Track to measure against (the call recording is best). Default: the best-matching track."),
+                       .init("ppm", .number, "The drift in parts per million (positive: it ran fast). Skips the measurement.", range: -2_000...2_000)]),
         .init("loudness_preset", "Loudness Preset", "Brings the range (the whole document without a range or selection) to a delivery target in one step. Without a limiter, the gain stops where the true peak would pass the ceiling; info.limitedByPeak is then 1 and integratedAfter shows what was reached.",
               params: [.init("preset", .string, "The target.", required: true, options: LoudnessPreset.allCases.map(\.rawValue)), start, end]),
         .init("add_marker", "Add Marker", "Adds a marker, or a region when `duration` is given.",
@@ -469,6 +478,38 @@ public enum StepRunner {
             }
             if let refIndex = s.project.tracks.firstIndex(where: { $0.id == ref }) { info["referenceTrack"] = Double(refIndex + 1) }
             return info
+        case "spectral_attenuate":
+            guard let pool = s.pool, let media = s.media else { throw StepFailure("spectral_attenuate needs the app.") }
+            let r = try range(); try checkInside(r)
+            let lo = p["low"]?.double ?? 0, hi = p["high"]?.double ?? 0
+            guard hi > lo else { throw StepFailure("spectral_attenuate: high must be above low.") }
+            let ids = p["tracks"]?.strings.map { Set($0.compactMap(UUID.init(uuidString:))) }
+            do {
+                s.project = try s.project.applyingSpectralAttenuation(range: r, freq: lo...hi, gainDB: p["db"]?.double ?? -20, tracks: ids, pool: pool, media: media)
+            } catch let e as EffectError { throw StepFailure("spectral_attenuate: \(e.localizedDescription)") }
+        case "correct_drift":
+            guard let pool = s.pool, let media = s.media else { throw StepFailure("correct_drift needs the app.") }
+            guard let track = UUID(uuidString: p["track"]?.string ?? ""), project.tracks.contains(where: { $0.id == track }) else {
+                throw StepFailure("correct_drift: no such track.", reason: "not_found")
+            }
+            var ppm = p["ppm"]?.double
+            var confidence = 1.0
+            if ppm == nil {
+                let against = p["against"]?.string.flatMap(UUID.init(uuidString:))
+                    ?? project.suggestedReference(pool: pool).flatMap { $0 == track ? nil : $0 }
+                    ?? project.tracks.first { $0.id != track }?.id
+                guard let against, let d = project.drift(of: track, against: against, pool: pool) else {
+                    throw StepFailure("correct_drift: the tracks overlap too little to measure drift (at least 90 s).", reason: "too_short")
+                }
+                confidence = min(d.start.confidence, d.end.confidence)
+                guard confidence >= 0.5 else {
+                    throw StepFailure(String(format: "correct_drift: the measurement is uncertain (confidence %.2f); pass ppm to correct anyway.", confidence),
+                                      reason: "drift_uncertain", details: ["confidence": confidence])
+                }
+                ppm = d.partsPerMillion
+            }
+            s.project = try s.project.correctingDrift(of: track, ppm: ppm!, pool: pool, media: media)
+            return ["ppm": (ppm! * 10).rounded() / 10, "msPerHour": (ppm! * 3.6 * 10).rounded() / 10, "confidence": (confidence * 1_000).rounded() / 1_000]
         case "loudness_preset":
             let r = try range(wholeIfNone: true); try checkInside(r)
             guard let preset = LoudnessPreset(rawValue: p["preset"]?.string ?? "") else { throw StepFailure("loudness_preset: unknown preset.") }

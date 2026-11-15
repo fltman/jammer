@@ -454,3 +454,28 @@ struct LoudnessPresetStepTests {
         #expect(throws: StepFailure.self) { try StepRunner.validate(Step(op: "loudness_preset", params: ["preset": .string("acx")])) }
     }
 }
+
+@Suite("Drift and spectral steps")
+struct DriftSpectralStepTests {
+    @Test("correct_drift refuses an uncertain measurement; spectral_attenuate checks its band")
+    func steps() {
+        let n = 48_000 * 100
+        var x: UInt64 = 1
+        let a = (0..<n).flatMap { _ -> [Float] in x = x &* 6_364_136_223_846_793_005 &+ 1; let v = Float(Int32(truncatingIfNeeded: x >> 32)) / 4_294_967_296; return [v, v] }
+        var y: UInt64 = 2
+        let b = (0..<n).flatMap { _ -> [Float] in y = y &* 6_364_136_223_846_793_005 &+ 1; let v = Float(Int32(truncatingIfNeeded: y >> 32)) / 4_294_967_296; return [v, v] }
+        let info = AudioFileInfo(container: .wav, sampleFormat: .float32, bigEndian: false, channels: 2, sampleRate: 48_000,
+                                 channelMask: nil, dataOffset: 0, frames: Int64(n), chunks: [], bext: nil, ixml: nil, markers: [])
+        let ra = SourceRef(name: "A", path: "/dev/null", info: info), rb = SourceRef(name: "B", path: "/dev/null", info: info)
+        let pool = SourcePool()
+        pool.register(ra.id, memory: a, channels: 2)
+        pool.register(rb.id, memory: b, channels: 2)
+        var p = Project(source: ra)
+        p.addTrack(source: rb)
+        var s = EditState(project: p, pool: pool, media: FileManager.default.temporaryDirectory.appending(path: "jammer-st-\(UUID().uuidString)"))
+        let measure: StepRunner.Measure = { _, _ in LoudnessResult(integrated: nil, range: nil, maxMomentary: nil, maxShortTerm: nil, samplePeak: 0, truePeak: 0, duration: 0) }
+        let r = StepRunner.run([Step(op: "correct_drift", params: ["track": .string(p.tracks[1].id.uuidString)])], on: &s, measure: measure)
+        #expect(r[0].status == .failed && r[0].reason == "drift_uncertain", "\(r[0].error ?? "")")
+        #expect(throws: StepFailure.self) { try StepRunner.validate(Step(op: "spectral_attenuate", params: ["low": .number(1_000), "high": .number(2_000), "db": .number(5)])) }
+    }
+}

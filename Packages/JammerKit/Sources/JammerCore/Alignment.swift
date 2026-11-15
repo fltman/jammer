@@ -1,4 +1,5 @@
 import Accelerate
+import AudioToolbox
 import Foundation
 
 /// Lines up separately recorded tracks (double-enders): where does `other` sit against
@@ -229,5 +230,74 @@ extension Project {
             if best == nil || score > best!.1 { best = (i, score) }
         }
         return best.map { tracks[$0.0].id }
+    }
+}
+
+extension Alignment {
+    /// Interleaved float from one rate to another with AudioConverter (highest quality).
+    public static func resample(_ x: [Float], channels: Int, from: Double, to: Double) throws -> [Float] {
+        var inFmt = AudioStreamBasicDescription(mSampleRate: from, mFormatID: kAudioFormatLinearPCM, mFormatFlags: kAudioFormatFlagIsFloat | kAudioFormatFlagIsPacked,
+                                                mBytesPerPacket: UInt32(4 * channels), mFramesPerPacket: 1, mBytesPerFrame: UInt32(4 * channels),
+                                                mChannelsPerFrame: UInt32(channels), mBitsPerChannel: 32, mReserved: 0)
+        var outFmt = inFmt
+        outFmt.mSampleRate = to
+        var conv: AudioConverterRef?
+        guard AudioConverterNew(&inFmt, &outFmt, &conv) == noErr, let conv else { throw ExportError.unsupported("Can't resample.") }
+        defer { AudioConverterDispose(conv) }
+        var complexity = kAudioConverterSampleRateConverterComplexity_Mastering
+        AudioConverterSetProperty(conv, kAudioConverterSampleRateConverterComplexity, 4, &complexity)
+        var quality = kAudioConverterQuality_Max
+        AudioConverterSetProperty(conv, kAudioConverterSampleRateConverterQuality, 4, &quality)
+        let inFrames = x.count / channels
+        let outCapacity = Int(Double(inFrames) * to / from) + 4_096
+        var out = [Float](repeating: 0, count: outCapacity * channels)
+        final class Feed { var data: [Float]; var given = false; init(_ d: [Float]) { data = d } }
+        let feed = Feed(x)
+        var packets = UInt32(outCapacity)
+        let status = out.withUnsafeMutableBytes { raw -> OSStatus in
+            var list = AudioBufferList(mNumberBuffers: 1, mBuffers: AudioBuffer(mNumberChannels: UInt32(channels), mDataByteSize: UInt32(raw.count), mData: raw.baseAddress))
+            return AudioConverterFillComplexBuffer(conv, { _, ioPackets, ioData, _, user in
+                let f = Unmanaged<Feed>.fromOpaque(user!).takeUnretainedValue()
+                if f.given { ioPackets.pointee = 0; ioData.pointee.mBuffers.mDataByteSize = 0; return noErr }
+                f.given = true
+                let ch = Int(ioData.pointee.mBuffers.mNumberChannels)
+                ioPackets.pointee = UInt32(f.data.count / max(1, ch))
+                f.data.withUnsafeMutableBytes { r in
+                    ioData.pointee.mBuffers.mData = r.baseAddress
+                    ioData.pointee.mBuffers.mDataByteSize = UInt32(r.count)
+                }
+                return noErr
+            }, Unmanaged.passUnretained(feed).toOpaque(), &packets, &list, nil)
+        }
+        guard status == noErr else { throw ExportError.encoder("resample", status) }
+        return Array(out.prefix(Int(packets) * channels))
+    }
+}
+
+extension Project {
+    /// Corrects a recorder's clock drift: the track is resampled by `ppm` (positive: it ran
+    /// fast) into a new file, anchored where it starts, so it stays in sync to the end.
+    public func correctingDrift(of track: UUID, ppm: Double, pool: SourcePool, media: URL) throws -> Project {
+        guard let t = tracks.firstIndex(where: { $0.id == track }), let first = tracks[t].clips.first?.start else { throw EffectError.nothingInRange }
+        guard abs(ppm) < 2_000 else { throw EffectError.badValue("A drift of \(ppm) ppm is beyond what a recorder does; check the measurement.") }
+        let end = tracks[t].end
+        var solo = self
+        solo.tracks = [tracks[t]]
+        solo.tracks[0].gainDB = 0
+        solo.tracks[0].isMuted = false
+        let raw = PlanCompiler.compile(solo, pool: pool).render(from: first, frames: Int(end - first))
+        // Played at sampleRate·(1 + ppm/1e6) it would match; so stretch it by that factor.
+        let corrected = try Alignment.resample(raw, channels: channels, from: sampleRate, to: sampleRate * (1 + ppm / 1_000_000))
+        try FileManager.default.createDirectory(at: media, withIntermediateDirectories: true)
+        let url = media.appending(path: "\(UUID().uuidString.prefix(8)) drift.wav")
+        let w = try WAVWriter(url: url, options: .init(encoding: .float32, channels: channels, sampleRate: sampleRate))
+        try w.write(corrected)
+        try w.finish()
+        let src = SourceRef(name: "\(tracks[t].name) (drift corrected)", path: url.path, info: try AudioFileReader.info(at: url))
+        var p = self
+        p.sources.append(src)
+        p.tracks[t].clips = [Clip(sourceID: src.id, start: first, length: src.info.frames)]
+        p.pruneSources()
+        return p
     }
 }
