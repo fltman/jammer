@@ -8,7 +8,9 @@
 set -u
 root="$(cd "$(dirname "$0")/.." && pwd)"
 [[ "$(cat /tmp/gui-test.lock/owner 2>/dev/null)" == "jammer" ]] || { echo "with-app: the GUI lock isn't held by jammer; not starting." >&2; exit 75; }
-app="$root/build/dd/Build/Products/Debug/Jammer.app/Contents/MacOS/Jammer"
+# JAMMER_APP_BUNDLE: another copy of the debug app to start (e.g. one re-signed with the
+# hardened runtime, to see what a release build will refuse).
+app="${JAMMER_APP_BUNDLE:-$root/build/dd/Build/Products/Debug/Jammer.app}/Contents/MacOS/Jammer"
 [[ -x "$app" ]] || { echo "with-app: build the app first (xcodebuild … -derivedDataPath build/dd)." >&2; exit 1; }
 # JAMMER_ARGS: extra launch arguments, e.g. "-linkAnyOpen Flimmer" (debug builds).
 # JAMMER_LOG: a file for the app's output (default: discarded).
