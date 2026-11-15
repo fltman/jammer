@@ -86,6 +86,63 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
     @objc func zoomToFit(_ sender: Any?) { timeline.zoomToFit() }
     @objc func zoomToSelection(_ sender: Any?) { timeline.zoomToSelection() }
 
+    /// Double-enders: each speaker's own recording as a track, lined up with track 1.
+    @objc func importTracks(_ sender: Any?) {
+        guard let window else { return }
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = true
+        panel.allowedContentTypes = [.audio]
+        panel.message = "Choose each speaker's own recording. Jämmer adds them as tracks and lines them up with the first track."
+        panel.beginSheetModal(for: window) { [weak self] response in
+            guard response == .OK, let self else { return }
+            let urls = panel.urls
+            let session = self.session
+            Task {
+                session.status = "Importing \(urls.count) track\(urls.count == 1 ? "" : "s")…"
+                var p = session.project
+                var added: [UUID] = []
+                for url in urls {
+                    do {
+                        let r = try await Task.detached { try AudioImporter.importFile(url, mediaFolder: MediaStore.folder) }.value
+                        added.append(p.addTrack(source: r.source, name: url.deletingPathExtension().lastPathComponent).id)
+                    } catch {
+                        session.status = "Couldn't import \(url.lastPathComponent): \(error.localizedDescription)"
+                        return
+                    }
+                }
+                guard let reference = p.tracks.first?.id, p.tracks.count > added.count else {
+                    session.commit(p, action: "Import Tracks")
+                    session.status = "Imported \(added.count) tracks."
+                    return
+                }
+                session.status = "Lining up the tracks…"
+                let pool = session.pool
+                let (aligned, notes) = await Task.detached { () -> (Project, [String]) in
+                    var q = p
+                    let results = q.alignTracks(to: reference, tracks: added, pool: pool)
+                    var notes: [String] = []
+                    for id in added {
+                        guard let t = q.tracks.first(where: { $0.id == id }), let r = results[id] else { continue }
+                        if r.confidence < 0.5 {
+                            notes.append("\(t.name): no clear match (\(String(format: "%.2f", r.confidence))), left at the start")
+                        } else {
+                            var note = "\(t.name): \(String(format: "%+.3f", q.seconds(r.offset))) s"
+                            // Recorders' clocks can disagree; say so when they part noticeably.
+                            if let d = q.drift(of: id, against: reference, pool: pool), d.start.confidence > 0.5, d.end.confidence > 0.5,
+                               abs(d.partsPerMillion) > 10 {
+                                note += String(format: ", drifts %.0f ms per hour", d.partsPerMillion * 3.6)
+                            }
+                            notes.append(note)
+                        }
+                    }
+                    return (q, notes)
+                }.value
+                session.commit(aligned, action: "Import Tracks")
+                session.status = "Imported and lined up: " + notes.joined(separator: "; ")
+            }
+        }
+    }
+
     @objc func toggleAssistant(_ sender: Any?) {
         guard let split = window?.contentView as? NSSplitView, split.arrangedSubviews.count > 1 else { return }
         let view = split.arrangedSubviews[1]

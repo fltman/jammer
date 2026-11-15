@@ -44,3 +44,7 @@ Jämmer reads its own way through WAV and AIFF files instead of relying on macOS
 - **markers and regions** (WAV cue points and labels, AIFF markers), which appear as markers on the timeline.
 
 When you export from the start of the project, the first file's bext and iXML go with it, and your markers are written as cue points.
+
+## Separately recorded speakers (double-enders)
+
+When each speaker recorded their own side (a "double-ender"), choose **File › Import Tracks…** (⇧⌘I) and pick their files. Jämmer adds each as a track and lines it up with the first track by comparing the sound itself (each recording usually picks up a little of the other speakers), to the sample. The status bar says how far each track moved and flags a track without a clear match, which is left where it was. Import and alignment are one undo step.
