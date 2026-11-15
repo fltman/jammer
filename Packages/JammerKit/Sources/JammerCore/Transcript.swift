@@ -98,7 +98,18 @@ extension Project {
                 }
             }
         }
-        return out.sorted { ($0.start, $0.track) < ($1.start, $1.track) }
+        // A word whose audio was bounced into a new file (restoration, effects) plays from
+        // pieces with the same id, edge to edge: show it once.
+        var merged: [PlacedWord] = []
+        for w in out.sorted(by: { ($0.track, $0.start) < ($1.track, $1.start) }) {
+            if let i = merged.indices.last, merged[i].word.id == w.word.id, merged[i].track == w.track, merged[i].end == w.start {
+                merged[i].end = w.end
+                merged[i].isPartial = merged[i].end - merged[i].start < w.word.end - w.word.start
+            } else {
+                merged.append(w)
+            }
+        }
+        return merged.sorted { ($0.start, $0.track) < ($1.start, $1.track) }
     }
 
     /// The transcript as plain text, words in timeline order.

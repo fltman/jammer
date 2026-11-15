@@ -21,3 +21,13 @@ When the sheet opens, Jämmer looks at the audio and tells you what it found, fo
 The repaired clips play from a new file that Jämmer writes in `~/Library/Application Support/Jammer/Media` (use **File › Collect Audio and Save** to move it into the project). Your original file is never changed, and one **Undo** brings back the unrepaired audio. Transcripts stay with the repaired clips. The status bar shows the progress; you can keep working meanwhile.
 
 Noise reduction with DeepFilterNet is planned.
+
+## Drawing in the spectrogram
+
+In the spectrogram (**View › Show Spectrogram**) you can mark a sound by where it is in time *and* pitch, and change only that. Pick a tool with **B** (box), **L** (lasso) or **P** (brush), then drag over the sound on its track; the area shows in turquoise and the status bar describes it ("Box, 1.42–1.59 s, 66–210 Hz"). Esc clears it.
+
+- **Audio › Heal Area** rebuilds the area from the sound just before and after it. It's for short sounds (a click, a cough, a phone ringing, up to half a second); longer areas are refused, use attenuate for those.
+- **Audio › Attenuate Area…** lowers the area by the amount you choose.
+- **Audio › Edit Spectrum Numerically…** does the same with a box you type in (time in seconds, frequency in Hz) on a track you pick, for when drawing isn't practical.
+
+As with the other repairs, the changed stretch plays from a new file; the original stays untouched and one undo brings it back, and the transcript and speakers stay as they were.

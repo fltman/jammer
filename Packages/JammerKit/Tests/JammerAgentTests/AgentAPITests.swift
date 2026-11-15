@@ -520,3 +520,29 @@ struct TierTests {
         #expect(AgentAPI.operations.allSatisfy { ["core", "advanced"].contains($0["tier"] as? String ?? "") })
     }
 }
+
+@Suite("Spectral edit step")
+struct SpectralEditStepTests {
+    @Test("polygon via JSON numbers; too_long and bad_shape reasons; numbers are validated")
+    func step() throws {
+        let n = 48_000 * 2
+        let x = (0..<n).flatMap { i -> [Float] in let v = Float(0.1 * sin(2 * .pi * 440 * Double(i) / 48_000)); return [v, v] }
+        let info = AudioFileInfo(container: .wav, sampleFormat: .float32, bigEndian: false, channels: 2, sampleRate: 48_000,
+                                 channelMask: nil, dataOffset: 0, frames: Int64(n), chunks: [], bext: nil, ixml: nil, markers: [])
+        let ref = SourceRef(name: "t", path: "/dev/null", info: info)
+        let pool = SourcePool()
+        pool.register(ref.id, memory: x, channels: 2)
+        var s = EditState(project: Project(source: ref), pool: pool, media: FileManager.default.temporaryDirectory.appending(path: "jammer-se-\(UUID().uuidString)"))
+        let measure: StepRunner.Measure = { _, _ in LoudnessResult(integrated: nil, range: nil, maxMomentary: nil, maxShortTerm: nil, samplePeak: 0, truePeak: 0, duration: 0) }
+        var r = StepRunner.run([Step(op: "spectral_edit", params: ["action": .string("attenuate"), "shape": .string("polygon"),
+                                                                    "points": .array([0.5, 3_000, 1.0, 3_000, 1.0, 6_000, 0.5, 6_000].map { .number($0) })])], on: &s, measure: measure)
+        #expect(r[0].status == .done, "\(r[0].error ?? "")")
+        #expect(s.project.sources.count == 2)
+        r = StepRunner.run([Step(op: "spectral_edit", params: ["action": .string("heal"), "shape": .string("box"), "start": .number(0.2), "end": .number(1.0),
+                                                                "low": .number(1_000), "high": .number(2_000)])], on: &s, measure: measure)
+        #expect(r[0].reason == "too_long")
+        r = StepRunner.run([Step(op: "spectral_edit", params: ["action": .string("attenuate"), "shape": .string("polygon"), "points": .array([.number(1), .number(2)])])], on: &s, measure: measure)
+        #expect(r[0].reason == "bad_shape")
+        #expect(throws: StepFailure.self) { try StepRunner.validate(Step(op: "spectral_edit", params: ["action": .string("heal"), "shape": .string("brush"), "points": .array([.string("x")])])) }
+    }
+}

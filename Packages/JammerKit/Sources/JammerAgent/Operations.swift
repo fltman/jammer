@@ -6,7 +6,7 @@ import JammerCore
 /// from this list, so they can't drift from what the app actually does.
 public struct OperationSpec: Sendable, Identifiable {
     public struct Param: Sendable {
-        public enum Kind: String, Sendable { case seconds, number, string, boolean, list }
+        public enum Kind: String, Sendable { case seconds, number, string, boolean, list, numbers }
         public var name: String
         public var kind: Kind
         public var description: String
@@ -36,6 +36,7 @@ public struct OperationSpec: Sendable, Identifiable {
             case .string: d["type"] = "string"
             case .boolean: d["type"] = "boolean"
             case .list: d["type"] = "array"; d["items"] = ["type": "string"]
+            case .numbers: d["type"] = "array"; d["items"] = ["type": "number"]
             }
             if let range, kind != .seconds || range.lowerBound != 0 { d["minimum"] = range.lowerBound }
             if let range { d["maximum"] = range.upperBound }
@@ -140,6 +141,17 @@ public enum Operations {
               params: [.init("track", .string, "The track to correct.", required: true),
                        .init("against", .string, "Track to measure against (the call recording is best). Default: the best-matching track."),
                        .init("ppm", .number, "The drift in parts per million (positive: it ran fast). Skips the measurement.", range: -2_000...2_000)]),
+        .init("spectral_edit", "Edit Spectrum", "Changes an area of the spectrogram, per track, rendered into a new file (the original audio is one undo away). action attenuate lowers it by db; heal rebuilds it from the sound just before and after (for short sounds such as clicks, coughs, a phone ringing: at most 0.5 s, longer fails with reason too_long; use attenuate). shape box takes start, end, low, high; polygon takes points [t1, f1, t2, f2, …] (seconds, Hz; at least three corners); brush takes points along the stroke plus radius (Hz) and radiusTime (s). Bad shapes fail with reason bad_shape.",
+              params: [.init("action", .string, "What to do.", required: true, options: ["attenuate", "heal"]),
+                       .init("shape", .string, "The area's kind.", required: true, options: ["box", "polygon", "brush"]),
+                       start, end,
+                       .init("low", .number, "box: lower edge in Hz.", range: 0...96_000),
+                       .init("high", .number, "box: upper edge in Hz.", range: 0...96_000),
+                       .init("points", .numbers, "polygon, brush: time (s) and frequency (Hz) pairs, flattened."),
+                       .init("radius", .number, "brush: Hz around the stroke. Default 200.", range: 1...20_000),
+                       .init("radiusTime", .number, "brush: seconds around the stroke. Default 0.02.", range: 0.001...1),
+                       .init("db", .number, "attenuate: change in dB, -80 to 0. Default -20.", range: -80...0),
+                       .init("tracks", .list, "Track ids. Default: every track.")]),
         .init("level_speakers", "Level Speakers", "Brings every speaker to the same loudness with one gain each, measured over their own turns (needs diarize first; fails with reason no_speakers otherwise). A track that is one speaker gets track gain; a track with several is split in the pauses where the speaker changes. Run loudness_preset afterwards for the mix. info: speakers, maxChangeDB, limitedByMaxGain.",
               params: [.init("target", .number, "LUFS per speaker. Default -18.", range: -40 ... -10),
                        .init("maxGain", .number, "Largest change in dB, up or down. Default 12.", range: 0...30),
@@ -305,6 +317,12 @@ public enum JSONValue: Sendable, Equatable {
         return nil
     }
 
+    public var numbers: [Double]? {
+        guard case .array(let a) = self else { return nil }
+        let n = a.compactMap { v -> Double? in if case .number(let d) = v { return d }; return nil }
+        return n.count == a.count ? n : nil
+    }
+
     public var strings: [String]? {
         guard case .array(let a) = self else { return nil }
         let s = a.compactMap(\.string)
@@ -420,6 +438,8 @@ public enum StepRunner {
                 guard case .bool = value else { throw StepFailure("\(step.op): \"\(key)\" must be true or false.") }
             case .list:
                 guard value.strings != nil else { throw StepFailure("\(step.op): \"\(key)\" must be a list of strings.") }
+            case .numbers:
+                guard let n = value.numbers, n.allSatisfy(\.isFinite) else { throw StepFailure("\(step.op): \"\(key)\" must be a list of numbers.") }
             }
         }
     }
@@ -563,6 +583,32 @@ public enum StepRunner {
             }
             s.project = try s.project.correctingDrift(of: track, ppm: ppm!, pool: pool, media: media)
             return ["ppm": (ppm! * 10).rounded() / 10, "msPerHour": (ppm! * 3.6 * 10).rounded() / 10, "confidence": (confidence * 1_000).rounded() / 1_000]
+        case "spectral_edit":
+            guard let pool = s.pool, let media = s.media else { throw StepFailure("spectral_edit needs the app.") }
+            func pts() throws -> [SpectralPoint] {
+                let n = p["points"]?.numbers ?? []
+                guard n.count >= 2, n.count % 2 == 0 else { throw StepFailure("spectral_edit: points must be time and frequency pairs.", reason: "bad_shape") }
+                return stride(from: 0, to: n.count, by: 2).map { SpectralPoint(t: n[$0], f: n[$0 + 1]) }
+            }
+            let shape: SpectralShape
+            switch p["shape"]?.string {
+            case "box":
+                guard let a = p["start"]?.double, let b = p["end"]?.double, let lo = p["low"]?.double, let hi = p["high"]?.double else {
+                    throw StepFailure("spectral_edit: a box needs start, end, low and high.", reason: "bad_shape")
+                }
+                shape = .box(start: a, end: b, low: lo, high: hi)
+            case "polygon": shape = .polygon(try pts())
+            default: shape = .brush(try pts(), radius: p["radius"]?.double ?? 200, radiusTime: p["radiusTime"]?.double ?? 0.02)
+            }
+            let ids = p["tracks"]?.strings.map { Set($0.compactMap(UUID.init(uuidString:))) }
+            do {
+                s.project = try s.project.applyingSpectralEdit(shape, action: p["action"]?.string == "heal" ? .heal : .attenuate,
+                                                               gainDB: p["db"]?.double ?? -20, tracks: ids, pool: pool, media: media)
+            } catch let e as SpectralEditError {
+                throw StepFailure("spectral_edit: \(e.localizedDescription)", reason: e.reason)
+            } catch let e as EffectError {
+                throw StepFailure("spectral_edit: \(e.localizedDescription)", reason: "nothing_in_range")
+            }
         case "level_speakers":
             guard let pool = s.pool else { throw StepFailure("level_speakers needs the app.") }
             let only = p["speakers"]?.strings.map { Set($0.compactMap(Int.init)) }

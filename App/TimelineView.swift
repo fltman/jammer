@@ -317,6 +317,7 @@ final class TimelineOverlay: NSView {
             text += ", selection \(formatTime(p.seconds(sel.lowerBound))) to \(formatTime(p.seconds(sel.upperBound)))"
         }
         if p.tracks.count > 1 { text += ", \(p.tracks.count) tracks" }
+        if areaMode, let a = session.spectralArea { text += ", area: \(a.shape.summary)" }
         return text
     }
     override func accessibilityPerformIncrement() -> Bool {
@@ -342,6 +343,7 @@ final class TimelineOverlay: NSView {
     // MARK: Drawing
 
     override func draw(_ dirtyRect: NSRect) {
+        defer { drawArea() } // the drawn spectrogram area, on top
         let rate = project.sampleRate
         let h = TimelineView.rulerHeight
         // Ruler ticks: pick a step that leaves ~90 pt between labels.
@@ -444,10 +446,86 @@ final class TimelineOverlay: NSView {
 
     // MARK: Mouse
 
+    // MARK: Spectrogram areas
+
+    static let fLo = 50.0
+    var fHi: Double { min(16_000, project.sampleRate / 2) }
+    private var laneHeight: CGFloat { (bounds.height - TimelineView.rulerHeight) / CGFloat(max(1, project.tracks.count)) }
+    private func laneTop(_ i: Int) -> CGFloat { TimelineView.rulerHeight + CGFloat(i) * laneHeight }
+    /// Frequency at a height in a lane, on the spectrogram's log scale (top is high).
+    private func hz(atY y: CGFloat, lane: Int) -> Double {
+        let r = Double(min(max(0, y - laneTop(lane)), laneHeight - 1)) / Double(max(1, laneHeight - 1))
+        return Self.fLo * pow(fHi / Self.fLo, 1 - r)
+    }
+    private func y(ofHz f: Double, lane: Int) -> CGFloat {
+        let r = 1 - log(max(Self.fLo, f) / Self.fLo) / log(fHi / Self.fLo)
+        return laneTop(lane) + CGFloat(r) * (laneHeight - 1)
+    }
+    private func seconds(atX x: CGFloat) -> Double { viewport.frame(atX: x) / project.sampleRate }
+    private func point(_ p: NSPoint, lane: Int) -> SpectralPoint { SpectralPoint(t: seconds(atX: p.x), f: hz(atY: p.y, lane: lane)) }
+    private var drawing: (lane: Int, anchor: NSPoint, points: [NSPoint])?
+    private static let brushPixels: CGFloat = 10
+    private var areaMode: Bool { timeline?.showsSpectrogram == true }
+
+    private func updateArea(_ d: (lane: Int, anchor: NSPoint, points: [NSPoint])) {
+        let lane = d.lane
+        let shape: SpectralShape
+        switch session.spectralTool {
+        case .box:
+            let a = point(d.anchor, lane: lane), b = point(d.points.last ?? d.anchor, lane: lane)
+            shape = .box(start: min(a.t, b.t), end: max(a.t, b.t), low: min(a.f, b.f), high: max(a.f, b.f))
+        case .lasso:
+            shape = .polygon(d.points.map { point($0, lane: lane) })
+        case .brush:
+            let pts = d.points.map { point($0, lane: lane) }
+            let meanF = pts.map(\.f).reduce(0, +) / Double(max(1, pts.count))
+            let radius = meanF * (pow(fHi / Self.fLo, Double(Self.brushPixels) / Double(max(1, laneHeight - 1))) - 1)
+            shape = .brush(pts, radius: max(1, radius), radiusTime: Double(Self.brushPixels) * viewport.framesPerPoint / project.sampleRate)
+        }
+        session.spectralArea = .init(shape: shape, track: lane)
+        needsDisplay = true
+    }
+
+    func drawArea() {
+        guard areaMode, let area = session.spectralArea else { return }
+        let path = NSBezierPath()
+        func pt(_ p: SpectralPoint) -> NSPoint { NSPoint(x: viewport.x(of: p.t * project.sampleRate), y: y(ofHz: p.f, lane: area.track)) }
+        switch area.shape {
+        case .box(let a, let b, let lo, let hi):
+            path.appendRect(NSRect(x: viewport.x(of: a * project.sampleRate), y: y(ofHz: hi, lane: area.track),
+                                   width: viewport.x(of: b * project.sampleRate) - viewport.x(of: a * project.sampleRate),
+                                   height: y(ofHz: lo, lane: area.track) - y(ofHz: hi, lane: area.track)))
+        case .polygon(let pts):
+            guard let first = pts.first else { return }
+            path.move(to: pt(first)); pts.dropFirst().forEach { path.line(to: pt($0)) }; path.close()
+        case .brush(let pts, _, _):
+            guard let first = pts.first else { return }
+            path.move(to: pt(first)); pts.dropFirst().forEach { path.line(to: pt($0)) }
+            path.lineWidth = Self.brushPixels * 2
+            path.lineCapStyle = .round
+            path.lineJoinStyle = .round
+            Theme.neon.withAlphaComponent(0.3).setStroke()
+            path.stroke()
+            return
+        }
+        Theme.neon.withAlphaComponent(0.18).setFill()
+        path.fill()
+        Theme.neon.setStroke()
+        path.lineWidth = 1.5
+        path.stroke()
+    }
+
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
         let p = convert(event.locationInWindow, from: nil)
         let f = frame(at: p)
+        if areaMode, p.y >= TimelineView.rulerHeight, event.clickCount == 1, !event.modifierFlags.contains(.shift) {
+            let lane = min(max(0, laneIndex(at: p.y)), max(0, project.tracks.count - 1))
+            drawing = (lane, p, [p])
+            didDrag = false
+            dragAnchor = nil
+            return
+        }
         if p.y < TimelineView.rulerHeight {
             session.seek(f)
             dragAnchor = nil
@@ -473,6 +551,13 @@ final class TimelineOverlay: NSView {
 
     override func mouseDragged(with event: NSEvent) {
         let p = convert(event.locationInWindow, from: nil)
+        if var d = drawing {
+            d.points.append(p)
+            drawing = d
+            didDrag = true
+            updateArea(d)
+            return
+        }
         if p.y < TimelineView.rulerHeight && dragAnchor == nil {
             session.seek(frame(at: p))
             return
@@ -485,6 +570,17 @@ final class TimelineOverlay: NSView {
     }
 
     override func mouseUp(with event: NSEvent) {
+        if let d = drawing {
+            drawing = nil
+            if !didDrag {
+                session.spectralArea = nil
+                session.seek(frame(at: d.anchor))
+                needsDisplay = true
+            } else if session.spectralTool == .lasso, d.points.count < 3 {
+                session.spectralArea = nil
+            }
+            return
+        }
         defer { dragAnchor = nil }
         guard let anchor = dragAnchor, !event.modifierFlags.contains(.shift) else { return }
         if !didDrag {
@@ -518,7 +614,11 @@ final class TimelineOverlay: NSView {
         switch event.keyCode {
         case 49: session.togglePlay() // space
         case 36: session.seek(0) // return
+        case 53 where areaMode && session.spectralArea != nil: session.spectralArea = nil; needsDisplay = true // escape: the area first
         case 53: session.selection = nil // escape
+        case 11 where areaMode: session.spectralTool = .box; session.status = "Box: drag a rectangle in the spectrogram." // B
+        case 37 where areaMode: session.spectralTool = .lasso; session.status = "Lasso: draw round the sound." // L
+        case 35 where areaMode: session.spectralTool = .brush; session.status = "Brush: paint over the sound." // P
         case 51, 117: delete(nil) // delete, forward delete
         case 123: session.seek(session.playhead - Frame(project.sampleRate)) // left: 1 s
         case 124: session.seek(session.playhead + Frame(project.sampleRate))

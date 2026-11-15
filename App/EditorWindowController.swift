@@ -197,6 +197,59 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         }
     }
 
+    // Spectrogram areas (drawn with B, L, P in the spectrogram).
+
+    @objc func healArea(_ sender: Any?) { session.editArea(.heal) }
+
+    @objc func attenuateArea(_ sender: Any?) {
+        guard let window, session.spectralArea != nil else { NSSound.beep(); return }
+        let alert = NSAlert()
+        alert.messageText = "Attenuate Area"
+        alert.informativeText = session.spectralArea.map { $0.shape.summary } ?? ""
+        let db = NSTextField(string: "-20")
+        db.setAccessibilityLabel("Change, in decibels")
+        db.frame = NSRect(x: 0, y: 0, width: 80, height: 22)
+        alert.accessoryView = db
+        alert.addButton(withTitle: "Attenuate")
+        alert.addButton(withTitle: "Cancel")
+        alert.beginSheetModal(for: window) { [session] r in
+            guard r == .alertFirstButtonReturn else { return }
+            session.editArea(.attenuate, db: max(-80, min(0, db.doubleValue)))
+        }
+    }
+
+    /// For anyone who can't draw: a box by numbers, on a chosen track.
+    @objc func editSpectrumNumerically(_ sender: Any?) {
+        guard let window, !session.project.tracks.isEmpty else { NSSound.beep(); return }
+        let alert = NSAlert()
+        alert.messageText = "Edit Spectrum"
+        alert.informativeText = "An area by its time (seconds) and frequency (Hz). Heal rebuilds up to 0.5 s from the sound around it; attenuate lowers it."
+        let fields = ["Start (s)", "End (s)", "From (Hz)", "To (Hz)", "Change (dB)"].map { label -> (String, NSTextField) in
+            let f = NSTextField(string: "")
+            f.setAccessibilityLabel(label)
+            f.widthAnchor.constraint(equalToConstant: 90).isActive = true
+            return (label, f)
+        }
+        let sel = session.selection
+        fields[0].1.stringValue = String(format: "%.3f", session.project.seconds(sel?.lowerBound ?? session.playhead))
+        fields[1].1.stringValue = String(format: "%.3f", session.project.seconds(sel?.upperBound ?? session.playhead + Frame(session.project.sampleRate / 10)))
+        fields[2].1.stringValue = "2000"; fields[3].1.stringValue = "8000"; fields[4].1.stringValue = "-20"
+        let action = NSPopUpButton(); action.addItems(withTitles: ["Heal", "Attenuate"]); action.setAccessibilityLabel("Action")
+        let track = NSPopUpButton(); track.addItems(withTitles: session.project.tracks.map(\.name)); track.setAccessibilityLabel("Track")
+        let grid = NSGridView(views: fields.map { [NSTextField(labelWithString: $0.0 + ":"), $0.1] } + [[NSTextField(labelWithString: "Action:"), action], [NSTextField(labelWithString: "Track:"), track]])
+        grid.frame = NSRect(x: 0, y: 0, width: 260, height: 200)
+        alert.accessoryView = grid
+        alert.addButton(withTitle: "Apply")
+        alert.addButton(withTitle: "Cancel")
+        alert.beginSheetModal(for: window) { [session] r in
+            guard r == .alertFirstButtonReturn else { return }
+            let v = fields.map(\.1.doubleValue)
+            session.spectralArea = .init(shape: .box(start: min(v[0], v[1]), end: max(v[0], v[1]), low: min(v[2], v[3]), high: max(v[2], v[3])),
+                                         track: track.indexOfSelectedItem)
+            session.editArea(action.indexOfSelectedItem == 0 ? .heal : .attenuate, db: max(-80, min(0, v[4])))
+        }
+    }
+
     @objc func toggleSpectrogram(_ sender: Any?) {
         timeline.showsSpectrogram.toggle()
     }
@@ -355,6 +408,9 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         }
         if item.action == #selector(zoomToSelection(_:)) { return session.selection != nil }
         if item.action == #selector(attenuateFrequencies(_:)) { return session.selection != nil }
+        if item.action == #selector(healArea(_:)) || item.action == #selector(attenuateArea(_:)) {
+            return timeline.showsSpectrogram && session.spectralArea != nil
+        }
         if item.action == #selector(toggleSpectrogram(_:)) {
             item.title = timeline.showsSpectrogram ? "Show Waveform" : "Show Spectrogram"
             return true

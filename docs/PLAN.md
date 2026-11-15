@@ -59,6 +59,7 @@ Replace the Audio Hijack → RX → Descript → Auphonic chain for speech and p
 | Per-speaker levelling, static: one gain per speaker over their turns (`level_speakers`) | Done |
 | Per-speaker levelling, dynamic (Auphonic-style, gain riding over time within a speaker) | Next after the static one |
 | Branching history: a tree of states saved in the package, View › History, `GET …/history` and `POST …/history/{node}`; one agent request is one undo step (explicit groups, AppKit only closes its automatic ones after user events) | Done, verified in the app (jump and undo bit-exact, survives save and open) |
+| Spectral tools: box, lasso, brush in the spectrogram; heal (≤ 0.5 s, log-magnitude interpolation, phase kept) and attenuate; `spectral_edit`; numeric entry | Done, verified in the app |
 | Stem separation | HTDemucs weights are research-only (author, demucs #327/#508); decision on Spleeter 4stems (MIT weights) pending with Anders |
 
 Stem separation with stems as first-class layers, spectral painting tools, dialogue/music/effects separation, de-reverb and de-bleed, per-speaker levelling, batch processing, branching history, VST3 and CLAP with a scanner process, FCPXML import from Flimmer, Music Understanding for tempo and beats.

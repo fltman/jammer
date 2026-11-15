@@ -79,6 +79,34 @@ final class EditorSession {
     /// Bumped when the running plugins change (windows and lists refresh).
     var pluginsVersion = 0
 
+    /// Spectrogram drawing: the tool and the area drawn (on one track).
+    enum SpectralTool: String { case box, lasso, brush }
+    struct SpectralArea { var shape: SpectralShape; var track: Int }
+    var spectralTool: SpectralTool = .box
+    var spectralArea: SpectralArea? {
+        didSet { if let a = spectralArea { status = "Area: \(a.shape.summary) on \(project.tracks[safe: a.track]?.name ?? "a track")" } }
+    }
+
+    /// Runs spectral_edit on the drawn area.
+    func editArea(_ action: SpectralAction, db: Double = -20) {
+        guard let area = spectralArea, let track = project.tracks[safe: area.track] else { NSSound.beep(); return }
+        var params: [String: JSONValue] = ["action": .string(action.rawValue), "tracks": .array([.string(track.id.uuidString)]), "db": .number(db)]
+        switch area.shape {
+        case .box(let a, let b, let lo, let hi):
+            params["shape"] = .string("box"); params["start"] = .number(a); params["end"] = .number(b); params["low"] = .number(lo); params["high"] = .number(hi)
+        case .polygon(let pts):
+            params["shape"] = .string("polygon"); params["points"] = .array(pts.flatMap { [.number($0.t), .number($0.f)] })
+        case .brush(let pts, let r, let rt):
+            params["shape"] = .string("brush"); params["points"] = .array(pts.flatMap { [.number($0.t), .number($0.f)] })
+            params["radius"] = .number(r); params["radiusTime"] = .number(rt)
+        }
+        let title = action == .heal ? "Heal Area" : "Attenuate Area"
+        Task {
+            let r = await run([Step(op: "spectral_edit", params: params)], action: title)
+            if let f = r.first(where: { $0.status == .failed }) { status = f.error; NSSound.beep() } else { spectralArea = nil; status = "\(title): done." }
+        }
+    }
+
     /// Set when a sibling app handed Jämmer a file to edit; ⌘S then saves back into it.
     var linkedFile: LinkedFile? {
         didSet { (window?.windowController as? EditorWindowController)?.showLink() }

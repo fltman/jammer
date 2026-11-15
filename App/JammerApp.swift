@@ -202,6 +202,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             restoreItem("Remove Clicks…", "declick"),
             restoreItem("Reduce Noise…", "denoise"),
             item("Attenuate Frequencies…", #selector(EditorWindowController.attenuateFrequencies(_:)), ""),
+            item("Attenuate Area…", #selector(EditorWindowController.attenuateArea(_:)), ""),
+            item("Heal Area", #selector(EditorWindowController.healArea(_:)), ""),
+            item("Edit Spectrum Numerically…", #selector(EditorWindowController.editSpectrumNumerically(_:)), ""),
             .separator(),
             submenu("Find Speakers", [
                 item("Automatically", #selector(EditorWindowController.findSpeakers(_:)), ""),

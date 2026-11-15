@@ -52,7 +52,7 @@ public enum AssistantCatalog {
     ]
 
     /// Plugin steps need track and insert ids and weren't in the measured action set.
-    public static let stepsNotForAssistant: Set<String> = ["add_insert", "set_insert", "remove_insert"]
+    public static let stepsNotForAssistant: Set<String> = ["add_insert", "set_insert", "remove_insert", "spectral_edit"]
 
     /// Own actions: every step (but the above), the useful endpoints, and the macros.
     public static var actions: [AssistantAction] {
@@ -265,6 +265,10 @@ public enum PlanParser {
                 params[name] = .number(d)
             case .boolean:
                 params[name] = .bool(["true", "yes", "ja", "1"].contains(value.lowercased()))
+            case .numbers:
+                let n = value.split(separator: ",").compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }
+                if n.isEmpty { continue }
+                params[name] = .array(n.map { .number($0) })
             case .list:
                 var items = value.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
                 if name == "tracks", let context { items = items.compactMap { context.trackID($0) } }
