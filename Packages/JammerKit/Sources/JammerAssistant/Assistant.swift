@@ -248,6 +248,11 @@ public enum PlanParser {
             let value = raw.trimmingCharacters(in: .whitespaces)
             guard let p = action.params.first(where: { $0.name == name }), !value.isEmpty, value.lowercased() != "null" else { continue }
             switch p.kind {
+            case .seconds where value.contains(":"):
+                // m:ss or h:mm:ss
+                let parts = value.split(separator: ":").compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }
+                guard !parts.isEmpty else { continue }
+                params[name] = .number(parts.reduce(0) { $0 * 60 + $1 })
             case .seconds, .number:
                 let cleaned = value.replacingOccurrences(of: ",", with: ".").replacingOccurrences(of: "−", with: "-")
                     .trimmingCharacters(in: CharacterSet(charactersIn: "-.0123456789").inverted)
@@ -275,6 +280,36 @@ public enum PlanParser {
         }
         for (k, v) in AssistantCatalog.defaults[op] ?? [:] where params[k] == nil { params[k] = v }
         return PlannedStep(op: op, params: params, why: why)
+    }
+
+    /// Decided before any model is asked: things Jämmer must not do, and requests too vague
+    /// to act on. Returns the reply, or nil to let the planner try.
+    public static func guardrail(_ goal: String) -> String? {
+        let t = Project.tokens(goal)
+        let text = " " + t.joined(separator: " ") + " "
+        let swedish = t.contains { ["och", "det", "ljudet", "gör", "ta", "bort", "fixa", "spela", "radera", "bättre", "lite"].contains($0) }
+        // Asking to record, not talking about a recording ("the recording is distorted").
+        let recording = text.contains(" spela in ") || text.contains(" record a ") || text.contains(" record me ") || text.contains(" start recording ")
+            || text.contains(" record new ") || text.contains(" ny inspelning ") || text.contains(" starta inspelning")
+        let fileWords = ["fil", "filen", "filer", "file", "files", "disk", "disken", "originalfilen", "original"]
+        let deleting = ["radera", "delete", "remove", "erase", "ta", "move", "flytta", "rename", "döp"].contains { text.contains(" \($0) ") }
+        if recording {
+            return swedish ? "Jag kan inte starta en inspelning; det gör du själv i Jämmer." : "I can't start a recording; that's up to you in Jämmer."
+        }
+        if deleting, t.contains(where: fileWords.contains) {
+            return swedish ? "Jag kan inte radera eller flytta filer på disken. Redigeringar ändrar aldrig originalfilen." : "I can't delete or move files on disk. Edits never change the original file."
+        }
+        let actionWords = [" up ", " down ", "upp", " ner ", "klipp", "cut", "trim", "tona", "fade", "volym", "volume", "tystare", "quieter", "högre", "louder", "gain", "db", "lufs", "normalis", "normaliz",
+                           "eko", "echo", "brum", "hum", "buzz", "klick", "click", "knast", "crackl", "brus", "noise", "hiss", "överstyr", "clip", "distort",
+                           "tystnad", "paus", "pause", "silenc", "ehm", "öh", "filler", "fyllnad", "transkri", "transcri", "markör", "marker", "kopier", "copy",
+                           "klistra", "paste", "markera", "select", "mät", "measure", "loud", "högt", "tempo", "bpm", "radera", "delete", "ta bort", "remove"]
+        let hasAction = actionWords.contains { text.contains($0) }
+        let hasNumber = t.contains { Double($0) != nil }
+        if !hasAction, !hasNumber, t.count <= 5 {
+            return swedish ? "Vad vill du att jag ändrar? Till exempel brus, brum, klick, nivå eller pauser."
+                           : "What should I change? For example noise, hum, clicks, level or pauses."
+        }
+        return nil
     }
 
     /// A keyword safety net for the small model's most common miss: with several tasks in

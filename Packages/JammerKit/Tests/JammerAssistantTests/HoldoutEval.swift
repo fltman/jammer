@@ -19,8 +19,9 @@ struct HoldoutEval {
         return options.contains { $0.caseInsensitiveCompare(text) == .orderedSame || (Double($0) != nil && Double($0) == Double(text)) }
     }
 
-    @Test("Hold-out set 1, on-device")
-    func set1() async throws {
+    @Test("Hold-out set, on-device (JAMMER_HOLDOUT=1 or 2)")
+    func run() async throws {
+        let set = ProcessInfo.processInfo.environment["JAMMER_HOLDOUT"] == "2" ? HoldoutSet2.cases : HoldoutSet1.cases
         let info = AudioFileInfo(container: .wav, sampleFormat: .float32, bigEndian: false, channels: 2, sampleRate: 48_000,
                                  channelMask: nil, dataOffset: 0, frames: 48_000 * 60, chunks: [], bext: nil, ixml: nil, markers: [])
         var p = Project(source: SourceRef(name: "Anna", path: "/dev/null", info: info))
@@ -33,7 +34,7 @@ struct HoldoutEval {
         var right = 0, valuesRight = 0, valuesTotal = 0
         var byKind: [String: (Int, Int)] = [:]
         var rows: [String] = []
-        for c in HoldoutSet1.cases {
+        for c in set {
             var plan = AssistantPlan(reply: "", steps: [])
             var failure: String?
             do { plan = try await OnDevicePlanner().plan(goal: c.goal, context: context, history: [], actions: actions) } catch { failure = error.localizedDescription }
@@ -55,7 +56,7 @@ struct HoldoutEval {
             rows.append("| \(c.kind) | \(c.goal) | \(c.ops.isEmpty ? "(no steps)" : c.ops.joined(separator: ", ")) | \(planned) | \(ok ? (notes.isEmpty ? "✓" : "ops ✓, " + notes.joined(separator: " ")) : "✗") |")
         }
         let kinds = ["task", "multi", "clarify", "refuse", "answer"].compactMap { k in byKind[k].map { "\(k) \($0.0)/\($0.1)" } }.joined(separator: ", ")
-        let summary = "Right actions: \(right)/\(HoldoutSet1.cases.count) (\(kinds)). Right values: \(valuesRight)/\(valuesTotal)."
+        let summary = "Right actions: \(right)/\(set.count) (\(kinds)). Right values: \(valuesRight)/\(valuesTotal)."
         let table = "| Kind | Request | Expected | Planned | Result |\n|---|---|---|---|---|\n" + rows.joined(separator: "\n") + "\n\n" + summary + "\n"
         print(table)
         if let path = ProcessInfo.processInfo.environment["JAMMER_EVAL_REPORT"] { try table.write(toFile: path, atomically: true, encoding: .utf8) }

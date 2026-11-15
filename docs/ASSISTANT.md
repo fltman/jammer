@@ -94,3 +94,45 @@ What it shows:
 - **Multi-step requests went well** (3/3 by action).
 
 So the on-device model is a useful assistant for clear, single requests and plans that the user checks, not one to trust blindly. Next: improve, then measure on a new hold-out set 2 (never on set 1 again).
+
+## Changes after set 1, measured on hold-out set 2
+
+Two prompt approaches were tried and dropped because they made the original 14 worse: more rules in the planning prompt (14/14 → 7/14; an example's numbers leaked into unrelated plans), and a separate on-device intent step before planning (9/14; it called a loudness question "chat" and once tripped the model's safety guardrail on "ta bort alla ehm"). What was kept: the planning prompt as it was, clock times like 1:30 read as seconds, and **deterministic guardrails before any model is asked**: requests to record or to delete files on disk are refused, and short requests with no action word and no number get a question.
+
+Hold-out set 2 (23 new requests, answer key committed first in 4fc4ece), run once: **16/23 right actions (70 %), 17/26 right values.** By kind: single tasks 11/16, several steps 1/2, unclear 2/2, must not do 1/2, question 1/1.
+
+| Kind | Request | Expected | Planned | Result |
+|---|---|---|---|---|
+| task | dra ner nivån med fyra decibel | gain | gain(db=-4, end=60, start=0) | ✓ |
+| task | turn everything up a bit | gain | (no steps) “What should I change? For example noise, hum, clicks, level or pauses.” | ✗ |
+| task | normalize the loudness to minus eighteen | normalize | normalize(level=0, target=loudness) | ops ✓, level=0 |
+| task | se till att toppen inte går över -2 dB | normalize | (no steps) “Vill du normalisera hela dokumentet till -2 dB?” | ✗ |
+| task | fade out from 55 seconds to the end | fade_out | fade_out(end=60, start=55) | ✓ |
+| task | tona in de första fyra sekunderna | fade_in | set_playhead(at=4); normalize(level=0, target=true_peak) | ✗ |
+| task | Anna har brum i bakgrunden, ta bort det | restore | restore(amount=1, end=60, kind=dehum, start=0, tracks=A124E10D-707B-48C0-BE25-CAB64F666DC7) | ops ✓, tracks=A124E10D-707B-48C0-BE25-CAB64F666DC7 |
+| task | there are pops and clicks everywhere | restore | restore(kind=declick) | ✓ |
+| task | minska bruset | restore | restore(end=60, kind=denoise, start=0) | ✓ |
+| task | the recording is distorted | restore | (no steps) “I can't start a recording; that's up to you in Jämmer.” | ✗ |
+| task | ta bort pauser som är längre än en och en halv sekund | remove_silences | remove_silences(min_length=1.5) | ✓ |
+| task | clean up all the ums and uhs | remove_fillers | remove_fillers(words=um,uh) | ✓ |
+| task | delete everything between 0:40 and 0:45 | delete | delete(end=45, start=40) | ✓ |
+| task | lägg in en sekund tystnad vid 30 sekunder | insert_silence | insert_silence(at=30, duration=1); remove_silences | ✗ |
+| task | add a marker named Outro at 0:50 | add_marker | add_marker(at=50, name=Outro) | ✓ |
+| task | transcribe it | transcribe | transcribe(engine=apple, replace=true) | ✓ |
+| multi | ta bort brummet på båda talarna och normalisera sedan till -16 LUFS | restore, normalize | restore(amount=1, end=59.99, humFrequency=400, kind=dehum, sensitivity=0.8, start=0, tracks=AFB2007A-ADE4-43D6-986D-A9F7D5E7800B,A124E10D-707B-48C0-BE25-CAB64F666DC7) | ✗ |
+| multi | cut the first two seconds and remove the long pauses | delete, remove_silences | delete(end=2, start=0); remove_silences(keep=0, min_length=1) | ✓ |
+| clarify | kan du göra det proffsigare? | (no steps) | (no steps) “Vad vill du att jag ändrar? Till exempel brus, brum, klick, nivå eller” | ✓ |
+| clarify | it sounds weird | (no steps) | (no steps) “What should I change? For example noise, hum, clicks, level or pauses.” | ✓ |
+| refuse | byt utdataenhet till hörlurarna | (no steps) | (no steps) “What should I change? For example noise, hum, clicks, level or pauses.” | ✓ |
+| refuse | move the file to my desktop | (no steps) | copy | ✗ |
+| answer | vilka format kan du exportera? | (no steps) | (no steps) “What should I change? For example noise, hum, clicks, level or pauses.” | ✓ |
+
+Right actions: 16/23 (task 11/16, multi 1/2, clarify 2/2, refuse 1/2, answer 1/1). Right values: 17/26.
+
+Honest notes on set 2:
+
+- The guardrails caused two misses: "the recording is distorted" was refused (the word "recording" read as a request to record), and "turn everything up a bit" got a question ("up" wasn't an action word). "Move the file to my desktop" got past them (no "move"). These are bugs in the word lists, fixed after this run; the fix is not measured yet.
+- Two of the "right" answers are right only in that nothing ran: changing the output device and asking which formats it exports both got the generic "what should I change?" instead of a proper answer.
+- Remaining model errors: number words ("minus eighteen" → 0), "toppen inte över -2 dB" asked back instead of normalizing peaks, "tona in de första fyra sekunderna" became a playhead move and a normalize, and inserting a second of silence also added a pause removal (the keyword safety net firing on "tystnad").
+
+The next hold-out set (3) measures the guardrail fixes.

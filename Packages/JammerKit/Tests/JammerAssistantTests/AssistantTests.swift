@@ -108,7 +108,7 @@ struct AssistantTests {
         let names = tools.compactMap { ($0["function"] as? [String: Any])?["name"] as? String }
         #expect(names.allSatisfy { $0.range(of: "^[a-zA-Z0-9_-]{1,64}$", options: .regularExpression) != nil })
         let noKey = OpenRouterPlanner(model: "x", key: { nil }, session: session)
-        await #expect(throws: AssistantError.noKey) { try await noKey.plan(goal: "x", context: AssistantContext(project: p, selection: nil, playhead: 0), history: [], actions: actions) }
+        await #expect(throws: AssistantError.noKey) { try await noKey.plan(goal: "normalize to -16 LUFS", context: AssistantContext(project: p, selection: nil, playhead: 0), history: [], actions: actions) }
         #expect(planner.paid && !OnDevicePlanner().paid)
     }
 
@@ -130,5 +130,23 @@ struct AssistantTests {
         #expect(PlanParser.augment(goal: "remove the pauses", plan: AssistantPlan(reply: "", steps: [])).steps.map(\.op) == ["remove_silences"])
         #expect(PlanParser.augment(goal: "normalisera till -16 LUFS", plan: only).steps.map(\.op) == ["remove_silences"])
         #expect(PlanParser.augment(goal: "cut 10 to 15", plan: AssistantPlan(reply: "", steps: [PlannedStep(op: "delete")])).steps.map(\.op) == ["delete"])
+    }
+
+    @Test("Clock times become seconds")
+    func clockTimes() {
+        #expect(PlanParser.typed(op: "add_marker", args: [("at", "1:30"), ("name", "K")], why: "", actions: actions)?.params["at"] == .number(90))
+        #expect(PlanParser.typed(op: "set_playhead", args: [("at", "1:02:03")], why: "", actions: actions)?.params["at"] == .number(3_723))
+    }
+
+    @Test("Guardrails: recording and deleting files are refused, vague requests get a question, real tasks pass")
+    func guardrails() {
+        #expect(PlanParser.guardrail("spela in en ny tagning")?.contains("inspelning") == true)
+        #expect(PlanParser.guardrail("delete the original file from disk") != nil)
+        #expect(PlanParser.guardrail("fixa ljudet")?.hasPrefix("Vad vill du") == true)
+        #expect(PlanParser.guardrail("make it better") != nil)
+        #expect(PlanParser.guardrail("move the file to my desktop") != nil)
+        for task in ["the recording is distorted", "turn everything up a bit", "ta bort alla ehm", "normalize to -16 LUFS", "fade in the first two seconds", "ta bort brummet på talare 2", "cut from 10 to 15 seconds", "hur högt är det, i LUFS?"] {
+            #expect(PlanParser.guardrail(task) == nil, "\(task)")
+        }
     }
 }

@@ -39,6 +39,7 @@ public struct OnDevicePlanner: AssistantPlanner {
     public func plan(goal: String, context: AssistantContext, history: [(user: String, reply: String)],
                      actions: [AssistantAction]) async throws -> AssistantPlan {
         if let why = Self.availability { throw AssistantError.unavailable(why) }
+        if let reply = PlanParser.guardrail(goal) { return AssistantPlan(reply: reply, steps: []) }
         let session = LanguageModelSession(instructions: AssistantPrompt.instructions(actions))
         let response = try await session.respond(to: AssistantPrompt.prompt(goal: goal, context: context, history: history),
                                                  schema: try Self.schema(actions),
@@ -112,6 +113,7 @@ public struct OpenRouterPlanner: AssistantPlanner {
 
     public func plan(goal: String, context: AssistantContext, history: [(user: String, reply: String)],
                      actions: [AssistantAction]) async throws -> AssistantPlan {
+        if let reply = PlanParser.guardrail(goal) { return AssistantPlan(reply: reply, steps: []) }
         guard let key = key(), !key.isEmpty else { throw AssistantError.noKey }
         var req = URLRequest(url: endpoint.appending(path: "chat/completions"))
         req.httpMethod = "POST"
