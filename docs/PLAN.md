@@ -20,10 +20,11 @@ Goal: open a WAV of several hours, zoom smoothly, play, cut, undo, export bit-ex
 | Default-output playback feeding the engine | Done |
 | Agent API on 127.0.0.1:9003 (then 9301–9319), guide, splash, uploads | Done, verified end to end with curl |
 | Site content (`site/`): app.json, FAQ, manual, generated agents.md, hero | Done for what exists |
-| RTSan dynamic check (needs upstream LLVM; Apple clang lacks the runtime) | Open |
-| HAL IOProc via `AudioHardwareSystem`, audio workgroups for parallel rendering | Open (the default-output unit covers playback today) |
+| RTSan dynamic check: `scripts/rtsan.sh` builds the engine with upstream clang (`-fsanitize=realtime`) and drives pull, the IOProc (resampling) and the AU callback with seeks and plan swaps; `--plant` proves it catches a violation | Done (LLVM 20.1.8) |
+| HAL IOProc on the default device (C HAL API; the SDK has no `AudioHardwareSystem`), routing to the device's stereo pair, resampling in the render worker when the device rate differs, following device and rate changes; AUHAL as fallback | Done; device switching not yet tried by hand |
+| Audio workgroups | Deferred: the worker renders 340 ms ahead and isn't tied to the device deadline. Joining `kAudioDevicePropertyIOThreadOSWorkgroup` pays off once rendering moves into the device cycle (low-latency monitoring, plugin chains), phase 1–2 |
 | Tempo map in the time model: frame-anchored tempo and time signature, bar.beat.tick, `set_tempo`/`remove_tempo_change` | Done |
-| Multi-hour stress test (3 h file: peaks, zoom, export timings) | Open |
+| Multi-hour stress test (`scripts/stress.sh`, results in `docs/STRESS.md`); zoomed-in waveform reads moved off the main thread after it found 150 ms stalls | Done |
 | Collect media into the package ("collect and save") | Open |
 
 ## Phase 1: MVP, the speech and audio editor
