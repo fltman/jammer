@@ -41,7 +41,9 @@ struct AgentSplashView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .background(Color.white.opacity(0.05), in: .rect(cornerRadius: 8))
                             .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.neonColor.opacity(0.55)))
+                            .accessibilityElement(children: .ignore)
                             .accessibilityLabel("Text for your agent")
+                            .accessibilityValue(Text(verbatim: prompt))
                         Button {
                             NSPasteboard.general.clearContents()
                             NSPasteboard.general.setString(prompt, forType: .string)
@@ -51,10 +53,8 @@ struct AgentSplashView: View {
                             Label(copied ? "Copied" : "Copy", systemImage: copied ? "checkmark" : "doc.on.doc")
                                 .frame(minWidth: 70)
                         }
-                        .controlSize(.large)
-                        .buttonStyle(.borderedProminent)
-                        .tint(Theme.neonColor)
-                        .foregroundStyle(.black)
+                        // Dark text on the neon: about 14:1, where white gives 1.4:1.
+                        .buttonStyle(NeonButtonStyle())
                         .keyboardShortcut("c", modifiers: [.command, .shift])
                     }
                 } else if let failure = server.failure {
@@ -67,6 +67,7 @@ struct AgentSplashView: View {
                 Toggle("Show at launch", isOn: $showAtLaunch)
                 Spacer()
                 Button("Close") { dismiss() }
+                    .buttonStyle(NeonButtonStyle())
                     .keyboardShortcut(.defaultAction)
             }
         }
@@ -78,6 +79,25 @@ struct AgentSplashView: View {
     }
 }
 
+/// A filled neon button with near-black text (the system prominent style draws white).
+struct NeonButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.body.weight(.semibold))
+            .foregroundStyle(Theme.inkColor)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .background(Theme.neonColor.opacity(configuration.isPressed ? 0.75 : 1), in: .rect(cornerRadius: 7))
+            .contentShape(.rect(cornerRadius: 7))
+    }
+}
+
+/// Closes on Esc like a sheet.
+private final class SplashPanel: NSPanel {
+    var onCancel: (() -> Void)?
+    override func cancelOperation(_ sender: Any?) { onCancel?() }
+}
+
 @MainActor
 enum AgentSplash {
     private static var window: NSWindow?
@@ -87,13 +107,14 @@ enum AgentSplash {
             window.makeKeyAndOrderFront(nil)
             return
         }
-        let w = NSPanel(contentRect: .zero, styleMask: [.titled, .closable, .fullSizeContentView], backing: .buffered, defer: false)
+        let w = SplashPanel(contentRect: .zero, styleMask: [.titled, .closable, .fullSizeContentView], backing: .buffered, defer: false)
         w.titlebarAppearsTransparent = true
         w.titleVisibility = .hidden
         w.isMovableByWindowBackground = true
         w.appearance = NSAppearance(named: .darkAqua)
         w.backgroundColor = Theme.ink
         w.isReleasedWhenClosed = false
+        w.onCancel = { AgentSplash.close() }
         w.contentView = NSHostingView(rootView: AgentSplashView { AgentSplash.close() })
         w.setContentSize(w.contentView!.fittingSize)
         w.center()
