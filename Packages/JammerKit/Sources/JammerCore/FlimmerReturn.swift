@@ -50,6 +50,7 @@ public enum FlimmerReturn {
         /// against the picture.
         public var lengthChangedBy: Frame = 0
         public var isEmpty: Bool { takes.isEmpty && new.isEmpty && tracks.isEmpty }
+        public init() {}
     }
 
     public enum PlanError: Error, LocalizedError, Equatable {
@@ -101,5 +102,37 @@ public enum FlimmerReturn {
         }
         plan.missing = record.clipIds.filter { byClip[$0] == nil }
         return plan
+    }
+
+    // MARK: What each file is rendered from
+
+    /// The document reduced to one take's sound: only the pieces of that clip, on their tracks
+    /// with their plugins. The track's level and mute aren't in the file (they go back as
+    /// values), except what a track has above 0 dB, which Flimmer's 0…1 volume can't hold.
+    public static func soloProject(_ project: Project, clipId: String) -> Project {
+        solo(project) { $0.origin?.clipId == clipId && $0.origin?.videoAudio != true }
+    }
+
+    /// The same for a clip that was added here.
+    public static func soloProject(_ project: Project, clip: UUID) -> Project { solo(project) { $0.id == clip } }
+
+    static func solo(_ project: Project, keep: (Clip) -> Bool) -> Project {
+        var p = project
+        p.markers = []
+        for i in p.tracks.indices {
+            p.tracks[i].clips.removeAll { !keep($0) }
+            p.tracks[i].isMuted = false
+            p.tracks[i].gainDB = max(0, p.tracks[i].gainDB)
+        }
+        return p
+    }
+
+    /// The whole mix as Flimmer should get it: everything as it sounds here, without the
+    /// video clips' own sound, which Flimmer plays itself.
+    public static func mixProject(_ project: Project) -> Project {
+        var p = project
+        p.markers = []
+        for i in p.tracks.indices { p.tracks[i].clips.removeAll { $0.origin?.videoAudio == true } }
+        return p
     }
 }

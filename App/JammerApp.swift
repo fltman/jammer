@@ -126,6 +126,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: Menus
 
+    /// Flimmer doesn't have the receiving side yet, so the command is in debug builds only;
+    /// it moves into every build (and the guide and manual) when it has been tried against Flimmer.
+    private var sendToFlimmerItems: [NSMenuItem] {
+        #if DEBUG
+        let i = NSMenuItem(title: "Send to Flimmer…", action: #selector(EditorWindowController.sendToFlimmer(_:)), keyEquivalent: "")
+        return [i]
+        #else
+        return []
+        #endif
+    }
+
     private func buildMenu() -> NSMenu {
         let main = NSMenu()
         func item(_ title: String, _ action: Selector?, _ key: String = "", _ mods: NSEvent.ModifierFlags = .command, target: AnyObject? = nil) -> NSMenuItem {
@@ -179,7 +190,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             item("Import Final Cut Pro XML…", #selector(AppDelegate.importTimeline(_:)), ""),
             item("Export Audio…", #selector(EditorWindowController.exportAudio(_:)), "e", [.command, .shift]),
             item("Batch…", #selector(AppDelegate.showBatch(_:)), "b", [.command, .option]),
-        ]))
+        ] + sendToFlimmerItems))
         main.addItem(submenu("Edit", [
             item("Undo", Selector(("undo:")), "z"),
             item("Redo", Selector(("redo:")), "z", [.command, .shift]),

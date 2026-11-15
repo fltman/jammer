@@ -42,6 +42,8 @@ public struct Origin: Codable, Hashable, Sendable {
     public var exportVersion: String?
     /// The sound of a video clip itself (Flimmer has no audio clip for it): `clipId` is the shot clip's.
     public var videoAudio: Bool?
+    /// A clip linked to a shot: seconds from the shot's start, as it came in.
+    public var clipRelativeOffset: Double?
     /// How the clip or track was when it came in, to tell later what has changed.
     public var snapshot: Snapshot?
 
@@ -243,11 +245,16 @@ public struct Project: Codable, Equatable, Sendable {
         public var exportVersion: String?
         public var clipIds: [String]
         public var length: Frame
-        public init(app: String, exportVersion: String?, clipIds: [String], length: Frame) {
+        /// Flimmer, exportVersion 2 and later: the project and story the export was made from.
+        public var projectId: String?
+        public var storyId: String?
+        public init(app: String, exportVersion: String?, clipIds: [String], length: Frame, projectId: String? = nil, storyId: String? = nil) {
             self.app = app
             self.exportVersion = exportVersion
             self.clipIds = clipIds
             self.length = length
+            self.projectId = projectId
+            self.storyId = storyId
         }
     }
 

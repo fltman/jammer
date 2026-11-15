@@ -268,6 +268,21 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         UserDefaults.standard.set(!transcript.isHidden, forKey: "transcript.visible")
     }
 
+    /// File › Send to Flimmer… (debug builds until Flimmer has the receiving side).
+    @objc func sendToFlimmer(_ sender: Any?) {
+        guard let window else { return }
+        let model = FlimmerSendModel(session: session)
+        let host = NSHostingController(rootView: AnyView(EmptyView()))
+        host.rootView = AnyView(FlimmerSendSheet(model: model) { [weak host] in
+            guard let sheet = host?.view.window else { return }
+            window.endSheet(sheet)
+        })
+        window.contentViewController?.presentAsSheet(host) ?? {
+            let sheet = NSWindow(contentViewController: host)
+            window.beginSheet(sheet)
+        }()
+    }
+
     @objc func showRestore(_ sender: Any?) {
         guard let window else { return }
         let kind = (sender as? NSMenuItem)?.representedObject as? String
@@ -457,6 +472,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
             item.title = session.linkedFile != nil ? "Save a Jämmer Copy…" : "Duplicate"
             return true
         }
+        if item.action == #selector(sendToFlimmer(_:)) { return session.project.imported?.app == "flimmer" }
         if item.action == #selector(showRestore(_:)) {
             return session.project.length > 0 && !(JobRegistry.shared.latest("restore", document: session.agentID).map { !$0.isFinished } ?? false)
         }

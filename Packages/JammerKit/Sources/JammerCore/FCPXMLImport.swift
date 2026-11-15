@@ -80,6 +80,9 @@ public enum FCPXMLImport {
         public var shots: [Shot]
         /// Flimmer's `exportVersion` when the file is one of its exports.
         public var flimmerExportVersion: String?
+        /// From exportVersion 2: the project and story it was exported from (needed for the way back).
+        public var flimmerProjectId: String?
+        public var flimmerStoryId: String?
         public var warnings: [Warning]
         public var media: [URL] { Array(Set(tracks.flatMap { $0.clips.map(\.media) })).sorted { $0.path < $1.path } }
     }
@@ -216,6 +219,7 @@ public enum FCPXMLImport {
                 if let i = time("fadeIn"), let o = time("fadeOut"), i.seconds + o.seconds <= duration.seconds + 1e-9 { fadeIn = i; fadeOut = o }
                 origin = Origin(app: "flimmer", clipId: md[flimmer + "clipId"], trackId: md[flimmer + "trackId"],
                                 linkedShotId: md[flimmer + "linkedShotId"], exportVersion: exportVersion)
+                if origin?.linkedShotId != nil { origin?.clipRelativeOffset = md[flimmer + "clipRelativeOffset"].flatMap(Double.init) }
             }
             found.append(Found(lane: lane, role: c["audioRole"] ?? c["role"],
                                item: ClipItem(name: c["name"] ?? asset.name, media: url, mediaName: asset.name, start: start, sourceStart: sourceStart,
@@ -304,7 +308,8 @@ public enum FCPXMLImport {
             warnings.append(Warning(code: "layout", message: "The timeline is \(layout); it was imported as stereo.", clip: nil))
         }
         return Timeline(name: project?["name"] ?? fallbackName, sampleRate: sampleRate, channels: channels, tracks: tracks, shots: shots,
-                        flimmerExportVersion: exportVersion, warnings: warnings)
+                        flimmerExportVersion: exportVersion, flimmerProjectId: sequence.metadata[flimmer + "projectId"],
+                        flimmerStoryId: sequence.metadata[flimmer + "storyId"], warnings: warnings)
     }
 
     // MARK: Building the project
@@ -391,7 +396,8 @@ public enum FCPXMLImport {
         }
         if let version = timeline.flimmerExportVersion {
             let ids = project.tracks.flatMap { $0.clips.compactMap { $0.origin?.videoAudio == true ? nil : $0.origin?.clipId } }
-            project.imported = .init(app: "flimmer", exportVersion: version, clipIds: ids, length: project.length)
+            project.imported = .init(app: "flimmer", exportVersion: version, clipIds: ids, length: project.length,
+                                     projectId: timeline.flimmerProjectId, storyId: timeline.flimmerStoryId)
         }
         return Result(project: project, name: timeline.name, warnings: warnings, shots: timeline.shots, flimmerExportVersion: timeline.flimmerExportVersion)
     }
