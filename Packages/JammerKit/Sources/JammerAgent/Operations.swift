@@ -157,6 +157,14 @@ public enum Operations {
                        .init("tracks", .list, "Track ids. Default: every track (gate: those with speakers)."),
                        .init("amount", .number, "gate: dB outside the turns. Default -18.", range: -40...0),
                        .init("maxDelay", .number, "cancel: ms of spread around the found delay (the room or codec). Default 30.", range: 5...100)]),
+        .init("set_track", "Change Track", "Changes one track: its gain, mute or name.",
+              params: [.init("track", .string, "Track id.", required: true),
+                       .init("gainDB", .number, "The track's gain in dB.", range: -96...24),
+                       .init("muted", .boolean, "True to mute."),
+                       .init("name", .string, "A new name.")]),
+        .init("set_group", "Change Group", "Moves the gain of every track in a group (the stems of one separated track) by the same amount, so their balance stays.",
+              params: [.init("group", .string, "Group id (GET …/tracks shows it).", required: true),
+                       .init("gainDB", .number, "Change in dB, added to each track's gain.", required: true, range: -48...48)]),
         .init("level_speakers", "Level Speakers", "Brings every speaker to the same loudness with one gain each, measured over their own turns (needs diarize first; fails with reason no_speakers otherwise). A track that is one speaker gets track gain; a track with several is split in the pauses where the speaker changes. Run loudness_preset afterwards for the mix. info: speakers, maxChangeDB, limitedByMaxGain.",
               params: [.init("mode", .string, "static: one gain per speaker (default). dynamic: rides each speaker's gain over time (3 s short-term loudness over their own speech, looking ahead so speech starts don't pump; pauses never lifted); bounces the tracks into new files. info then also has spreadBeforeLU and spreadAfterLU.", options: ["static", "dynamic"]),
                        .init("target", .number, "LUFS per speaker. Default -18.", range: -40 ... -10),
@@ -250,6 +258,10 @@ public enum Operations {
         .init("goto_history", "Go to Step", "Makes a step from the history current, on any branch; itself one undo step back to where you were.",
               params: [OperationSpec.Param("node", .string, "Step id from get_history.", required: true).at("path")],
               call: ("POST", "/api/v1/documents/{id}/history/{node}")),
+        .init("separate", "Separate Stems", "Splits tracks into stems as a job: model music4 gives vocals, drums, bass and other (Spleeter). Each track is replaced by one track per stem, in a group, playing from new files; together they sound exactly like the track did, so nothing changes until you change a stem. Sound above the model's 11 kHz goes to other. One undo step. The model is installed by the user in Settings › Models (reason model_missing otherwise); tracks with plugins are refused (has_inserts).",
+              params: [.init("model", .string, "Which separation.", options: ["music4"]),
+                       .init("tracks", .list, "Track ids. Default: every track with audio.")],
+              call: ("POST", "/api/v1/documents/{id}/separate"), startsJob: true),
         .init("get_chapters", "Read Chapters", "The markers as Podcasting 2.0 chapters (JSON, version 1.2.0), optionally over start and end.",
               params: [start, end], edits: false, call: ("GET", "/api/v1/documents/{id}/chapters")),
         .init("measure_loudness", "Measure Loudness", "Integrated LUFS, loudness range, max momentary and short-term, sample and true peak.",
@@ -625,6 +637,20 @@ public enum StepRunner {
                 return ["tracks": Double(report.tracks), "reductionDB": report.reductionDB]
             } catch let e as DebleedError {
                 throw StepFailure("debleed: \(e.localizedDescription)", reason: e.reason)
+            }
+        case "set_track":
+            guard let id = UUID(uuidString: p["track"]?.string ?? ""), let t = project.tracks.firstIndex(where: { $0.id == id }) else {
+                throw StepFailure("set_track: no such track.", reason: "not_found")
+            }
+            if let g = p["gainDB"]?.double { s.project.tracks[t].gainDB = g }
+            if let m = p["muted"], case .bool(let v) = m { s.project.tracks[t].isMuted = v }
+            if let n = p["name"]?.string, !n.trimmingCharacters(in: .whitespaces).isEmpty { s.project.tracks[t].name = n }
+        case "set_group":
+            guard let id = UUID(uuidString: p["group"]?.string ?? ""), project.tracks.contains(where: { $0.group == id }) else {
+                throw StepFailure("set_group: no such group.", reason: "not_found")
+            }
+            for t in s.project.tracks.indices where s.project.tracks[t].group == id {
+                s.project.tracks[t].gainDB = ((s.project.tracks[t].gainDB + (p["gainDB"]?.double ?? 0)) * 100).rounded() / 100
             }
         case "level_speakers":
             guard let pool = s.pool else { throw StepFailure("level_speakers needs the app.") }

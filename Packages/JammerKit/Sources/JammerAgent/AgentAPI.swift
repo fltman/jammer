@@ -330,6 +330,7 @@ public enum AgentAPI {
         | GET | `/api/v1/documents/{id}/tracks/{trackId}/drift?against=<trackId>` | How far two recorders' clocks part: `{"drift": {"ppm", "msPerHour", "confidence"}}`. Needs at least 90 s of overlap. |
         | GET | `/api/v1/documents/{id}/tracks` | The tracks with their ids, clips and plugins (`inserts`). |
         | GET | `/api/v1/documents/{id}/tracks/{trackId}/inserts/{insert}` | One plugin: `{"insert": {"id", "plugin", "name", "bypass", "latencyMs", "factoryPresets", "params": [{"identifier", "name", "unit", "min", "max", "value"}]}}`. |
+        | POST | `/api/v1/documents/{id}/separate` | Splits tracks into stems (a job). Body: `{"model": "music4", "tracks": [id]}`; both optional. Result: `{"stems": [names], "tracks": [ids]}`. |
         | GET | `/api/v1/documents/{id}/history` | The history tree: `{"current", "pruned", "limit", "nodes": [{"id", "parent", "action", "time", "branch"}]}`. A change made after an undo starts a branch; the old future stays reachable. |
         | POST | `/api/v1/documents/{id}/history/{node}` | Goes to that step (any branch). One undo step; `undo` goes back. |
         | GET | `/api/v1/plugins` | The Audio Unit effects installed on this Mac, optionally filtered by `?q=`: `{"plugins": [{"id", "name", "manufacturer", "kind", "version", "v3"}], "safeMode"}`. |
@@ -406,6 +407,10 @@ public enum AgentAPI {
         ## Speakers
 
         `POST …/diarize` labels the document with speakers as a job. For a double-ender (several tracks playing at once, one person per track) the default is `"mode": "by_track"`: each track is its speaker, named after the track, and bleed from the other tracks doesn't count. Otherwise it's `"ml"`, a diarisation model run on each track; tell it `speakers` when you know how many, especially for similar voices and short back-and-forth, where it's much weaker (docs/DIARISATION.md has the numbers). If `ml` finds only one speaker, the job's result has a `hint`: when the recording is a conversation, run it again with `speakers`, since the model often merges voices that sound alike. The first `ml` run downloads the model (about 20 MB); if that fails the job fails with `error.code` `model_unavailable`. Afterwards `GET …/speakers` lists who talks when, `GET …/transcript` gives each word a `speaker` id and lists `speakers`, and `rename_speaker` names them ("0" → "Anna"). Turns are anchored in the audio, so they stay right through edits.
+
+        ## Stems
+
+        `POST …/separate` (a job) splits each track into vocals, drums, bass and other with Spleeter's 4-stem model, on this Mac. The stems replace the track as four tracks in one group (`group` in `GET …/tracks`) and add up to exactly what the track was, so the mix is unchanged until you change a stem: `set_track` mutes or turns one, `set_group` moves them all together. The model works up to 11 kHz; everything above it, and whatever the model leaves, goes to `other`, so nothing is lost. The user installs the model (146 MB, MIT, from Deezer's own release) in Settings › Models.
 
         ## Plugins
 

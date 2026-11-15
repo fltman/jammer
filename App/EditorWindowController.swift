@@ -1,6 +1,7 @@
 import AppKit
 import JammerAgent
 import JammerCore
+import JammerStems
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -296,6 +297,22 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
     }
 
     @objc func showHistory(_ sender: Any?) { HistoryPanel.show(session) }
+
+    /// Audio › Separate Stems: every track with audio into vocals, drums, bass and other.
+    @objc func separateStems(_ sender: Any?) {
+        guard Stems.model.isInstalled else {
+            session.status = StemError.modelMissing.localizedDescription
+            NSSound.beep()
+            return
+        }
+        if let t = session.project.tracks.first(where: { !$0.inserts.isEmpty && !$0.clips.isEmpty }) {
+            session.status = StemError.hasInserts(t.name).localizedDescription
+            NSSound.beep()
+            return
+        }
+        _ = JobRegistry.shared.startSeparation(session, tracks: nil)
+        session.status = "Separating stems…"
+    }
 
     @objc func showPlugins(_ sender: Any?) {
         guard let window else { return }

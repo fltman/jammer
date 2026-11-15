@@ -182,3 +182,64 @@ struct RealSeparationTests {
     }
     static let golden: [Double]? = [-22.12, -36.51, -15.20, -35.81]
 }
+
+@Suite("Stems in a project")
+struct ProjectStemTests {
+    @Test("A track becomes grouped stem tracks that null against it, at 44.1 kHz stereo and at 48 kHz mono; words follow")
+    func project() throws {
+        for (rate, channels, limit) in [(44_100.0, 2, -100.0), (48_000.0, 1, -40.0)] {
+            let dir = FileManager.default.temporaryDirectory.appending(path: "jammer-stems-\(UUID().uuidString)")
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: dir) }
+            let n = Int(rate * 3)
+            let mono = (0..<n).map { i -> Float in let t = Double(i) / rate; return Float(0.3 * sin(2 * .pi * 200 * t) + 0.2 * sin(2 * .pi * 3_000 * t)) }
+            let url = dir.appending(path: "song.wav")
+            let w = try WAVWriter(url: url, options: .init(encoding: .float32, channels: channels, sampleRate: rate))
+            try w.write(channels == 2 ? mono.flatMap { [$0, $0] } : mono); try w.finish()
+            var p = Project(source: SourceRef(name: "Song", path: url.path, info: try AudioFileReader.info(at: url)))
+            p.setTranscript(SourceTranscript(sourceID: p.sources[0].id, language: "en", engine: "t", words: [Word(text: "la", start: Frame(rate), end: Frame(rate * 1.2))]))
+            p.tracks[0].gainDB = -3
+            let pool = SourcePool()
+            let before = PlanCompiler.compile(p, pool: pool).render(from: 0, frames: n)
+            let (q, report) = try p.separatingStems(with: BandSplit(), pool: pool, media: dir.appending(path: "m"))
+            #expect(q.tracks.map(\.name) == ["Song – Low", "Song – Mid", "Song – Other"] && report.tracks.count == 3)
+            #expect(Set(q.tracks.map(\.group)).count == 1 && q.tracks[0].group != nil && q.tracks.allSatisfy { $0.gainDB == -3 })
+            let after = PlanCompiler.compile(q, pool: pool).render(from: 0, frames: n)
+            var err = 0.0, pow = 0.0
+            for i in 0..<before.count { let d = Double(after[i] - before[i]); err += d * d; pow += Double(before[i] * before[i]) }
+            let null = 10 * log10(max(err, 1e-30) / pow)
+            print(String(format: "STEMS project null at %.0f Hz, %d ch: %.1f dB", rate, channels, null))
+            #expect(null < limit)
+            #expect(q.placedWords().map(\.word.text) == ["la"] && q.placedWords()[0].track == 0 && q.placedWords()[0].start == Frame(rate))
+            #expect(try JSONDecoder().decode(Project.self, from: JSONEncoder().encode(q)).tracks.map(\.group) == q.tracks.map(\.group))
+        }
+    }
+
+    @Test("Tracks with plugins are refused; a wrong checksum installs nothing")
+    func refusals() throws {
+        var p = Project(sampleRate: 44_100, channels: 2)
+        p.tracks = [Track(name: "A", clips: [Clip(sourceID: UUID(), start: 0, length: 100)], inserts: [Insert(plugin: PluginID("aufx/lmtr/appl")!, name: "L")])]
+        #expect(throws: StemError.hasInserts("A")) { try p.separatingStems(with: BandSplit(), pool: SourcePool(), media: FileManager.default.temporaryDirectory) }
+        let dir = FileManager.default.temporaryDirectory.appending(path: "jammer-sm-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let fake = dir.appending(path: "x.tar.gz")
+        try Data("not the model".utf8).write(to: fake)
+        #expect(throws: (any Error).self) { try StemModel.unpack(fake, into: dir.appending(path: "out")) }
+        #expect(!FileManager.default.fileExists(atPath: dir.appending(path: "out/model.index").path))
+        #expect(!StemModel(modelsFolder: dir).isInstalled)
+    }
+}
+
+@Suite("Stem model install", .enabled(if: spleeterDir != nil))
+struct InstallTests {
+    @Test("Deezer's archive passes the pinned checksum, unpacks and loads")
+    func unpack() throws {
+        let dir = FileManager.default.temporaryDirectory.appending(path: "jammer-inst-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let model = StemModel(modelsFolder: dir)
+        try StemModel.unpack(spleeterDir!.appending(path: "4stems.tar.gz"), into: model.folder)
+        #expect(model.isInstalled)
+        #expect(try TFCheckpoint(index: model.folder.appending(path: "model.index"), data: model.folder.appending(path: "model.data-00000-of-00001")).entries.count >= 296)
+    }
+}

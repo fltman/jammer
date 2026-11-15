@@ -1,6 +1,7 @@
 import AppKit
 import JammerAgent
 import JammerCore
+import JammerStems
 import Network
 import OSLog
 
@@ -348,6 +349,22 @@ enum AgentRouter {
                 guard let id = UUID(uuidString: t[1]), session.history?.node(id) != nil else { throw APIError.notFound("No step \(t[1]) in the history.") }
                 try session.jump(to: id)
                 return .json(["current": id.uuidString, "document": detail(session)])
+            case ["separate"]:
+                try only("POST")
+                let body = try json(r)
+                if let m = body["model"] as? String, m != "music4" { throw APIError.badRequest("model must be \"music4\".") }
+                var ids: [UUID]? = nil
+                if let list = body["tracks"] as? [String] {
+                    ids = try list.map { s in
+                        guard let id = UUID(uuidString: s), session.project.tracks.contains(where: { $0.id == id }) else { throw APIError.badRequest("No track with id \(s).") }
+                        return id
+                    }
+                }
+                guard Stems.model.isInstalled else { throw APIError.unprocessable("model_missing", StemError.modelMissing.localizedDescription) }
+                if let t = session.project.tracks.first(where: { (ids?.contains($0.id) ?? true) && !$0.inserts.isEmpty && !$0.clips.isEmpty }) {
+                    throw APIError.unprocessable("has_inserts", StemError.hasInserts(t.name).localizedDescription)
+                }
+                return .json(["job": JobRegistry.shared.startSeparation(session, tracks: ids).json], status: 202)
             case ["diarize"]:
                 try only("POST")
                 return try diarize(session, r)
@@ -448,7 +465,7 @@ enum AgentRouter {
 
     static func trackJSON(_ s: EditorSession, _ t: Track) -> [String: Any] {
         let p = s.project
-        return ["id": t.id.uuidString, "name": t.name, "gainDB": t.gainDB, "muted": t.isMuted,
+        return ["id": t.id.uuidString, "name": t.name, "gainDB": t.gainDB, "muted": t.isMuted, "group": t.group?.uuidString ?? NSNull(),
                 "inserts": t.inserts.map { i -> [String: Any] in
                     var d: [String: Any] = ["id": i.id.uuidString, "plugin": i.plugin.description, "name": i.name, "bypass": i.bypass]
                     if let f = s.inserts.failure(i.id) { d["error"] = ["reason": f.reason, "message": f.localizedDescription] }

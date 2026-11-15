@@ -29,6 +29,11 @@
       "screen": "screens/speakers.webp"
     },
     {
+      "title": "Stems from a finished mix",
+      "text": "Split a music track into vocals, drums, bass and other, on your Mac. The four stems add up to exactly the original, so nothing changes until you turn one down.",
+      "screen": "screens/stems.webp"
+    },
+    {
       "title": "Loudness for where it's going",
       "text": "Presets for Apple Podcasts, Spotify, YouTube, EBU R 128 and ATSC A/85, measured to ITU-R BS.1770 and tested against the EBU signals. Export WAV, FLAC, AAC, MP3 and Opus with chapters from your markers.",
       "screen": "screens/export.webp"
@@ -61,11 +66,6 @@
     {
       "title": "Non-destructive and bit-exact",
       "text": "Edits play from your original files, and audio you haven't changed comes out exactly as it went in; Jämmer's tests check it sample by sample. Broadcast Wave data, iXML and markers survive."
-    },
-    {
-      "title": "Models you choose",
-      "text": "Speech models are optional downloads, each shown with its size and licence first, and removable. Nothing is sent to a server of ours, because there isn't one.",
-      "screen": "screens/models.webp"
     }
   ]
 }

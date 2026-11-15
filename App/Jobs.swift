@@ -2,6 +2,7 @@ import Foundation
 import JammerAgent
 import Observation
 import JammerCore
+import JammerStems
 import JammerSpeech
 import JammerWhisper
 
@@ -163,6 +164,51 @@ final class JobRegistry {
                           "speakers": .array(diarized.speakers.map { .string($0) }),
                           "seconds": .array(diarized.speakers.indices.map { .number(((seconds[$0] ?? 0) * 10).rounded() / 10) }),
                           "turns": .number(Double(diarized.placedTurns().count))]
+            self?.finish(job)
+        }
+        return job
+    }
+
+    /// Splits tracks into stems (Spleeter); the stems replace the tracks as one undo step.
+    func startSeparation(_ session: EditorSession, tracks: [UUID]?) -> Job {
+        var job = Job(kind: "separate", documentID: session.agentID)
+        jobs[job.id] = job
+        let project = session.project, pool = session.pool, id = job.id
+        tasks[id] = Task { [weak self, weak session] in
+            job.status = .running
+            self?.update(job)
+            let result = await Task.detached(priority: .userInitiated) { () -> Result<(Project, StemReport), Error> in
+                Result {
+                    let net = try Stems.net()
+                    return try project.separatingStems(tracks: tracks, with: net, pool: pool, media: MediaStore.folder) { p in
+                        Task { @MainActor in
+                            guard var j = self?.jobs[id], !j.isFinished else { return }
+                            j.progress = min(0.99, p)
+                            self?.update(j)
+                        }
+                        return !Task.isCancelled && true
+                    }
+                }
+            }.value
+            guard self?.jobs[id]?.status != .cancelled else { return }
+            switch result {
+            case .success(let (separated, report)):
+                if session?.project == project { session?.commit(separated, action: "Separate Stems") } else {
+                    job.status = .failed
+                    job.error = ("document_changed", "The document changed while separating; nothing was applied. Run it again.")
+                    self?.finish(job)
+                    return
+                }
+                session?.status = "Separated into \(report.stems.joined(separator: ", ")). The stems add up to the original."
+                job.status = .done
+                job.progress = 1
+                job.result = ["stems": .array(report.stems.map { .string($0) }), "tracks": .array(report.tracks.map { .string($0.uuidString) }),
+                              "note": .string("Sound above the model's 11 kHz, and whatever the model leaves, is in other; the stems add up to the original.")]
+            case .failure(let e):
+                job.status = .failed
+                job.error = ((e as? StemError)?.reason ?? "separation_failed", e.localizedDescription)
+                session?.status = e.localizedDescription
+            }
             self?.finish(job)
         }
         return job

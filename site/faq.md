@@ -28,11 +28,11 @@ No. Jämmer doesn't rely on any service run by us. Models are fetched from their
 
 ## Which models does it use, and how big are they?
 
-Noise reduction (DeepFilterNet 3, 8 MB) ships inside the app. The rest are optional downloads under **Jämmer › Settings… › Models**, each shown with its size and licence before you download it, and removable there: KB-Whisper small (175 MB) or medium (539 MB) for the most accurate Swedish transcription, Parakeet TDT 0.6B v3 (about 630 MB) for 25 European languages, and the speaker model (about 20 MB). Without any download, transcription uses the Mac's own recogniser. The assistant uses the model built into macOS.
+Noise reduction (DeepFilterNet 3, 8 MB) ships inside the app. The rest are optional downloads under **Jämmer › Settings… › Models**, each shown with its size and licence before you download it, and removable there: KB-Whisper small (175 MB) or medium (539 MB) for the most accurate Swedish transcription, Parakeet TDT 0.6B v3 (about 630 MB) for 25 European languages, the speaker model (about 20 MB), and the stem model (146 MB). Without any download, transcription uses the Mac's own recogniser. The assistant uses the model built into macOS.
 
 ## Why no HTDemucs stem separation?
 
-Because its weights aren't free to use. The Demucs code is MIT, but its author has said that the trained weights aren't covered by that licence and are for research only, and they were trained on a non-commercial dataset. Jämmer only ships and downloads models whose licence allows everyone to use them, so stem separation will come with models that do.
+Because its weights aren't free to use. The Demucs code is MIT, but its author has said that the trained weights aren't covered by that licence and are for research only, and they were trained on a non-commercial dataset. Jämmer only ships and downloads models whose licence allows everyone to use them, so stem separation uses Spleeter's 4-stem model from Deezer (MIT) instead. It's older and separates less cleanly, but it's yours to use for anything.
 
 ## Which files can I open?
 

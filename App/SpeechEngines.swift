@@ -2,7 +2,24 @@ import Foundation
 import JammerCore
 import JammerParakeet
 import JammerSpeech
+import JammerStems
 import JammerWhisper
+
+/// The stem model and its loaded network (built once; loading takes a few seconds).
+enum Stems {
+    static let model = StemModel(modelsFolder: ModelStore.standard().folder)
+    nonisolated(unsafe) private static var cached: SpleeterNet?
+    private static let lock = NSLock()
+    static func net() throws -> SpleeterNet {
+        try lock.withLock {
+            if let cached { return cached }
+            let n = try model.loadNet()
+            cached = n
+            return n
+        }
+    }
+    static func forget() { lock.withLock { cached = nil } }
+}
 
 /// Which recogniser transcribes: chosen per request ("auto", "apple", "parakeet",
 /// "whisper"); models are installed by the user under Jämmer › Settings › Models.

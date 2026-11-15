@@ -217,6 +217,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 i.representedObject = n
                 return i
             }),
+            item("Separate Stems", #selector(EditorWindowController.separateStems(_:)), ""),
             item("Plugins…", #selector(EditorWindowController.showPlugins(_:)), "p", [.command, .option, .shift]),
         ]))
         main.addItem(submenu("Transport", [

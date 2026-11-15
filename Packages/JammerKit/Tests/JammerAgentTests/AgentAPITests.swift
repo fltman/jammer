@@ -557,3 +557,22 @@ struct StatusTests {
         #expect(AgentAPI.appInfo(version: "0.1.0", bundleID: nil)["bundleID"] as? String == "com.brattoo.jammer")
     }
 }
+
+@Suite("Track and group steps")
+struct TrackGroupStepTests {
+    @Test("set_track changes one track; set_group moves a group's gains together")
+    func steps() {
+        var p = Project(sampleRate: 44_100, channels: 2)
+        let g = UUID()
+        p.tracks = [Track(name: "V", gainDB: -3), Track(name: "D", gainDB: 0), Track(name: "Other")]
+        p.tracks[0].group = g; p.tracks[1].group = g
+        var s = EditState(project: p)
+        let measure: StepRunner.Measure = { _, _ in LoudnessResult(integrated: nil, range: nil, maxMomentary: nil, maxShortTerm: nil, samplePeak: 0, truePeak: 0, duration: 0) }
+        var r = StepRunner.run([Step(op: "set_group", params: ["group": .string(g.uuidString), "gainDB": .number(-6)]),
+                                Step(op: "set_track", params: ["track": .string(p.tracks[1].id.uuidString), "muted": .bool(true), "name": .string("Drums")])], on: &s, measure: measure)
+        #expect(r.allSatisfy { $0.status == .done })
+        #expect(s.project.tracks.map(\.gainDB) == [-9, -6, 0] && s.project.tracks[1].isMuted && s.project.tracks[1].name == "Drums")
+        r = StepRunner.run([Step(op: "set_group", params: ["group": .string(UUID().uuidString), "gainDB": .number(1)])], on: &s, measure: measure)
+        #expect(r[0].reason == "not_found")
+    }
+}

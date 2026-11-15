@@ -3,6 +3,7 @@ import JammerCore
 import JammerDiarize
 import JammerParakeet
 import JammerSpeech
+import JammerStems
 import SwiftUI
 
 /// Jämmer › Settings… (⌘,): the speech models, each with its size and licence shown
@@ -68,6 +69,12 @@ final class ModelsModel {
                                  install: { p in try await d.install(progress: p) },
                                  remove: { try d.remove() }))
         }
+        let stems = Stems.model
+        rows.append(ModelRow(id: "stems", title: StemModel.title, use: "Audio › Separate Stems: vocals, drums, bass and other from a music track. From Deezer's own release.",
+                             bytes: StemModel.downloadBytes, licence: StemModel.licence,
+                             installed: { stems.isInstalled },
+                             install: { p in try await stems.install(progress: p) },
+                             remove: { Stems.forget(); try stems.remove() }))
         return rows
     }()
 
@@ -99,7 +106,7 @@ struct ModelsSettings: View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Models").font(.title2.bold())
             HStack(alignment: .firstTextBaseline) {
-                Text("Speech models run on this Mac. Each is downloaded once, from \(SpeechEngines.store.source.host() ?? "the model source"), and can be removed again.")
+                Text("Models run on this Mac. Each is downloaded once from its publisher (speech models from \(SpeechEngines.store.source.host() ?? "the model source")), and can be removed again.")
                     .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 Spacer()
                 Button("Show in Finder") {

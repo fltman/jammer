@@ -20,6 +20,7 @@ Window size and position are remembered too.
 
 - **KB-Whisper** small or medium: the most accurate Swedish transcription (Apache-2.0).
 - **Parakeet TDT 0.6B v3**: transcription in 25 European languages, Swedish and English among them, very fast (CC-BY-4.0; about 630 MB).
+- **Stem separation** (Spleeter 4stems): vocals, drums, bass and other from a music track (MIT; 146 MB; from Deezer's own release).
 - **Speaker diarisation**: for Find Speakers on a mixed recording (CC-BY-4.0; about 20 MB; also fetched by itself the first time).
 
 When you transcribe, Jämmer picks KB-Whisper for Swedish if it's installed, otherwise Parakeet if it's installed and knows the language, otherwise the Mac's own recogniser, which needs no download. Agents can ask for a particular engine but can't download models; that's up to you.
