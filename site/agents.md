@@ -52,7 +52,7 @@ Opening a document answers `201 Created`. To send the audio inside JSON instead:
 | GET | `/api/v1/operations` | Every step operation with its parameters (JSON). |
 | GET | `/api/v1/documents` | The open documents. |
 | POST | `/api/v1/documents` | Open audio: raw bytes (`Content-Type: audio/…` or `application/octet-stream`, optional `?name=`), JSON `{"audio": "<base64>", "name"}`, or JSON `{"upload": "<id>", "name"}`. |
-| GET | `/api/v1/documents/{id}` | Duration, sample rate, channels, tracks and clips, markers, selection, playhead. |
+| GET | `/api/v1/documents/{id}` | Duration, sample rate, channels, tracks and clips, markers, tempo, selection, playhead. |
 | POST | `/api/v1/documents/{id}/steps` | Run steps in order. Body: `{"steps": [{"op": "…", "params": {…}}], "allowPaid": false}`. |
 | POST | `/api/v1/documents/{id}/undo` | Undo the last change (a whole `steps` request counts as one). |
 | POST | `/api/v1/documents/{id}/redo` | Redo. |
@@ -265,10 +265,30 @@ Removes the markers with this name.
 |---|---|---|
 | `name` | string | **Required.** Marker name. |
 
+### `set_tempo`
+
+Sets the tempo, and the time signature when given, from `at` on. Tempo changes move with the audio in ripple edits.
+
+| Param | Type | Description |
+|---|---|---|
+| `bpm` | number | **Required.** Quarter notes per minute, 10–999. |
+| `at` | seconds | Where the tempo starts. Defaults to 0, the start of the document. |
+| `beats` | number | Beats per bar (1–64). Give it with `unit`; without both, the time signature in effect at `at` is kept. |
+| `unit` | number | Note value of a beat: 1, 2, 4, 8, 16 or 32 (4 is a quarter note). |
+
+### `remove_tempo_change`
+
+Removes the tempo change at exactly `at` (see `tempo.changes` in the document). The first one can't be removed, only changed with `set_tempo`.
+
+| Param | Type | Description |
+|---|---|---|
+| `at` | seconds | **Required.** Position of the change in seconds. |
+
 ## Good to know
 
 - Nothing is destructive: clips play from the original files, so you can always undo. `GET /api/v1/documents/{id}` shows the clips.
 - Measure before and after: `analysis` gives the numbers, `waveform` shows the shape.
 - Common targets: podcasts −16 LUFS (Apple) with true peak at most −1 dBTP; EBU broadcast −23 LUFS.
 - The user may be editing the same document. Read it before you act on it, and keep requests small.
+- `tempo.changes` in the document lists each tempo change with `at` (seconds), `bpm` and `meter` (e.g. `"3/4"`); the first is at 0. The API speaks seconds only: to work in bars and beats, compute them yourself from `tempo.changes`. A beat lasts 60 / `bpm` × 4 / unit seconds, and a new time signature starts a new bar.
 - Playback is for the user to hear what you did. Don't start it unless they asked; recording can only be started by the user.

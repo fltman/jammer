@@ -15,9 +15,9 @@ The agent fetches the guide and follows it. **Help › Open the Agent Guide** sh
 ## What an agent can do
 
 - Open audio you or it provides (as bytes; the API never reads file paths).
-- Read the document: tracks, clips, markers, selection and playhead.
+- Read the document: tracks, clips, markers, tempo map, selection and playhead.
 - Measure loudness and look at the waveform.
-- Edit with the same operations as the menus. One request is one undo step that you can undo with ⌘Z; a request that fails changes nothing.
+- Edit with the same operations as the menus, including setting the tempo. One request is one undo step that you can undo with ⌘Z; a request that fails changes nothing.
 - Export the result.
 - Start and stop playback, but only in a window you can see.
 

@@ -341,6 +341,9 @@ enum AgentRouter {
             if m.length > 0 { e["duration"] = seconds(s, m.length) }
             return e
         }
+        d["tempo"] = ["changes": p.tempo.changes.map { c -> [String: Any] in
+            ["at": seconds(s, c.position), "frame": c.position, "bpm": c.bpm, "meter": c.meter.description]
+        }]
         d["selection"] = s.selection.map { ["start": seconds(s, $0.lowerBound), "end": seconds(s, $0.upperBound)] } ?? NSNull()
         d["playhead"] = seconds(s, s.playhead)
         d["sources"] = p.sources.map { src -> [String: Any] in

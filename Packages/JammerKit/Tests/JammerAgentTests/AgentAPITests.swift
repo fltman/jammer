@@ -119,6 +119,37 @@ struct StepRunnerTests {
         #expect(s.project.markers.map(\.name) == ["Intro"])
     }
 
+    @Test("Tempo: set, change the meter, follow a delete, remove; bad values fail the step")
+    func tempo() {
+        var s = state()
+        var r = StepRunner.run(steps([
+            ("set_tempo", ["bpm": .number(90)]),
+            ("set_tempo", ["bpm": .number(140), "at": .number(4), "beats": .number(6), "unit": .number(8)]),
+            ("set_tempo", ["bpm": .number(70), "at": .number(6)]),
+            ("delete", ["start": .number(1), "end": .number(2)]),
+        ]), on: &s, measure: fakeMeasure)
+        #expect(r.map(\.status) == [.done, .done, .done, .done])
+        #expect(s.project.tempo.changes.map(\.position) == [0, 3 * 48_000, 5 * 48_000])
+        #expect(s.project.tempo.changes.map(\.bpm) == [90, 140, 70])
+        #expect(s.project.tempo.changes.map(\.meter) == [.common, Meter(6, 8), Meter(6, 8)])
+
+        r = StepRunner.run(steps([("remove_tempo_change", ["at": .number(5)])]), on: &s, measure: fakeMeasure)
+        #expect(r.map(\.status) == [.done])
+        #expect(s.project.tempo.changes.count == 2)
+
+        for bad: [String: JSONValue] in [["bpm": .number(5)], ["bpm": .number(120), "beats": .number(3)],
+                                         ["bpm": .number(120), "beats": .number(3), "unit": .number(5)],
+                                         ["bpm": .number(120), "beats": .number(2.5), "unit": .number(4)]] {
+            var t = s
+            #expect(StepRunner.run(steps([("set_tempo", bad)]), on: &t, measure: fakeMeasure).map(\.status) == [.failed])
+            #expect(t.project.tempo == s.project.tempo)
+        }
+        r = StepRunner.run(steps([("remove_tempo_change", ["at": .number(0)])]), on: &s, measure: fakeMeasure)
+        #expect(r.map(\.status) == [.failed])
+        r = StepRunner.run(steps([("remove_tempo_change", ["at": .number(2)])]), on: &s, measure: fakeMeasure)
+        #expect(r[0].error?.contains("Changes are at: 3 s.") == true)
+    }
+
     @Test("The first failure stops the rest")
     func failure() {
         var s = state()

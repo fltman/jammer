@@ -22,7 +22,7 @@ Goal: open a WAV of several hours, zoom smoothly, play, cut, undo, export bit-ex
 | Site content (`site/`): app.json, FAQ, manual, generated agents.md, hero | Done for what exists |
 | RTSan dynamic check (needs upstream LLVM; Apple clang lacks the runtime) | Open |
 | HAL IOProc via `AudioHardwareSystem`, audio workgroups for parallel rendering | Open (the default-output unit covers playback today) |
-| Tempo map in the time model | Open |
+| Tempo map in the time model: frame-anchored tempo and time signature, bar.beat.tick, `set_tempo`/`remove_tempo_change` | Done |
 | Multi-hour stress test (3 h file: peaks, zoom, export timings) | Open |
 | Collect media into the package ("collect and save") | Open |
 

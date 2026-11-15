@@ -302,7 +302,7 @@ public enum AgentAPI {
         | GET | `/api/v1/operations` | Every step operation with its parameters (JSON). |
         | GET | `/api/v1/documents` | The open documents. |
         | POST | `/api/v1/documents` | Open audio: raw bytes (`Content-Type: audio/…` or `application/octet-stream`, optional `?name=`), JSON `{"audio": "<base64>", "name"}`, or JSON `{"upload": "<id>", "name"}`. |
-        | GET | `/api/v1/documents/{id}` | Duration, sample rate, channels, tracks and clips, markers, selection, playhead. |
+        | GET | `/api/v1/documents/{id}` | Duration, sample rate, channels, tracks and clips, markers, tempo, selection, playhead. |
         | POST | `/api/v1/documents/{id}/steps` | Run steps in order. Body: `{"steps": [{"op": "…", "params": {…}}], "allowPaid": false}`. |
         | POST | `/api/v1/documents/{id}/undo` | Undo the last change (a whole `steps` request counts as one). |
         | POST | `/api/v1/documents/{id}/redo` | Redo. |
@@ -388,6 +388,7 @@ public enum AgentAPI {
         - Measure before and after: `analysis` gives the numbers, `waveform` shows the shape.
         - Common targets: podcasts −16 LUFS (Apple) with true peak at most −1 dBTP; EBU broadcast −23 LUFS.
         - The user may be editing the same document. Read it before you act on it, and keep requests small.
+        - `tempo.changes` in the document lists each tempo change with `at` (seconds), `bpm` and `meter` (e.g. `"3/4"`); the first is at 0. The API speaks seconds only: to work in bars and beats, compute them yourself from `tempo.changes`. A beat lasts 60 / `bpm` × 4 / unit seconds, and a new time signature starts a new bar.
         - Playback is for the user to hear what you did. Don't start it unless they asked; recording can only be started by the user.
 
         """

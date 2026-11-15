@@ -28,6 +28,9 @@ enum CommandPalette {
             .init(id: "loud", title: "Measure Loudness", detail: "Analysis", shortcut: "⌥⌘L") {
                 NSApp.sendAction(#selector(EditorWindowController.analyzeLoudness(_:)), to: nil, from: nil)
             },
+            .init(id: "tempo", title: "Set Tempo…", detail: "Audio", shortcut: "") {
+                NSApp.sendAction(#selector(EditorWindowController.setTempo(_:)), to: nil, from: nil)
+            },
             .init(id: "agent", title: "Agent Access…", detail: "Help", shortcut: "") { AgentSplash.show() },
         ]
         for (title, op, params) in MenuPresets.all {

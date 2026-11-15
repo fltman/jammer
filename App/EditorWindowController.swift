@@ -77,6 +77,41 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         session.perform("add_marker", ["name": .string("Marker \(n)")])
     }
 
+    /// Asks for tempo and time signature from the start or from the playhead, then runs `set_tempo`.
+    @objc func setTempo(_ sender: Any?) {
+        guard let window else { return }
+        let current = session.project.tempo.change(at: session.playhead)
+        let alert = NSAlert()
+        alert.messageText = "Set Tempo"
+        alert.informativeText = "Tempo in quarter notes per minute. Tempo changes move with the audio when you delete or insert."
+        let bpm = NSTextField(string: current.bpm.formatted(.number.precision(.fractionLength(0...3)).grouping(.never)))
+        let beats = NSTextField(string: "\(current.meter.beats)")
+        let unit = NSPopUpButton()
+        unit.addItems(withTitles: ["1", "2", "4", "8", "16", "32"])
+        unit.selectItem(withTitle: "\(current.meter.unit)")
+        let fromPlayhead = NSButton(checkboxWithTitle: "From the playhead (\(session.project.musicalPosition(at: session.playhead)))", target: nil, action: nil)
+        fromPlayhead.state = session.playhead > 0 ? .on : .off
+        fromPlayhead.isEnabled = session.playhead > 0
+        for f in [bpm, beats] { f.widthAnchor.constraint(equalToConstant: 70).isActive = true }
+        let grid = NSGridView(views: [
+            [NSTextField(labelWithString: "BPM:"), bpm],
+            [NSTextField(labelWithString: "Time signature:"), NSStackView(views: [beats, NSTextField(labelWithString: "/"), unit])],
+            [NSGridCell.emptyContentView, fromPlayhead],
+        ])
+        grid.frame = NSRect(x: 0, y: 0, width: 300, height: 84)
+        alert.accessoryView = grid
+        alert.addButton(withTitle: "Set")
+        alert.addButton(withTitle: "Cancel")
+        alert.window.initialFirstResponder = bpm
+        alert.beginSheetModal(for: window) { [session] response in
+            guard response == .alertFirstButtonReturn else { return }
+            let at = fromPlayhead.state == .on ? session.project.seconds(session.playhead) : 0
+            session.perform("set_tempo", ["bpm": .number(bpm.doubleValue), "at": .number(at),
+                                          "beats": .number(Double(beats.integerValue)),
+                                          "unit": .number(Double(unit.titleOfSelectedItem ?? "4") ?? 4)])
+        }
+    }
+
     @objc func analyzeLoudness(_ sender: Any?) {
         Task {
             session.status = "Measuring…"
@@ -151,6 +186,11 @@ struct TransportBar: View {
                 .shadow(color: Theme.neonColor.opacity(0.5), radius: 6)
                 .accessibilityLabel("Playhead")
             Text("/ \(formatTime(session.duration))").font(.system(.callout, design: .monospaced)).foregroundStyle(.secondary)
+            Text(session.project.musicalPosition(at: session.playhead).description)
+                .font(.system(.callout, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .help("Bar.beat.tick at the playhead")
+                .accessibilityLabel("Bar, beat and tick")
             Spacer()
             HStack(spacing: 6) {
                 Button { timeline.zoom(by: 0.5) } label: { Image(systemName: "minus.magnifyingglass") }
@@ -188,7 +228,15 @@ struct StatusBar: View {
             if !session.missingSources.isEmpty {
                 Label("\(session.missingSources.count) missing file(s)", systemImage: "exclamationmark.triangle").foregroundStyle(.orange)
             }
-            Text("\(Int(session.project.sampleRate)) Hz · \(session.project.channels == 1 ? "mono" : (session.project.channels == 2 ? "stereo" : "\(session.project.channels) ch"))")
+            Button {
+                NSApp.sendAction(#selector(EditorWindowController.setTempo(_:)), to: nil, from: nil)
+            } label: {
+                let c = session.project.tempo.change(at: session.playhead)
+                Text("\(c.bpm.formatted(.number.precision(.fractionLength(0...2)))) BPM \(c.meter.description)\(session.project.tempo.isConstant ? "" : " (map)")")
+            }
+            .buttonStyle(.plain)
+            .help("Tempo and time signature at the playhead. Click to change.")
+                        Text("\(Int(session.project.sampleRate)) Hz · \(session.project.channels == 1 ? "mono" : (session.project.channels == 2 ? "stereo" : "\(session.project.channels) ch"))")
         }
         .font(.system(size: 11, design: .monospaced))
         .foregroundStyle(.secondary)

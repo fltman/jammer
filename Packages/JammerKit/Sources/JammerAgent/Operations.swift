@@ -81,6 +81,13 @@ public enum Operations {
                        .init("duration", .seconds, "Region length in seconds.")]),
         .init("remove_marker", "Remove Marker", "Removes the markers with this name.",
               params: [.init("name", .string, "Marker name.", required: true)]),
+        .init("set_tempo", "Set Tempo", "Sets the tempo, and the time signature when given, from `at` on. Tempo changes move with the audio in ripple edits.",
+              params: [.init("bpm", .number, "Quarter notes per minute, 10–999.", required: true),
+                       .init("at", .seconds, "Where the tempo starts. Defaults to 0, the start of the document."),
+                       .init("beats", .number, "Beats per bar (1–64). Give it with `unit`; without both, the time signature in effect at `at` is kept."),
+                       .init("unit", .number, "Note value of a beat: 1, 2, 4, 8, 16 or 32 (4 is a quarter note).")]),
+        .init("remove_tempo_change", "Remove Tempo Change", "Removes the tempo change at exactly `at` (see `tempo.changes` in the document). The first one can't be removed, only changed with `set_tempo`.",
+              params: [.init("at", .seconds, "Position of the change in seconds.", required: true)]),
     ]
 
     public static func named(_ name: String) -> OperationSpec? { all.first { $0.name == name } }
@@ -309,6 +316,26 @@ public enum StepRunner {
             let before = s.project.markers.count
             s.project.markers.removeAll { $0.name == name }
             guard s.project.markers.count < before else { throw StepFailure("remove_marker: no marker named \"\(name)\".") }
+        case "set_tempo":
+            var meter: Meter?
+            switch (p["beats"]?.double, p["unit"]?.double) {
+            case (nil, nil): meter = nil
+            case let (b?, u?):
+                guard b == b.rounded(), u == u.rounded(), abs(b) < 1_000, abs(u) < 1_000 else {
+                    throw StepFailure("set_tempo: beats and unit must be whole numbers.")
+                }
+                meter = Meter(Int(b), Int(u))
+            default: throw StepFailure("set_tempo: give both beats and unit, or neither.")
+            }
+            do {
+                try s.project.tempo.set(bpm: p["bpm"]?.double ?? 0, meter: meter, at: frames("at") ?? 0)
+            } catch { throw StepFailure("set_tempo: \(error.localizedDescription)") }
+        case "remove_tempo_change":
+            let at = frames("at") ?? 0
+            do { try s.project.tempo.removeChange(at: at) } catch {
+                let list = s.project.tempo.changes.dropFirst().map { String(format: "%.6g", project.seconds($0.position)) }
+                throw StepFailure("remove_tempo_change: \(error.localizedDescription)" + (list.isEmpty ? "" : " Changes are at: \(list.joined(separator: ", ")) s."))
+            }
         default:
             throw StepFailure("Unknown op \"\(step.op)\".")
         }

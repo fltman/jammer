@@ -2,9 +2,19 @@
 
 ## The window
 
-- **Transport bar** (top): play/stop, the playhead time, the total length, zoom buttons and the playback volume.
+- **Transport bar** (top): play/stop, the playhead time, the total length, the playhead in bars, beats and ticks, zoom buttons and the playback volume.
 - **Timeline**: a ruler with times, and one lane per track. Stereo tracks show left above right. Clip edges are thin vertical lines; fades are drawn as a slanted line.
-- **Status bar** (bottom): the selection's start, end and length, messages from the last command, missing files, and the sample rate and channel layout.
+- **Status bar** (bottom): the selection's start, end and length, messages from the last command, missing files, the tempo and time signature at the playhead, and the sample rate and channel layout.
+
+## Tempo and time signature
+
+Every project has a tempo map. It starts at 120 BPM in 4/4, and for speech you can ignore it. For music, choose **Audio › Set Tempo…** (or click the tempo in the status bar). Enter the tempo in quarter notes per minute and the time signature. Tick **From the playhead** to make it a change at the playhead instead of the tempo for the whole project.
+
+- The tempo stays the same until the next change. Gradual tempo changes aren't supported yet.
+- A new time signature starts a new bar. If the bar before it isn't finished, it still counts as a bar.
+- Tempo changes are tied to the audio: when you delete or insert, they move with what follows. If you delete a range that contains a change, the tempo that was playing at the end of the range carries on from the cut.
+- Bar.beat.tick in the transport bar counts bars and beats from 1. A beat has 960 ticks.
+- Undo covers tempo changes like any other edit.
 
 ## Moving around
 

@@ -146,6 +146,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .separator(),
             item("Measure Loudness", #selector(EditorWindowController.analyzeLoudness(_:)), "l", [.command, .option]),
             item("Add Marker", #selector(EditorWindowController.addMarker(_:)), "m", [.command, .option]),
+            item("Set Tempo…", #selector(EditorWindowController.setTempo(_:)), ""),
         ]))
         main.addItem(submenu("Transport", [
             // Space and Return are handled by the timeline, so text fields keep them.
