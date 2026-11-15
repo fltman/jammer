@@ -34,3 +34,7 @@ Jämmer only plays for an agent in a window you can see. Bring the document's wi
 ## After normalizing, the true peak is above −1 dBTP
 
 Normalizing to a loudness target raises everything by the same amount and doesn't limit peaks. Lower the gain, or normalize the true peak to −1 dBTP instead.
+
+## Jämmer quits or stalls with a plugin on a track
+
+Turn on **Safe mode** under **Audio › Plugins…**. Every plugin then runs in a process of its own, so one that crashes can't take Jämmer with it. If the document crashes Jämmer as soon as it opens, hold off on playing, open **Audio › Plugins…** and switch the plugin off or remove it. See [Plugins](15-plugins.md).

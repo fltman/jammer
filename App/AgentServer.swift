@@ -259,6 +259,14 @@ enum AgentRouter {
             let job = r.method == "GET" ? JobRegistry.shared.job(p[3]) : JobRegistry.shared.cancel(p[3])
             guard let job else { throw APIError.notFound("No job with id \(p[3]).") }
             return .json(["job": job.json])
+        case ["api", "v1", "plugins"]:
+            try only("GET")
+            let q = r.query["q"]?.lowercased()
+            let list = PluginCatalog.effects().filter { q == nil || q!.isEmpty || $0.name.lowercased().contains(q!) || $0.manufacturer.lowercased().contains(q!) }
+            return .json(["plugins": list.map { ["id": $0.id.description, "name": $0.name, "manufacturer": $0.manufacturer, "kind": $0.kind,
+                                                  "version": $0.version, "v3": $0.isV3] as [String: Any] },
+                          "safeMode": EditorSession.pluginSafeMode,
+                          "note": "Plugins are third-party code that runs with Jämmer's rights. If one crashes or misbehaves, turn on Safe Mode in Jämmer (Audio › Plugins) so every plugin runs out of process."])
         case ["api", "v1", "operations"]:
             try only("GET")
             return .json(["operations": AgentAPI.operations])
@@ -323,8 +331,12 @@ enum AgentRouter {
                 try only("GET")
                 return try transcript(session, r)
             case ["tracks"]:
-                try only("POST")
+                try only("GET", "POST")
+                if r.method == "GET" { return .json(["tracks": session.project.tracks.map { trackJSON(session, $0) }]) }
                 return try await addTrack(session, r)
+            case let t where t.count == 4 && t[0] == "tracks" && t[2] == "inserts":
+                try only("GET")
+                return try await insertDetail(session, track: t[1], insert: t[3])
             case let t where t.count == 3 && t[0] == "tracks" && t[2] == "drift":
                 try only("GET")
                 guard let id = UUID(uuidString: t[1]), session.project.tracks.contains(where: { $0.id == id }) else {
@@ -391,14 +403,7 @@ enum AgentRouter {
     static func detail(_ s: EditorSession) -> [String: Any] {
         var d = summary(s)
         let p = s.project
-        d["tracks"] = p.tracks.map { t -> [String: Any] in
-            ["name": t.name, "gainDB": t.gainDB, "muted": t.isMuted,
-             "clips": t.clips.map { c -> [String: Any] in
-                 ["start": seconds(s, c.start), "end": seconds(s, c.end), "startFrame": c.start, "endFrame": c.end,
-                  "source": p.source(c.sourceID)?.name ?? "?", "sourceStart": seconds(s, c.sourceStart),
-                  "gainDB": (c.gainDB * 100).rounded() / 100, "fadeIn": seconds(s, c.fadeIn), "fadeOut": seconds(s, c.fadeOut)]
-             }]
-        }
+        d["tracks"] = p.tracks.map { trackJSON(s, $0) }
         d["markers"] = p.markers.map { m -> [String: Any] in
             var e: [String: Any] = ["name": m.name, "at": seconds(s, m.position), "frame": m.position]
             if m.length > 0 { e["duration"] = seconds(s, m.length) }
@@ -414,6 +419,49 @@ enum AgentRouter {
              "missing": s.pool.missing.contains(src.id)]
         }
         return d
+    }
+
+    static func trackJSON(_ s: EditorSession, _ t: Track) -> [String: Any] {
+        let p = s.project
+        return ["id": t.id.uuidString, "name": t.name, "gainDB": t.gainDB, "muted": t.isMuted,
+                "inserts": t.inserts.map { i -> [String: Any] in
+                    var d: [String: Any] = ["id": i.id.uuidString, "plugin": i.plugin.description, "name": i.name, "bypass": i.bypass]
+                    if let f = s.inserts.failure(i.id) { d["error"] = ["reason": f.reason, "message": f.localizedDescription] }
+                    return d
+                },
+                "clips": t.clips.map { c -> [String: Any] in
+                    ["start": seconds(s, c.start), "end": seconds(s, c.end), "startFrame": c.start, "endFrame": c.end,
+                     "source": p.source(c.sourceID)?.name ?? "?", "sourceStart": seconds(s, c.sourceStart),
+                     "gainDB": (c.gainDB * 100).rounded() / 100, "fadeIn": seconds(s, c.fadeIn), "fadeOut": seconds(s, c.fadeOut)]
+                }]
+    }
+
+    /// One insert with its parameters, read from the playing unit (or a unit of its own
+    /// while that one is still starting).
+    private static func insertDetail(_ session: EditorSession, track: String, insert: String) async throws -> Response {
+        guard let t = session.project.tracks.first(where: { $0.id.uuidString == track.uppercased() }) else {
+            throw APIError.notFound("No track with id \(track).")
+        }
+        guard let i = t.inserts.first(where: { $0.id.uuidString == insert.uppercased() }) else {
+            throw APIError.notFound("The track has no insert with id \(insert).")
+        }
+        let unit: PluginInstance
+        if let live = session.inserts.instance(i.id) {
+            unit = live
+        } else {
+            do {
+                unit = try await PluginInstance.make(i.plugin, channels: session.project.channels, sampleRate: session.project.sampleRate,
+                                                     state: i.state, outOfProcess: EditorSession.pluginSafeMode)
+            } catch let e as PluginError {
+                throw APIError.unprocessable(e.reason, e.localizedDescription)
+            }
+        }
+        return .json(["insert": ["id": i.id.uuidString, "plugin": i.plugin.description, "name": i.name, "bypass": i.bypass,
+                                 "latencyMs": (Double(unit.latency) / session.project.sampleRate * 100_000).rounded() / 100,
+                                 "factoryPresets": unit.factoryPresets,
+                                 "params": unit.parameters.map { p -> [String: Any] in
+                                     ["identifier": p.identifier, "name": p.name, "unit": p.unit ?? NSNull(), "min": p.min, "max": p.max, "value": p.value]
+                                 }] as [String: Any]])
     }
 
     private static func json(_ r: AgentAPI.Request) throws -> [String: Any] {
@@ -521,7 +569,11 @@ enum AgentRouter {
         let list: [[String: Any]] = results.enumerated().map { i, res in
             var d: [String: Any] = ["index": i, "op": res.op, "status": res.status.rawValue]
             if let e = res.error { d["error"] = e }
-            if !res.info.isEmpty { d["info"] = res.info }
+            if !res.info.isEmpty || !res.ids.isEmpty {
+                var info: [String: Any] = res.info
+                for (k, v) in res.ids { info[k] = v }
+                d["info"] = info
+            }
             return d
         }
         if let failed = results.firstIndex(where: { $0.status == .failed }) {

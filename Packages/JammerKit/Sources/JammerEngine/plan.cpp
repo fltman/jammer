@@ -26,6 +26,28 @@ inline float fade_gain(const Clip &c, int64_t p) {
 
 } // namespace
 
+void Renderer::mixClip(const Plan &plan, const Clip &c, float trackGain, int64_t start, int64_t frames, float *out) {
+    const int64_t end = start + frames;
+    const Source &src = *plan.sources[size_t(c.source)];
+    const int64_t a = std::max(start, c.start);
+    const int64_t b = std::min(end, c.end());
+    const int64_t n = b - a;
+    const int32_t sc = src.channels;
+    scratch_.resize(size_t(n * sc));
+    const int64_t got = src.read(c.sourceStart + (a - c.start), n, scratch_.data());
+    const float base = c.gain * trackGain;
+    const bool fades = c.fadeIn > 0 || c.fadeOut > 0;
+    for (int64_t i = 0; i < got; ++i) {
+        const float g = fades ? base * fade_gain(c, a - c.start + i) : base;
+        float *o = out + (a - start + i) * channels_;
+        const float *s = scratch_.data() + i * sc;
+        for (int32_t ch = 0; ch < channels_; ++ch) {
+            if (sc == 1) o[ch] += s[0] * g;
+            else if (ch < sc) o[ch] += s[ch] * g;
+        }
+    }
+}
+
 void Renderer::render(const Plan &plan, int64_t start, int64_t frames, float *out) {
     std::memset(out, 0, size_t(frames * channels_) * sizeof(float));
     const int64_t end = start + frames;
@@ -34,24 +56,27 @@ void Renderer::render(const Plan &plan, int64_t start, int64_t frames, float *ou
         if (c.end() <= start) continue;
         const Track &track = plan.tracks[size_t(c.track)];
         if (track.mute) continue;
-        const Source &src = *plan.sources[size_t(c.source)];
-        const int64_t a = std::max(start, c.start);
-        const int64_t b = std::min(end, c.end());
-        const int64_t n = b - a;
-        const int32_t sc = src.channels;
-        scratch_.resize(size_t(n * sc));
-        const int64_t got = src.read(c.sourceStart + (a - c.start), n, scratch_.data());
-        const float base = c.gain * track.gain;
-        const bool fades = c.fadeIn > 0 || c.fadeOut > 0;
-        for (int64_t i = 0; i < got; ++i) {
-            const float g = fades ? base * fade_gain(c, a - c.start + i) : base;
-            float *o = out + (a - start + i) * channels_;
-            const float *s = scratch_.data() + i * sc;
-            for (int32_t ch = 0; ch < channels_; ++ch) {
-                if (sc == 1) o[ch] += s[0] * g;
-                else if (ch < sc) o[ch] += s[ch] * g;
-            }
-        }
+        if (track.chain) continue;
+        mixClip(plan, c, track.gain, start, frames, out);
+    }
+    // Tracks with inserts run whenever they're audible, so tails ring past their clips.
+    for (size_t t = 0; t < plan.tracks.size(); ++t) {
+        const Track &track = plan.tracks[t];
+        if (track.mute || !track.chain) continue;
+        track_.resize(size_t(frames * channels_));
+        track.chain->process(plan, int32_t(t), *this, start, frames, track_.data());
+        const float g = track.gain;
+        for (int64_t i = 0; i < frames * channels_; ++i) out[i] += track_[size_t(i)] * g;
+    }
+}
+
+void Renderer::renderTrack(const Plan &plan, int32_t track, int64_t start, int64_t frames, float *out) {
+    std::memset(out, 0, size_t(frames * channels_) * sizeof(float));
+    const int64_t end = start + frames;
+    for (const Clip &c : plan.clips) {
+        if (c.start >= end) break;
+        if (c.track != track || c.end() <= start) continue;
+        mixClip(plan, c, 1.0f, start, frames, out);
     }
 }
 
@@ -74,7 +99,7 @@ int32_t jm_plan_add_source(jm_plan *plan, jm_source *source) {
 }
 
 int32_t jm_plan_add_track(jm_plan *plan, float gain, bool mute) {
-    plan->ptr->tracks.push_back(Track{gain, mute});
+    plan->ptr->tracks.push_back(Track{gain, mute, nullptr});
     return int32_t(plan->ptr->tracks.size() - 1);
 }
 
@@ -87,6 +112,12 @@ void jm_plan_add_clip(jm_plan *plan, int32_t track, int32_t source, int64_t sour
     fade_out = std::clamp<int64_t>(fade_out, 0, length);
     p.clips.push_back(Clip{track, source, std::max<int64_t>(0, source_start), timeline_start, length, gain,
                            fade_in, fade_out, shape});
+}
+
+void jm_plan_set_chain(jm_plan *plan, int32_t track, jm_chain *chain) {
+    Plan &p = *plan->ptr;
+    if (p.finalized || track < 0 || size_t(track) >= p.tracks.size()) return;
+    p.tracks[size_t(track)].chain = chain->ptr;
 }
 
 void jm_plan_finalize(jm_plan *plan) {

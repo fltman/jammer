@@ -66,7 +66,7 @@ public struct OperationSpec: Sendable, Identifiable {
     public var allParams: [Param] {
         guard let call else { return params }
         let id = Param("id", .string, "The document id (GET /api/v1/documents lists them).", required: true).at("path")
-        return [id] + (call.method == "GET" ? params.map { $0.at("query") } : params)
+        return [id] + (call.method == "GET" ? params.map { $0.location == nil ? $0.at("query") : $0 } : params)
     }
 
     /// `params` as a JSON Schema object (SIBLINGS.md §3); `x-in` marks path and query values.
@@ -133,6 +133,21 @@ public enum Operations {
               params: [.init("track", .string, "The track to correct.", required: true),
                        .init("against", .string, "Track to measure against (the call recording is best). Default: the best-matching track."),
                        .init("ppm", .number, "The drift in parts per million (positive: it ran fast). Skips the measurement.", range: -2_000...2_000)]),
+        .init("add_insert", "Add Plugin", "Puts an Audio Unit effect on a track, last in its chain unless position says otherwise; its latency is compensated. Plugins are third-party code running with Jämmer's rights. GET /api/v1/plugins lists what's installed. info has latencyMs; ids has the new insert's id.",
+              params: [.init("track", .string, "Track id.", required: true),
+                       .init("plugin", .string, "Plugin id from GET /api/v1/plugins (e.g. aufx/lmtr/appl) or its exact name.", required: true),
+                       .init("position", .number, "Place in the chain, 0 first. Default: last.", range: 0...64),
+                       .init("preset", .string, "A factory preset, by name.")]),
+        .init("set_insert", "Change Plugin", "Changes a plugin on a track: bypass, a factory preset, or one parameter by identifier (GET …/tracks/{track}/inserts/{insert} lists them with their ranges). A value outside the range fails with reason out_of_range; nothing is clipped. Send several steps to change several parameters at once.",
+              params: [.init("track", .string, "Track id.", required: true),
+                       .init("insert", .string, "Insert id (or its name when that's unique on the track).", required: true),
+                       .init("bypass", .boolean, "True to bypass, false to switch back on."),
+                       .init("preset", .string, "A factory preset, by name."),
+                       .init("parameter", .string, "Parameter identifier, e.g. global.0, or its exact name."),
+                       .init("value", .number, "The parameter's new value, in its unit.")]),
+        .init("remove_insert", "Remove Plugin", "Takes a plugin off a track.",
+              params: [.init("track", .string, "Track id.", required: true),
+                       .init("insert", .string, "Insert id (or its name when that's unique on the track).", required: true)]),
         .init("loudness_preset", "Loudness Preset", "Brings the range (the whole document without a range or selection) to a delivery target in one step. Without a limiter, the gain stops where the true peak would pass the ceiling; info.limitedByPeak is then 1 and integratedAfter shows what was reached.",
               params: [.init("preset", .string, "The target.", required: true, options: LoudnessPreset.allCases.map(\.rawValue)), start, end]),
         .init("add_marker", "Add Marker", "Adds a marker, or a region when `duration` is given.",
@@ -185,6 +200,10 @@ public enum Operations {
               call: ("POST", "/api/v1/documents/{id}/transcribe"), startsJob: true),
         .init("get_transcript", "Read Transcript", "The words as they play now, with ids, times and confidence.",
               params: [start, end], edits: false, call: ("GET", "/api/v1/documents/{id}/transcript")),
+        .init("get_insert", "Read Plugin", "One plugin on a track: its latency, factory presets and parameters (identifier, name, unit, min, max, value), for set_insert.",
+              params: [OperationSpec.Param("trackId", .string, "Track id.", required: true).at("path"),
+                       OperationSpec.Param("insert", .string, "Insert id.", required: true).at("path")],
+              edits: false, call: ("GET", "/api/v1/documents/{id}/tracks/{trackId}/inserts/{insert}")),
         .init("get_chapters", "Read Chapters", "The markers as Podcasting 2.0 chapters (JSON, version 1.2.0), optionally over start and end.",
               params: [start, end], edits: false, call: ("GET", "/api/v1/documents/{id}/chapters")),
         .init("measure_loudness", "Measure Loudness", "Integrated LUFS, loudness range, max momentary and short-term, sample and true peak.",
@@ -274,6 +293,8 @@ public struct EditState: Sendable {
     /// For steps that render audio (echo): where sources are read and new files written.
     public var pool: SourcePool?
     public var media: URL?
+    /// Ids the current step made; moved into its result.
+    public var made: [String: String] = [:]
 
     public init(project: Project, selection: Range<Frame>? = nil, playhead: Frame = 0, clipboard: ClipboardContent? = nil,
                 pool: SourcePool? = nil, media: URL? = nil) {
@@ -297,6 +318,8 @@ public struct StepResult: Sendable, Equatable {
     public var reason: String?
     /// Numbers that go with the reason, e.g. ["matches": 3].
     public var details: [String: Double] = [:]
+    /// Ids of things the step made, e.g. ["insert": "…"].
+    public var ids: [String: String] = [:]
 }
 
 public struct StepFailure: Error, LocalizedError {
@@ -327,8 +350,10 @@ public enum StepRunner {
                 continue
             }
             do {
+                state.made = [:]
                 let info = try apply(step, to: &state, measure: measure)
-                results.append(StepResult(op: step.op, status: .done, info: info))
+                results.append(StepResult(op: step.op, status: .done, info: info, ids: state.made))
+                state.made = [:]
             } catch {
                 let f = error as? StepFailure
                 results.append(StepResult(op: step.op, status: .failed, error: error.localizedDescription,
@@ -510,6 +535,8 @@ public enum StepRunner {
             }
             s.project = try s.project.correctingDrift(of: track, ppm: ppm!, pool: pool, media: media)
             return ["ppm": (ppm! * 10).rounded() / 10, "msPerHour": (ppm! * 3.6 * 10).rounded() / 10, "confidence": (confidence * 1_000).rounded() / 1_000]
+        case "add_insert", "set_insert", "remove_insert":
+            return try applyInsert(step, to: &s)
         case "loudness_preset":
             let r = try range(wholeIfNone: true); try checkInside(r)
             guard let preset = LoudnessPreset(rawValue: p["preset"]?.string ?? "") else { throw StepFailure("loudness_preset: unknown preset.") }
@@ -614,5 +641,72 @@ public enum StepRunner {
             throw StepFailure("Unknown op \"\(step.op)\".")
         }
         return [:]
+    }
+}
+
+extension StepRunner {
+    /// add_insert, set_insert, remove_insert. Settings are worked out on a unit of their
+    /// own and stored in the project; playback picks them up from there.
+    static func applyInsert(_ step: Step, to s: inout EditState) throws -> [String: Double] {
+        let p = step.params
+        let project = s.project
+        guard let id = UUID(uuidString: p["track"]?.string ?? ""), let t = project.tracks.firstIndex(where: { $0.id == id }) else {
+            throw StepFailure("\(step.op): no track with id \(p["track"]?.string ?? "").", reason: "not_found")
+        }
+        func failure(_ e: Error) -> StepFailure {
+            if let e = e as? PluginError { return StepFailure("\(step.op): \(e.localizedDescription)", reason: e.reason) }
+            return StepFailure("\(step.op): \(e.localizedDescription)", reason: "plugin_failed")
+        }
+        func latencyMs(_ i: PluginInstance) -> Double { (Double(i.latency) / project.sampleRate * 100_000).rounded() / 100 }
+        func insertIndex() throws -> Int {
+            let key = p["insert"]?.string ?? ""
+            let inserts = project.tracks[t].inserts
+            if let u = UUID(uuidString: key), let i = inserts.firstIndex(where: { $0.id == u }) { return i }
+            let named = inserts.indices.filter { inserts[$0].name.caseInsensitiveCompare(key) == .orderedSame }
+            if named.count == 1 { return named[0] }
+            if named.count > 1 { throw StepFailure("\(step.op): \(named.count) plugins on the track are called \(key); use the id.", reason: "ambiguous", details: ["matches": Double(named.count)]) }
+            throw StepFailure("\(step.op): the track has no plugin \(key).", reason: "not_found")
+        }
+        switch step.op {
+        case "add_insert":
+            let name = p["plugin"]?.string ?? ""
+            guard let info = PluginCatalog.find(name) else {
+                throw StepFailure("add_insert: no Audio Unit effect \(name) is installed (GET /api/v1/plugins lists them).", reason: "plugin_not_found")
+            }
+            do {
+                let unit = try PluginInstance.makeBlocking(info.id, channels: project.channels, sampleRate: project.sampleRate)
+                var insert = Insert(plugin: info.id, name: info.name)
+                if let preset = p["preset"]?.string {
+                    try unit.loadPreset(preset)
+                    insert.state = unit.captureState()
+                }
+                let at = min(project.tracks[t].inserts.count, p["position"]?.double.map { Int($0) } ?? .max)
+                s.project.tracks[t].inserts.insert(insert, at: at)
+                s.made["insert"] = insert.id.uuidString
+                return ["latencyMs": latencyMs(unit), "position": Double(at)]
+            } catch let f as StepFailure { throw f } catch { throw failure(error) }
+        case "set_insert":
+            let i = try insertIndex()
+            var insert = project.tracks[t].inserts[i]
+            if let b = p["bypass"], case .bool(let v) = b { insert.bypass = v }
+            if p["value"] != nil, p["parameter"] == nil { throw StepFailure("set_insert: value needs parameter.") }
+            if p["parameter"] != nil, p["value"] == nil { throw StepFailure("set_insert: parameter needs value.") }
+            var info: [String: Double] = [:]
+            if p["preset"] != nil || p["parameter"] != nil {
+                do {
+                    let unit = try PluginInstance.makeBlocking(insert.plugin, channels: project.channels, sampleRate: project.sampleRate, state: insert.state)
+                    if let preset = p["preset"]?.string { try unit.loadPreset(preset) }
+                    if let name = p["parameter"]?.string, let v = p["value"]?.double { try unit.set(name, to: v) }
+                    insert.state = unit.captureState()
+                    info["latencyMs"] = latencyMs(unit)
+                } catch { throw failure(error) }
+            }
+            s.project.tracks[t].inserts[i] = insert
+            return info
+        default:
+            let i = try insertIndex()
+            s.project.tracks[t].inserts.remove(at: i)
+            return [:]
+        }
     }
 }

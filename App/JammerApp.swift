@@ -171,6 +171,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             restoreItem("Remove Clicks…", "declick"),
             restoreItem("Reduce Noise…", "denoise"),
             item("Attenuate Frequencies…", #selector(EditorWindowController.attenuateFrequencies(_:)), ""),
+            .separator(),
+            item("Plugins…", #selector(EditorWindowController.showPlugins(_:)), "p", [.command, .option, .shift]),
         ]))
         main.addItem(submenu("Transport", [
             // Space and Return are handled by the timeline, so text fields keep them.

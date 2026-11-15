@@ -210,6 +210,19 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         }()
     }
 
+    @objc func showPlugins(_ sender: Any?) {
+        guard let window else { return }
+        let host = NSHostingController(rootView: AnyView(EmptyView()))
+        host.rootView = AnyView(PluginsSheet(session: session) { [weak host] in
+            guard let sheet = host?.view.window else { return }
+            window.endSheet(sheet)
+        })
+        window.contentViewController?.presentAsSheet(host) ?? {
+            let sheet = NSWindow(contentViewController: host)
+            window.beginSheet(sheet)
+        }()
+    }
+
     @objc func performOperation(_ sender: Any?) {
         guard let item = (sender as? NSMenuItem)?.representedObject as? OperationItem else { return }
         session.perform(item.op, item.params)

@@ -95,11 +95,14 @@ public final class RenderPlan: @unchecked Sendable {
 
 public enum PlanCompiler {
     /// Compiles the project into what the engine plays. Clips whose file is missing are left out.
-    public static func compile(_ project: Project, pool: SourcePool) -> RenderPlan {
+    /// Inserts run only when `inserts` supplies their chains; without it the plan is the
+    /// dry mix (what the bounced effects and restoration work from).
+    public static func compile(_ project: Project, pool: SourcePool, inserts: ChainProvider? = nil) -> RenderPlan {
         let plan = jm_plan_create(Int32(project.channels), project.sampleRate)
         var indices: [UUID: Int32] = [:]
         for t in project.tracks {
             let track = jm_plan_add_track(plan, Float(dbToGain(t.gainDB)), t.isMuted)
+            if let inserts, t.inserts.contains(where: { !$0.bypass }) { inserts.attachChain(for: t, to: plan, index: track) }
             for c in t.clips {
                 guard let ref = project.source(c.sourceID) else { continue }
                 let index: Int32

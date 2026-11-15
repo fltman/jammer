@@ -51,10 +51,13 @@ public enum AssistantCatalog {
         "echo": ["delay": .number(0.3)],
     ]
 
-    /// Own actions: every step, the useful endpoints, and the macros.
+    /// Plugin steps need track and insert ids and weren't in the measured action set.
+    public static let stepsNotForAssistant: Set<String> = ["add_insert", "set_insert", "remove_insert"]
+
+    /// Own actions: every step (but the above), the useful endpoints, and the macros.
     public static var actions: [AssistantAction] {
         let endpointNames: Set<String> = ["transcribe", "restore", "analyze_restoration", "measure_loudness"]
-        return Operations.all.map { AssistantAction(name: $0.name, description: $0.description, params: $0.params, kind: .step,
+        return Operations.all.filter { !stepsNotForAssistant.contains($0.name) }.map { AssistantAction(name: $0.name, description: $0.description, params: $0.params, kind: .step,
                                                     destructive: destructiveNames.contains($0.name)) }
             + Operations.endpoints.filter { endpointNames.contains($0.name) }.map {
                 AssistantAction(name: $0.name, description: $0.description, params: $0.params, kind: .endpoint,

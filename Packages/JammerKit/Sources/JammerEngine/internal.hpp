@@ -7,6 +7,7 @@
 #include <atomic>
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <vector>
 
 namespace jm {
@@ -38,9 +39,56 @@ struct Clip {
     int64_t end() const { return start + length; }
 };
 
+struct Plan;
+class Renderer;
+
+/// An Audio Unit and the input its render callback hands it.
+struct Unit {
+    AudioUnit unit = nullptr;
+    int32_t channels = 1;
+    void *context = nullptr;
+    void (*release)(void *) = nullptr;
+    /// Set by the chain right before AudioUnitRender: non-interleaved input.
+    const float *feed = nullptr;
+    int64_t feedFrames = 0;
+    ~Unit();
+};
+
+/// A track's insert chain and its stream state. Used by one render at a time (locked).
+struct Chain {
+    static constexpr int64_t kQuantum = 512;
+    struct Entry { std::shared_ptr<Unit> unit; int64_t latency; };
+
+    int32_t channels;
+    int64_t preroll;
+    std::vector<Entry> units;
+    int64_t latency = 0;
+    std::atomic<OSStatus> status{0};
+
+    Chain(int32_t channels, int64_t preroll);
+    ~Chain();
+    /// Writes `n` processed frames of `track` from `start` to `out` (interleaved, overwritten).
+    void process(const Plan &plan, int32_t track, Renderer &renderer, int64_t start, int64_t n, float *out);
+
+private:
+    std::mutex mutex_;
+    bool primed_ = false;
+    int64_t readPos_ = 0;   // timeline frame of the next output frame
+    int64_t inCursor_ = 0;  // timeline frame of the next input frame
+    int64_t discard_ = 0;   // output frames still to drop after a reset
+    double sampleTime_ = 0;
+    std::vector<float> fifo_;  // interleaved, processed, from readPos_
+    size_t fifoHead_ = 0;      // frames consumed from fifo_
+    std::vector<float> interleaved_, a_, b_;
+    AudioBufferList *list_ = nullptr;
+    void reset(int64_t start);
+    void produce(const Plan &plan, int32_t track, Renderer &renderer);
+};
+
 struct Track {
     float gain = 1.0f;
     bool mute = false;
+    std::shared_ptr<Chain> chain;
 };
 
 struct Plan {
@@ -58,10 +106,14 @@ class Renderer {
 public:
     explicit Renderer(int32_t channels) : channels_(channels) {}
     void render(const Plan &plan, int64_t start, int64_t frames, float *out);
+    /// One track's clips with clip gains and fades only (no track gain or mute), any range.
+    void renderTrack(const Plan &plan, int32_t track, int64_t start, int64_t frames, float *out);
 
 private:
     int32_t channels_;
     std::vector<float> scratch_;
+    std::vector<float> track_;
+    void mixClip(const Plan &plan, const Clip &c, float trackGain, int64_t start, int64_t frames, float *out);
 };
 
 } // namespace jm
@@ -72,4 +124,12 @@ struct jm_source {
 
 struct jm_plan {
     std::shared_ptr<jm::Plan> ptr;
+};
+
+struct jm_unit {
+    std::shared_ptr<jm::Unit> ptr;
+};
+
+struct jm_chain {
+    std::shared_ptr<jm::Chain> ptr;
 };

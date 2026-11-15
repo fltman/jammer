@@ -479,3 +479,33 @@ struct DriftSpectralStepTests {
         #expect(throws: StepFailure.self) { try StepRunner.validate(Step(op: "spectral_attenuate", params: ["low": .number(1_000), "high": .number(2_000), "db": .number(5)])) }
     }
 }
+
+@Suite("Insert steps", .serialized)
+struct InsertStepTests {
+    @Test("add, change, bypass and remove a plugin; refusals carry reasons")
+    func steps() throws {
+        var p = Project(sampleRate: 48_000, channels: 2)
+        p.tracks = [Track(name: "A")]
+        let track = p.tracks[0].id.uuidString
+        var s = EditState(project: p)
+        let measure: StepRunner.Measure = { _, _ in LoudnessResult(integrated: nil, range: nil, maxMomentary: nil, maxShortTerm: nil, samplePeak: 0, truePeak: 0, duration: 0) }
+        var r = StepRunner.run([Step(op: "add_insert", params: ["track": .string(track), "plugin": .string("AULowpass")])], on: &s, measure: measure)
+        #expect(r[0].status == .done, "\(r[0].error ?? "")")
+        let id = try #require(r[0].ids["insert"])
+        #expect(s.project.tracks[0].inserts.map(\.name) == ["AULowpass"])
+        r = StepRunner.run([Step(op: "set_insert", params: ["track": .string(track), "insert": .string(id), "parameter": .string("global.0"), "value": .number(900)])], on: &s, measure: measure)
+        #expect(r[0].status == .done, "\(r[0].error ?? "")")
+        let unit = try PluginInstance.makeBlocking(s.project.tracks[0].inserts[0].plugin, channels: 2, sampleRate: 48_000, state: s.project.tracks[0].inserts[0].state)
+        #expect(abs((unit.parameters.first { $0.identifier == "global.0" }?.value ?? 0) - 900) < 0.01)
+        r = StepRunner.run([Step(op: "set_insert", params: ["track": .string(track), "insert": .string("AULowpass"), "parameter": .string("global.0"), "value": .number(1e9)])], on: &s, measure: measure)
+        #expect(r[0].status == .failed && r[0].reason == "out_of_range", "\(r[0].error ?? "")")
+        r = StepRunner.run([Step(op: "set_insert", params: ["track": .string(track), "insert": .string(id), "bypass": .bool(true)])], on: &s, measure: measure)
+        #expect(s.project.tracks[0].inserts[0].bypass)
+        r = StepRunner.run([Step(op: "add_insert", params: ["track": .string(track), "plugin": .string("No Such Plugin")])], on: &s, measure: measure)
+        #expect(r[0].reason == "plugin_not_found")
+        r = StepRunner.run([Step(op: "remove_insert", params: ["track": .string(track), "insert": .string(id)])], on: &s, measure: measure)
+        #expect(r[0].status == .done && s.project.tracks[0].inserts.isEmpty)
+        r = StepRunner.run([Step(op: "remove_insert", params: ["track": .string(track), "insert": .string(id)])], on: &s, measure: measure)
+        #expect(r[0].reason == "not_found")
+    }
+}

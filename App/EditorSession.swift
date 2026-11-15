@@ -39,6 +39,13 @@ final class EditorSession {
     @ObservationIgnored weak var window: NSWindow?
     @ObservationIgnored let pool = SourcePool()
     @ObservationIgnored private(set) var plan: RenderPlan
+    /// The units playing the tracks' inserts. Exports and measurements make their own.
+    @ObservationIgnored private(set) var inserts: InsertHost
+    /// Safe mode: every plugin loads out of process, so a crash can't take Jämmer down.
+    static var pluginSafeMode: Bool {
+        get { UserDefaults.standard.bool(forKey: "plugins.safeMode") }
+        set { UserDefaults.standard.set(newValue, forKey: "plugins.safeMode") }
+    }
     @ObservationIgnored let output: AudioOutput
     @ObservationIgnored private var timer: Timer?
     @ObservationIgnored private var peakTasks: [UUID: Task<Void, Never>] = [:]
@@ -46,10 +53,59 @@ final class EditorSession {
     init(project: Project) {
         self.project = project
         output = AudioOutput(channels: project.channels, sampleRate: project.sampleRate)
+        inserts = InsertHost(channels: project.channels, sampleRate: project.sampleRate, outOfProcess: Self.pluginSafeMode)
         plan = PlanCompiler.compile(project, pool: pool)
         output.setPlan(plan)
         output.setGain(volume)
         loadPeaks()
+        syncInserts()
+    }
+
+    /// Brings the playing units in line with the document's inserts (new, removed,
+    /// changed settings), then plays through them.
+    func syncInserts() {
+        let p = project
+        guard p.tracks.contains(where: { !$0.inserts.isEmpty }) || !inserts.isEmpty else { return }
+        let host = inserts
+        Task { @MainActor in
+            guard await host.sync(p), host === self.inserts else { return }
+            self.plan = PlanCompiler.compile(self.project, pool: self.pool, inserts: host)
+            self.output.setPlan(self.plan)
+            self.pluginsVersion += 1
+        }
+    }
+
+    /// Bumped when the running plugins change (windows and lists refresh).
+    var pluginsVersion = 0
+
+    /// Turns safe mode on or off and starts every plugin again.
+    func restartPlugins() {
+        inserts = InsertHost(channels: project.channels, sampleRate: project.sampleRate, outOfProcess: Self.pluginSafeMode)
+        plan = PlanCompiler.compile(project, pool: pool, inserts: inserts)
+        output.setPlan(plan)
+        pluginsVersion += 1
+        syncInserts()
+    }
+
+    /// Settings compared as property lists (serialising the same state twice needn't give
+    /// the same bytes), so an undo that re-applies a state doesn't come back as an edit.
+    static func sameState(_ a: Data?, _ b: Data?) -> Bool {
+        if a == b { return true }
+        guard let a, let b,
+              let x = try? PropertyListSerialization.propertyList(from: a, format: nil) as? NSDictionary,
+              let y = try? PropertyListSerialization.propertyList(from: b, format: nil) as? NSDictionary else { return false }
+        return x.isEqual(y)
+    }
+
+    /// A plugin's own window changed its settings: store them as one undo step.
+    func commitPluginState(track: UUID, insert: UUID, state: Data?) {
+        guard let t = project.tracks.firstIndex(where: { $0.id == track }),
+              let i = project.tracks[t].inserts.firstIndex(where: { $0.id == insert }),
+              !Self.sameState(project.tracks[t].inserts[i].state, state) else { return }
+        var p = project
+        p.tracks[t].inserts[i].state = state
+        inserts.markApplied(insert, state: state)
+        commit(p, action: "Change \(p.tracks[t].inserts[i].name)")
     }
 
     var undoManager: UndoManager? { document?.undoManager }
@@ -134,9 +190,10 @@ final class EditorSession {
         project = newProject
         if let s = selection { selection = s.clamped(to: 0..<max(1, project.length)) }
         playhead = min(playhead, project.length)
-        plan = PlanCompiler.compile(project, pool: pool)
+        plan = PlanCompiler.compile(project, pool: pool, inserts: inserts)
         output.setPlan(plan)
         version += 1
+        syncInserts()
         loadPeaks()
         document?.invalidateRestorableState()
         // Keep playing: restart where we are so the change is heard at once.
@@ -149,10 +206,12 @@ final class EditorSession {
         let start = EditState(project: project, selection: selection, playhead: playhead, clipboard: AppClipboard.content,
                               pool: pool, media: MediaStore.folder)
         let pool = self.pool
+        let safe = Self.pluginSafeMode
         let (results, end) = await Task.detached(priority: .userInitiated) { () -> ([StepResult], EditState) in
             var s = start
+            // Loudness is measured on the mix as heard, plugins included.
             let r = StepRunner.run(steps, on: &s, measure: { p, range in
-                LoudnessMeter.measure(PlanCompiler.compile(p, pool: pool), range)
+                LoudnessMeter.measure(PlanCompiler.mixBlocking(p, pool: pool, outOfProcess: safe), range)
             })
             return (r, s)
         }.value
@@ -276,7 +335,7 @@ final class EditorSession {
     // MARK: Analysis and export
 
     func analyze(_ range: Range<Frame>? = nil) async -> LoudnessResult {
-        let plan = self.plan
+        let plan = await PlanCompiler.mix(project, pool: pool, outOfProcess: Self.pluginSafeMode)
         let r = range ?? 0..<project.length
         let result = await Task.detached(priority: .userInitiated) { LoudnessMeter.measure(plan, r) }.value
         if range == nil { lastAnalysis = result }
@@ -298,7 +357,8 @@ final class EditorSession {
     /// Renders to a WAV file off the main thread. Keeps the first source's
     /// Broadcast Wave and iXML data when exporting from the start.
     func export(to url: URL, options: ExportOptions, progress: @escaping @Sendable (Double) -> Void = { _ in }) async throws {
-        let plan = self.plan
+        // Units of its own: playback keeps going untouched while this renders.
+        let plan = await PlanCompiler.mix(project, pool: pool, outOfProcess: Self.pluginSafeMode)
         let range = options.range ?? 0..<project.length
         guard !range.isEmpty else { throw EditError.emptyRange }
         let chapters = project.chapters(in: range)

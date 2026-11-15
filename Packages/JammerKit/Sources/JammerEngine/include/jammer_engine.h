@@ -95,6 +95,37 @@ int32_t jm_plan_channels(const jm_plan *_Nonnull plan);
 /// Not for the audio thread. Returns false if the plan isn't finalized.
 bool jm_render(const jm_plan *_Nonnull plan, int64_t start, int64_t frames, float *_Nonnull interleaved);
 
+// MARK: Insert chains (Audio Units)
+//
+// A track can run its audio through a chain of Audio Units before its gain. Chains run in
+// the render worker or an offline render, never on the device thread. Each chain keeps
+// its own stream position: rendering from anywhere other than where it left off resets
+// the units and pre-rolls `preroll` frames, and the chain's total latency is compensated,
+// so the track stays in time with the others. Units process fixed 512-frame quanta, so
+// the output doesn't depend on the caller's block size.
+
+/// One Audio Unit instance, set up by the caller: non-interleaved float32 at the plan's
+/// rate and channel count on input and output bus 0, maximum frames per slice >= 512,
+/// initialized. Takes over the unit's input render callback. `release(context)` runs
+/// when the last chain using it is gone (on whatever thread drops it).
+typedef struct jm_unit jm_unit;
+jm_unit *_Nonnull jm_unit_create(AudioUnit _Nonnull unit, int32_t channels, void *_Nullable context,
+                                 void (*_Nullable release)(void *_Nullable context));
+void jm_unit_release(jm_unit *_Nullable unit);
+
+typedef struct jm_chain jm_chain;
+jm_chain *_Nonnull jm_chain_create(int32_t channels, int64_t preroll);
+/// Appends a unit (retained) with its latency in frames.
+void jm_chain_add(jm_chain *_Nonnull chain, jm_unit *_Nonnull unit, int64_t latency);
+void jm_chain_release(jm_chain *_Nullable chain);
+/// The sum of the units' latencies, in frames.
+int64_t jm_chain_latency(const jm_chain *_Nonnull chain);
+/// The last error a unit returned while rendering (0 if none). A failing unit passes its
+/// input through.
+OSStatus jm_chain_status(const jm_chain *_Nonnull chain);
+/// Runs `track` through `chain` (retained) before its gain. Before finalize.
+void jm_plan_set_chain(jm_plan *_Nonnull plan, int32_t track, jm_chain *_Nonnull chain);
+
 // MARK: Engine
 
 typedef struct jm_engine jm_engine;

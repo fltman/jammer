@@ -66,6 +66,9 @@ Opening a document answers `201 Created`. To send the audio inside JSON instead:
 | POST | `/api/v1/documents/{id}/restore` | Repairs audio (a job). Body: `{"kind": "dehum"\|"declip"\|"declick", "amount": 0–1, "start", "end", "tracks": [id], "humFrequency", "sensitivity"}`; only `kind` is required. The repaired clips play from new files; the originals are untouched and one undo step brings them back. |
 | POST | `/api/v1/documents/{id}/tracks` | Adds a track from audio sent like `POST /api/v1/documents` (bytes, base64 or upload; `?name=`). Answers `201` with `{"track": {"id", "name"}, "document"}`; one undo step. For double-enders, add each speaker's recording and the call recording, then run `align_tracks`. |
 | GET | `/api/v1/documents/{id}/tracks/{trackId}/drift?against=<trackId>` | How far two recorders' clocks part: `{"drift": {"ppm", "msPerHour", "confidence"}}`. Needs at least 90 s of overlap. |
+| GET | `/api/v1/documents/{id}/tracks` | The tracks with their ids, clips and plugins (`inserts`). |
+| GET | `/api/v1/documents/{id}/tracks/{trackId}/inserts/{insert}` | One plugin: `{"insert": {"id", "plugin", "name", "bypass", "latencyMs", "factoryPresets", "params": [{"identifier", "name", "unit", "min", "max", "value"}]}}`. |
+| GET | `/api/v1/plugins` | The Audio Unit effects installed on this Mac, optionally filtered by `?q=`: `{"plugins": [{"id", "name", "manufacturer", "kind", "version", "v3"}], "safeMode"}`. |
 | GET | `/api/v1/documents/{id}/chapters` | The markers as Podcasting 2.0 chapters: `{"version": "1.2.0", "chapters": [{"startTime", "endTime", "title"}]}` (Content-Type `application/json+chapters`), optionally over `?start=&end=`. |
 | GET | `/api/v1/jobs/{id}` | A job's state. |
 | DELETE | `/api/v1/jobs/{id}` | Cancels a job. |
@@ -133,6 +136,12 @@ A transcript is a view of the edit: it always reads what plays now. Each word ha
 ## Restoration
 
 Look, listen, then repair. `GET …/analysis/restoration` tells you whether there is hum, clipping or clicks. `POST …/restore/preview` with `Accept: application/json` gives the numbers before and after for a short stretch, so you can check that a repair helps (and that `amount` isn't too much) without listening. `POST …/restore` then runs it as a job. `dehum` finds 50 or 60 Hz by itself; pass `humFrequency` if it says `no_hum` and you know better. `amount` blends between the original (0) and the full repair (1). Use `tracks` to repair one speaker in a multitrack recording.
+
+## Plugins
+
+A track can run through Audio Unit effects (AUv2 and AUv3) before its gain. `GET /api/v1/plugins` lists what's installed; `add_insert` puts one on a track (by id like `aufx/lmtr/appl` or by its exact name) and answers its id in `info.insert`; `GET …/tracks/{trackId}/inserts/{insert}` lists its parameters with their ranges; `set_insert` changes one parameter, a factory preset or bypass; `remove_insert` takes it off. A value outside a parameter's range fails with `reason: "out_of_range"`; nothing is clipped. Every change is one undo step, settings are saved in the document, and each plugin's latency is compensated so the tracks stay in time. Exports and loudness measurements (including `normalize` and `loudness_preset`) hear the plugins. You can't open a plugin's window; the user can, under Audio › Plugins.
+
+Plugins are third-party code that runs with Jämmer's rights. If one crashes or misbehaves, the right fix is safe mode (Audio › Plugins, or ask the user): every plugin then runs in a process of its own. Plugins whose developer isn't Apple run that way anyway when the system won't load them into Jämmer. Errors: `plugin_not_found`, `plugin_unsupported_format` (it can't take the document's mono or stereo float audio), `plugin_failed` (it didn't start).
 
 ## Sibling apps
 
@@ -306,6 +315,39 @@ Resamples a separately recorded track whose recorder's clock ran fast or slow, s
 | `track` | string | **Required.** The track to correct. |
 | `against` | string | Track to measure against (the call recording is best). Default: the best-matching track. |
 | `ppm` | number | The drift in parts per million (positive: it ran fast). Skips the measurement. |
+
+### `add_insert`
+
+Puts an Audio Unit effect on a track, last in its chain unless position says otherwise; its latency is compensated. Plugins are third-party code running with Jämmer's rights. GET /api/v1/plugins lists what's installed. info has latencyMs; ids has the new insert's id.
+
+| Param | Type | Description |
+|---|---|---|
+| `track` | string | **Required.** Track id. |
+| `plugin` | string | **Required.** Plugin id from GET /api/v1/plugins (e.g. aufx/lmtr/appl) or its exact name. |
+| `position` | number | Place in the chain, 0 first. Default: last. |
+| `preset` | string | A factory preset, by name. |
+
+### `set_insert`
+
+Changes a plugin on a track: bypass, a factory preset, or one parameter by identifier (GET …/tracks/{track}/inserts/{insert} lists them with their ranges). A value outside the range fails with reason out_of_range; nothing is clipped. Send several steps to change several parameters at once.
+
+| Param | Type | Description |
+|---|---|---|
+| `track` | string | **Required.** Track id. |
+| `insert` | string | **Required.** Insert id (or its name when that's unique on the track). |
+| `bypass` | boolean | True to bypass, false to switch back on. |
+| `preset` | string | A factory preset, by name. |
+| `parameter` | string | Parameter identifier, e.g. global.0, or its exact name. |
+| `value` | number | The parameter's new value, in its unit. |
+
+### `remove_insert`
+
+Takes a plugin off a track.
+
+| Param | Type | Description |
+|---|---|---|
+| `track` | string | **Required.** Track id. |
+| `insert` | string | **Required.** Insert id (or its name when that's unique on the track). |
 
 ### `loudness_preset`
 

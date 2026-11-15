@@ -84,13 +84,38 @@ public struct Track: Codable, Hashable, Sendable, Identifiable {
     public var clips: [Clip]
     public var gainDB: Double
     public var isMuted: Bool
+    /// Audio Units the track runs through, in order, before its gain.
+    public var inserts: [Insert]
 
-    public init(id: UUID = UUID(), name: String, clips: [Clip] = [], gainDB: Double = 0, isMuted: Bool = false) {
+    public init(id: UUID = UUID(), name: String, clips: [Clip] = [], gainDB: Double = 0, isMuted: Bool = false, inserts: [Insert] = []) {
         self.id = id
         self.name = name
         self.clips = clips
         self.gainDB = gainDB
         self.isMuted = isMuted
+        self.inserts = inserts
+    }
+
+    private enum CodingKeys: String, CodingKey { case id, name, clips, gainDB, isMuted, inserts }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        name = try c.decode(String.self, forKey: .name)
+        clips = try c.decode([Clip].self, forKey: .clips)
+        gainDB = try c.decode(Double.self, forKey: .gainDB)
+        isMuted = try c.decode(Bool.self, forKey: .isMuted)
+        inserts = try c.decodeIfPresent([Insert].self, forKey: .inserts) ?? []
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(name, forKey: .name)
+        try c.encode(clips, forKey: .clips)
+        try c.encode(gainDB, forKey: .gainDB)
+        try c.encode(isMuted, forKey: .isMuted)
+        if !inserts.isEmpty { try c.encode(inserts, forKey: .inserts) }
     }
 
     public var end: Frame { clips.map(\.end).max() ?? 0 }

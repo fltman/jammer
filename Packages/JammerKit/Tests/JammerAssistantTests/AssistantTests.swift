@@ -56,7 +56,7 @@ struct AssistantTests {
     @Test("The catalogue comes from the registry: every step and the macros, compact")
     func catalogue() {
         let names = Set(actions.map(\.name))
-        #expect(Operations.all.allSatisfy { names.contains($0.name) })
+        #expect(Operations.all.allSatisfy { names.contains($0.name) || AssistantCatalog.stepsNotForAssistant.contains($0.name) })
         #expect(names.isSuperset(of: ["restore", "transcribe", "remove_fillers", "remove_silences"]))
         let text = AssistantCatalog.catalogue(actions)
         #expect(text.contains("- gain(db*, start, end):"))
