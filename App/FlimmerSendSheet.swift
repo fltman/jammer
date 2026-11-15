@@ -46,8 +46,8 @@ final class FlimmerSendModel {
                 stage = .working("Preparing the files…")
                 let p = try await FlimmerSend.prepare(project, mode: mode, client: client, render: { item, depth, rate in
                     // Plugins included, as the track sounds here.
-                    try FlimmerSend.wav(PlanCompiler.mixBlocking(item.render, pool: pool, outOfProcess: safe), range: item.range,
-                                        bitDepth: depth, sampleRate: rate, scratch: MediaStore.folder)
+                    try FlimmerSend.wavFile(PlanCompiler.mixBlocking(item.render, pool: pool, outOfProcess: safe), range: item.range,
+                                            bitDepth: depth, sampleRate: rate, monoIfSame: item.monoSource, scratch: MediaStore.folder)
                 }, progress: { p in Task { @MainActor in if case .working = self.stage { self.stage = .working("Preparing the files… \(Int(p * 100)) %") } } })
                 prepared = p
                 lines = p.lines

@@ -8,7 +8,7 @@ import JammerCore
 final class PretendFlimmer: @unchecked Sendable {
     struct Clip { var id: String; var trackId: String; var timelineOffset: Double; var duration: Double; var linked: Bool; var relativeOffset = 0.5; var deleted = false; var muted = false }
     struct Track { var id: String; var name: String; var volume = 1.0; var muted = false; var locked = false }
-    struct Upload { var name: String; var data: Data; var used = false; var open = false; var seconds: Double }
+    struct Upload { var name: String; var data: Data; var used = false; var open = false; var seconds: Double; var total = 0 }
 
     let lock = NSLock()
     var projectId = "P1", stories = ["S1"]
@@ -17,6 +17,10 @@ final class PretendFlimmer: @unchecked Sendable {
     var uploads: [String: Upload] = [:]
     var jobs: [String: [String: Any]] = [:]
     var bitDepths = [16]
+    var maxBytes = 1 << 30, maxChunkBytes = 8 << 20
+    var puts = 0
+    /// Fails the n:th PUT, as a connection that drops would.
+    var failPut: Int?
     var signedIn = true, viewer = false, hasEndpoint = true
     var undoSteps: [String] = []
     var seenHeaders: [[String: String]] = []
@@ -63,14 +67,40 @@ final class PretendFlimmer: @unchecked Sendable {
         }
         switch (method, path) {
         case ("GET", "/api/v1/status"): return answer(200, ["app": ["name": "Flimmer", "bundleID": "com.brattoo.flimmer.debug"]], r)
-        case ("GET", "/api/v1/operations"): return answer(200, ["operations": [], "uploads": ["wavBitDepths": bitDepths, "maxBytes": 1 << 30]], r)
+        case ("GET", "/api/v1/operations"): return answer(200, ["operations": [], "uploads": ["wavBitDepths": bitDepths, "maxBytes": maxBytes, "maxChunkBytes": maxChunkBytes]], r)
         case ("POST", "/api/v1/uploads"):
-            guard let body = r.httpBody, let seconds = wavSeconds(body) else { return fail(415, "unsupported_media", r) }
+            let query = URLComponents(url: r.url!, resolvingAgainstBaseURL: false)?.queryItems ?? []
+            let name = query.first { $0.name == "name" }?.value ?? ""
             n += 1
             let id = "up_\(n)"
-            let name = URLComponents(url: r.url!, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "name" }?.value ?? ""
+            // No body and a total: an upload opened for chunks.
+            if let total = query.first(where: { $0.name == "bytes" })?.value.flatMap(Int.init), (r.httpBody ?? Data()).isEmpty {
+                guard total <= maxBytes else { return fail(413, "too_large", r) }
+                uploads[id] = Upload(name: name, data: Data(), open: true, seconds: 0, total: total)
+                return answer(201, ["upload": ["id": id, "name": name, "status": "open"]], r)
+            }
+            guard let body = r.httpBody, body.count <= maxChunkBytes, body.count <= maxBytes else { return fail(413, "too_large", r) }
+            guard let seconds = wavSeconds(body) else { return fail(415, "unsupported_media", r) }
             uploads[id] = Upload(name: name, data: body, seconds: seconds)
             return answer(201, ["upload": ["id": id, "name": name, "bytes": body.count]], r)
+        case ("PUT", let p) where p.hasPrefix("/api/v1/uploads/"):
+            puts += 1
+            let id = String(p.dropFirst("/api/v1/uploads/".count))
+            guard var u = uploads[id], u.open else { return fail(404, "not_found", r) }
+            if puts == failPut { return fail(500, "internal", r) }
+            let offset = URLComponents(url: r.url!, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "offset" }?.value.flatMap(Int.init)
+            guard let chunk = r.httpBody, chunk.count <= maxChunkBytes, offset == u.data.count, u.data.count + chunk.count <= u.total else { return fail(413, "too_large", r) }
+            u.data.append(chunk)
+            uploads[id] = u
+            return answer(200, ["upload": ["id": id, "bytes": u.data.count, "status": "open"]], r)
+        case ("POST", let p) where p.hasPrefix("/api/v1/uploads/") && p.hasSuffix("/complete"):
+            let id = String(p.dropFirst("/api/v1/uploads/".count).dropLast("/complete".count))
+            guard var u = uploads[id], u.open, u.data.count == u.total else { return fail(404, "not_found", r) }
+            guard let seconds = wavSeconds(u.data) else { uploads[id] = nil; return fail(415, "unsupported_media", r) }
+            u.open = false
+            u.seconds = seconds
+            uploads[id] = u
+            return answer(200, ["upload": ["id": id, "bytes": u.data.count]], r)
         case ("DELETE", let p) where p.hasPrefix("/api/v1/uploads/"):
             uploads[String(p.dropFirst("/api/v1/uploads/".count))] = nil
             return answer(200, [:], r)
@@ -209,7 +239,8 @@ struct FlimmerSendTests {
 
     func render(_ pool: SourcePool) -> FlimmerSend.Render {
         { item, depth, rate in
-            try FlimmerSend.wav(PlanCompiler.compile(item.render, pool: pool), range: item.range, bitDepth: depth, sampleRate: rate, scratch: FileManager.default.temporaryDirectory)
+            try FlimmerSend.wavFile(PlanCompiler.compile(item.render, pool: pool), range: item.range, bitDepth: depth, sampleRate: rate, monoIfSame: item.monoSource,
+                                    scratch: FileManager.default.temporaryDirectory)
         }
     }
 
@@ -240,14 +271,15 @@ struct FlimmerSendTests {
         defer { try? FileManager.default.removeItem(at: scratch) }
         try file.data.write(to: scratch.appending(path: "t.wav"))
         let info = try AudioFileReader.info(at: scratch.appending(path: "t.wav"))
-        #expect(info.sampleFormat == .int16 && info.sampleRate == 48_000 && info.channels == 2)
+        #expect(info.sampleFormat == .int16 && info.sampleRate == 48_000 && info.channels == 1, "a mono original gets a mono take")
         let back = Project(source: try AudioImporter.importFile(scratch.appending(path: "t.wav"), mediaFolder: scratch).source)
         let x = PlanCompiler.compile(back, pool: SourcePool()).render(from: 0, frames: Int(4 * sr))
-        func peak(_ a: Double, _ b: Double) -> Float { x[(Int(a * sr) * 2)..<(Int(b * sr) * 2)].map(abs).max() ?? 0 }
+        func peak(_ a: Double, _ b: Double) -> Float { x[(Int(a * sr) * back.channels)..<(Int(b * sr) * back.channels)].map(abs).max() ?? 0 }
         #expect(abs(peak(0.1, 0.9) - 0.2) < 0.002 && abs(peak(1.1, 1.9) - 0.1002) < 0.002 && abs(peak(2.1, 3.9) - 0.2) < 0.002, "the −6 dB stretch is in the file, the track's −3 dB isn't")
         // The plan as sent: a position only for the moved clip, the right kind; headers as the protocol says.
         let items = prepared.body["items"]!.any as! [[String: Any]]
         #expect(items[0]["position"] == nil && (items[1]["position"] as? [String: Double]) == ["timelineOffset": 8.5])
+        #expect(items.map { $0["name"] as? String } == ["berattare", "musik"], "the clip's name in Jämmer goes along")
         #expect((prepared.body["trackSettings"]!.any as! [[String: Any]]).first?["volume"] as? Double == 0.7079)
         #expect(f.seenHeaders.allSatisfy { $0["X-Flimmer-Agent"] == "1" && $0["X-Sibling"] == "jammer" && $0["Origin"] == nil })
         // For real.
@@ -370,6 +402,64 @@ struct FlimmerSendTests {
         #expect(f.uploads.isEmpty && f.undoSteps.isEmpty)
     }
 
+    @Test("A plan with only track settings is allowed")
+    func settingsOnly() async throws {
+        var (p, pool) = film()
+        let f = flimmer(), c = client(f)
+        p.tracks[1].isMuted = true
+        let prepared = try await FlimmerSend.prepare(p, mode: .takes, client: c, render: render(pool))
+        #expect(prepared.items.isEmpty && prepared.uploads.isEmpty && prepared.lines.first == "Track Musik: level 0.0 dB, muted.")
+        _ = try await FlimmerSend.send(prepared, client: c)
+        #expect(f.tracks[1].muted && f.undoSteps.count == 1 && f.clips.count == 3)
+    }
+
+    @Test("Mono stays mono unless the work here made it stereo, and then the dry run says so")
+    func channels() async throws {
+        let (p, pool) = film()
+        var plan = RenderPlanProbe.stereoised(p, pool: pool)
+        let f = flimmer()
+        let prepared = try await FlimmerSend.prepare(plan.project, mode: .takes, client: client(f), render: render(plan.pool))
+        func channels(_ d: Data) -> Int {
+            let at = d.range(of: Data("fmt ".utf8))!.lowerBound
+            return Int(d[at + 10]) | Int(d[at + 11]) << 8
+        }
+        #expect(channels(f.uploads[prepared.uploads[0]]!.data) == 2 && prepared.lines.contains("berattare was mono and comes back in stereo: what was done to it here made the two sides differ."), "\(prepared.lines)")
+        plan = RenderPlanProbe.stereoised(p, pool: pool, differ: false)
+        let same = try await FlimmerSend.prepare(plan.project, mode: .takes, client: client(f), render: render(plan.pool))
+        #expect(channels(f.uploads[same.uploads[0]]!.data) == 1 && !same.lines.contains { $0.contains("stereo") })
+    }
+
+    @Test("Large files go in chunks from disk; one over the limit is refused before anything is uploaded; a dropped upload is removed")
+    func chunks() async throws {
+        let (p, pool) = film()
+        let f = flimmer(), c = client(f)
+        f.maxChunkBytes = 100_000
+        // The mix: 15.5 s stereo at 16 bits is about 3 MB, so some thirty chunks.
+        let prepared = try await FlimmerSend.prepare(p, mode: .mix, client: c, render: render(pool))
+        let up = try #require(f.uploads[prepared.uploads[0]])
+        #expect(f.puts >= 29 && !up.open && abs(up.seconds - 15.5) < 0.001 && up.data.count == up.total)
+        #expect(f.seenHeaders.allSatisfy { $0["X-Sibling"] == "jammer" })
+        await FlimmerSend.cancel(prepared, client: c)
+        // Over Flimmer's limit: said in words before any upload exists.
+        f.maxBytes = 1_000_000
+        f.puts = 0
+        let big = await failure { _ = try await FlimmerSend.prepare(p, mode: .mix, client: c, render: render(pool)) }
+        #expect(big?.code == "too_large" && big?.message.hasPrefix("The mix would be") == true && f.uploads.isEmpty && f.puts == 0, "\(big?.message ?? "")")
+        // The connection drops at the fifth chunk: the half-sent upload is taken away.
+        f.maxBytes = 1 << 30
+        f.failPut = 5
+        let dropped = await failure { _ = try await FlimmerSend.prepare(p, mode: .mix, client: c, render: render(pool)) }
+        #expect(dropped != nil && f.uploads.isEmpty && f.puts == 5 && f.undoSteps.isEmpty)
+        // The user backs out in the middle (the task is cancelled): the same.
+        f.failPut = nil
+        f.puts = 0
+        let task = Task { try await FlimmerSend.prepare(p, mode: .mix, client: c, render: render(pool)) }
+        while f.lock.withLock({ f.puts }) < 3 { try await Task.sleep(for: .milliseconds(1)) }
+        task.cancel()
+        _ = await task.result
+        #expect(f.lock.withLock { f.uploads.isEmpty } && f.lock.withLock { f.puts } < 29)
+    }
+
     @Test("Finding Flimmer: the name must match, and a debug copy pairs only with a debug copy")
     func find() async {
         let f = flimmer()
@@ -379,5 +469,24 @@ struct FlimmerSendTests {
             (try! JSONSerialization.data(withJSONObject: ["app": ["name": "Glimmer", "bundleID": "com.brattoo.glimmer"]]), HTTPURLResponse(url: r.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
         }
         #expect(await FlimmerSend.find(transport: other, debug: false) == nil)
+    }
+}
+
+/// A film whose first clip plays from a stereo file made here (as a stereo effect would leave it).
+enum RenderPlanProbe {
+    static func stereoised(_ project: Project, pool: SourcePool, differ: Bool = true) -> (project: Project, pool: SourcePool) {
+        var p = project
+        let rate = p.sampleRate, n = Int(10 * rate)
+        let info = AudioFileInfo(container: .wav, sampleFormat: .float32, bigEndian: false, channels: 2, sampleRate: rate,
+                                 channelMask: nil, dataOffset: 0, frames: Int64(n), chunks: [], bext: nil, ixml: nil, markers: [])
+        let ref = SourceRef(name: "berattare echo", path: "/dev/null", info: info)
+        pool.register(ref.id, memory: (0..<n).flatMap { i -> [Float] in
+            let v = Float(0.2 * sin(2 * .pi * 440 * Double(i) / rate))
+            return [v, differ ? v * 0.5 : v]
+        }, channels: 2)
+        p.sources.append(ref)
+        // The clip keeps its origin (the mono original) and now plays from the processed file.
+        p.tracks[0].clips[0].sourceID = ref.id
+        return (p, pool)
     }
 }

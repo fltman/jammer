@@ -22,6 +22,9 @@ Jämmer is MIT. Every third-party component and model is listed here **before** 
 | FluidAudio (Swift) | v0.18.3 (c8b41f98) | Apache-2.0 ([LICENSE](https://github.com/FluidInference/FluidAudio/blob/main/LICENSE), read 2026-11-15) | Its source compiled into the app by our package (fetched by `scripts/fetch-fluidaudio.sh`, pinned commit checked): only the `Diarizer` code, offline Community-1 pipeline. Not its manifest, whose prebuilt NemoTextProcessing binary we leave out; no TTS. Include the Apache-2.0 notice in About | 2026-11-15 |
 | ↳ fastcluster (C++, inside FluidAudio's FastClusterWrapper) | as vendored in FluidAudio v0.18.3 | BSD-2-Clause, "© 2011 Daniel Müllner; changes from 1.1.24 © Google Inc." ([LICENSE](https://github.com/fastcluster/fastcluster/blob/master/LICENSE), read 2026-11-15; the vendored header has no licence text) | Centroid-linkage clustering for diarisation. Reproduce the notice in About | 2026-11-15 |
 
+| CLAP (plugin interface headers, C) | 1.2.9 (cd94482b) | MIT, "Copyright (c) 2021 Alexandre BIQUE" ([LICENSE](https://github.com/free-audio/clap/blob/main/LICENSE), read 2026-11-15) | Fetched by `scripts/fetch-plugin-sdks.sh` (pinned commit checked) for hosting CLAP plugins. **Not compiled into the app yet**: this row is here before anything ships | 2026-11-15 |
+| VST 3 SDK: pluginterfaces (4f547e8e), base (fcf9da0b), public.sdk hosting helpers (586dc5e6) | v3.8.1_build_84 (3cdf9ca5) | MIT since SDK 3.8, "Copyright (c) 2026, Steinberg Media Technologies GmbH" (LICENSE.txt in each of the three, read 2026-11-15; Steinberg's portal: "No need to sign any documents", GPLv3 and the proprietary licence "no longer available"). VSTGUI (BSD-style) and the examples are **not** fetched or used | Fetched by `scripts/fetch-plugin-sdks.sh` (pinned commit checked) for hosting VST 3 plugins. **Not compiled into the app yet** | 2026-11-15 |
+
 ## Derived algorithms (no code copied)
 
 | What | Source | Licence | Note |

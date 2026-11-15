@@ -49,6 +49,8 @@ public enum FlimmerSend {
         public var render: Project
         /// Body fields besides kind and uploadId.
         public var fields: [String: J]
+        /// The original clip's file is mono: the take goes back mono unless the work here made it stereo.
+        public var monoSource = false
     }
 
     // MARK: From the document to the plan
@@ -59,7 +61,7 @@ public enum FlimmerSend {
         func r6(_ v: Double) -> Double { (v * 1_000_000).rounded() / 1_000_000 }
         if mode == .mix {
             let p = FlimmerReturn.mixProject(project)
-            return [Item(kind: .mix, name: "Jämmer mix", clipId: nil, range: 0..<p.length, render: p, fields: [:])]
+            return [Item(kind: .mix, name: "Jämmer mix", clipId: nil, range: 0..<p.length, render: p, fields: ["name": .string("Jämmer mix")])]
         }
         var out: [Item] = []
         for t in plan.takes {
@@ -74,14 +76,20 @@ public enum FlimmerSend {
                     fields["position"] = .object(["timelineOffset": .number(r6(project.seconds(t.range.lowerBound)))])
                 }
             }
-            out.append(Item(kind: .take, name: name(first), clipId: t.clipId, range: t.range,
-                            render: FlimmerReturn.soloProject(project, clipId: t.clipId), fields: fields))
+            // The name and "mono" are about the file the clip came in with, whatever it plays from now
+            // (a repaired clip plays from a new file with a name of its own).
+            let original = (first?.origin?.snapshot?.sourceID).flatMap { project.source($0) } ?? first.flatMap { project.source($0.sourceID) }
+            let title = original?.name ?? name(first)
+            fields["name"] = .string(title)
+            out.append(Item(kind: .take, name: title, clipId: t.clipId, range: t.range,
+                            render: FlimmerReturn.soloProject(project, clipId: t.clipId), fields: fields, monoSource: original?.info.channels == 1))
         }
         for n in plan.new {
             let clip = project.tracks.flatMap(\.clips).first { $0.id == n.clip }
             var fields: [String: J] = ["name": .string(name(clip)), "position": .object(["timelineOffset": .number(r6(project.seconds(n.range.lowerBound)))])]
             if let id = n.trackId { fields["trackId"] = .string(id) }
-            out.append(Item(kind: .new, name: name(clip), clipId: nil, range: n.range, render: FlimmerReturn.soloProject(project, clip: n.clip), fields: fields))
+            out.append(Item(kind: .new, name: name(clip), clipId: nil, range: n.range, render: FlimmerReturn.soloProject(project, clip: n.clip), fields: fields,
+                            monoSource: clip.flatMap { project.source($0.sourceID) }?.info.channels == 1))
         }
         return out
     }
@@ -233,18 +241,52 @@ public enum FlimmerSend {
             return (response.statusCode, object)
         }
 
-        /// 24 bits when Flimmer says it takes them, else 16 (with dither).
-        public func bitDepth() async throws -> Int {
-            let (_, ops) = try await call("GET", "/api/v1/operations")
-            let depths = ((ops["uploads"] as? [String: Any])?["wavBitDepths"] as? [NSNumber])?.map(\.intValue) ?? [16]
-            return depths.contains(24) ? 24 : 16
+        public struct Limits: Sendable, Equatable {
+            /// 24 bits when Flimmer says it takes them, else 16 (with dither).
+            public var bitDepth: Int
+            public var maxBytes: Int64
+            public var maxChunkBytes: Int
         }
 
-        public func upload(_ wav: Data, name: String) async throws -> String {
+        /// What Flimmer's `GET /api/v1/operations` says about uploads.
+        public func limits() async throws -> Limits {
+            let (_, ops) = try await call("GET", "/api/v1/operations")
+            let u = ops["uploads"] as? [String: Any] ?? [:]
+            let depths = (u["wavBitDepths"] as? [NSNumber])?.map(\.intValue) ?? [16]
+            return Limits(bitDepth: depths.contains(24) ? 24 : 16, maxBytes: (u["maxBytes"] as? NSNumber)?.int64Value ?? 2 << 30,
+                          maxChunkBytes: max(1, (u["maxChunkBytes"] as? NSNumber)?.intValue ?? 8 << 20))
+        }
+
+        /// Sends a file from disk: in one call when it fits in a chunk, else opened, appended a
+        /// chunk at a time (never the whole file in memory) and completed. A cancelled or failed
+        /// upload is removed from Flimmer before the error goes on.
+        public func upload(file: URL, name: String, limits: Limits) async throws -> String {
             let q = name.addingPercentEncoding(withAllowedCharacters: .alphanumerics.union(.init(charactersIn: "-._"))) ?? "clip.wav"
-            let (_, answer) = try await call("POST", "/api/v1/uploads?name=\(q)", body: wav, contentType: "audio/wav")
-            guard let id = (answer["upload"] as? [String: Any])?["id"] as? String else { throw Failure("bad_answer", "Flimmer's answer to an upload couldn't be read.") }
-            return id
+            let size = ((try? FileManager.default.attributesOfItem(atPath: file.path))?[.size] as? NSNumber)?.int64Value ?? 0
+            func id(_ answer: [String: Any]) throws -> String {
+                guard let id = (answer["upload"] as? [String: Any])?["id"] as? String else { throw Failure("bad_answer", "Flimmer's answer to an upload couldn't be read.") }
+                return id
+            }
+            if size <= Int64(limits.maxChunkBytes) {
+                return try id(try await call("POST", "/api/v1/uploads?name=\(q)", body: try Data(contentsOf: file), contentType: "audio/wav").1)
+            }
+            let upload = try id(try await call("POST", "/api/v1/uploads?name=\(q)&bytes=\(size)").1)
+            do {
+                let handle = try FileHandle(forReadingFrom: file)
+                defer { try? handle.close() }
+                var offset: Int64 = 0
+                while offset < size {
+                    try Task.checkCancellation()
+                    guard let chunk = try handle.read(upToCount: limits.maxChunkBytes), !chunk.isEmpty else { break }
+                    _ = try await call("PUT", "/api/v1/uploads/\(upload)?offset=\(offset)", body: chunk, contentType: "application/octet-stream")
+                    offset += Int64(chunk.count)
+                }
+                _ = try await call("POST", "/api/v1/uploads/\(upload)/complete")
+                return upload
+            } catch {
+                await remove(upload: upload)
+                throw error
+            }
         }
 
         public func remove(upload id: String) async { _ = try? await call("DELETE", "/api/v1/uploads/\(id)") }
@@ -296,8 +338,16 @@ public enum FlimmerSend {
         public var body: [String: J]
     }
 
-    /// Renders one item to WAV bytes at a bit depth and sample rate Flimmer takes.
-    public typealias Render = @Sendable (_ item: Item, _ bitDepth: Int, _ sampleRate: Double) async throws -> Data
+    /// One item rendered to a WAV file at a bit depth and sample rate Flimmer takes.
+    public struct Rendered: Sendable {
+        public var file: URL
+        public var channels: Int
+        public init(file: URL, channels: Int) {
+            self.file = file
+            self.channels = channels
+        }
+    }
+    public typealias Render = @Sendable (_ item: Item, _ bitDepth: Int, _ sampleRate: Double) async throws -> Rendered
 
     /// The rate the files go at: the document's when Flimmer takes it, else 48 kHz.
     public static func sendRate(_ project: Project) -> Double { [44_100, 48_000].contains(project.sampleRate) ? project.sampleRate : 48_000 }
@@ -310,21 +360,36 @@ public enum FlimmerSend {
         guard !items.isEmpty || !plan.tracks.isEmpty else {
             throw Failure("nothing_to_change", "There is nothing to send: no clip or track has changed since the film came in.")
         }
-        let depth = try await client.bitDepth()
+        let limits = try await client.limits()
         let rate = sendRate(project)
-        var uploads: [String] = []
+        var uploads: [String] = [], files: [Rendered] = [], notes: [String] = []
+        defer { for f in files { try? FileManager.default.removeItem(at: f.file) } }
         do {
+            // Every file first, so that one that is too large is said before anything is uploaded.
             for (i, item) in items.enumerated() {
                 try Task.checkCancellation()
-                let wav = try await render(item, depth, rate)
-                uploads.append(try await client.upload(wav, name: "\(item.name)-jammer.wav"))
-                progress(Double(i + 1) / Double(items.count + 1))
+                let r = try await render(item, limits.bitDepth, rate)
+                files.append(r)
+                let size = ((try? FileManager.default.attributesOfItem(atPath: r.file.path))?[.size] as? NSNumber)?.int64Value ?? 0
+                if size > limits.maxBytes {
+                    throw Failure("too_large", String(format: "%@ would be %.1f GB as a file, and Flimmer takes at most %.1f GB. Send a shorter stretch, or the clips as takes instead of the whole mix.",
+                                                      item.kind == .mix ? "The mix" : "\"\(item.name)\"", Double(size) / 1_073_741_824, Double(limits.maxBytes) / 1_073_741_824))
+                }
+                if item.monoSource, r.channels == 2 {
+                    notes.append("\(item.name) was mono and comes back in stereo: what was done to it here made the two sides differ.")
+                }
+                progress(0.5 * Double(i + 1) / Double(items.count))
+            }
+            for (i, (item, r)) in zip(items, files).enumerated() {
+                try Task.checkCancellation()
+                uploads.append(try await client.upload(file: r.file, name: "\(item.name)-jammer.wav", limits: limits))
+                progress(0.5 + 0.5 * Double(i + 1) / Double(items.count + 1))
             }
             let dry = body(project, plan: plan, mode: mode, items: items, uploads: uploads, dryRun: true)
             let answer = try await client.plan(dry, items: items)
             progress(1)
             return Prepared(mode: mode, plan: plan, items: items, uploads: uploads,
-                            lines: lines(project, plan: plan, mode: mode, items: items, resampledTo: rate == project.sampleRate ? nil : rate),
+                            lines: lines(project, plan: plan, mode: mode, items: items, resampledTo: rate == project.sampleRate ? nil : rate) + notes,
                             flimmerLines: lines(answer: answer, items: items),
                             body: body(project, plan: plan, mode: mode, items: items, uploads: uploads, dryRun: false))
         } catch {
@@ -343,29 +408,49 @@ public enum FlimmerSend {
         for id in prepared.uploads { await client.remove(upload: id) }
     }
 
-    /// `range` of a compiled plan as WAV bytes: 24 bits, or 16 with dither; converted to
-    /// `sampleRate` when the document is at another rate.
-    public static func wav(_ plan: RenderPlan, range: Range<Frame>, bitDepth: Int, sampleRate: Double, scratch: URL) throws -> Data {
+    /// `range` of a compiled plan as a WAV file: 24 bits, or 16 with dither; converted to
+    /// `sampleRate` when the document is at another rate. With `monoIfSame`, a stereo render
+    /// whose two sides are the same sample for sample is written as mono.
+    public static func wavFile(_ plan: RenderPlan, range: Range<Frame>, bitDepth: Int, sampleRate: Double, monoIfSame: Bool = false, scratch: URL) throws -> Rendered {
         let dir = scratch.appending(path: "flimmer-send-\(UUID().uuidString.prefix(8))")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: dir) }
-        func write(_ plan: RenderPlan, _ range: Range<Frame>, to url: URL, float: Bool) throws {
-            let w = try WAVWriter(url: url, options: .init(encoding: float ? .float32 : (bitDepth == 24 ? .int24 : .int16), channels: plan.channels,
+        var mono = plan.channels == 1
+        if monoIfSame, plan.channels == 2 {
+            mono = true
+            plan.render(range) { b in
+                guard mono else { return }
+                var i = 0
+                while i + 1 < b.count { if b[i] != b[i + 1] { mono = false; break }; i += 2 }
+            }
+        }
+        let channels = mono ? 1 : plan.channels
+        func write(_ plan: RenderPlan, _ range: Range<Frame>, to url: URL, float: Bool, left: Bool) throws {
+            let w = try WAVWriter(url: url, options: .init(encoding: float ? .float32 : (bitDepth == 24 ? .int24 : .int16), channels: left ? 1 : plan.channels,
                                                           sampleRate: plan.sampleRate, dither: !float && bitDepth == 16))
-            try plan.render(range) { try w.write($0) }
+            var one: [Float] = []
+            try plan.render(range) { b in
+                guard left else { try w.write(b); return }
+                one.removeAll(keepingCapacity: true)
+                var i = 0
+                while i < b.count { one.append(b[i]); i += plan.channels }
+                try one.withUnsafeBufferPointer { try w.write($0) }
+            }
             try w.finish()
         }
         let out = dir.appending(path: "out.wav")
+        let takeLeft = mono && plan.channels > 1
         if plan.sampleRate == sampleRate {
-            try write(plan, range, to: out, float: false)
+            try write(plan, range, to: out, float: false, left: takeLeft)
         } else {
             // Through a float file, so the conversion works on the full signal and the rounding happens once.
             let full = dir.appending(path: "full.wav")
-            try write(plan, range, to: full, float: true)
+            try write(plan, range, to: full, float: true, left: takeLeft)
             let converted = try AudioImporter.importFile(full, sampleRate: sampleRate, mediaFolder: dir)
-            let p = Project(source: converted.source)
-            try write(PlanCompiler.compile(p, pool: SourcePool()), 0..<p.length, to: out, float: false)
+            var p = Project(source: converted.source)
+            p.channels = channels
+            try write(PlanCompiler.compile(p, pool: SourcePool()), 0..<p.length, to: out, float: false, left: false)
+            try? FileManager.default.removeItem(at: full)
         }
-        return try Data(contentsOf: out)
+        return Rendered(file: out, channels: channels)
     }
 }
