@@ -109,7 +109,22 @@ extension Project {
                 merged.append(w)
             }
         }
-        return merged.sorted { ($0.start, $0.track) < ($1.start, $1.track) }
+        return droppingBleed(merged).sorted { ($0.start, $0.track) < ($1.start, $1.track) }
+    }
+
+    /// On a multitrack recording every microphone also hears the others, so each track's
+    /// transcript repeats what the other people said. Once the speakers are known, a word
+    /// that lies outside its own track's turns while someone on another track is talking
+    /// is that bleed, and isn't shown. Words nobody's turn covers are kept.
+    private func droppingBleed(_ words: [PlacedWord]) -> [PlacedWord] {
+        guard tracks.count > 1, !speakerTurns.isEmpty else { return words }
+        let turns = placedTurns()
+        guard Set(turns.map(\.track)).count > 1 else { return words }
+        func covered(_ w: PlacedWord, on sameTrack: Bool) -> Bool {
+            let mid = (w.start + w.end) / 2
+            return turns.contains { ($0.track == w.track) == sameTrack && $0.start <= mid && mid < $0.end }
+        }
+        return words.filter { covered($0, on: true) || !covered($0, on: false) }
     }
 
     /// The transcript as plain text, words in timeline order.

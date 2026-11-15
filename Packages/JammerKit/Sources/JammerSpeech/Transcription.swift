@@ -61,6 +61,38 @@ public enum WordBuilder {
             let end = min(sourceFrames, max(start, Frame((r.end * sampleRate).rounded())))
             out.append(Word(text: text, start: start, end: end, confidence: r.confidence))
         }
+        return spreadingCollapsed(out, sampleRate: sampleRate)
+    }
+
+    /// Recognisers sometimes give the first words after a pause no duration (Whisper's
+    /// token times collapse at a segment start). A word without duration can't be shown,
+    /// selected or deleted, so each such run gets the stretch just before the next timed
+    /// word: about 70 ms per character, shared by length, and never before the previous
+    /// word's end.
+    static func spreadingCollapsed(_ words: [Word], sampleRate: Double) -> [Word] {
+        var out = words
+        var i = 0
+        while i < out.count {
+            guard out[i].end <= out[i].start else { i += 1; continue }
+            var j = i
+            while j < out.count, out[j].end <= out[j].start { j += 1 }
+            let chars = out[i..<j].map { max(1, $0.text.count) }
+            let wanted = Frame(Double(chars.reduce(0, +)) * 0.07 * sampleRate)
+            let floor = i > 0 ? out[i - 1].end : 0
+            let hi: Frame = j < out.count ? max(out[j].start, out[j - 1].start) : out[j - 1].start + wanted
+            let lo = max(floor, hi - wanted)
+            if hi > lo {
+                var at = lo
+                let total = Double(chars.reduce(0, +))
+                for (k, n) in zip(i..<j, chars) {
+                    let len = Frame((Double(hi - lo) * Double(n) / total).rounded(.down))
+                    out[k].start = at
+                    out[k].end = k == j - 1 ? hi : max(at + 1, at + len)
+                    at = out[k].end
+                }
+            }
+            i = j
+        }
         return out
     }
 }

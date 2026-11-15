@@ -38,7 +38,7 @@ public enum Spectral {
         }
 
         /// Inverse transform back to `size` samples (unscaled; the caller normalises).
-        func inverse(_ re: [Float], _ im: [Float]) -> [Float] {
+        public func inverse(_ re: [Float], _ im: [Float]) -> [Float] {
             var r = re, i = im
             var out = [Float](repeating: 0, count: size)
             r.withUnsafeMutableBufferPointer { rp in

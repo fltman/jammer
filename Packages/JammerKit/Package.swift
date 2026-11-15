@@ -18,6 +18,7 @@ let package = Package(
     products: [
         .library(name: "JammerEngine", targets: ["JammerEngine"]),
         .library(name: "JammerCore", targets: ["JammerCore"]),
+        .library(name: "JammerStems", targets: ["JammerStems"]),
         .library(name: "JammerAudio", targets: ["JammerAudio"]),
         .library(name: "JammerAgent", targets: ["JammerAgent"]),
         .library(name: "JammerSpeech", targets: ["JammerSpeech"]),
@@ -35,6 +36,9 @@ let package = Package(
         ),
         // Document model, edits, file formats, peaks and loudness. No UI, no device.
         .target(name: "JammerCore", dependencies: ["JammerEngine"]),
+        // Stem separation: Spleeter's U-Nets on MPSGraph, weights read from Deezer's own checkpoint.
+        .target(name: "JammerStems", dependencies: ["JammerCore"]),
+        .testTarget(name: "JammerStemsTests", dependencies: ["JammerStems", "JammerCore"]),
         // The audio device: output unit feeding the engine.
         .target(
             name: "JammerAudio",

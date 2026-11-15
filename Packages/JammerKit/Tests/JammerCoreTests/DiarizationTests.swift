@@ -398,4 +398,20 @@ struct DiarizationTests {
         #expect(onset <= -18, "overshoot \(onset + 20) dB")
         #expect(abs(loudness(q, pool, track: 0, 16, 21.5) + 20) <= 1)
     }
+
+    @Test("A double-ender's transcript shows each line once: the other person's bleed isn't repeated")
+    func bleedWords() throws {
+        let dir = TempDir()
+        var (p, pool, _) = try doubleEnder(dir)
+        // Both microphones heard both people: A talks at 2 s, B at 7 s (see doubleEnder's turns).
+        for t in 0..<2 {
+            p.setTranscript(SourceTranscript(sourceID: p.tracks[t].clips[0].sourceID, language: "en", engine: "t",
+                                             words: [Word(text: "hello", start: Frame(2 * sr), end: Frame(2.4 * sr)), Word(text: "there", start: Frame(7 * sr), end: Frame(7.4 * sr))]))
+        }
+        #expect(p.placedWords().count == 4)
+        p.applyDiarization(Diarization.byTrack(p, pool: pool, tracks: p.tracks.map(\.id)), engine: "by-track")
+        let w = p.placedWords()
+        #expect(w.map(\.word.text) == ["hello", "there"])
+        #expect(w.map(\.track) == [0, 1] && w.map(\.word.speaker) == [0, 1])
+    }
 }

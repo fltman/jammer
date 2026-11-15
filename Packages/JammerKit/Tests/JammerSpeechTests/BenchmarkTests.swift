@@ -153,3 +153,21 @@ struct TranscriptionBenchmark {
         #expect(total.rate < 0.25)
     }
 }
+
+
+@Suite("Words without duration")
+struct CollapsedWordTests {
+    @Test("Words a recogniser gives no duration get the stretch before the next timed word, in order, never overlapping")
+    func spread() {
+        let runs = [RecognisedRun(text: "Ljudverkstan.", start: 2.17, end: 3.23, confidence: nil),
+                    RecognisedRun(text: "Idag", start: 4.16, end: 4.16, confidence: nil), RecognisedRun(text: "ska", start: 4.16, end: 4.16, confidence: nil),
+                    RecognisedRun(text: "vi", start: 4.16, end: 4.16, confidence: nil), RecognisedRun(text: "prata", start: 4.25, end: 4.50, confidence: nil),
+                    RecognisedRun(text: "till", start: 22.0, end: 22.0, confidence: nil)]
+        let w = WordBuilder.words(from: runs, sampleRate: 48_000, sourceFrames: 48_000 * 30)
+        #expect(w.allSatisfy { $0.end > $0.start })
+        #expect(zip(w, w.dropFirst()).allSatisfy { $0.end <= $1.start })
+        #expect(w[1].start >= w[0].end && w[3].end == w[4].start)
+        #expect(Double(w[3].end - w[1].start) / 48_000 > 0.5) // nine characters at about 70 ms
+        #expect(w[5].end > w[5].start)                         // the last one, with nothing after it
+    }
+}

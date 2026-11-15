@@ -7,7 +7,7 @@ import Testing
 
 @Suite("Parakeet words")
 struct ParakeetWordTests {
-    @Test("SentencePiece tokens join into words with times and the lowest confidence")
+    @Test("SentencePiece tokens join into words with times and their mean confidence")
     func words() {
         let t = [TokenTiming(token: "▁Hej", tokenId: 1, startTime: 0.10, endTime: 0.30, confidence: 0.9),
                  TokenTiming(token: "▁väl", tokenId: 2, startTime: 0.40, endTime: 0.55, confidence: 0.8),
@@ -17,7 +17,7 @@ struct ParakeetWordTests {
         let w = ParakeetEngine.words(t, sampleRate: 48_000)
         #expect(w.map(\.text) == ["Hej", "välkommen."])
         #expect(w[1].start == 19_200 && w[1].end == 39_360)
-        #expect(abs((w[1].confidence ?? 0) - 0.6) < 1e-6)
+        #expect(abs((w[1].confidence ?? 0) - (0.8 + 0.6 + 0.95 + 0.99) / 4) < 1e-6)
     }
 }
 

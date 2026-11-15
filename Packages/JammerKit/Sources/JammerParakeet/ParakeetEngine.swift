@@ -85,17 +85,20 @@ public final class ParakeetEngine: TranscriptionEngine, @unchecked Sendable {
     }
 
     /// SentencePiece tokens to words: "▁" starts a word. Times in source frames;
-    /// confidence is the lowest of the word's tokens.
+    /// confidence is the mean of the word's tokens.
     static func words(_ tokens: [TokenTiming], sampleRate: Double) -> [Word] {
         var out: [Word] = []
-        var text = "", start = 0.0, end = 0.0, conf: Float = 1
+        var text = "", start = 0.0, end = 0.0, confs: [Float] = []
         func flush() {
             let t = text.trimmingCharacters(in: .whitespaces)
             if !t.isEmpty {
+                // The mean over the word's tokens, like the Whisper engine: the lowest token
+                // alone marked nearly every word as unsure.
+                let conf = confs.isEmpty ? 1 : confs.reduce(0, +) / Float(confs.count)
                 out.append(Word(text: t, start: Frame((start * sampleRate).rounded()), end: Frame((end * sampleRate).rounded()), confidence: Double(conf)))
             }
             text = ""
-            conf = 1
+            confs = []
         }
         for tok in tokens {
             let piece = tok.token
@@ -105,7 +108,7 @@ public final class ParakeetEngine: TranscriptionEngine, @unchecked Sendable {
             }
             text += piece.replacingOccurrences(of: "▁", with: piece.hasPrefix("▁") && text.isEmpty ? "" : " ")
             end = tok.endTime
-            conf = min(conf, tok.confidence)
+            confs.append(tok.confidence)
         }
         flush()
         return out
