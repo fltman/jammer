@@ -18,6 +18,8 @@ Jämmer is MIT. Every third-party component and model is listed here **before** 
 | DeepFilterNet libDF (Rust) with the DeepFilterNet3 model | 7b14b89 | MIT or Apache-2.0 (we take MIT), "Copyright (c) 2021 Hendrik Schröter"; model weights under the same licence | Static library built from source by `scripts/build-libdf.sh` (`--features capi`); the 7.6 MB model ships with the app | 2026-11-15 |
 | 146 Rust crates linked into libDF (tract ONNX runtime, ndarray, rubato, …) | Cargo.lock at 7b14b89 | All permissive: 87 MIT OR Apache-2.0, 20 MIT/Apache-2.0, 12 MIT, 4 Apache-2.0, plus BSD-2/3, Zlib, Unlicense/MIT, 0BSD, BSL-1.0 dual, CC0-1.0 and Unicode-DFS-2016; no GPL, LGPL or non-commercial terms. Full list: [licenses/libdf-crates.tsv](licenses/libdf-crates.tsv) (from `cargo metadata`, normal dependencies only) | Linked in libDF | 2026-11-15 |
 
+| LAME | 3.100 (tarball SHA-256 ddfe36ca…da1e, checked by the build script) | LGPL-2.0-or-later (COPYING in the source; copied into the framework's Resources) | Dynamic framework built from source by `scripts/build-lame.sh`, loaded by the app and replaceable by the user, as the LGPL requires; MP3 export only. Source: https://lame.sourceforge.io | 2026-11-15 |
+
 ## Derived algorithms (no code copied)
 
 | What | Source | Licence | Note |
@@ -60,5 +62,4 @@ When any CC-BY-4.0 model is installed, About › Acknowledgements lists: NVIDIA 
 
 | Component | Licence (to verify) | Plan |
 |---|---|---|
-| LAME (MP3 encoder) | LGPL | Dynamic library only, phase 1 |
 | Sparkle | MIT | Updates |

@@ -2,6 +2,7 @@ import AppKit
 import JammerAgent
 import JammerCore
 import JammerDenoise
+import JammerMP3
 
 /// Operations with preset parameters, for menus and the palette.
 enum MenuPresets {
@@ -45,6 +46,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let model = Bundle.main.url(forResource: "DeepFilterNet3_onnx", withExtension: "tar.gz"), let d = try? Denoiser(modelPath: model) {
             d.register()
         }
+        // MP3 through LAME, a separate dynamic framework (LGPL).
+        MP3Writer.register()
         AgentServer.shared.start()
         if UserDefaults.standard.object(forKey: AgentSplashView.showAtLaunchKey) as? Bool ?? true {
             Task {

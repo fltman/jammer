@@ -4,7 +4,10 @@ import Foundation
 /// Export formats beyond WAV, through Apple's encoders (ExtAudioFile). WAV and RF64 stay
 /// with `WAVWriter`, which keeps bext, iXML and markers.
 public enum ExportFormat: String, Sendable, Codable, CaseIterable {
-    case wav, aiff, flac, alac, aac, opus
+    case wav, aiff, flac, alac, aac, opus, mp3
+
+    /// The formats this build can write (MP3 needs the LAME framework).
+    public static var available: [ExportFormat] { allCases.filter { $0 != .mp3 || EncodedWriter.mp3Factory != nil } }
 
     public var fileExtension: String {
         switch self {
@@ -13,10 +16,11 @@ public enum ExportFormat: String, Sendable, Codable, CaseIterable {
         case .flac: "flac"
         case .alac, .aac: "m4a"
         case .opus: "opus"
+        case .mp3: "mp3"
         }
     }
 
-    public var isLossless: Bool { self != .aac && self != .opus }
+    public var isLossless: Bool { self != .aac && self != .opus && self != .mp3 }
     /// Bit depths a format can store (AAC has none).
     public var bitDepths: [Int] {
         switch self {
@@ -24,7 +28,7 @@ public enum ExportFormat: String, Sendable, Codable, CaseIterable {
         case .aiff: [16, 24]
         case .flac: [16, 24]
         case .alac: [16, 24]
-        case .aac, .opus: []
+        case .aac, .opus, .mp3: []
         }
     }
 }
@@ -54,14 +58,25 @@ public enum ExportError: Error, LocalizedError, Equatable {
     }
 }
 
+/// A file writer fed interleaved float blocks (MP3 plugs in through this).
+public protocol StreamingAudioWriter: AnyObject {
+    func write(_ samples: UnsafeBufferPointer<Float>) throws
+    func finish() throws
+}
+
 /// Writes a rendered plan to AIFF, FLAC, ALAC or AAC.
 public final class EncodedWriter {
+    /// MP3 comes from LAME (LGPL, a separate dynamic framework); the app registers it.
+    nonisolated(unsafe) public static var mp3Factory: ((_ url: URL, _ channels: Int, _ sampleRate: Double, _ bitRate: Int) throws -> StreamingAudioWriter)?
+
     private var file: ExtAudioFileRef?
     let channels: Int
 
     public init(url: URL, options: EncodedExportOptions, channels: Int, sampleRate: Double) throws {
         self.channels = channels
-        guard options.format != .wav, options.format != .opus else { throw ExportError.unsupported("Use WAVWriter for WAV and OggOpusWriter for Opus.") }
+        guard options.format != .wav, options.format != .opus, options.format != .mp3 else {
+            throw ExportError.unsupported("Use WAVWriter for WAV, OggOpusWriter for Opus and mp3Factory for MP3.")
+        }
         if options.format.isLossless, !options.format.bitDepths.contains(options.bitDepth) {
             throw ExportError.unsupported("\(options.format.rawValue.uppercased()) takes \(options.format.bitDepths.map(String.init).joined(separator: " or ")) bits.")
         }
@@ -89,7 +104,7 @@ public final class EncodedWriter {
         case .aac:
             type = kAudioFileM4AType
             dst.mFormatID = kAudioFormatMPEG4AAC
-        case .wav, .opus:
+        case .wav, .opus, .mp3:
             fatalError()
         }
         if options.format != .aiff {
@@ -114,8 +129,11 @@ public final class EncodedWriter {
             if let converter {
                 var rate = UInt32(options.bitRate)
                 AudioConverterSetProperty(converter, kAudioConverterEncodeBitRate, UInt32(MemoryLayout<UInt32>.size), &rate)
-                var none: CFArray?
-                ExtAudioFileSetProperty(ref, kExtAudioFileProperty_ConverterConfig, UInt32(MemoryLayout<CFArray?>.size), &none)
+                // Tells ExtAudioFile to apply the converter change (an empty configuration).
+                var none: Unmanaged<CFArray>?
+                withUnsafeMutablePointer(to: &none) { ptr in
+                    _ = ExtAudioFileSetProperty(ref, kExtAudioFileProperty_ConverterConfig, UInt32(MemoryLayout<Unmanaged<CFArray>?>.size), ptr)
+                }
             }
         }
     }
@@ -143,6 +161,14 @@ public final class EncodedWriter {
                               progress: (Double) -> Bool = { _ in true }) throws {
         if options.format == .opus {
             try OggOpusWriter.export(plan, range: range, to: url, bitRate: options.bitRate)
+            _ = progress(1)
+            return
+        }
+        if options.format == .mp3 {
+            guard let make = mp3Factory else { throw ExportError.unsupported("MP3 isn't available in this build.") }
+            let w = try make(url, plan.channels, plan.sampleRate, options.bitRate)
+            try plan.render(range) { try w.write($0) }
+            try w.finish()
             _ = progress(1)
             return
         }

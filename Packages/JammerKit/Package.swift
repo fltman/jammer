@@ -7,6 +7,8 @@ import PackageDescription
 let hasWhisper = FileManager.default.fileExists(atPath: Context.packageDirectory + "/Vendor/whisper.xcframework")
 // DeepFilterNet's libDF likewise, from scripts/build-libdf.sh.
 let hasDeepFilter = FileManager.default.fileExists(atPath: Context.packageDirectory + "/Vendor/DeepFilter.xcframework")
+// LAME (LGPL, dynamic only), from scripts/build-lame.sh.
+let hasLAME = FileManager.default.fileExists(atPath: Context.packageDirectory + "/Vendor/LAME.xcframework")
 
 let package = Package(
     name: "JammerKit",
@@ -75,5 +77,14 @@ if hasDeepFilter {
         .target(name: "JammerDenoise", dependencies: ["DeepFilter", "JammerCore"],
                 linkerSettings: [.linkedFramework("AVFoundation")]),
         .testTarget(name: "JammerDenoiseTests", dependencies: ["JammerDenoise", "JammerCore"]),
+    ]
+}
+
+if hasLAME {
+    package.products.append(.library(name: "JammerMP3", targets: ["JammerMP3"]))
+    package.targets += [
+        .binaryTarget(name: "LAME", path: "Vendor/LAME.xcframework"),
+        .target(name: "JammerMP3", dependencies: ["LAME", "JammerCore"]),
+        .testTarget(name: "JammerMP3Tests", dependencies: ["JammerMP3", "JammerCore"]),
     ]
 }

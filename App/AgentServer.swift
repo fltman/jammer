@@ -650,8 +650,8 @@ enum AgentRouter {
     private static func export(_ session: EditorSession, _ r: AgentAPI.Request) async throws -> Response {
         let obj = try json(r)
         let formatName = (obj["format"] as? String ?? "wav").lowercased()
-        guard let format = ExportFormat(rawValue: formatName) else {
-            throw APIError.badRequest("format must be one of \(ExportFormat.allCases.map(\.rawValue).joined(separator: ", ")).")
+        guard let format = ExportFormat(rawValue: formatName), ExportFormat.available.contains(format) else {
+            throw APIError.badRequest("format must be one of \(ExportFormat.available.map(\.rawValue).joined(separator: ", ")).")
         }
         let bits = obj["bitDepth"] as? Int ?? 24
         var encoding: WAVWriter.Encoding = .int24
@@ -669,6 +669,14 @@ enum AgentRouter {
             let rate = obj["bitRate"] as? Int ?? 192_000
             guard (64_000...320_000).contains(rate) else { throw APIError.badRequest("bitRate must be 64000–320000.") }
             encoded = EncodedExportOptions(format: .aac, bitRate: rate)
+        case .mp3:
+            if obj["bitDepth"] != nil { throw APIError.badRequest("mp3 has no bitDepth; use bitRate.") }
+            guard session.project.channels <= 2 else { throw APIError.badRequest("mp3 export takes mono or stereo documents.") }
+            let rate = obj["bitRate"] as? Int ?? 160_000
+            guard [64_000, 96_000, 128_000, 160_000, 192_000, 256_000, 320_000].contains(rate) else {
+                throw APIError.badRequest("bitRate for mp3 must be 64000, 96000, 128000, 160000, 192000, 256000 or 320000.")
+            }
+            encoded = EncodedExportOptions(format: .mp3, bitRate: rate)
         case .opus:
             if obj["bitDepth"] != nil { throw APIError.badRequest("opus has no bitDepth; use bitRate.") }
             guard session.project.channels <= 2 else { throw APIError.badRequest("opus export takes mono or stereo documents.") }
@@ -681,7 +689,7 @@ enum AgentRouter {
             }
             encoded = EncodedExportOptions(format: format, bitDepth: bits)
         }
-        if format != .aac, format != .opus, obj["bitRate"] != nil { throw APIError.badRequest("bitRate is for aac and opus only.") }
+        if format.isLossless, obj["bitRate"] != nil { throw APIError.badRequest("bitRate is for aac, mp3 and opus only.") }
         var range: Range<Frame>? = nil
         if let a = obj["start"] as? Double, let b = obj["end"] as? Double {
             guard a >= 0, b > a else { throw APIError.badRequest("start and end must be seconds with end after start.") }
@@ -698,7 +706,7 @@ enum AgentRouter {
         defer { try? FileManager.default.removeItem(at: tmp) }
         try await session.export(to: tmp, options: .init(encoding: encoding, range: range, dither: obj["dither"] as? Bool ?? false, encoded: encoded))
         let data = try Data(contentsOf: tmp, options: .mappedIfSafe)
-        let types: [ExportFormat: String] = [.wav: "audio/wav", .aiff: "audio/aiff", .flac: "audio/flac", .alac: "audio/mp4", .aac: "audio/mp4", .opus: "audio/ogg"]
+        let types: [ExportFormat: String] = [.wav: "audio/wav", .aiff: "audio/aiff", .flac: "audio/flac", .alac: "audio/mp4", .aac: "audio/mp4", .opus: "audio/ogg", .mp3: "audio/mpeg"]
         return Response(status: 200, contentType: types[format] ?? "application/octet-stream", body: data,
                         extraHeaders: ["Content-Disposition": "attachment; filename=\"\(asciiName(session.name)).\(format.fileExtension)\""])
     }

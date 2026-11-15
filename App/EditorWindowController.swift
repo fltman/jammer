@@ -176,7 +176,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
     @objc func exportAudio(_ sender: Any?) {
         guard let window else { return }
         let panel = NSSavePanel()
-        panel.allowedContentTypes = [.wav, .aiff, UTType("org.xiph.flac") ?? .audio, .mpeg4Audio, UTType(filenameExtension: "opus") ?? .audio]
+        panel.allowedContentTypes = [.wav, .aiff, UTType("org.xiph.flac") ?? .audio, .mpeg4Audio, UTType(filenameExtension: "opus") ?? .audio, .mp3]
         panel.allowsOtherFileTypes = true
         panel.nameFieldStringValue = session.name + ".wav"
         let model = ExportChoices(hasSelection: session.selection != nil)
@@ -317,7 +317,7 @@ struct StatusBar: View {
 final class ExportChoices {
     enum Choice: String, CaseIterable {
         case wav16 = "WAV 16-bit", wav24 = "WAV 24-bit", wavFloat = "WAV 32-bit float", aiff24 = "AIFF 24-bit",
-             flac16 = "FLAC 16-bit", flac24 = "FLAC 24-bit", alac24 = "Apple Lossless (ALAC) 24-bit", aac = "AAC 192 kbit/s", opus = "Opus 96 kbit/s (Ogg)"
+             flac16 = "FLAC 16-bit", flac24 = "FLAC 24-bit", alac24 = "Apple Lossless (ALAC) 24-bit", aac = "AAC 192 kbit/s", opus = "Opus 96 kbit/s (Ogg)", mp3 = "MP3 160 kbit/s"
         var encoded: EncodedExportOptions? {
             switch self {
             case .wav16, .wav24, .wavFloat: nil
@@ -327,6 +327,7 @@ final class ExportChoices {
             case .alac24: .init(format: .alac, bitDepth: 24)
             case .aac: .init(format: .aac, bitRate: 192_000)
             case .opus: .init(format: .opus, bitRate: 96_000)
+            case .mp3: .init(format: .mp3, bitRate: 160_000)
             }
         }
         var encoding: WAVWriter.Encoding { self == .wav16 ? .int16 : (self == .wavFloat ? .float32 : .int24) }
@@ -349,7 +350,7 @@ struct ExportAccessory: View {
     var body: some View {
         Form {
             Picker("Format", selection: $model.choice) {
-                ForEach(ExportChoices.Choice.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                ForEach(ExportChoices.Choice.allCases.filter { $0 != .mp3 || EncodedWriter.mp3Factory != nil }, id: \.self) { Text($0.rawValue).tag($0) }
             }
             Toggle("Dither (TPDF)", isOn: $model.dither).disabled(model.choice != .wav16 && model.choice != .wav24)
             if model.choice.encoded != nil {

@@ -45,6 +45,8 @@ targets:
         product: JammerWhisper
       - package: JammerKit
         product: JammerDenoise
+      - package: JammerKit
+        product: JammerMP3
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.brattoo.jammer

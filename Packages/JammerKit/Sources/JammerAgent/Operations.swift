@@ -161,7 +161,8 @@ public enum Operations {
         .init("humFrequency", .number, "dehum: the mains frequency; without it 50 or 60 Hz is found.", range: 20...400),
         .init("sensitivity", .number, "declick: higher finds quieter clicks. Default 1.", range: 0.1...10),
     ]
-    public static let endpoints: [OperationSpec] = [
+    /// Computed each time: the formats depend on what the app registered (MP3).
+    public static var endpoints: [OperationSpec] { [
         .init("transcribe", "Transcribe", "Transcribes the document on this Mac; words get ids and times. Answers with a job; the transcript lands as one undo step.",
               params: [.init("language", .string, "BCP 47, e.g. sv-SE or en-US. Default: the Mac's language."),
                        .init("engine", .string, "Recogniser.", options: ["auto", "apple"]),
@@ -177,14 +178,14 @@ public enum Operations {
         .init("restore_preview", "Preview Repair", "The repaired audio of at most 30 s, without changing the document; with Accept: application/json the measurements before and after.",
               params: restoreParams, edits: false, call: ("POST", "/api/v1/documents/{id}/restore/preview")),
         .init("export", "Export Audio", "The rendered audio as bytes (at most 2 GB per response; export a range for more).",
-              params: [.init("format", .string, "File format. Default wav.", options: ExportFormat.allCases.map(\.rawValue)),
+              params: [.init("format", .string, "File format. Default wav.", options: ExportFormat.available.map(\.rawValue)),
                        .init("bitDepth", .number, "wav 16, 24 or 32 (float); aiff, flac and alac 16 or 24. Default 24.", options: nil, range: 16...32),
-                       .init("bitRate", .number, "aac (64000–320000, default 192000) and opus (16000–256000, default 96000), bits per second.", range: 16_000...320_000),
+                       .init("bitRate", .number, "aac (64000–320000, default 192000), mp3 (64000–320000, default 160000) and opus (16000–256000, default 96000), bits per second.", range: 16_000...320_000),
                        start, end, .init("dither", .boolean, "TPDF dither when writing 16 or 24-bit wav.")],
               edits: false, call: ("POST", "/api/v1/documents/{id}/export")),
         .init("restore", "Repair", "Removes hum, repairs clipping, removes clicks or reduces noise. Answers with a job; one undo step brings the original back.",
               params: restoreParams, call: ("POST", "/api/v1/documents/{id}/restore"), startsJob: true),
-    ]
+    ] }
 
     public static func named(_ name: String) -> OperationSpec? { all.first { $0.name == name } }
     public static var paidNames: Set<String> { Set(all.filter(\.paid).map(\.name)) }
