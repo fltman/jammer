@@ -370,3 +370,47 @@ struct StemBench {
         print(String(format: "BENCH %@ %.0f s stereo: %.1f s (%.1f× real time), %d frames out", env["JAMMER_STEM_BENCH"]!, seconds, took, seconds / took, frames))
     }
 }
+
+/// Real material with a known answer (JAMMER_EVAL_DIR; see its SOURCES.md): a LibriVox
+/// reader, a CC0 piano recording and public-domain rain and thunder, mixed at set levels.
+@Suite("Stem evaluation", .enabled(if: ProcessInfo.processInfo.environment["JAMMER_EVAL_DIR"] != nil && mrxDir != nil))
+struct StemEvaluation {
+    func load(_ name: String, seconds: Double) throws -> [Float] {
+        let d = try Data(contentsOf: URL(fileURLWithPath: ProcessInfo.processInfo.environment["JAMMER_EVAL_DIR"]!).appending(path: name))
+        return Array(d.withUnsafeBytes { Array($0.bindMemory(to: Float.self)) }.prefix(Int(seconds * 44_100)))
+    }
+    func rms(_ x: [Float]) -> Float { (x.map { $0 * $0 }.reduce(0, +) / Float(x.count)).squareRoot() }
+    func sisdr(_ est: [Float], _ ref: [Float]) -> Double {
+        var dot = 0.0, rr = 0.0
+        for i in 0..<ref.count { dot += Double(est[i * 2]) * Double(ref[i]); rr += Double(ref[i] * ref[i]) }
+        let a = dot / rr
+        var e = 0.0
+        for i in 0..<ref.count { let d = Double(est[i * 2]) - a * Double(ref[i]); e += d * d }
+        return 10 * log10(a * a * rr / e)
+    }
+
+    @Test("dialog on real speech, music and effects", arguments: [(-6.0, -6.0), (-12.0, -12.0), (0.0, -6.0)])
+    func dialog(musicDB: Double, fxDB: Double) throws {
+        let seconds = 60.0
+        var speech = try load("speech.f32", seconds: seconds), music = try load("music.f32", seconds: seconds), fx = try load("fxall.f32", seconds: seconds)
+        let n = min(speech.count, music.count, fx.count)
+        let s = rms(speech)
+        speech = speech.prefix(n).map { $0 * 0.1 / s }
+        let mg = 0.1 / rms(music) * Float(pow(10, musicDB / 20)), fg = 0.1 / rms(fx) * Float(pow(10, fxDB / 20))
+        music = music.prefix(n).map { $0 * mg }; fx = fx.prefix(n).map { $0 * fg }
+        let mix = (0..<n).flatMap { i -> [Float] in let m = speech[i] + music[i] + fx[i]; return [m, m] }
+        let engine = SoundtrackEngine(try MRXNet(checkpoint: TorchCheckpoint(url: mrxDir!.appending(path: "default_mrx_pre_trained_weights.pth"))))
+        var stems = [[Float]](repeating: [], count: 3)
+        try engine.separate(mix, progress: { _ in true }) { k, b in stems[k] += b }
+        let rows = [("speech", stems[0], speech), ("music", stems[1], music), ("effects", stems[2], fx)]
+        print(String(format: "EVAL dialog, music %+.0f dB, effects %+.0f dB re speech: ", musicDB, fxDB)
+              + rows.map { String(format: "%@ %.1f → %.1f dB", $0.0, sisdr(mix, $0.2), sisdr($0.1, $0.2)) }.joined(separator: "; "))
+        #expect(sisdr(stems[0], speech) > sisdr(mix, speech) + 3)
+        if musicDB == -6, let out = ProcessInfo.processInfo.environment["JAMMER_EVAL_DIR"] {
+            for (name, x, _) in rows {
+                let w = try WAVWriter(url: URL(fileURLWithPath: out).appending(path: "out-\(name).wav"), options: .init(encoding: .int24, channels: 2, sampleRate: 44_100))
+                try w.write(x); try w.finish()
+            }
+        }
+    }
+}

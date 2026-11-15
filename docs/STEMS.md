@@ -34,6 +34,18 @@
 | In the app, 8 s at 48 kHz stereo: mix loudness and true peak before and after | −16.04 LUFS, −3.78 dBTP both times |
 | Speed, debug build | 28 s for 8 s of stereo |
 
+### On real material (2026-11-15)
+
+One minute of a LibriVox reader (public domain), a CC0 piano recording (Open Goldberg Variations) and public-domain rain and thunder from Wikimedia Commons, mixed mono-in-stereo at set levels with the parts kept as the answer. The files and their licences are listed in `SOURCES.md` beside them on the work volume; none of it is in the repository. `StemEvaluation` in `StemTests`, release build, default 24 s chunks. SI-SDR in the mix → in its stem:
+
+| Music, effects relative to speech | Speech | Music | Effects |
+|---|---|---|---|
+| −6 dB, −6 dB | 3.0 → 12.1 dB | −7.0 → 6.5 dB | −7.0 → 4.8 dB |
+| −12 dB, −12 dB | 9.0 → 16.9 dB | −12.4 → 5.1 dB | −12.3 → 4.4 dB |
+| 0 dB, −6 dB | −1.0 → 8.9 dB | −1.0 → 9.2 dB | −9.1 → 3.0 dB |
+
+So speech gains 8 to 10 dB and comes out clearly usable; music and effects are separated less cleanly from each other (solo piano and rain are also one easy and one hard case each, and it's a single reader and a single piece). No such test for music4: we found no multitrack recordings under CC0 or CC-BY to build one from, so its only quality figures are the synthetic ones above.
+
 The synthetic scene is a poor stand-in for a film mix (the model was trained on real speech, music and sound effects), so the 1.6 dB says little about real material; it shows the pipeline separates in the right direction. Training-data caveat: see `LICENSES.md`.
 
 ## Speed and memory in a release build (2026-11-15, this Mac)
