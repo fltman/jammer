@@ -24,7 +24,8 @@ public final class OggOpusWriter {
     static let needMore: OSStatus = 0x4D4F5245 // 'MORE'
     static let appleDelayCorrection: UInt32 = 3
 
-    public init(url: URL, channels: Int, sampleRate: Double, bitRate: Int = 64_000, vendor: String = "Jammer") throws {
+    /// `comments`: Vorbis comments ("KEY=value") for OpusTags, e.g. chapters.
+    public init(url: URL, channels: Int, sampleRate: Double, bitRate: Int = 64_000, vendor: String = "Jammer", comments: [String] = []) throws {
         guard (1...2).contains(channels) else { throw ExportError.unsupported("Opus here takes mono or stereo.") }
         self.channels = channels
         inputRate = sampleRate
@@ -66,12 +67,16 @@ public final class OggOpusWriter {
         head.le16(0)
         head.append(0)
         try writePage([head], granule: 0, flags: 0x02)
-        // OpusTags (§5.2): vendor, no comments.
+        // OpusTags (§5.2): vendor and comments. Large tags span pages (lacing continues).
         var tags = Data("OpusTags".utf8)
         tags.u32le(UInt32(vendor.utf8.count))
         tags.append(contentsOf: Array(vendor.utf8))
-        tags.u32le(0)
-        try writePage([tags], granule: 0, flags: 0)
+        tags.u32le(UInt32(comments.count))
+        for c in comments {
+            tags.u32le(UInt32(c.utf8.count))
+            tags.append(contentsOf: Array(c.utf8))
+        }
+        try writeHeaderPacket(tags)
         status = noErr
         _ = status
     }
@@ -155,6 +160,54 @@ public final class OggOpusWriter {
         return noErr
     }
 
+    /// A header packet that may be longer than one page holds (255 × 255 bytes): split
+    /// across pages, each later page flagged as a continuation.
+    private func writeHeaderPacket(_ packet: Data) throws {
+        // One page holds up to 255 lacing values: 65 024 bytes of a packet that ends on it,
+        // or 65 025 of one that continues on the next page.
+        var rest = packet
+        var first = true
+        while rest.count >= 255 * 255 {
+            try writeRawPage(Data(rest.prefix(255 * 255)), complete: false, granule: -1, flags: first ? 0 : 0x01)
+            rest = Data(rest.dropFirst(255 * 255))
+            first = false
+        }
+        try writeRawPage(rest, complete: true, granule: 0, flags: first ? 0 : 0x01)
+    }
+
+    /// A page holding part of a packet: full 255 lacing values, plus a final short one
+    /// when `complete`.
+    private func writeRawPage(_ body: Data, complete: Bool, granule: Int64, flags: UInt8) throws {
+        var segments = [UInt8](repeating: 255, count: body.count / 255)
+        if complete { segments.append(UInt8(body.count % 255)) }
+        precondition(segments.count <= 255)
+        var page = Data("OggS".utf8)
+        page.append(0)
+        page.append(flags)
+        page.le64(UInt64(bitPattern: granule))
+        page.u32le(serial)
+        page.u32le(pageSequence)
+        page.u32le(0)
+        page.append(UInt8(segments.count))
+        page.append(contentsOf: segments)
+        page.append(body)
+        let crc = Self.crc(page)
+        page.replaceSubrange(22..<26, with: [UInt8(crc & 0xFF), UInt8((crc >> 8) & 0xFF), UInt8((crc >> 16) & 0xFF), UInt8(crc >> 24)])
+        try handle.write(contentsOf: page)
+        pageSequence += 1
+    }
+
+    /// Vorbis chapter comments (the Ogg chapter extension, as ffmpeg writes them):
+    /// CHAPTER000=00:00:00.000 and CHAPTER000NAME=Intro, numbered from 000.
+    public static func chapterComments(_ chapters: [Chapter]) -> [String] {
+        chapters.prefix(1_000).enumerated().flatMap { i, c -> [String] in
+            let ms = Int((c.start * 1_000).rounded())
+            let time = String(format: "%02d:%02d:%02d.%03d", ms / 3_600_000, ms / 60_000 % 60, ms / 1_000 % 60, ms % 1_000)
+            let n = String(format: "%03d", i)
+            return ["CHAPTER\(n)=\(time)", "CHAPTER\(n)NAME=\(c.title)"]
+        }
+    }
+
     /// One Ogg page (RFC 3533) holding whole packets.
     private func writePage(_ packets: [Data], granule: Int64, flags: UInt8) throws {
         var segments: [UInt8] = []
@@ -196,8 +249,9 @@ public final class OggOpusWriter {
     }
 
     /// Renders `range` of a plan into an .opus file.
-    public static func export(_ plan: RenderPlan, range: Range<Frame>, to url: URL, bitRate: Int = 64_000) throws {
-        let w = try OggOpusWriter(url: url, channels: plan.channels, sampleRate: plan.sampleRate, bitRate: bitRate)
+    public static func export(_ plan: RenderPlan, range: Range<Frame>, to url: URL, bitRate: Int = 64_000, chapters: [Chapter] = []) throws {
+        let w = try OggOpusWriter(url: url, channels: plan.channels, sampleRate: plan.sampleRate, bitRate: bitRate,
+                                  comments: chapterComments(chapters))
         try plan.render(range) { try w.write($0) }
         try w.finish()
     }

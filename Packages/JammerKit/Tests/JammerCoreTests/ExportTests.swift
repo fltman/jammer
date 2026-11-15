@@ -47,3 +47,57 @@ struct ExportTests {
         #expect(throws: ExportError.self) { try EncodedWriter(url: dir.file("x.flac"), options: .init(format: .flac, bitDepth: 32), channels: 2, sampleRate: 48_000) }
     }
 }
+
+
+@Suite("M4A chapters")
+struct M4AChapterTests {
+    @Test("AAC and ALAC carry a chapter track that AVFoundation and ffprobe read; ALAC stays lossless")
+    func chapters() async throws {
+        let dir = TempDir()
+        let x = sine(440, amplitudeDB: -12, seconds: 6)
+        let wav = dir.file("s.wav")
+        try writeWAV(x, to: wav, encoding: .int24)
+        let p = Project(source: SourceRef(name: "s", path: wav.path, info: try AudioFileReader.info(at: wav)))
+        let plan = PlanCompiler.compile(p, pool: SourcePool())
+        let list = [Chapter(title: "Intro", start: 0, end: 2), Chapter(title: "Ämne två", start: 2, end: 4.5), Chapter(title: "Slut", start: 4.5, end: 6)]
+        for format in [ExportFormat.aac, .alac] {
+            let url = dir.file("c-\(format.rawValue).m4a")
+            try EncodedWriter.export(plan, range: 0..<p.length, to: url, options: .init(format: format, bitDepth: 24, bitRate: 128_000, chapters: list, language: "sv-SE"))
+            let asset = AVURLAsset(url: url)
+            let groups = try await asset.loadChapterMetadataGroups(bestMatchingPreferredLanguages: ["sv"])
+            let titles = try await groups.asyncMap { g in try await g.items.first?.load(.stringValue) ?? "" }
+            let locales = try await asset.load(.availableChapterLocales)
+            #expect(!locales.isEmpty && locales.allSatisfy { $0.language.languageCode?.identifier == "sv" }, "\(locales.map(\.identifier))")
+            #expect(titles == ["Intro", "Ämne två", "Slut"], "\(format)")
+            #expect(groups.map { ($0.timeRange.start.seconds * 1_000).rounded() / 1_000 } == [0, 2, 4.5], "\(format)")
+            let duration = try await asset.load(.duration).seconds
+            #expect(abs(duration - 6) < 0.05, "\(format) duration \(duration)")
+            let probe = "/opt/homebrew/bin/ffprobe"
+            if FileManager.default.fileExists(atPath: probe) {
+                let r = try run(probe, ["-v", "error", "-show_chapters", "-of", "csv=p=0", url.path])
+                #expect(r.output.contains("Intro") && r.output.contains("Slut"), "\(r.output)")
+            }
+            if format == .alac {
+                let file = try AVAudioFile(forReading: url)
+                let buf = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: AVAudioFrameCount(file.length))!
+                try file.read(into: buf)
+                #expect(Int(file.length) == x.count / 2)
+                let l = UnsafeBufferPointer(start: buf.floatChannelData![0], count: Int(buf.frameLength))
+                let ref = stride(from: 0, to: x.count, by: 2).map { (Float(Int32(($0 < x.count ? x[$0] : 0) * 8_388_608).clamped(to: -8_388_608...8_388_607)) / 8_388_608) }
+                #expect(zip(l, ref).allSatisfy { abs($0 - $1) < 1e-6 }, "ALAC must decode to the 24-bit samples")
+            }
+        }
+    }
+}
+
+extension Sequence {
+    func asyncMap<T>(_ f: (Element) async throws -> T) async rethrows -> [T] {
+        var out: [T] = []
+        for e in self { out.append(try await f(e)) }
+        return out
+    }
+}
+
+extension Comparable {
+    func clamped(to r: ClosedRange<Self>) -> Self { min(max(self, r.lowerBound), r.upperBound) }
+}

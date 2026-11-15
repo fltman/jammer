@@ -42,7 +42,7 @@ Goal: open a WAV of several hours, zoom smoothly, play, cut, undo, export bit-ex
 | KB-Whisper engine (1.7 % WER on synthetic Swedish) | Done |
 | Export: AIFF, FLAC, ALAC, AAC, Ogg Opus (own muxer), MP3 (LAME, dynamic) | Done |
 | Chapters from markers: ID3 CHAP in MP3, Podcasting 2.0 JSON, `GET …/chapters` | Done |
-| Chapters in AAC/M4A (MP4 chapter track) and Ogg Opus (CHAPTERxxx comments) | Open |
+| Chapters in AAC/M4A (QuickTime chapter track via AVAssetWriter) and Ogg Opus (CHAPTERxxx comments, OpusTags across pages) | Done; read back by AVFoundation and ffprobe |
 | Loudness presets (Apple Podcasts, Spotify, YouTube, EBU R 128, ATSC A/85), peak-limited gain without a limiter | Done |
 | ACX/Audible preset (RMS −23…−18 dB, peak ≤ −3 dB, noise floor ≤ −60 dB): needs its own measurement and the phase 3 limiter | Planned (phase 3) |
 | Built-in assistant, sibling tools, plan impact | Done (`ASSISTANT.md`) |

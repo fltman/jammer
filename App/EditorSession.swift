@@ -364,7 +364,7 @@ final class EditorSession {
         var dither = false
         /// AIFF, FLAC, ALAC or AAC; nil writes WAV.
         var encoded: EncodedExportOptions?
-        /// MP3: chapters from the markers as ID3 CHAP frames.
+        /// Chapters from the markers: ID3 CHAP in MP3, a chapter track in AAC/ALAC, CHAPTERxxx in Opus.
         var chapters = true
         /// Also write Podcasting 2.0 JSON chapters next to the file.
         var chaptersJSON = false
@@ -384,6 +384,10 @@ final class EditorSession {
         if var encoded = options.encoded {
             if encoded.format == .mp3, options.chapters {
                 encoded.id3 = ChapterFormats.id3Tag(chapters, title: name)
+            }
+            if [.opus, .aac, .alac].contains(encoded.format), options.chapters {
+                encoded.chapters = chapters
+                encoded.language = project.transcripts.first?.language
             }
             try await Task.detached(priority: .userInitiated) {
                 try EncodedWriter.export(plan, range: range, to: url, options: encoded) { p in progress(p); return true }

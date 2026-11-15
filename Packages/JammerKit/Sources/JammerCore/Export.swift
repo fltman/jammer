@@ -40,12 +40,18 @@ public struct EncodedExportOptions: Sendable {
     public var bitRate: Int
     /// MP3: an ID3v2 tag to put before the audio (chapters, title).
     public var id3: Data?
+    /// Opus (CHAPTERxxx comments) and AAC/ALAC (a chapter track); seconds from the range's start.
+    public var chapters: [Chapter]
+    /// BCP 47 language of the speech, e.g. "sv-SE": labels the M4A tracks so players pick the chapters.
+    public var language: String?
 
-    public init(format: ExportFormat, bitDepth: Int = 24, bitRate: Int = 160_000, id3: Data? = nil) {
+    public init(format: ExportFormat, bitDepth: Int = 24, bitRate: Int = 160_000, id3: Data? = nil, chapters: [Chapter] = [], language: String? = nil) {
         self.format = format
         self.bitDepth = bitDepth
         self.bitRate = bitRate
         self.id3 = id3
+        self.chapters = chapters
+        self.language = language
     }
 }
 
@@ -163,7 +169,7 @@ public final class EncodedWriter {
     public static func export(_ plan: RenderPlan, range: Range<Frame>, to url: URL, options: EncodedExportOptions,
                               progress: (Double) -> Bool = { _ in true }) throws {
         if options.format == .opus {
-            try OggOpusWriter.export(plan, range: range, to: url, bitRate: options.bitRate)
+            try OggOpusWriter.export(plan, range: range, to: url, bitRate: options.bitRate, chapters: options.chapters)
             _ = progress(1)
             return
         }
@@ -173,6 +179,10 @@ public final class EncodedWriter {
             try plan.render(range) { try w.write($0) }
             try w.finish()
             _ = progress(1)
+            return
+        }
+        if options.format == .aac || options.format == .alac, !options.chapters.isEmpty {
+            try M4AChapterWriter.export(plan, range: range, to: url, options: options, progress: progress)
             return
         }
         let w = try EncodedWriter(url: url, options: options, channels: plan.channels, sampleRate: plan.sampleRate)

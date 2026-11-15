@@ -53,6 +53,32 @@ struct OggOpusTests {
         #expect(abs(best) <= 2, "shifted by \(best)")
     }
 
+    @Test("Chapters as CHAPTERxxx comments: ffprobe reads them, also when the tags span pages")
+    func chapters() throws {
+        let probe = "/opt/homebrew/bin/ffprobe"
+        guard FileManager.default.fileExists(atPath: probe) else { return }
+        let dir = TempDir()
+        let (p, pool) = memoryProject(tone(48_000 * 4, rate: 48_000), sampleRate: 48_000)
+        let plan = PlanCompiler.compile(p, pool: pool)
+        let few = [Chapter(title: "Intro", start: 0, end: 1.5), Chapter(title: "Ämne två", start: 1.5, end: 4)]
+        // 400 chapters with long titles: OpusTags passes 65 KB and must continue onto more pages.
+        let many = (0..<400).map { Chapter(title: "Chapter \($0) " + String(repeating: "x", count: 200), start: Double($0) * 0.01, end: Double($0 + 1) * 0.01) }
+        #expect(OggOpusWriter.chapterComments(few) == ["CHAPTER000=00:00:00.000", "CHAPTER000NAME=Intro", "CHAPTER001=00:00:01.500", "CHAPTER001NAME=Ämne två"])
+        for (name, list) in [("few", few), ("many", many)] {
+            let url = dir.file("\(name).opus")
+            try EncodedWriter.export(plan, range: 0..<p.length, to: url, options: .init(format: .opus, bitRate: 64_000, chapters: list))
+            let r = try run(probe, ["-v", "error", "-show_chapters", "-show_entries", "stream=codec_name", "-of", "json", url.path])
+            #expect(r.status == 0, "\(r.output)")
+            let json = try JSONSerialization.jsonObject(with: Data(r.output.utf8)) as? [String: Any]
+            let chapters = json?["chapters"] as? [[String: Any]] ?? []
+            #expect(chapters.count == list.count, "\(name): \(chapters.count) chapters")
+            if name == "few" {
+                #expect((chapters.last?["tags"] as? [String: String])?["title"] == "Ämne två")
+                #expect(abs((Double(chapters.last?["start_time"] as? String ?? "") ?? 0) - 1.5) < 0.001)
+            }
+        }
+    }
+
     @Test("macOS's own decoder reads it (the stack Apple Podcasts and QuickTime use)")
     func apple() throws {
         let dir = TempDir()
