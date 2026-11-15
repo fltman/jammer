@@ -35,10 +35,12 @@ enum LinkedEditing {
             NSLog("Jammer: %@ can't be linked (format, bit depth or channels)", url.lastPathComponent)
             return false
         }
+        var copyName: String?
         do {
             // The document plays from a copy (a clone on APFS), so writing the file back
             // never changes what the edit list reads.
             let copy = MediaStore.folder.appending(path: "\(UUID().uuidString.prefix(8)) \(url.lastPathComponent)")
+            copyName = copy.lastPathComponent
             try FileManager.default.copyItem(at: url, to: copy)
             let r: AudioImporter.Result
             do { r = try AudioImporter.importFile(copy, mediaFolder: MediaStore.folder) } catch {
@@ -58,7 +60,11 @@ enum LinkedEditing {
             NSApp.activate()
             return true
         } catch {
-            NSApp.presentError(error)
+            // In the words of the file the sibling sent, not of the copy made of it.
+            let alert = NSAlert()
+            alert.messageText = "\(url.lastPathComponent) couldn't be opened"
+            alert.informativeText = error.localizedDescription.replacingOccurrences(of: copyName ?? "", with: url.lastPathComponent)
+            alert.runModal()
             return true
         }
     }

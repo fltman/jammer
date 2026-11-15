@@ -81,3 +81,18 @@ Two rules carry this. A file is opened only when the file's own header agrees wi
 Tried in the app with five packages: one with its sound inside (plays, no question), one naming a text file as audio (asked about as an outside file; never read; the export is silent and doesn't contain the text), one with a path climbing out (silent, no question), one naming a recording in another folder (silent until "Use These Files", then it plays), and a damaged one (an alert; the app carries on). The first version of this read the outside recording before the rule was in place, because the files were opened when the window was made; the by-hand check caught it.
 
 Not covered: what an Audio Unit's saved state in a project could do to the plugin that loads it.
+
+### By hand, through File › Open and as a linked file (2026-11-16)
+
+The hostile audio files, opened in the app the three ways a person opens a file: the Open panel, from outside (as the Finder does), and sent by a sibling app as a linked file.
+
+| File | Open panel / from outside | Linked |
+|---|---|---|
+| cut short in its audio | opens with 0.5 s and the warning in the status bar | the same, with the warning in the sent file's name |
+| 65 535 channels, 4 billion Hz, header cut off | alert with the reason | falls back to an ordinary open; the same alert |
+| text named .mp3, tag claiming 256 MB, empty .wav | alert: not audio this Mac can decode | — |
+| a header and no sound | alert: no sound in it | alert, in the sent file's name |
+
+No file was changed by being opened, no copy was left in the media folder, and the app answered afterwards.
+
+Two things this found. The alerts said only "The document … could not be opened", without the reason: AppKit shows an error's failure reason there and nothing of its description, so the tests, which read the error's text, passed while a person saw no reason. The reason is now given as the failure reason, for audio files and for damaged projects. And a linked file with no sound was reported under the name of Jämmer's private copy ("791EC49A no-sound.wav"); it is now reported under its own name.

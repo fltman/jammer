@@ -94,7 +94,8 @@ final class JammerDocument: NSDocument {
         guard typeName == UTType.jammerProject.identifier || UTType(typeName)?.conforms(to: .jammerProject) == true else {
             throw CocoaError(.fileReadUnsupportedScheme)
         }
-        let (project, notes) = try ProjectPackage.readChecked(fileWrapper, packageURL: fileURL)
+        let (project, notes): (Project, [String])
+        do { (project, notes) = try ProjectPackage.readChecked(fileWrapper, packageURL: fileURL) } catch { throw OpenFailure.saying(error) }
         // A Media folder that is a link to somewhere else is not this project's media.
         let media = fileWrapper.fileWrappers?[ProjectPackage.mediaFolderName]
         mediaWrapper = media?.isDirectory == true ? media : nil
@@ -198,13 +199,28 @@ final class JammerDocument: NSDocument {
     }
 }
 
+/// AppKit's alert for a file that won't open is its own headline ("The document … could not be
+/// opened.") followed by the error's failure reason, and nothing of a plain description. So the
+/// reader's words go in as the reason, or the alert says that it failed and not why.
+enum OpenFailure {
+    static func saying(_ error: Error, replacing copy: String? = nil, with name: String? = nil) -> NSError {
+        let e = error as NSError
+        guard e.localizedFailureReason == nil else { return e }
+        var why = error.localizedDescription
+        if let copy, let name { why = why.replacingOccurrences(of: copy, with: name) }
+        return NSError(domain: NSCocoaErrorDomain, code: NSFileReadCorruptFileError,
+                       userInfo: [NSLocalizedDescriptionKey: why, NSLocalizedFailureReasonErrorKey: why, NSUnderlyingErrorKey: e])
+    }
+}
+
 /// Opens audio files as new projects instead of documents of their own.
 final class JammerDocumentController: NSDocumentController {
     override func makeDocument(withContentsOf url: URL, ofType typeName: String) throws -> NSDocument {
         guard let type = UTType(typeName), !type.conforms(to: .jammerProject), type.conforms(to: .audio) else {
             return try super.makeDocument(withContentsOf: url, ofType: typeName)
         }
-        let result = try AudioImporter.importFile(url, mediaFolder: MediaStore.folder)
+        let result: AudioImporter.Result
+        do { result = try AudioImporter.importFile(url, mediaFolder: MediaStore.folder) } catch { throw OpenFailure.saying(error) }
         let doc = JammerDocument()
         doc.pendingProject = Project(source: result.source)
         doc.pendingStatus = result.warning
