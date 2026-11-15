@@ -645,7 +645,8 @@ public enum StepRunner {
                     throw StepFailure("spectral_edit: a box needs start, end, low and high.", reason: "bad_shape")
                 }
                 shape = .box(start: a, end: b, low: lo, high: hi)
-            case "polygon", "brush" where !Operations.spectralFreeform:
+            // (A where clause belongs to one pattern only, so each has its own.)
+            case "polygon" where !Operations.spectralFreeform, "brush" where !Operations.spectralFreeform:
                 throw StepFailure("spectral_edit: only shape box is available in this build.", reason: "not_available")
             case "polygon": shape = .polygon(try pts())
             default: shape = .brush(try pts(), radius: p["radius"]?.double ?? 200, radiusTime: p["radiusTime"]?.double ?? 0.02)
