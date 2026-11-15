@@ -283,6 +283,8 @@ final class EditorSession {
         var encoding: WAVWriter.Encoding = .int24
         var range: Range<Frame>?
         var dither = false
+        /// AIFF, FLAC, ALAC or AAC; nil writes WAV.
+        var encoded: EncodedExportOptions?
     }
 
     /// Renders to a WAV file off the main thread. Keeps the first source's
@@ -291,6 +293,12 @@ final class EditorSession {
         let plan = self.plan
         let range = options.range ?? 0..<project.length
         guard !range.isEmpty else { throw EditError.emptyRange }
+        if let encoded = options.encoded {
+            try await Task.detached(priority: .userInitiated) {
+                try EncodedWriter.export(plan, range: range, to: url, options: encoded) { p in progress(p); return true }
+            }.value
+            return
+        }
         var wav = WAVWriter.Options(encoding: options.encoding, channels: project.channels, sampleRate: project.sampleRate,
                                     dither: options.dither)
         let first = project.sources.first?.info

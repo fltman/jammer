@@ -176,13 +176,15 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
     @objc func exportAudio(_ sender: Any?) {
         guard let window else { return }
         let panel = NSSavePanel()
-        panel.allowedContentTypes = [.wav]
+        panel.allowedContentTypes = [.wav, .aiff, UTType("org.xiph.flac") ?? .audio, .mpeg4Audio]
+        panel.allowsOtherFileTypes = true
         panel.nameFieldStringValue = session.name + ".wav"
         let model = ExportChoices(hasSelection: session.selection != nil)
         panel.accessoryView = NSHostingView(rootView: ExportAccessory(model: model))
         panel.beginSheetModal(for: window) { [weak self] response in
-            guard response == .OK, let url = panel.url, let self else { return }
-            var options = EditorSession.ExportOptions(encoding: model.encoding, dither: model.dither)
+            guard response == .OK, let chosen = panel.url, let self else { return }
+            let url = chosen.deletingPathExtension().appendingPathExtension(model.choice.fileExtension)
+            var options = EditorSession.ExportOptions(encoding: model.choice.encoding, dither: model.dither, encoded: model.choice.encoded)
             if model.selectionOnly { options.range = self.session.selection }
             let session = self.session
             Task {
@@ -313,6 +315,23 @@ struct StatusBar: View {
 @MainActor
 @Observable
 final class ExportChoices {
+    enum Choice: String, CaseIterable {
+        case wav16 = "WAV 16-bit", wav24 = "WAV 24-bit", wavFloat = "WAV 32-bit float", aiff24 = "AIFF 24-bit",
+             flac16 = "FLAC 16-bit", flac24 = "FLAC 24-bit", alac24 = "Apple Lossless (ALAC) 24-bit", aac = "AAC 192 kbit/s"
+        var encoded: EncodedExportOptions? {
+            switch self {
+            case .wav16, .wav24, .wavFloat: nil
+            case .aiff24: .init(format: .aiff, bitDepth: 24)
+            case .flac16: .init(format: .flac, bitDepth: 16)
+            case .flac24: .init(format: .flac, bitDepth: 24)
+            case .alac24: .init(format: .alac, bitDepth: 24)
+            case .aac: .init(format: .aac, bitRate: 192_000)
+            }
+        }
+        var encoding: WAVWriter.Encoding { self == .wav16 ? .int16 : (self == .wavFloat ? .float32 : .int24) }
+        var fileExtension: String { encoded?.format.fileExtension ?? "wav" }
+    }
+    var choice: Choice = .wav24
     var encoding: WAVWriter.Encoding = .int24
     var dither = false
     var selectionOnly = false
@@ -328,12 +347,13 @@ struct ExportAccessory: View {
 
     var body: some View {
         Form {
-            Picker("Format", selection: $model.encoding) {
-                Text("WAV 16-bit").tag(WAVWriter.Encoding.int16)
-                Text("WAV 24-bit").tag(WAVWriter.Encoding.int24)
-                Text("WAV 32-bit float").tag(WAVWriter.Encoding.float32)
+            Picker("Format", selection: $model.choice) {
+                ForEach(ExportChoices.Choice.allCases, id: \.self) { Text($0.rawValue).tag($0) }
             }
-            Toggle("Dither (TPDF)", isOn: $model.dither).disabled(model.encoding == .float32)
+            Toggle("Dither (TPDF)", isOn: $model.dither).disabled(model.choice != .wav16 && model.choice != .wav24)
+            if model.choice.encoded != nil {
+                Text("Broadcast Wave metadata and markers are kept in WAV only.").font(.caption).foregroundStyle(.secondary)
+            }
             Toggle("Selection only", isOn: $model.selectionOnly).disabled(!model.hasSelection)
         }
         .padding(12)
