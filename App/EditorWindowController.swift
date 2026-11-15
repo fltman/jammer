@@ -113,6 +113,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         panel.beginSheetModal(for: window) { [weak self] response in
             guard response == .OK, let self else { return }
             let urls = panel.urls
+            // The user picked these: a project saved with them may read them again.
+            ProjectAccess.approve(urls)
             let session = self.session
             Task {
                 session.status = "Importing \(urls.count) track\(urls.count == 1 ? "" : "s")…"

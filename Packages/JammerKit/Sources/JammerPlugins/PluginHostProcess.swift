@@ -69,8 +69,10 @@ public final class PluginHostProcess: @unchecked Sendable {
 
     /// Starts the helper, confined (no network, no writes, of the user's files only `readable`
     /// and the bundle), and opens the plugin in it. Throws with the plugin's own reason when it won't start.
+    /// `timeout` is for a request once it runs; loading (starting the process, reading the plugin from
+    /// disk, its own set-up) gets `loadTimeout`, since a slow start isn't a hang.
     public init(helper: URL, format: PluginFormat, bundle: URL, id: String, sampleRate: Double, channels: Int, maxFrames: Int = 512,
-                readable: [URL] = PluginScanner.pluginFolders(.vst3) + PluginScanner.pluginFolders(.clap), timeout: Double = 10) throws {
+                readable: [URL] = PluginScanner.pluginFolders(.vst3) + PluginScanner.pluginFolders(.clap), timeout: Double = 10, loadTimeout: Double = 30) throws {
         self.format = format
         self.channels = channels
         self.maxFrames = maxFrames
@@ -96,7 +98,7 @@ public final class PluginHostProcess: @unchecked Sendable {
         withUnsafeBytes(of: Int32(channels)) { open.append(contentsOf: $0) }
         withUnsafeBytes(of: Int32(maxFrames)) { open.append(contentsOf: $0) }
         let (status, answer): (UInt32, Data)
-        do { (status, answer) = try lock.withLock { try call(1, open) } } catch {
+        do { (status, answer) = try lock.withLock { try call(1, open, limit: max(timeout, loadTimeout)) } } catch {
             let d = died
             throw StartError(message: "The plugin \(d?.description ?? "failed") while it was being loaded.")
         }
@@ -164,14 +166,14 @@ public final class PluginHostProcess: @unchecked Sendable {
 
     /// One request and its answer. Called with the lock held. Throws when the helper is dead or
     /// doesn't answer in time (it is then killed and marked).
-    private func call(_ op: UInt32, _ payload: Data) throws -> (UInt32, Data) {
+    private func call(_ op: UInt32, _ payload: Data, limit: Double? = nil) throws -> (UInt32, Data) {
         guard death == nil else { throw Dead() }
         var frame = Data()
         withUnsafeBytes(of: op) { frame.append(contentsOf: $0) }
         withUnsafeBytes(of: UInt32(payload.count)) { frame.append(contentsOf: $0) }
         frame.append(payload)
         guard writeAll(frame) else { markDead(hung: false); throw Dead() }
-        let deadline = Date().addingTimeInterval(timeout)
+        let deadline = Date().addingTimeInterval(limit ?? timeout)
         guard let head = readExactly(8, deadline: deadline) else { throw Dead() }
         let status = head.withUnsafeBytes { $0.loadUnaligned(as: UInt32.self) }
         let length = head.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 4, as: UInt32.self) }

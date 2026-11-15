@@ -100,12 +100,13 @@ extension ProjectPackage {
     /// The project with every source its clips use moved into the package, and
     /// the copies that takes. Sources already inside, and files that are missing,
     /// are left as they are. `existingMedia` are names already in Media/.
-    public static func planCollection(_ project: Project, existingMedia: Set<String>) -> (project: Project, copies: [MediaCopy]) {
+    /// `skipping`: sources the document isn't reading (refused or missing); their files are never copied.
+    public static func planCollection(_ project: Project, existingMedia: Set<String>, skipping: Set<UUID> = []) -> (project: Project, copies: [MediaCopy]) {
         var p = project
         var taken = Set(existingMedia.map { $0.lowercased() })
         var copies: [MediaCopy] = []
         let used = Set(project.tracks.flatMap { $0.clips.map(\.sourceID) })
-        for i in p.sources.indices where p.sources[i].packagePath == nil && used.contains(p.sources[i].id) {
+        for i in p.sources.indices where p.sources[i].packagePath == nil && used.contains(p.sources[i].id) && !skipping.contains(p.sources[i].id) {
             let url = SourcePool.resolve(p.sources[i])
             guard FileManager.default.fileExists(atPath: url.path) else { continue }
             let name = uniqueName(for: url.lastPathComponent, taken: &taken)

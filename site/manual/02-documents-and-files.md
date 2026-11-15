@@ -58,3 +58,14 @@ When Flimmer sends a clip's sound to Jämmer ("Edit in Jämmer"), it opens as a 
 Jämmer never writes the file by itself: autosave keeps your edits in the document, not in the clip. **File › Save a Jämmer Copy…** (⇧⌘S) saves the whole project, with its edit list and transcript, as a `.jammer` package; ⌘S still saves back to the clip.
 
 This works for 16- and 24-bit and 32-bit float WAV, 16- and 24-bit AIFF and FLAC, mono or stereo. Other files from Flimmer open as ordinary new projects.
+
+## A project from someone else
+
+A project names the audio files it plays from, and a project you were sent could name anything. So Jämmer doesn't follow those names blindly:
+
+- **Audio inside the project** (collected with **File › Collect Audio and Save**) is simply used.
+- **Audio you have opened yourself** in Jämmer, and audio in projects you saved here, is used as before.
+- **Any other file on your Mac** is asked about first: "This project uses audio from outside itself", with the files listed. **Open Without Them** is the safe answer for a project you don't know: those clips stay silent and nothing outside the project is read. **Use These Files** reads them, now and next time.
+- **A file is only ever read as the audio it really is.** If a project describes some other file as audio, or lies about what kind of audio a file holds, that file isn't read at all, and the status bar says a file was left out.
+
+A project file that is damaged or cut off is refused with a message; clips that point outside their audio are left out and the status bar says how many.

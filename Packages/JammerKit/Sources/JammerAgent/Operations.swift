@@ -231,7 +231,7 @@ public enum Operations {
                        .init("at", .seconds, "Where the tempo starts. Defaults to 0, the start of the document."),
                        .init("beats", .number, "Beats per bar (1–64). Give it with `unit`; without both, the time signature in effect at `at` is kept."),
                        .init("unit", .number, "Note value of a beat: 1, 2, 4, 8, 16 or 32 (4 is a quarter note).")]),
-        .init("delete_words", "Delete Words", "Removes words from the audio by their transcript, closing the gaps (ripple). Give word ids (best: they stay valid across edits, undo and saving) or the text to find. Text must match in exactly one place, unless you pass `occurrence` or `all`. A word's time runs up to the next word, so the pause after it goes with it. info has words and removedSeconds.",
+        .init("delete_words", "Delete Words", "Removes words from the audio by their transcript, closing the gaps (ripple). Give word ids (best: they stay valid across edits, undo and saving) or the text to find. Text must match in exactly one place, unless you pass `occurrence` or `all`. Words follow each other without gaps, so a pause sits inside a neighbouring word (usually the one after it) and goes with that word. info has words and removedSeconds.",
               params: [.init("words", .list, "Word ids from GET /api/v1/documents/{id}/transcript."),
                        .init("text", .string, "A word or phrase as it reads in the transcript; case and punctuation don't count."),
                        .init("occurrence", .number, "With `text`: which match, counting from 1."),

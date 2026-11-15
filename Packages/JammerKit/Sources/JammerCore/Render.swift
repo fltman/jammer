@@ -25,8 +25,11 @@ public final class SourcePool: @unchecked Sendable {
     public func restrict(_ allows: (@Sendable (URL) -> Bool)?) {
         lock.withLock {
             policy = allows
-            // Asked again under the new rule.
-            for id in refusedIDs.keys { missingIDs.remove(id) }
+            // Everything is asked again under the new rule: also files that were already open,
+            // which may no longer be allowed.
+            for (_, s) in open { jm_source_release(s) }
+            open = [:]
+            missingIDs = []
             refusedIDs = [:]
         }
     }
@@ -43,6 +46,11 @@ public final class SourcePool: @unchecked Sendable {
         lock.withLock {
             if let s = open[ref.id] { return s }
             if missingIDs.contains(ref.id) { return nil }
+            // No path and no bookmark is no file (an empty path would otherwise mean "here").
+            guard !ref.path.isEmpty || ref.bookmark != nil else {
+                missingIDs.insert(ref.id)
+                return nil
+            }
             let url = Self.real(Self.resolve(ref))
             if let policy, !policy(url) {
                 refusedIDs[ref.id] = .notAllowed(url)

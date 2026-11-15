@@ -38,6 +38,10 @@ final class EditorSession {
     @ObservationIgnored weak var document: JammerDocument?
     @ObservationIgnored weak var window: NSWindow?
     @ObservationIgnored let pool = SourcePool()
+    /// Set for a document read from a project file (see ProjectAccess): where it may read audio.
+    @ObservationIgnored var readsFromPackage: URL?
+    @ObservationIgnored var isRestricted = false
+    @ObservationIgnored var askedAboutOutside = false
     @ObservationIgnored private(set) var plan: RenderPlan
     /// The units playing the tracks' inserts. Exports and measurements make their own.
     @ObservationIgnored private(set) var inserts: InsertHost
@@ -51,8 +55,16 @@ final class EditorSession {
     @ObservationIgnored private var timer: Timer?
     @ObservationIgnored private var peakTasks: [UUID: Task<Void, Never>] = [:]
 
-    init(project: Project) {
+    /// `fromPackage`: the project was read from a project file, so its audio is read only where
+    /// that is allowed (ProjectAccess). The rule is in place before the first file is opened:
+    /// compiling the plan and drawing the waveforms already read the audio.
+    init(project: Project, fromPackage: Bool = false, package: URL? = nil) {
         self.project = project
+        if fromPackage {
+            readsFromPackage = package
+            isRestricted = true
+            pool.restrict(ProjectAccess.rule(package: package))
+        }
         output = AudioOutput(channels: project.channels, sampleRate: project.sampleRate)
         inserts = InsertHost(channels: project.channels, sampleRate: project.sampleRate, outOfProcess: Self.pluginSafeMode)
         plan = PlanCompiler.compile(project, pool: pool)
@@ -284,6 +296,9 @@ final class EditorSession {
         for r in refs { collected[r.id] = r }
         replace(with: project)
     }
+
+    /// Opens the sources again under the pool's current rule and rebuilds what plays.
+    func reloadAudio() { replace(with: project) }
 
     private func replace(with newProject: Project) {
         var newProject = newProject

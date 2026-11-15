@@ -69,6 +69,12 @@ public enum FCPXMLImport {
         public var message: String
         /// The clip it is about (its name), when there is one.
         public var clip: String?
+
+        public init(code: String, message: String, clip: String?) {
+            self.code = code
+            self.message = message
+            self.clip = clip
+        }
     }
 
     public struct ClipItem: Sendable, Equatable {

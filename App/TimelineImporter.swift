@@ -32,7 +32,26 @@ enum TimelineImporter {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         Task {
             do {
-                let timeline = try TimelineImport.check(["path": url.path], policy: nil)
+                var timeline = try TimelineImport.check(["path": url.path], policy: nil)
+                // The user chose the timeline, not every file it names. Media beside it (in its own
+                // folder) comes along; media elsewhere on the Mac is asked about first.
+                let home = SourcePool.real(url.deletingLastPathComponent()).path + "/"
+                let outside = timeline.media.filter { !SourcePool.real($0).path.hasPrefix(home) && FileManager.default.fileExists(atPath: $0.path) }
+                if !outside.isEmpty {
+                    let alert = NSAlert()
+                    alert.messageText = "This timeline uses audio from other folders"
+                    alert.informativeText = "“\(url.lastPathComponent)” names \(outside.count) audio file\(outside.count == 1 ? "" : "s") outside its own folder:\n\n"
+                        + outside.prefix(6).map { "• " + ($0.path as NSString).abbreviatingWithTildeInPath }.joined(separator: "\n")
+                        + (outside.count > 6 ? "\n… and \(outside.count - 6) more" : "")
+                        + "\n\nIf the timeline is your own, or you trust where it came from, use them. Otherwise import without: those clips are left out, and nothing outside the timeline's folder is read."
+                    alert.addButton(withTitle: "Import Without Them")
+                    alert.addButton(withTitle: "Use These Files")
+                    if alert.runModal() == .alertFirstButtonReturn {
+                        let drop = Set(outside)
+                        for i in timeline.tracks.indices { timeline.tracks[i].clips.removeAll { drop.contains($0.media) } }
+                        timeline.warnings.append(.init(code: "outside", message: "\(outside.count) file\(outside.count == 1 ? "" : "s") outside the timeline's folder \(outside.count == 1 ? "wasn't" : "weren't") read.", clip: nil))
+                    }
+                }
                 _ = try await open(timeline)
             } catch {
                 let alert = NSAlert()

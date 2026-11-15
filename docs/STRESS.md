@@ -61,3 +61,23 @@ What they found and what was changed:
 - FCPXML: any entity declaration is refused before parsing; size, depth and element count are limited; time arithmetic saturates instead of overflowing; gains are bounded; clips placed beyond a day are left out with a note.
 
 Tried in the running app as well, through `POST /documents`, an upload in two parts, `POST /import/fcpxml` and a batch over a folder of ten such files: every refusal in words, no leftover files in the media folder, the app still answering afterwards. Not tried by hand: File › Open and a linked file from Flimmer with such files (both use the same importer). Project packages (`.jammer`) with hostile contents are not covered here.
+
+## Hostile project packages (2026-11-15)
+
+A `.jammer` package is shared between people and opened with a double-click. `HostileProjectTests` makes its own and checks:
+
+| What | Result |
+|---|---|
+| project.json cut at six offsets, missing, and 200 copies with bytes changed | refused in words, or opened as something that passes every check |
+| Clips before 0, past their audio, past the timeline, of no or negative length, with levels of 1e300; markers outside the timeline; 4 billion Hz; 70 000 channels; more tracks, clips, markers or files than the limits | clips and markers left out and counted in the status bar; the rest refused |
+| A source "in the package" given as `../x`, an absolute path, a deeper folder, `Media/..`, a link in Media/, and Media itself as a link | not followed; the clip is silent; nothing outside is read |
+| A text file described as 16-bit audio; a real WAV with a false offset, channel count, rate, format or byte order; more sound claimed than there is | not read at all, except the last, which plays what is there |
+| A file outside what the document may read, also through a link and `..` | refused by its real location |
+| Collect Audio and Save with a refused file | the file is not copied into the package |
+| History: a state that expands to 600 MB, garbage, a state with an impossible sample rate | refused |
+
+Two rules carry this. A file is opened only when the file's own header agrees with what the project says about it, so a project can't make another file be read as sound and carried out in an export. And a document opened from a project file reads only from the package, Jämmer's own media folder, and files the user has opened here or allowed; anything else is asked about, with "Open Without Them" as the default.
+
+Tried in the app with five packages: one with its sound inside (plays, no question), one naming a text file as audio (asked about as an outside file; never read; the export is silent and doesn't contain the text), one with a path climbing out (silent, no question), one naming a recording in another folder (silent until "Use These Files", then it plays), and a damaged one (an alert; the app carries on). The first version of this read the outside recording before the rule was in place, because the files were opened when the window was made; the by-hand check caught it.
+
+Not covered: what an Audio Unit's saved state in a project could do to the plugin that loads it.

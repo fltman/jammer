@@ -233,6 +233,26 @@ struct HostileProjectTests {
         #expect(render(p, pool: pool).contains { $0 != 0 } && pool.refused.isEmpty)
     }
 
+    @Test("Collecting audio into the package never copies a file the document was refused")
+    func collect() throws {
+        let dir = try folder()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let mine = dir.appending(path: "mine.wav"), theirs = dir.appending(path: "private.wav")
+        try Hostile.wav(frames: 4_800).write(to: mine)
+        try Hostile.wav(frames: 4_800).write(to: theirs)
+        let a = SourceRef(name: "mine", path: mine.path, info: try AudioFileReader.info(at: mine))
+        let b = SourceRef(name: "private", path: theirs.path, info: try AudioFileReader.info(at: theirs))
+        var p = Project(source: a)
+        _ = p.addTrack(source: b)
+        // Unrestricted, both would be copied; with the second refused, only the first.
+        #expect(ProjectPackage.planCollection(p, existingMedia: []).copies.map(\.name) == ["mine.wav", "private.wav"])
+        let pool = SourcePool()
+        pool.restrict { $0.lastPathComponent == "mine.wav" }
+        _ = PlanCompiler.compile(p, pool: pool).render(from: 0, frames: 100)
+        let plan = ProjectPackage.planCollection(p, existingMedia: [], skipping: Set(pool.refused.keys).union(pool.missing))
+        #expect(plan.copies.map(\.name) == ["mine.wav"] && plan.project.sources[1].packagePath == nil)
+    }
+
     @Test("History in the package: a state that expands without end, a damaged one and an absurd one are refused")
     func history() throws {
         let dir = try folder()
@@ -267,5 +287,38 @@ struct HostileProjectTests {
             read = try tampered(body)
             #expect(throws: AudioFileError.self) { _ = try read.project(of: read.current) }
         }
+    }
+
+    /// Writes a few packages for trying in the app by hand (JAMMER_WRITE_PACKAGES=<folder>).
+    @Test("Packages for trying in the app", .enabled(if: ProcessInfo.processInfo.environment["JAMMER_WRITE_PACKAGES"] != nil))
+    func writePackages() throws {
+        let dir = URL(fileURLWithPath: ProcessInfo.processInfo.environment["JAMMER_WRITE_PACKAGES"]!)
+        try? FileManager.default.removeItem(at: dir)
+        try FileManager.default.createDirectory(at: dir.appending(path: "elsewhere"), withIntermediateDirectories: true)
+        // Honest: its sound is inside it.
+        _ = try package(in: dir, name: "Own.jammer")
+        // Names a real recording in another folder.
+        let outside = dir.appending(path: "elsewhere/private-recording.wav")
+        try Hostile.wav(frames: 96_000).write(to: outside)
+        func write(_ name: String, _ source: SourceRef) throws {
+            let pkg = dir.appending(path: name)
+            try FileManager.default.createDirectory(at: pkg, withIntermediateDirectories: true)
+            try ProjectPackage.encode(Project(source: source)).write(to: pkg.appending(path: "project.json"))
+        }
+        try write("Outside.jammer", SourceRef(name: "private-recording", path: outside.path, info: try AudioFileReader.info(at: outside)))
+        // Describes a file that isn't audio as 16-bit sound.
+        let secret = dir.appending(path: "elsewhere/secret.txt")
+        try Data(String(repeating: "TOP-SECRET-CONTENT ", count: 4_000).utf8).write(to: secret)
+        var lie = try AudioFileReader.info(at: outside)
+        lie.dataOffset = 0
+        lie.frames = 15_000
+        try write("Secret.jammer", SourceRef(name: "audio", path: secret.path, info: lie))
+        // Says its sound is in the package, with a path that climbs out.
+        var climbing = SourceRef(name: "private-recording", path: outside.path, info: try AudioFileReader.info(at: outside))
+        climbing.packagePath = "../elsewhere/private-recording.wav"
+        try write("Escape.jammer", climbing)
+        // Damaged.
+        try FileManager.default.createDirectory(at: dir.appending(path: "Broken.jammer"), withIntermediateDirectories: true)
+        try Data("{\"formatVersion\": 1, \"tracks\": [".utf8).write(to: dir.appending(path: "Broken.jammer/project.json"))
     }
 }

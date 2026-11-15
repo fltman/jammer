@@ -27,6 +27,8 @@ final class JammerDocument: NSDocument {
     var pendingProject: Project?
     /// Something to say in the status bar once the window is up (the file opened cut short).
     var pendingStatus: String?
+    /// True for a document read from a project file: its audio is then read only where it may be.
+    var readFromPackage = false
     /// A history read from the package before the window opened.
     var pendingHistory: History?
     static let historyFile = "history.json"
@@ -39,7 +41,7 @@ final class JammerDocument: NSDocument {
 
     override func makeWindowControllers() {
         let project = pendingProject ?? session?.project ?? Project(sampleRate: 48_000, channels: 2, tracks: [Track(name: "Track 1")])
-        let s = session ?? EditorSession(project: project)
+        let s = session ?? EditorSession(project: project, fromPackage: readFromPackage, package: fileURL)
         if session == nil, let h = pendingHistory { s.load(project, history: h) }
         s.document = self
         if let pendingStatus { s.status = pendingStatus }
@@ -47,6 +49,12 @@ final class JammerDocument: NSDocument {
         session = s
         let wc = EditorWindowController(session: s)
         addWindowController(wc)
+        if readFromPackage {
+            // Once the window is up: audio the project names outside itself is asked about, not just read.
+            DispatchQueue.main.async { [weak wc, weak s] in
+                if let w = wc?.window, let s { s.askAboutFilesOutside(in: w) }
+            }
+        }
         AgentRegistry.shared.register(s)
     }
 
@@ -86,12 +94,21 @@ final class JammerDocument: NSDocument {
         guard typeName == UTType.jammerProject.identifier || UTType(typeName)?.conforms(to: .jammerProject) == true else {
             throw CocoaError(.fileReadUnsupportedScheme)
         }
-        let project = try ProjectPackage.read(fileWrapper, packageURL: fileURL)
-        mediaWrapper = fileWrapper.fileWrappers?[ProjectPackage.mediaFolderName]
+        let (project, notes) = try ProjectPackage.readChecked(fileWrapper, packageURL: fileURL)
+        // A Media folder that is a link to somewhere else is not this project's media.
+        let media = fileWrapper.fileWrappers?[ProjectPackage.mediaFolderName]
+        mediaWrapper = media?.isDirectory == true ? media : nil
+        readFromPackage = true
+        if !notes.isEmpty { pendingStatus = notes.joined(separator: " ") }
         let history = fileWrapper.fileWrappers?[Self.historyFile]?.regularFileContents.flatMap { try? JSONDecoder().decode(History.self, from: $0) }
         // NSDocument reads on the main thread (no concurrent reading).
         MainActor.assumeIsolated {
-            if let session { session.load(project, history: history) } else { pendingProject = project; pendingHistory = history }
+            if let session {
+                // The rule first, the project after: loading opens the files.
+                session.restrictReading(package: self.fileURL)
+                session.load(project, history: history)
+                if !notes.isEmpty { session.status = notes.joined(separator: " ") }
+            } else { pendingProject = project; pendingHistory = history }
         }
     }
 
@@ -122,11 +139,20 @@ final class JammerDocument: NSDocument {
     override func fileWrapper(ofType typeName: String) throws -> FileWrapper {
         var project = MainActor.assumeIsolated { session?.project ?? pendingProject }
         guard project != nil else { throw CocoaError(.fileWriteUnknown) }
+        // What this document plays from now was opened under the user's hand: saving it makes a
+        // project that may read those files again. (Files it was refused stay refused.)
+        MainActor.assumeIsolated {
+            guard let s = session else { return }
+            let refused = Set(s.pool.refused.keys).union(s.pool.missing)
+            ProjectAccess.approve(s.project.sources.filter { !refused.contains($0.id) && $0.packagePath == nil && !$0.path.isEmpty }.map { SourcePool.resolve($0) })
+        }
         pendingCopies = []
         pendingCollected = nil
         if collectOnSave, let p = project {
             let existing = Set(mediaWrapper?.fileWrappers?.keys.map { $0 } ?? [])
-            let (collected, copies) = ProjectPackage.planCollection(p, existingMedia: existing)
+            // Only what the document is actually reading goes into the package: a file it was refused isn't copied in.
+            let skip = MainActor.assumeIsolated { session.map { Set($0.pool.refused.keys).union($0.pool.missing) } ?? [] }
+            let (collected, copies) = ProjectPackage.planCollection(p, existingMedia: existing, skipping: skip)
             project = collected
             pendingCopies = copies
             pendingCollected = collected
@@ -182,6 +208,8 @@ final class JammerDocumentController: NSDocumentController {
         let doc = JammerDocument()
         doc.pendingProject = Project(source: result.source)
         doc.pendingStatus = result.warning
+        // The user picked this file: a project saved from it may read it again.
+        MainActor.assumeIsolated { ProjectAccess.approve([url]) }
         doc.displayName = url.deletingPathExtension().lastPathComponent
         return doc
     }
