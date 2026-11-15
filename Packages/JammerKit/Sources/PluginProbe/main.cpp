@@ -3,7 +3,7 @@
 // while it is loaded, it is this process that dies or is killed, and Jämmer notes the plugin
 // as failed and goes on.
 //
-//   jammer-plugin-probe clap /path/to/Plugin.clap
+//   jammer-plugin-probe clap /path/to/Plugin.clap      (or: vst3 /path/to/Plugin.vst3)
 //   → {"format":"clap","plugins":[{"id":"…","name":"…","vendor":"…","version":"…","features":["…"]}]}
 // Exit codes: 0 found, 2 not a plugin of that format (stderr says why), 64 usage.
 
@@ -13,9 +13,16 @@
 #include <cstring>
 #include <string>
 
+int probeVST3(const char *path);
+std::string probeJSON(const char *s);
+
 namespace {
 
-std::string json(const char *s) {
+std::string json(const char *s) { return probeJSON(s); }
+
+} // namespace
+
+std::string probeJSON(const char *s) {
     std::string out = "\"";
     for (const unsigned char *p = reinterpret_cast<const unsigned char *>(s ? s : ""); *p; ++p) {
         if (*p == '"' || *p == '\\') { out += '\\'; out += char(*p); }
@@ -24,6 +31,8 @@ std::string json(const char *s) {
     }
     return out + "\"";
 }
+
+namespace {
 
 int fail(const char *why) {
     std::fprintf(stderr, "%s\n", why);
@@ -62,8 +71,9 @@ int probeCLAP(const char *path) {
 } // namespace
 
 int main(int argc, char **argv) {
-    if (argc != 3) { std::fprintf(stderr, "usage: jammer-plugin-probe clap <bundle>\n"); return 64; }
+    if (argc != 3) { std::fprintf(stderr, "usage: jammer-plugin-probe clap|vst3 <bundle>\n"); return 64; }
     if (std::strcmp(argv[1], "clap") == 0) return probeCLAP(argv[2]);
+    if (std::strcmp(argv[1], "vst3") == 0) return probeVST3(argv[2]);
     std::fprintf(stderr, "unknown format %s\n", argv[1]);
     return 64;
 }

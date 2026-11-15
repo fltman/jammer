@@ -88,7 +88,8 @@ if hasCLAP {
     package.products.append(.executable(name: "jammer-plugin-probe", targets: ["PluginProbe"]))
     package.targets += [
         .executableTarget(name: "PluginProbe", path: "Sources/PluginProbe",
-                          cxxSettings: [.headerSearchPath("../../Vendor/clap/include")],
+                          // The VST 3 interface headers too when the SDK is there (the probe says so when it isn't).
+                          cxxSettings: [.headerSearchPath("../../Vendor/clap/include"), .headerSearchPath("../../Vendor/vst3sdk")],
                           linkerSettings: [.linkedFramework("CoreFoundation")]),
         .testTarget(name: "JammerPluginsTests", dependencies: ["JammerPlugins", "JammerCore", "PluginProbe"]),
     ]

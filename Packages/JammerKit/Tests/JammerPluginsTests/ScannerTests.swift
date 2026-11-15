@@ -58,6 +58,82 @@ enum TestPlugins {
     CLAP_EXPORT const clap_plugin_entry_t clap_entry = { CLAP_VERSION_INIT, init, deinit, get_factory };
     """
 
+    /// A VST 3 bundle reduced to what a scan meets: the three entry points and a factory with one
+    /// audio class and one controller class (which a scan must not list).
+    static let vst3Source = """
+    #include <CoreFoundation/CoreFoundation.h>
+    #include <pluginterfaces/base/funknown.h>
+    #include <pluginterfaces/base/ipluginbase.h>
+    #include "pluginterfaces/base/funknown.cpp"
+    #include "pluginterfaces/base/coreiids.cpp"
+    #include <cstring>
+    #include <cstdlib>
+    #include <unistd.h>
+    using namespace Steinberg;
+    struct Factory : IPluginFactory2 {
+        tresult PLUGIN_API queryInterface(const TUID iid, void **obj) override {
+            if (FUnknownPrivate::iidEqual(iid, IPluginFactory2::iid) || FUnknownPrivate::iidEqual(iid, IPluginFactory::iid) || FUnknownPrivate::iidEqual(iid, FUnknown::iid)) { *obj = this; return kResultOk; }
+            *obj = nullptr; return kNoInterface;
+        }
+        uint32 PLUGIN_API addRef() override { return 1; }
+        uint32 PLUGIN_API release() override { return 1; }
+        tresult PLUGIN_API getFactoryInfo(PFactoryInfo *info) override { memset(info, 0, sizeof *info); strcpy(info->vendor, "Factory Vendor"); return kResultOk; }
+        int32 PLUGIN_API countClasses() override { return 2; }
+        void fill(int32 i, TUID cid, char8 *category, char8 *name) {
+            for (int b = 0; b < 16; ++b) cid[b] = char(i == 0 ? 0xA0 + b : 0x10 + b);
+            strcpy(category, i == 0 ? "Audio Module Class" : "Component Controller Class");
+            strcpy(name, i == 0 ? "Test " NAME : "Test Controller");
+        }
+        tresult PLUGIN_API getClassInfo(int32 i, PClassInfo *info) override {
+            if (i < 0 || i > 1) return kInvalidArgument;
+            memset(info, 0, sizeof *info); fill(i, info->cid, info->category, info->name); info->cardinality = PClassInfo::kManyInstances; return kResultOk;
+        }
+        tresult PLUGIN_API createInstance(FIDString, FIDString, void **obj) override { *obj = nullptr; return kNoInterface; }
+        tresult PLUGIN_API getClassInfo2(int32 i, PClassInfo2 *info) override {
+            if (i < 0 || i > 1) return kInvalidArgument;
+            memset(info, 0, sizeof *info); fill(i, info->cid, info->category, info->name);
+            strcpy(info->vendor, "Brattoo Tests"); strcpy(info->version, "2.0.1"); strcpy(info->subCategories, "Fx|Reverb"); return kResultOk;
+        }
+    };
+    static Factory factory;
+    extern "C" {
+    __attribute__((visibility("default"))) bool bundleEntry(CFBundleRef) {
+    #ifdef CRASH
+        abort();
+    #endif
+    #ifdef HANG
+        for (;;) pause();
+    #endif
+        return true;
+    }
+    __attribute__((visibility("default"))) bool bundleExit() { return true; }
+    __attribute__((visibility("default"))) IPluginFactory *GetPluginFactory() { return &factory; }
+    }
+    """
+
+    /// Builds `<name>.vst3` in `dir`.
+    static func buildVST3(_ name: String, flag: String? = nil, in dir: URL) throws -> URL {
+        let bundle = dir.appending(path: "\(name).vst3"), macos = bundle.appending(path: "Contents/MacOS")
+        try FileManager.default.createDirectory(at: macos, withIntermediateDirectories: true)
+        try "<plist version=\"1.0\"><dict><key>CFBundleExecutable</key><string>\(name)</string><key>CFBundlePackageType</key><string>BNDL</string></dict></plist>"
+            .write(to: bundle.appending(path: "Contents/Info.plist"), atomically: true, encoding: .utf8)
+        let cpp = dir.appending(path: "\(name).cpp")
+        try vst3Source.write(to: cpp, atomically: true, encoding: .utf8)
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/xcrun")
+        p.arguments = ["clang++", "-std=c++17", "-bundle", "-arch", "arm64", "-w", "-I", package.appending(path: "Vendor/vst3sdk").path, "-DNAME=\"\(name)\"", "-DRELEASE=1"]
+            + (flag.map { ["-D\($0)"] } ?? []) + ["-framework", "CoreFoundation", "-o", macos.appending(path: name).path, cpp.path]
+        let err = Pipe()
+        p.standardError = err
+        try p.run()
+        p.waitUntilExit()
+        guard p.terminationStatus == 0 else {
+            throw NSError(domain: "TestPlugins", code: 1, userInfo: [NSLocalizedDescriptionKey: String(decoding: err.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)])
+        }
+        return bundle
+    }
+    static let hasVST3 = FileManager.default.fileExists(atPath: package.appending(path: "Vendor/vst3sdk/pluginterfaces/base/ipluginbase.h").path)
+
     static let package = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
 
     /// Builds `<name>.clap` in `dir` with the given behaviour (a -D flag) and returns the bundle.
@@ -225,5 +301,29 @@ struct ScannerTests {
         #expect(again.plugin("clap:com.brattoo.test.Good")?.bundle.hasSuffix("CLAP/Vendor/Good.clap") == true)
         // A missing or broken file is an empty catalogue, not an error.
         #expect(PluginCatalogue.load(dir.appending(path: "none.json")) == PluginCatalogue())
+    }
+
+    @Test("VST 3: the audio class is described (not its controller), and a bundle that crashes or hangs on entry is survived", .enabled(if: TestPlugins.hasVST3))
+    func vst3() throws {
+        let dir = try folder()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let scanner = PluginScanner(probe: TestPlugins.probe, timeout: 1)
+        let good = try TestPlugins.buildVST3("Hall", in: dir)
+        let outcome = scanner.probe(good, format: .vst3)
+        #expect(outcome == .found([ScannedPlugin(format: .vst3, id: "A0A1A2A3A4A5A6A7A8A9AAABACADAEAF", name: "Test Hall", vendor: "Brattoo Tests", version: "2.0.1",
+                                                 features: ["Fx", "Reverb"], bundle: good.path)]), "\(outcome)")
+        #expect(scanner.probe(try TestPlugins.buildVST3("Bad", flag: "CRASH", in: dir), format: .vst3) == .crashed(signal: SIGABRT))
+        #expect(scanner.probe(try TestPlugins.buildVST3("Stuck", flag: "HANG", in: dir), format: .vst3) == .timedOut)
+        // A CLAP bundle asked for as VST 3 (and the other way round) is simply not one.
+        let clap = try TestPlugins.build("Other", in: dir)
+        #expect(scanner.probe(clap, format: .vst3) == .invalid("no VST 3 entry points") && scanner.probe(good, format: .clap) == .invalid("no clap_entry"))
+        // Both formats in one catalogue.
+        var c = PluginCatalogue()
+        try FileManager.default.createDirectory(at: dir.appending(path: "V"), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: dir.appending(path: "C"), withIntermediateDirectories: true)
+        try FileManager.default.moveItem(at: good, to: dir.appending(path: "V/Hall.vst3"))
+        try FileManager.default.moveItem(at: clap, to: dir.appending(path: "C/Other.clap"))
+        #expect(c.scan(with: scanner, folders: [.vst3: [dir.appending(path: "V")], .clap: [dir.appending(path: "C")]]) == 2)
+        #expect(Set(c.plugins.map(PluginCatalogue.key)) == ["vst3:A0A1A2A3A4A5A6A7A8A9AAABACADAEAF", "clap:com.brattoo.test.Other"])
     }
 }
