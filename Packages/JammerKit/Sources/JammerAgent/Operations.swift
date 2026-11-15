@@ -133,6 +133,9 @@ public enum Operations {
               params: [.init("track", .string, "The track to correct.", required: true),
                        .init("against", .string, "Track to measure against (the call recording is best). Default: the best-matching track."),
                        .init("ppm", .number, "The drift in parts per million (positive: it ran fast). Skips the measurement.", range: -2_000...2_000)]),
+        .init("rename_speaker", "Rename Speaker", "Gives a speaker a name, e.g. after diarize. Use it to pair up speakers found on different tracks.",
+              params: [.init("speaker", .string, "The speaker's id as a string (\"0\", \"1\", …) or current name.", required: true),
+                       .init("name", .string, "The new name.", required: true)]),
         .init("add_insert", "Add Plugin", "Puts an Audio Unit effect on a track, last in its chain unless position says otherwise; its latency is compensated. Plugins are third-party code running with Jämmer's rights. GET /api/v1/plugins lists what's installed. info has latencyMs; ids has the new insert's id.",
               params: [.init("track", .string, "Track id.", required: true),
                        .init("plugin", .string, "Plugin id from GET /api/v1/plugins (e.g. aufx/lmtr/appl) or its exact name.", required: true),
@@ -204,6 +207,15 @@ public enum Operations {
               params: [OperationSpec.Param("trackId", .string, "Track id.", required: true).at("path"),
                        OperationSpec.Param("insert", .string, "Insert id.", required: true).at("path")],
               edits: false, call: ("GET", "/api/v1/documents/{id}/tracks/{trackId}/inserts/{insert}")),
+        .init("diarize", "Find Speakers", "Works out who speaks when, as a job; the result is one undo step and labels the transcript's words. mode by_track (the default when several tracks play at once, as in a double-ender) makes each track its speaker, named after the track, counting speech only where the track is clearly above the other tracks' bleed. mode ml (the default otherwise) runs the diarisation model on each track; its speakers are per track.",
+              params: [.init("mode", .string, "How to find speakers.", options: ["by_track", "ml"]),
+                       .init("tracks", .list, "Track ids. Default: every track with audio."),
+                       .init("speakers", .number, "ml: the exact number of speakers, if known.", range: 1...20),
+                       .init("minSpeakers", .number, "ml: at least this many.", range: 1...20),
+                       .init("maxSpeakers", .number, "ml: at most this many.", range: 1...20)],
+              call: ("POST", "/api/v1/documents/{id}/diarize"), startsJob: true),
+        .init("get_speakers", "Read Speakers", "The speakers (id, name, seconds) and their turns as they play now (speaker, track, start, end), optionally over start and end.",
+              params: [start, end], edits: false, call: ("GET", "/api/v1/documents/{id}/speakers")),
         .init("get_chapters", "Read Chapters", "The markers as Podcasting 2.0 chapters (JSON, version 1.2.0), optionally over start and end.",
               params: [start, end], edits: false, call: ("GET", "/api/v1/documents/{id}/chapters")),
         .init("measure_loudness", "Measure Loudness", "Integrated LUFS, loudness range, max momentary and short-term, sample and true peak.",
@@ -535,6 +547,12 @@ public enum StepRunner {
             }
             s.project = try s.project.correctingDrift(of: track, ppm: ppm!, pool: pool, media: media)
             return ["ppm": (ppm! * 10).rounded() / 10, "msPerHour": (ppm! * 3.6 * 10).rounded() / 10, "confidence": (confidence * 1_000).rounded() / 1_000]
+        case "rename_speaker":
+            do {
+                try s.project.renameSpeaker(p["speaker"]?.string ?? "", to: p["name"]?.string ?? "")
+            } catch SpeakerError.unknown(let k) {
+                throw StepFailure("rename_speaker: there's no speaker \(k) (GET …/speakers lists them).", reason: "not_found")
+            }
         case "add_insert", "set_insert", "remove_insert":
             return try applyInsert(step, to: &s)
         case "loudness_preset":

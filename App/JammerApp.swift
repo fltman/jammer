@@ -2,7 +2,9 @@ import AppKit
 import JammerAgent
 import JammerCore
 import JammerDenoise
+import JammerDiarize
 import JammerMP3
+import JammerSpeech
 
 /// Operations with preset parameters, for menus and the palette.
 enum MenuPresets {
@@ -48,6 +50,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         // MP3 through LAME, a separate dynamic framework (LGPL).
         MP3Writer.register()
+        // Diarisation: the Community-1 model, fetched from the user's model source on first use.
+        let store = ModelStore.standard()
+        Diarization.engine = FluidDiarizer(folder: store.folder.appending(path: "diarisation"), source: store.source)
         AgentServer.shared.start()
         if UserDefaults.standard.object(forKey: AgentSplashView.showAtLaunchKey) as? Bool ?? true {
             Task {
@@ -172,6 +177,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             restoreItem("Reduce Noise…", "denoise"),
             item("Attenuate Frequencies…", #selector(EditorWindowController.attenuateFrequencies(_:)), ""),
             .separator(),
+            item("Find Speakers", #selector(EditorWindowController.findSpeakers(_:)), ""),
             item("Plugins…", #selector(EditorWindowController.showPlugins(_:)), "p", [.command, .option, .shift]),
         ]))
         main.addItem(submenu("Transport", [

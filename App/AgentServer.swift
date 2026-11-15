@@ -330,6 +330,12 @@ enum AgentRouter {
             case ["transcript"]:
                 try only("GET")
                 return try transcript(session, r)
+            case ["diarize"]:
+                try only("POST")
+                return try diarize(session, r)
+            case ["speakers"]:
+                try only("GET")
+                return try speakers(session, r)
             case ["tracks"]:
                 try only("GET", "POST")
                 if r.method == "GET" { return .json(["tracks": session.project.tracks.map { trackJSON(session, $0) }]) }
@@ -607,7 +613,52 @@ enum AgentRouter {
             return d
         }
         let langs = Set(session.project.transcripts.map(\.language)).sorted()
-        return .json(["words": words, "text": placed.map(\.word.text).joined(separator: " "), "languages": langs])
+        return .json(["words": words, "text": placed.map(\.word.text).joined(separator: " "), "languages": langs,
+                      "speakers": session.project.speakers.enumerated().map { ["id": $0.offset, "name": $0.element] as [String: Any] }])
+    }
+
+    private static func speakers(_ session: EditorSession, _ r: AgentAPI.Request) throws -> Response {
+        let range = try queryRange(r, session)
+        let p = session.project
+        let secs = p.speakerSeconds(in: range)
+        return .json(["speakers": p.speakers.enumerated().map { i, n -> [String: Any] in ["id": i, "name": n, "seconds": ((secs[i] ?? 0) * 10).rounded() / 10] },
+                      "turns": p.placedTurns(in: range).map { t -> [String: Any] in
+                          ["speaker": t.speaker, "track": p.tracks[t.track].id.uuidString, "start": seconds(session, t.start), "end": seconds(session, t.end)]
+                      }])
+    }
+
+    private static func diarize(_ session: EditorSession, _ r: AgentAPI.Request) throws -> Response {
+        let body = try json(r)
+        let p = session.project
+        let mode = body["mode"] as? String
+        if let mode, !["by_track", "ml"].contains(mode) { throw APIError.badRequest("mode must be \"by_track\" or \"ml\".") }
+        var tracks = p.tracks.filter { !$0.clips.isEmpty }.map(\.id)
+        if let list = body["tracks"] as? [String] {
+            tracks = try list.map { s in
+                guard let id = UUID(uuidString: s), p.tracks.contains(where: { $0.id == id }) else {
+                    throw APIError.badRequest("No track with id \(s). GET /api/v1/documents/{id}/tracks lists them.")
+                }
+                return id
+            }
+        }
+        guard !tracks.isEmpty else { throw APIError.unprocessable("nothing_to_diarize", "There's no audio to look for speakers in.") }
+        func count(_ key: String) throws -> Int? {
+            guard let v = body[key] else { return nil }
+            guard let n = (v as? NSNumber)?.intValue, (1...20).contains(n) else { throw APIError.badRequest("\(key) must be a whole number from 1 to 20.") }
+            return n
+        }
+        var lo = try count("minSpeakers"), hi = try count("maxSpeakers")
+        if let n = try count("speakers") { lo = n; hi = n }
+        if let lo, let hi, lo > hi { throw APIError.badRequest("minSpeakers can't be above maxSpeakers.") }
+        let byTrack = mode == "by_track" || (mode == nil && p.hasOverlappingTracks)
+        if byTrack, lo != nil || hi != nil {
+            throw APIError.badRequest("Speaker counts are for mode \"ml\"; by_track gives each track one speaker.")
+        }
+        if !byTrack, Diarization.engine == nil {
+            throw APIError.unprocessable("model_unavailable", "This copy of Jämmer has no diarisation model; mode \"by_track\" works without one.")
+        }
+        let job = JobRegistry.shared.startDiarization(session, byTrack: byTrack, tracks: tracks, minSpeakers: lo, maxSpeakers: hi)
+        return .json(["job": job.json], status: 202)
     }
 
     // MARK: Restoration

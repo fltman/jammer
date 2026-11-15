@@ -177,6 +177,7 @@ extension Project {
     public mutating func setTranscript(_ t: SourceTranscript) {
         transcripts.removeAll { $0.sourceID == t.sourceID }
         transcripts.append(t)
+        if speakerTurns.contains(where: { $0.sourceID == t.sourceID }) { labelWords() }
     }
 }
 

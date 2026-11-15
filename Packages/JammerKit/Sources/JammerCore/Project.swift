@@ -177,6 +177,10 @@ public struct Project: Codable, Equatable, Sendable {
     public var tempo: TempoMap
     /// Recognised words per source, anchored in source frames (see `placedWords`).
     public var transcripts: [SourceTranscript]
+    /// Speaker names; `SpeakerTurn.speaker` and `Word.speaker` index into this.
+    public var speakers: [String] = []
+    /// Who speaks when, per source, anchored in source frames like the words.
+    public var speakerTurns: [SourceSpeakers] = []
 
     public init(sampleRate: Double, channels: Int, tracks: [Track] = [], markers: [Marker] = [], sources: [SourceRef] = [],
                 tempo: TempoMap = TempoMap(), transcripts: [SourceTranscript] = []) {
@@ -190,7 +194,7 @@ public struct Project: Codable, Equatable, Sendable {
         self.transcripts = transcripts
     }
 
-    private enum CodingKeys: String, CodingKey { case formatVersion, sampleRate, channels, tracks, markers, sources, tempo, transcripts }
+    private enum CodingKeys: String, CodingKey { case formatVersion, sampleRate, channels, tracks, markers, sources, tempo, transcripts, speakers, speakerTurns }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -202,6 +206,8 @@ public struct Project: Codable, Equatable, Sendable {
         sources = try c.decode([SourceRef].self, forKey: .sources)
         tempo = try c.decodeIfPresent(TempoMap.self, forKey: .tempo) ?? TempoMap()
         transcripts = try c.decodeIfPresent([SourceTranscript].self, forKey: .transcripts) ?? []
+        speakers = try c.decodeIfPresent([String].self, forKey: .speakers) ?? []
+        speakerTurns = try c.decodeIfPresent([SourceSpeakers].self, forKey: .speakerTurns) ?? []
     }
 
     /// A project with one track playing the whole file.
@@ -392,5 +398,6 @@ public struct Project: Codable, Equatable, Sendable {
         let used = Set(tracks.flatMap { $0.clips.map(\.sourceID) })
         sources.removeAll { !used.contains($0.id) }
         transcripts.removeAll { !used.contains($0.sourceID) }
+        speakerTurns.removeAll { !used.contains($0.sourceID) }
     }
 }

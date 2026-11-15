@@ -9,6 +9,8 @@ let hasWhisper = FileManager.default.fileExists(atPath: Context.packageDirectory
 let hasDeepFilter = FileManager.default.fileExists(atPath: Context.packageDirectory + "/Vendor/DeepFilter.xcframework")
 // LAME (LGPL, dynamic only), from scripts/build-lame.sh.
 let hasLAME = FileManager.default.fileExists(atPath: Context.packageDirectory + "/Vendor/LAME.xcframework")
+// FluidAudio (Apache-2.0) for diarisation, from scripts/fetch-fluidaudio.sh; only its Diarizer trait.
+let hasFluidAudio = FileManager.default.fileExists(atPath: Context.packageDirectory + "/Vendor/FluidAudio/Package.swift")
 
 let package = Package(
     name: "JammerKit",
@@ -86,5 +88,22 @@ if hasLAME {
         .binaryTarget(name: "LAME", path: "Vendor/LAME.xcframework"),
         .target(name: "JammerMP3", dependencies: ["LAME", "JammerCore"]),
         .testTarget(name: "JammerMP3Tests", dependencies: ["JammerMP3", "JammerCore"]),
+    ]
+}
+
+if hasFluidAudio {
+    // FluidAudio's own sources, built here rather than through its manifest: the manifest
+    // declares a prebuilt binary (NemoTextProcessing) that SwiftPM fetches even with its
+    // trait off. We want none of it: only the diarisation code, with no TTS.
+    let fa = "Vendor/FluidAudio/Sources"
+    package.products.append(.library(name: "JammerDiarize", targets: ["JammerDiarize"]))
+    package.targets += [
+        .target(name: "FastClusterWrapper", path: fa + "/FastClusterWrapper", publicHeadersPath: "include"),
+        .target(name: "MachTaskSelfWrapper", path: fa + "/MachTaskSelfWrapper", publicHeadersPath: "include"),
+        .target(name: "FluidAudio", dependencies: ["FastClusterWrapper", "MachTaskSelfWrapper"], path: fa + "/FluidAudio",
+                exclude: ["ASR/Parakeet/Unified/benchmark.md"],
+                swiftSettings: [.define("Diarizer")]),
+        .target(name: "JammerDiarize", dependencies: ["FluidAudio", "JammerCore"]),
+        .testTarget(name: "JammerDiarizeTests", dependencies: ["JammerDiarize", "JammerCore"]),
     ]
 }

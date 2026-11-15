@@ -152,8 +152,17 @@ final class TranscriptPanel: NSView, NSTextViewDelegate {
         let text = NSMutableAttributedString()
         ranges = []
         let normal: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 14), .foregroundColor: NSColor(white: 1, alpha: 0.88)]
+        let names = session.project.speakers
+        let label: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 12, weight: .semibold), .foregroundColor: Theme.neon]
+        var speaker: Int?
         for (i, w) in placed.enumerated() {
-            if i > 0 { text.append(NSAttributedString(string: " ", attributes: normal)) }
+            // A new speaker starts a paragraph with their name.
+            if let s = w.word.speaker, s != speaker, names.indices.contains(s) {
+                speaker = s
+                text.append(NSAttributedString(string: (i > 0 ? "\n\n" : "") + names[s] + "\n", attributes: label))
+            } else if i > 0 {
+                text.append(NSAttributedString(string: " ", attributes: normal))
+            }
             var attrs = normal
             attrs[.jammerWord] = i
             if w.isPartial { attrs[.foregroundColor] = NSColor(white: 1, alpha: 0.45) }

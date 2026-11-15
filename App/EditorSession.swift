@@ -127,6 +127,17 @@ final class EditorSession {
     }
 
     /// A finished transcription: one undo step. Sources the project no longer uses are skipped.
+    /// A finished diarisation, worked out on an earlier copy of the document. Turns are
+    /// anchored in the sources, so they carry over onto edits made meanwhile.
+    func applySpeakers(from diarized: Project) {
+        var p = project
+        p.speakers = diarized.speakers
+        p.speakerTurns = diarized.speakerTurns.filter { p.source($0.sourceID) != nil }
+        p.compactSpeakers()
+        p.labelWords()
+        commit(p, action: "Find Speakers")
+    }
+
     func applyTranscripts(_ ts: [SourceTranscript]) {
         var p = project
         for t in ts where p.source(t.sourceID) != nil { p.setTranscript(t) }

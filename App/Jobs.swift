@@ -111,6 +111,55 @@ final class JobRegistry {
     /// Transcribes every source the session's clips use that has no transcript yet
     /// (or all of them with `replace`). The result lands as one undo step; words are
     /// anchored to the sources, so edits made meanwhile don't matter.
+    /// Who speaks when. `by_track` (each track is its speaker) is the default for
+    /// double-enders; `ml` runs the diarisation model on each track.
+    func startDiarization(_ session: EditorSession, byTrack: Bool, tracks: [UUID], minSpeakers: Int?, maxSpeakers: Int?) -> Job {
+        var job = Job(kind: "diarize", documentID: session.agentID)
+        jobs[job.id] = job
+        let project = session.project, pool = session.pool, id = job.id
+        tasks[id] = Task { [weak self, weak session] in
+            job.status = .running
+            self?.update(job)
+            let results: [TrackDiarization]
+            let engine = byTrack ? "by-track" : (Diarization.engine?.engineName ?? "model")
+            do {
+                if byTrack {
+                    results = await Task.detached(priority: .userInitiated) { Diarization.byTrack(project, pool: pool, tracks: tracks) }.value
+                } else {
+                    results = try await Diarization.model(project, pool: pool, tracks: tracks, minSpeakers: minSpeakers, maxSpeakers: maxSpeakers) { p in
+                        Task { @MainActor in
+                            guard var j = self?.jobs[id], !j.isFinished else { return }
+                            j.progress = min(0.99, p)
+                            self?.update(j)
+                        }
+                    }
+                }
+                try Task.checkCancellation()
+            } catch is CancellationError {
+                return
+            } catch {
+                guard self?.jobs[id]?.status != .cancelled else { return }
+                job.status = .failed
+                job.error = ((error as? DiarizationError)?.reason ?? "diarization_failed", error.localizedDescription)
+                self?.finish(job)
+                return
+            }
+            guard self?.jobs[id]?.status != .cancelled else { return }
+            var diarized = project
+            diarized.applyDiarization(results, engine: engine)
+            session?.applySpeakers(from: diarized)
+            let seconds = diarized.speakerSeconds()
+            job.status = .done
+            job.progress = 1
+            job.result = ["mode": .string(byTrack ? "by_track" : "ml"),
+                          "speakers": .array(diarized.speakers.map { .string($0) }),
+                          "seconds": .array(diarized.speakers.indices.map { .number(((seconds[$0] ?? 0) * 10).rounded() / 10) }),
+                          "turns": .number(Double(diarized.placedTurns().count))]
+            self?.finish(job)
+        }
+        return job
+    }
+
     func startTranscription(_ session: EditorSession, locale: Locale, replace: Bool) -> Job {
         var job = Job(kind: "transcribe", documentID: session.agentID)
         jobs[job.id] = job
