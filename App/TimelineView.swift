@@ -618,8 +618,8 @@ final class TimelineOverlay: NSView {
         case 53 where areaMode && session.spectralArea != nil: session.spectralArea = nil; needsDisplay = true // escape: the area first
         case 53: session.selection = nil // escape
         case 11 where areaMode: session.spectralTool = .box; session.status = "Box: drag a rectangle in the spectrogram." // B
-        case 37 where areaMode: session.spectralTool = .lasso; session.status = "Lasso: draw round the sound." // L
-        case 35 where areaMode: session.spectralTool = .brush; session.status = "Brush: paint over the sound." // P
+        case 37 where areaMode && Operations.spectralFreeform: session.spectralTool = .lasso; session.status = "Lasso: draw round the sound." // L
+        case 35 where areaMode && Operations.spectralFreeform: session.spectralTool = .brush; session.status = "Brush: paint over the sound." // P
         case 51, 117: delete(nil) // delete, forward delete
         case 123: session.seek(session.playhead - Frame(project.sampleRate)) // left: 1 s
         case 124: session.seek(session.playhead + Frame(project.sampleRate))

@@ -221,8 +221,9 @@ struct SiteGuideTests {
     @Test("site/agents.md matches GET /jammer")
     func siteGuide() throws {
         let url = Self.repo.appending(path: "site/agents.md")
-        _ = Features.dereverb
-        let guide = AgentAPI.guide(port: AgentAPI.ports[0], appVersion: Self.appVersion)
+        // The site describes the release build, whatever this test process has switched on.
+        let guide = AgentAPI.guide(port: AgentAPI.ports[0], appVersion: Self.appVersion,
+                                   features: .init(dereverb: Features.dereverb, spectralFreeform: Features.spectralFreeform))
         if ProcessInfo.processInfo.environment["JAMMER_WRITE_GUIDE"] == "1" {
             try guide.write(to: url, atomically: true, encoding: .utf8)
         }
@@ -545,6 +546,20 @@ struct TierTests {
 
 @Suite("Spectral edit step")
 struct SpectralEditStepTests {
+    @Test("Without freeform areas only the box is offered, in the schema and in the guide")
+    func boxOnly() throws {
+        let full = try #require(Operations.all(freeform: true).first { $0.name == "spectral_edit" })
+        let box = try #require(Operations.all(freeform: false).first { $0.name == "spectral_edit" })
+        #expect(full.params.first { $0.name == "shape" }?.options == ["box", "polygon", "brush"])
+        #expect(box.params.first { $0.name == "shape" }?.options == ["box"])
+        #expect(!box.params.contains { ["points", "radius", "radiusTime"].contains($0.name) } && !box.description.contains("polygon"))
+        #expect(Operations.all(freeform: false).count == Operations.all(freeform: true).count)
+        let off = AgentAPI.guide(port: 9003, appVersion: "1", features: .init(dereverb: false, spectralFreeform: false))
+        let on = AgentAPI.guide(port: 9003, appVersion: "1", features: .init(dereverb: true, spectralFreeform: true))
+        #expect(!off.contains("polygon") && !off.contains("brush") && !off.contains("dereverb"))
+        #expect(on.contains("polygon") && on.contains("brush") && on.contains("dereverb"))
+    }
+
     @Test("polygon via JSON numbers; too_long and bad_shape reasons; numbers are validated")
     func step() throws {
         let n = 48_000 * 2
@@ -602,11 +617,16 @@ struct TrackGroupStepTests {
 /// What Config/Features.xcconfig says a release has, mirrored into this test process so the
 /// guide written to site/ and the request tests describe the build that ships.
 enum Features {
-    static let dereverb: Bool = {
+    static func setting(_ name: String) -> Bool {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
             .deletingLastPathComponent().deletingLastPathComponent()
         let text = (try? String(contentsOf: root.appending(path: "Config/Features.xcconfig"), encoding: .utf8)) ?? ""
-        let on = text.split(separator: "\n").contains { $0.replacingOccurrences(of: " ", with: "") == "JAMMER_DEREVERB=YES" }
+        return text.split(separator: "\n").contains { $0.replacingOccurrences(of: " ", with: "") == "\(name)=YES" }
+    }
+    /// Read only: the package always has the freeform shapes; the guide is asked for the release's.
+    static let spectralFreeform = setting("JAMMER_SPECTRAL_FREEFORM")
+    static let dereverb: Bool = {
+        let on = setting("JAMMER_DEREVERB")
         // A stand-in: these tests check parsing and text, not the sound (JammerDereverbTests does that).
         if on { Restoration.dereverber = { x, _, _ in x } }
         return on

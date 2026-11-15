@@ -257,12 +257,24 @@ public enum AgentAPI {
     // MARK: Guide
 
     /// What an agent fetches first: what Jammer is and exactly how to drive it.
-    public static func guide(port: UInt16, appVersion: String) -> String {
+    /// What a build can leave out (docs/RELEASE.md). The guide only describes what works.
+    public struct Features: Sendable, Equatable {
+        public var dereverb: Bool
+        public var spectralFreeform: Bool
+        public init(dereverb: Bool, spectralFreeform: Bool) {
+            self.dereverb = dereverb
+            self.spectralFreeform = spectralFreeform
+        }
+        /// As this process has them.
+        public static var current: Features { .init(dereverb: Restoration.dereverber != nil, spectralFreeform: Operations.spectralFreeform) }
+    }
+
+    public static func guide(port: UInt16, appVersion: String, features: Features = .current) -> String {
         let base = "http://127.0.0.1:\(port)"
         let h = agentHeader
         // Reverb reduction can be left out of a build; the guide only describes what works.
-        let dereverbKind = Restoration.dereverber != nil ? "\\|\"dereverb\"" : ""
-        let dereverbText = Restoration.dereverber != nil ? " `dereverb` takes down the room's echo after each sound (the late reverberation, by linear prediction; no model) and leaves the direct sound; its `amount` defaults to 0.7, and it does little when `reverb.present` is false. It lowers the tail by 5 to 10 dB without shortening it, so judge a preview by ear or by level, not by `rt60` after." : ""
+        let dereverbKind = features.dereverb ? "\\|\"dereverb\"" : ""
+        let dereverbText = features.dereverb ? " `dereverb` takes down the room's echo after each sound (the late reverberation, by linear prediction; no model) and leaves the direct sound; its `amount` defaults to 0.7, and it does little when `reverb.present` is false. It lowers the tail by 5 to 10 dB without shortening it, so judge a preview by ear or by level, not by `rt60` after." : ""
         var s = """
         # Jämmer: guide for agents
 
@@ -436,7 +448,7 @@ public enum AgentAPI {
         These are the `op` values for `steps`, with their `params`. The same list is available as JSON from `GET /api/v1/operations`.
 
         """
-        for op in Operations.all {
+        for op in Operations.all(freeform: features.spectralFreeform) {
             s += "\n### `\(op.name)`\(op.paid ? " (paid)" : "")\n\n\(op.description)\n"
             if op.params.isEmpty {
                 s += "\nNo params: `{\"op\": \"\(op.name)\"}`\n"

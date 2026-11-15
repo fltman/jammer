@@ -336,19 +336,16 @@ Resamples a separately recorded track whose recorder's clock ran fast or slow, s
 
 ### `spectral_edit`
 
-Changes an area of the spectrogram, per track, rendered into a new file (the original audio is one undo away). action attenuate lowers it by db; heal rebuilds it from the sound just before and after (for short sounds such as clicks, coughs, a phone ringing: at most 0.5 s, longer fails with reason too_long; use attenuate). shape box takes start, end, low, high; polygon takes points [t1, f1, t2, f2, …] (seconds, Hz; at least three corners); brush takes points along the stroke plus radius (Hz) and radiusTime (s). Bad shapes fail with reason bad_shape.
+Changes a box in the spectrogram, per track, rendered into a new file (the original audio is one undo away). action attenuate lowers it by db; heal rebuilds it from the sound just before and after (for short sounds such as clicks, coughs, a phone ringing: at most 0.5 s, longer fails with reason too_long; use attenuate). shape box takes start, end, low, high. Bad shapes fail with reason bad_shape.
 
 | Param | Type | Description |
 |---|---|---|
 | `action` | string | **Required.** What to do. One of: `attenuate`, `heal`. |
-| `shape` | string | **Required.** The area's kind. One of: `box`, `polygon`, `brush`. |
+| `shape` | string | **Required.** The area's kind. One of: `box`. |
 | `start` | seconds | Range start in seconds. With `end`, overrides the selection. |
 | `end` | seconds | Range end in seconds. |
 | `low` | number | box: lower edge in Hz. |
 | `high` | number | box: upper edge in Hz. |
-| `points` | numbers | polygon, brush: time (s) and frequency (Hz) pairs, flattened. |
-| `radius` | number | brush: Hz around the stroke. Default 200. |
-| `radiusTime` | number | brush: seconds around the stroke. Default 0.02. |
 | `db` | number | attenuate: change in dB, -80 to 0. Default -20. |
 | `tracks` | list | Track ids. Default: every track. |
 

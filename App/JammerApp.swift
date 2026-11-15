@@ -47,6 +47,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Reverb reduction (WPE); a build can leave it out (Config/Features.xcconfig). Before the menu, which follows it.
         WPEDereverb.register()
         #endif
+        #if !JAMMER_SPECTRAL_FREEFORM
+        // Lasso and brush can be left out of a build (Config/Features.xcconfig): only the box then.
+        Operations.spectralFreeform = false
+        #endif
         NSApp.mainMenu = buildMenu()
         // Our own "open documents" handler: AppKit hands document-based apps' opens straight
         // to the document controller, so this is where the sending app can be seen.

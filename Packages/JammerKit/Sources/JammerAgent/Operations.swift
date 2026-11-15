@@ -102,7 +102,26 @@ public enum Operations {
     static let start = OperationSpec.Param("start", .seconds, "Range start in seconds. With `end`, overrides the selection.")
     static let end = OperationSpec.Param("end", .seconds, "Range end in seconds.")
 
-    public static let all: [OperationSpec] = [
+    /// Drawing freeform areas in the spectrogram (lasso, brush; `spectral_edit` shapes polygon
+    /// and brush) can be left out of a build (docs/RELEASE.md): the app sets this at launch.
+    /// The code stays; only the box is offered then.
+    nonisolated(unsafe) public static var spectralFreeform = true
+
+    /// The steps this build offers.
+    public static var all: [OperationSpec] { all(freeform: spectralFreeform) }
+    public static func all(freeform: Bool) -> [OperationSpec] { freeform ? everything : boxOnly }
+    private static let boxOnly: [OperationSpec] = everything.map { op in
+        guard op.name == "spectral_edit" else { return op }
+        var o = op
+        o.description = "Changes a box in the spectrogram, per track, rendered into a new file (the original audio is one undo away). action attenuate lowers it by db; heal rebuilds it from the sound just before and after (for short sounds such as clicks, coughs, a phone ringing: at most 0.5 s, longer fails with reason too_long; use attenuate). shape box takes start, end, low, high. Bad shapes fail with reason bad_shape."
+        o.params = op.params.filter { !["points", "radius", "radiusTime"].contains($0.name) }.map { p in
+            var p = p
+            if p.name == "shape" { p.options = ["box"] }
+            return p
+        }
+        return o
+    }
+    private static let everything: [OperationSpec] = [
         .init("select", "Select Range", "Selects a range. Later steps without `start`/`end` act on it.",
               params: [.init("start", .seconds, "Start in seconds.", required: true), .init("end", .seconds, "End in seconds.", required: true)], edits: false),
         .init("select_all", "Select All", "Selects the whole document.", edits: false),
@@ -626,6 +645,8 @@ public enum StepRunner {
                     throw StepFailure("spectral_edit: a box needs start, end, low and high.", reason: "bad_shape")
                 }
                 shape = .box(start: a, end: b, low: lo, high: hi)
+            case "polygon", "brush" where !Operations.spectralFreeform:
+                throw StepFailure("spectral_edit: only shape box is available in this build.", reason: "not_available")
             case "polygon": shape = .polygon(try pts())
             default: shape = .brush(try pts(), radius: p["radius"]?.double ?? 200, radiusTime: p["radiusTime"]?.double ?? 0.02)
             }
