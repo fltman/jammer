@@ -871,14 +871,18 @@ enum AgentRouter {
 
     private static func undoRedo(_ session: EditorSession, redo: Bool) throws -> Response {
         guard let undo = session.undoManager else { throw APIError.notAvailable("The document has no undo history yet.") }
+        // The reply names what was undone or redone, so an agent needn't compare histories to know.
+        let name: String
         if redo {
             guard undo.canRedo else { throw APIError.notAvailable("Nothing to redo.") }
+            name = undo.redoActionName
             undo.redo()
         } else {
             guard undo.canUndo else { throw APIError.notAvailable("Nothing to undo.") }
+            name = undo.undoActionName
             undo.undo()
         }
-        return .json(["document": detail(session)])
+        return .json([redo ? "redone" : "undone": name, "document": detail(session)])
     }
 
     private static func waveform(_ session: EditorSession, _ r: AgentAPI.Request) throws -> Response {

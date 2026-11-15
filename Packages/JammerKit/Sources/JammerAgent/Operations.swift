@@ -189,7 +189,7 @@ public enum Operations {
                        .init("maxDelay", .number, "cancel: ms of spread around the found delay (the room or codec). Default 30.", range: 5...100)]),
         .init("set_track", "Change Track", "Changes one track: its gain, mute or name.",
               params: [.init("track", .string, "Track id.", required: true),
-                       .init("gainDB", .number, "The track's gain in dB.", range: -96...24),
+                       .init("gainDB", .number, "The track's gain in dB: the new value, not a change to the old one.", range: -96...24),
                        .init("muted", .boolean, "True to mute."),
                        .init("name", .string, "A new name.")]),
         .init("set_group", "Change Group", "Moves the gain of every track in a group (the stems of one separated track) by the same amount, so their balance stays.",
