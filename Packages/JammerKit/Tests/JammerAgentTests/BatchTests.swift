@@ -42,6 +42,17 @@ struct BatchTests {
             let l = LoudnessMeter.measure(PlanCompiler.compile(p, pool: SourcePool()), 0..<p.length).integrated ?? 0
             #expect(abs(l + 20) < 0.2, "\(url.lastPathComponent): \(l) LUFS")
         }
+        #expect(result.loudness.count == 2 && result.loudness.allSatisfy { abs(($0 ?? 0) + 20) < 0.2 } && result.limitedByPeak == [false, false])
+        // A target the peaks don't allow (a quiet tone with loud clicks): reported, not hidden.
+        let peaky = dir.appending(path: "in/peaky.wav")
+        let n = 48_000 * 4
+        let x = (0..<n).flatMap { i -> [Float] in let v = Float(0.01 * sin(2 * .pi * 440 * Double(i) / 48_000)) + (i % 12_000 == 0 ? 0.9 : 0); return [v, v] }
+        let w = try WAVWriter(url: peaky, options: .init(encoding: .int24, channels: 2, sampleRate: 48_000))
+        try w.write(x); try w.finish()
+        let loud = BatchRequest(inputs: [peaky], steps: [Step(op: "loudness_preset", params: ["preset": .string("spotify")])], output: dir.appending(path: "out"))
+        let limited = await BatchRunner.run(loud, media: dir.appending(path: "media"))
+        #expect(limited.limitedByPeak == [true] && ((limited.loudness.first ?? nil) ?? 0) < -15, "\(limited.loudness) \(limited.limitedByPeak)")
+        try FileManager.default.removeItem(at: peaky)
         #expect([try hash(a), try hash(b), try hash(c)] == before)
         // Again without overwrite: the two are skipped, nothing rewritten.
         let again = await BatchRunner.run(request, media: dir.appending(path: "media"))

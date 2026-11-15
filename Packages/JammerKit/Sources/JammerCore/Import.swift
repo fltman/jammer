@@ -35,7 +35,8 @@ public enum AudioImporter {
     static func decode(_ url: URL, to folder: URL, sampleRate: Double?, progress: (Double) -> Void) throws -> URL {
         let file: AVAudioFile
         do { file = try AVAudioFile(forReading: url) } catch {
-            throw AudioFileError.unsupported("Jammer can't read \(url.lastPathComponent) (\(error.localizedDescription)).")
+            // AVFoundation's own text is a bare error code; say what it means.
+            throw AudioFileError.unsupported("Jämmer can't read \(url.lastPathComponent): it isn't audio in a format this Mac can decode.")
         }
         let input = file.processingFormat
         let channels = Int(input.channelCount)

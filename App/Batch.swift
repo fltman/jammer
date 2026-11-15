@@ -168,6 +168,10 @@ final class BatchModel {
             let job = JobRegistry.shared.startBatch(request) { [weak self] result in
                 self?.running = false
                 var parts = ["\(result.outputs.count) done"]
+                let short = zip(result.outputs, zip(result.loudness, result.limitedByPeak)).filter { $0.1.1 }
+                if !short.isEmpty {
+                    parts.append("\(short.count) quieter than the target because of their peaks (" + short.map { String(format: "%@ %.1f LUFS", ($0.0 as NSString).lastPathComponent, $0.1.0 ?? 0) }.joined(separator: ", ") + ")")
+                }
                 if !result.skipped.isEmpty { parts.append("\(result.skipped.count) skipped (already there)") }
                 if !result.failed.isEmpty { parts.append("\(result.failed.count) failed: " + result.failed.map { "\(($0.file as NSString).lastPathComponent) (\($0.message))" }.joined(separator: "; ")) }
                 self?.status = parts.joined(separator: ", ") + "."
@@ -209,6 +213,7 @@ struct BatchView: View {
         }
         .formStyle(.grouped)
         .frame(width: 520)
+        .frame(minHeight: 380)
     }
 }
 
@@ -220,7 +225,10 @@ enum BatchWindow {
         let w = EscClosingWindow(contentRect: .zero, styleMask: [.titled, .closable], backing: .buffered, defer: false)
         w.title = "Batch"
         w.isReleasedWhenClosed = false
-        w.contentViewController = NSHostingController(rootView: BatchView())
+        let host = NSHostingController(rootView: BatchView())
+        w.contentViewController = host
+        // A grouped Form reports no height of its own, which left the window 32 points tall.
+        w.setContentSize(NSSize(width: 520, height: max(380, host.view.fittingSize.height)))
         w.center()
         w.makeKeyAndOrderFront(nil)
         window = w

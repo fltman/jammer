@@ -4,13 +4,15 @@
 
 ## Run one
 
+![The Batch window after a run: three files, a recipe, MP3, an output folder, and the result: 2 done, 1 failed](../screens/batch.webp)
+
 1. **Files**: choose audio files, or folders of them.
 2. **Recipe**: what to do with each file. Jämmer comes with a few (remove hum and set Spotify loudness; Apple Podcasts or EBU R 128 loudness; reduce noise and normalize; convert only).
 3. **Format**: what to save as (WAV, AIFF, FLAC, ALAC, AAC, Opus or MP3). Markers in a file become chapters where the format has them.
 4. **Save in**: the folder the results go in.
 5. **Run.**
 
-Each file is saved as "name (Jämmer)" in that folder. Your files are never changed. A result that's already there is skipped, so you can run the same batch again after adding files. If one file can't be read or a step fails on it, the others still finish, and the window says which failed and why.
+Each file is saved as "name (Jämmer)" in that folder. Your files are never changed. A result that's already there is skipped, so you can run the same batch again after adding files. If one file can't be read or a step fails on it, the others still finish, and the window says which failed and why. If a loudness recipe couldn't reach its target on some file because of its peaks (Jämmer has no limiter yet), the window lists those files with the level they did reach. Lossy formats can also land a few tenths under a loudness target, because the encoder removes a little; agents get each file's loudness as written.
 
 ## Your own recipes
 

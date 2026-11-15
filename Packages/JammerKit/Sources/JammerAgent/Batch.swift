@@ -147,11 +147,16 @@ public struct BatchResult: Sendable, Equatable {
         public var message: String
     }
     public var outputs: [String] = []
+    /// Per output, in the same order: the integrated loudness of what was written (LUFS), and
+    /// whether a loudness step stopped short of its target because of the peaks (no limiter yet).
+    public var loudness: [Double?] = []
+    public var limitedByPeak: [Bool] = []
     public var failed: [Failure] = []
     public var skipped: [String] = []
 
     public var json: [String: JSONValue] {
         ["done": .number(Double(outputs.count)), "outputs": .array(outputs.map { .string($0) }), "skipped": .array(skipped.map { .string($0) }),
+         "loudness": .array(loudness.map { $0.map { .number(($0 * 10).rounded() / 10) } ?? .null }), "limitedByPeak": .array(limitedByPeak.map { .bool($0) }),
          "failed": .array(failed.map { .string("\($0.file): \($0.reason): \($0.message)") })]
     }
 }
@@ -190,6 +195,8 @@ public enum BatchRunner {
                 }
                 try export(project, pool: pool, to: dest, request: request)
                 result.outputs.append(dest.path)
+                result.loudness.append(writtenLoudness(dest, media: media) ?? LoudnessMeter.measure(PlanCompiler.mixBlocking(project, pool: pool), 0..<project.length).integrated)
+                result.limitedByPeak.append(results.contains { $0.info["limitedByPeak"] == 1 })
             } catch {
                 let b = error as? BatchError
                 result.failed.append(.init(file: input.path, reason: b?.reason ?? "failed", message: error.localizedDescription))
@@ -197,6 +204,18 @@ public enum BatchRunner {
             progress(Double(i + 1) / Double(request.inputs.count))
         }
         return result
+    }
+
+    /// The loudness of the file as written: a lossy encoder can change it (LAME at 160 kbit/s
+    /// took 0.4 LU off one test file), so the file is read back rather than trusting the mix.
+    /// Nil when this Mac can't decode the format (Ogg Opus); the caller then uses the mix.
+    static func writtenLoudness(_ url: URL, media: URL) -> Double? {
+        let scratch = media.appending(path: "batch-check-\(UUID().uuidString.prefix(8))")
+        defer { try? FileManager.default.removeItem(at: scratch) }
+        try? FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
+        guard let r = try? AudioImporter.importFile(url, mediaFolder: scratch) else { return nil }
+        let p = Project(source: r.source)
+        return LoudnessMeter.measure(PlanCompiler.compile(p, pool: SourcePool()), 0..<p.length).integrated
     }
 
     static func export(_ project: Project, pool: SourcePool, to url: URL, request: BatchRequest) throws {

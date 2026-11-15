@@ -25,7 +25,8 @@ Task {
             windows = main + windows.filter { ($0.title ?? "").isEmpty && $0.frame.intersects(frame) }
         }
         guard !windows.isEmpty, let display = content.displays.first(where: { $0.frame.intersects(windows[0].frame) }) ?? content.displays.first else {
-            FileHandle.standardError.write(Data("winshot: no matching windows\n".utf8)); exit(1)
+            let seen = content.windows.filter { $0.owningApplication?.processID == pid }.map { "\($0.title ?? "nil") layer \($0.windowLayer) \(Int($0.frame.width))x\(Int($0.frame.height))" }
+            FileHandle.standardError.write(Data("winshot: no matching windows; the app has: \(seen)\n".utf8)); exit(1)
         }
         let union = windows.reduce(CGRect.null) { $0.union($1.frame) }.intersection(display.frame)
         let filter = SCContentFilter(display: display, including: windows)
