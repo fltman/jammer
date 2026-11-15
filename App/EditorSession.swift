@@ -285,6 +285,10 @@ final class EditorSession {
         var dither = false
         /// AIFF, FLAC, ALAC or AAC; nil writes WAV.
         var encoded: EncodedExportOptions?
+        /// MP3: chapters from the markers as ID3 CHAP frames.
+        var chapters = true
+        /// Also write Podcasting 2.0 JSON chapters next to the file.
+        var chaptersJSON = false
     }
 
     /// Renders to a WAV file off the main thread. Keeps the first source's
@@ -293,7 +297,14 @@ final class EditorSession {
         let plan = self.plan
         let range = options.range ?? 0..<project.length
         guard !range.isEmpty else { throw EditError.emptyRange }
-        if let encoded = options.encoded {
+        let chapters = project.chapters(in: range)
+        if options.chaptersJSON, !chapters.isEmpty {
+            try ChapterFormats.podcastingJSON(chapters).write(to: url.deletingPathExtension().appendingPathExtension("chapters.json"))
+        }
+        if var encoded = options.encoded {
+            if encoded.format == .mp3, options.chapters {
+                encoded.id3 = ChapterFormats.id3Tag(chapters, title: name)
+            }
             try await Task.detached(priority: .userInitiated) {
                 try EncodedWriter.export(plan, range: range, to: url, options: encoded) { p in progress(p); return true }
             }.value

@@ -38,11 +38,14 @@ public struct EncodedExportOptions: Sendable {
     public var bitDepth: Int
     /// AAC only, bits per second (e.g. 128 000 for speech at 48 kHz stereo).
     public var bitRate: Int
+    /// MP3: an ID3v2 tag to put before the audio (chapters, title).
+    public var id3: Data?
 
-    public init(format: ExportFormat, bitDepth: Int = 24, bitRate: Int = 160_000) {
+    public init(format: ExportFormat, bitDepth: Int = 24, bitRate: Int = 160_000, id3: Data? = nil) {
         self.format = format
         self.bitDepth = bitDepth
         self.bitRate = bitRate
+        self.id3 = id3
     }
 }
 
@@ -67,7 +70,7 @@ public protocol StreamingAudioWriter: AnyObject {
 /// Writes a rendered plan to AIFF, FLAC, ALAC or AAC.
 public final class EncodedWriter {
     /// MP3 comes from LAME (LGPL, a separate dynamic framework); the app registers it.
-    nonisolated(unsafe) public static var mp3Factory: ((_ url: URL, _ channels: Int, _ sampleRate: Double, _ bitRate: Int) throws -> StreamingAudioWriter)?
+    nonisolated(unsafe) public static var mp3Factory: ((_ url: URL, _ channels: Int, _ sampleRate: Double, _ bitRate: Int, _ id3: Data?) throws -> StreamingAudioWriter)?
 
     private var file: ExtAudioFileRef?
     let channels: Int
@@ -166,7 +169,7 @@ public final class EncodedWriter {
         }
         if options.format == .mp3 {
             guard let make = mp3Factory else { throw ExportError.unsupported("MP3 isn't available in this build.") }
-            let w = try make(url, plan.channels, plan.sampleRate, options.bitRate)
+            let w = try make(url, plan.channels, plan.sampleRate, options.bitRate, options.id3)
             try plan.render(range) { try w.write($0) }
             try w.finish()
             _ = progress(1)

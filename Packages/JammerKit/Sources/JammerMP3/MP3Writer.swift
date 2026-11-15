@@ -10,8 +10,10 @@ public final class MP3Writer: StreamingAudioWriter {
     private let handle: FileHandle
     private let channels: Int
     private var buffer = [UInt8](repeating: 0, count: 1 << 18)
+    /// Where the audio starts (after an ID3 tag); the LAME tag frame goes there.
+    private var audioStart: UInt64 = 0
 
-    public init(url: URL, channels: Int, sampleRate: Double, bitRate: Int = 128_000) throws {
+    public init(url: URL, channels: Int, sampleRate: Double, bitRate: Int = 128_000, id3: Data? = nil) throws {
         guard (1...2).contains(channels) else { throw ExportError.unsupported("MP3 takes mono or stereo.") }
         guard let l = lame_init() else { throw ExportError.unsupported("LAME couldn't start.") }
         lame = l
@@ -26,6 +28,10 @@ public final class MP3Writer: StreamingAudioWriter {
         FileManager.default.createFile(atPath: url.path, contents: nil)
         guard let h = try? FileHandle(forUpdating: url) else { lame_close(l); throw ExportError.unsupported("Can't write \(url.lastPathComponent).") }
         handle = h
+        if let id3 {
+            try h.write(contentsOf: id3)
+            audioStart = UInt64(id3.count)
+        }
     }
 
     deinit {
@@ -54,7 +60,7 @@ public final class MP3Writer: StreamingAudioWriter {
         var tag = [UInt8](repeating: 0, count: 2_880)
         let size = tag.withUnsafeMutableBufferPointer { lame_get_lametag_frame(lame, $0.baseAddress, $0.count) }
         if size > 0, size <= tag.count {
-            try handle.seek(toOffset: 0)
+            try handle.seek(toOffset: audioStart)
             try handle.write(contentsOf: tag[0..<size])
         }
         try handle.close()
@@ -62,6 +68,6 @@ public final class MP3Writer: StreamingAudioWriter {
 
     /// Lets `EncodedWriter` (and so the app and the API) write MP3.
     public static func register() {
-        EncodedWriter.mp3Factory = { url, ch, rate, br in try MP3Writer(url: url, channels: ch, sampleRate: rate, bitRate: br) }
+        EncodedWriter.mp3Factory = { url, ch, rate, br, id3 in try MP3Writer(url: url, channels: ch, sampleRate: rate, bitRate: br, id3: id3) }
     }
 }

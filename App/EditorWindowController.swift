@@ -184,7 +184,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         panel.beginSheetModal(for: window) { [weak self] response in
             guard response == .OK, let chosen = panel.url, let self else { return }
             let url = chosen.deletingPathExtension().appendingPathExtension(model.choice.fileExtension)
-            var options = EditorSession.ExportOptions(encoding: model.choice.encoding, dither: model.dither, encoded: model.choice.encoded)
+            var options = EditorSession.ExportOptions(encoding: model.choice.encoding, dither: model.dither, encoded: model.choice.encoded,
+                                                      chapters: model.chapters, chaptersJSON: model.chaptersJSON)
             if model.selectionOnly { options.range = self.session.selection }
             let session = self.session
             Task {
@@ -334,6 +335,8 @@ final class ExportChoices {
         var fileExtension: String { encoded?.format.fileExtension ?? "wav" }
     }
     var choice: Choice = .wav24
+    var chapters = true
+    var chaptersJSON = false
     var encoding: WAVWriter.Encoding = .int24
     var dither = false
     var selectionOnly = false
@@ -357,6 +360,8 @@ struct ExportAccessory: View {
                 Text("Broadcast Wave metadata and markers are kept in WAV only.").font(.caption).foregroundStyle(.secondary)
             }
             Toggle("Selection only", isOn: $model.selectionOnly).disabled(!model.hasSelection)
+            Toggle("Chapters from markers (MP3)", isOn: $model.chapters).disabled(model.choice != .mp3)
+            Toggle("Also save chapters as JSON (Podcasting 2.0)", isOn: $model.chaptersJSON)
         }
         .padding(12)
         .frame(width: 320)
