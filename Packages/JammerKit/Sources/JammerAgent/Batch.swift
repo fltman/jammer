@@ -58,6 +58,11 @@ public struct BatchRequest: Sendable {
     public var output: URL
     public var suffix: String
     public var overwrite: Bool
+    /// The loudness the files are delivered at, when the request gives one (`export.targetLUFS`)
+    /// or ends its steps with a loudness preset. With it, mp3 and aac are measured after
+    /// encoding and corrected (`LoudnessDelivery`), unless `compensate` is false.
+    public var loudnessTarget: LoudnessDelivery.Target?
+    public var compensate = true
 
     public init(inputs: [URL], steps: [Step] = [], jobs: [JobStep] = [], export: EncodedExportOptions = .init(format: .wav, bitDepth: 24),
                 chapters: Bool = true, output: URL, suffix: String = " (Jämmer)", overwrite: Bool = false) {
@@ -131,13 +136,32 @@ public struct BatchRequest: Sendable {
         let defaults: [ExportFormat: Int] = [.aac: 192_000, .opus: 96_000, .mp3: 160_000]
         let depth = (e["bitDepth"] as? Int) ?? 24
         if format.isLossless, !format.bitDepths.contains(depth) { throw BatchError("bad_request", "\(format.rawValue) takes \(format.bitDepths.map(String.init).joined(separator: " or ")) bits.") }
-        let request = BatchRequest(inputs: inputs, steps: steps, jobs: jobs,
+        var request = BatchRequest(inputs: inputs, steps: steps, jobs: jobs,
                                    export: .init(format: format, bitDepth: depth, bitRate: (e["bitRate"] as? Int) ?? defaults[format] ?? 160_000),
                                    chapters: (e["chapters"] as? Bool) ?? true, output: try checked(out, "output"),
                                    suffix: (body["suffix"] as? String) ?? " (Jämmer)", overwrite: (body["overwrite"] as? Bool) ?? false)
+        if let unknown = e.keys.first(where: { !exportKeys.contains($0) }) {
+            throw BatchError("bad_request", "Unknown export field \"\(unknown)\". export takes: \(exportKeys.sorted().joined(separator: ", ")).")
+        }
+        if let t = e["targetLUFS"] {
+            guard let n = t as? NSNumber, CFGetTypeID(n) != CFBooleanGetTypeID(), (-40.0 ... -5.0).contains(n.doubleValue) else {
+                throw BatchError("bad_request", "export.targetLUFS must be a number between -40 and -5.")
+            }
+            guard !format.isLossless else {
+                throw BatchError("bad_request", "export.targetLUFS is for mp3, aac and opus, where the encoder changes the loudness. Set the level of a \(format.rawValue) with a loudness_preset or normalize step.")
+            }
+            request.loudnessTarget = .init(integrated: n.doubleValue)
+        } else if let last = steps.last, last.op == "loudness_preset", let preset = LoudnessPreset(rawValue: last.params["preset"]?.string ?? "") {
+            request.loudnessTarget = .init(integrated: preset.integrated, ceiling: preset.truePeakCeiling)
+        }
+        if let c = e["compensate"] {
+            guard let b = c as? Bool else { throw BatchError("bad_request", "export.compensate must be true or false.") }
+            request.compensate = b
+        }
         try request.checkSources()
         return request
     }
+    static let exportKeys: Set<String> = ["format", "bitDepth", "bitRate", "chapters", "targetLUFS", "compensate"]
 }
 
 public struct BatchResult: Sendable, Equatable {
@@ -151,12 +175,18 @@ public struct BatchResult: Sendable, Equatable {
     /// whether a loudness step stopped short of its target because of the peaks (no limiter yet).
     public var loudness: [Double?] = []
     public var limitedByPeak: [Bool] = []
+    /// Per output: the gain put in before a lossy encoder so the file as delivered meets the
+    /// target (0 when nothing was needed or nothing was asked), and whether `loudness` was
+    /// measured on the written file ("file") or is the mix's because the file couldn't be read back ("mix").
+    public var compensatedDB: [Double] = []
+    public var loudnessFrom: [String] = []
     public var failed: [Failure] = []
     public var skipped: [String] = []
 
     public var json: [String: JSONValue] {
         ["done": .number(Double(outputs.count)), "outputs": .array(outputs.map { .string($0) }), "skipped": .array(skipped.map { .string($0) }),
          "loudness": .array(loudness.map { $0.map { .number(($0 * 10).rounded() / 10) } ?? .null }), "limitedByPeak": .array(limitedByPeak.map { .bool($0) }),
+         "compensatedDB": .array(compensatedDB.map { .number($0) }), "loudnessFrom": .array(loudnessFrom.map { .string($0) }),
          "failed": .array(failed.map { .string("\($0.file): \($0.reason): \($0.message)") })]
     }
 }
@@ -193,10 +223,12 @@ public enum BatchRunner {
                     guard let job else { throw BatchError("not_available", "\(j.op) isn't available here.") }
                     project = try await job(j, project, pool)
                 }
-                try export(project, pool: pool, to: dest, request: request)
+                let delivery = try deliver(project, pool: pool, to: dest, request: request, media: media)
                 result.outputs.append(dest.path)
-                result.loudness.append(writtenLoudness(dest, media: media) ?? LoudnessMeter.measure(PlanCompiler.mixBlocking(project, pool: pool), 0..<project.length).integrated)
-                result.limitedByPeak.append(results.contains { $0.info["limitedByPeak"] == 1 })
+                result.loudness.append(delivery.loudness ?? LoudnessMeter.measure(PlanCompiler.mixBlocking(project, pool: pool), 0..<project.length).integrated)
+                result.loudnessFrom.append(delivery.loudness != nil ? "file" : "mix")
+                result.compensatedDB.append(delivery.compensatedDB)
+                result.limitedByPeak.append(delivery.limitedByPeak || results.contains { $0.info["limitedByPeak"] == 1 })
             } catch {
                 let b = error as? BatchError
                 result.failed.append(.init(file: input.path, reason: b?.reason ?? "failed", message: error.localizedDescription))
@@ -206,16 +238,19 @@ public enum BatchRunner {
         return result
     }
 
-    /// The loudness of the file as written: a lossy encoder can change it (LAME at 160 kbit/s
-    /// took 0.4 LU off one test file), so the file is read back rather than trusting the mix.
-    /// Nil when this Mac can't decode the format (Ogg Opus); the caller then uses the mix.
-    static func writtenLoudness(_ url: URL, media: URL) -> Double? {
-        let scratch = media.appending(path: "batch-check-\(UUID().uuidString.prefix(8))")
-        defer { try? FileManager.default.removeItem(at: scratch) }
-        try? FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
-        guard let r = try? AudioImporter.importFile(url, mediaFolder: scratch) else { return nil }
-        let p = Project(source: r.source)
-        return LoudnessMeter.measure(PlanCompiler.compile(p, pool: SourcePool()), 0..<p.length).integrated
+    /// Writes the file and reads it back: a lossy encoder can change the loudness, so the
+    /// number reported is the file's. With a target, mp3 and aac are corrected and encoded again.
+    static func deliver(_ project: Project, pool: SourcePool, to url: URL, request: BatchRequest, media: URL) throws -> LoudnessDelivery {
+        if let target = request.loudnessTarget, request.compensate, request.export.format.loudnessIsCompensated {
+            return try LoudnessDelivery.deliver(target, encode: { gain in
+                var p = project
+                if gain != 0 { try p.changeGain(0..<p.length, by: gain) }
+                try export(p, pool: pool, to: url, request: request)
+            }, measure: { EncodedWriter.measureWritten(url, scratch: media) })
+        }
+        try export(project, pool: pool, to: url, request: request)
+        let m = EncodedWriter.measureWritten(url, scratch: media)
+        return LoudnessDelivery(loudness: m?.integrated, truePeak: m?.truePeak, compensatedDB: 0, encodes: 1, limitedByPeak: false)
     }
 
     static func export(_ project: Project, pool: SourcePool, to url: URL, request: BatchRequest) throws {

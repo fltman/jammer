@@ -404,14 +404,21 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
             var options = EditorSession.ExportOptions(encoding: model.choice.encoding, dither: model.dither, encoded: model.choice.encoded,
                                                       chapters: model.chapters, chaptersJSON: model.chaptersJSON)
             if model.selectionOnly { options.range = self.session.selection }
+            // After a loudness preset, a lossy file is delivered at the preset's target: measured as written, corrected, encoded again.
+            options.loudness = self.session.deliveryTarget
             let session = self.session
             Task {
                 session.status = "Exporting…"
                 do {
-                    try await session.export(to: url, options: options) { p in
+                    let delivery = try await session.export(to: url, options: options) { p in
                         Task { @MainActor in session.status = "Exporting… \(Int(p * 100)) %" }
                     }
-                    session.status = "Exported \(url.lastPathComponent)"
+                    if let d = delivery, let l = d.loudness {
+                        let how = d.limitedByPeak ? "the peaks held it back" : (d.compensatedDB == 0 ? "as encoded" : String(format: "%+.2f dB to make up for the encoder", d.compensatedDB))
+                        session.status = String(format: "Exported %@ at %.1f LUFS (%@)", url.lastPathComponent, l, how)
+                    } else {
+                        session.status = "Exported \(url.lastPathComponent)"
+                    }
                 } catch {
                     session.status = "Export failed: \(error.localizedDescription)"
                 }

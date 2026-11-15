@@ -887,6 +887,23 @@ enum AgentRouter {
             guard a >= 0, b > a else { throw APIError.badRequest("start and end must be seconds with end after start.") }
             range = session.project.frames(a)..<min(session.project.length, session.project.frames(b))
         }
+        // A loudness target for the delivered file: given here, or the preset the document was just brought to.
+        var target: LoudnessDelivery.Target?
+        if let t = obj["targetLUFS"] {
+            guard let n = t as? NSNumber, CFGetTypeID(n) != CFBooleanGetTypeID(), (-40.0 ... -5.0).contains(n.doubleValue) else {
+                throw APIError.badRequest("targetLUFS must be a number between -40 and -5.")
+            }
+            guard !format.isLossless else {
+                throw APIError.badRequest("targetLUFS is for mp3, aac and opus, where the encoder changes the loudness. Set the level of a \(format.rawValue) with loudness_preset or normalize.")
+            }
+            target = .init(integrated: n.doubleValue)
+        } else if !format.isLossless {
+            target = session.deliveryTarget
+        }
+        if let c = obj["compensate"] {
+            guard let on = c as? Bool else { throw APIError.badRequest("compensate must be true or false.") }
+            if !on { target = nil }
+        }
         let frames = Int64((range ?? 0..<session.project.length).count)
         guard frames > 0 else { throw APIError.notAvailable("Nothing to export.") }
         let bytes = frames * Int64(session.project.channels) * Int64(bits / 8)
@@ -896,11 +913,24 @@ enum AgentRouter {
         let tmp = FileManager.default.temporaryDirectory.appending(path: "jammer-export-\(UUID().uuidString).\(format.fileExtension)")
         try UploadStore.checkSpace(for: bytes, at: tmp.deletingLastPathComponent())
         defer { try? FileManager.default.removeItem(at: tmp) }
-        try await session.export(to: tmp, options: .init(encoding: encoding, range: range, dither: obj["dither"] as? Bool ?? false, encoded: encoded,
-                                                         chapters: obj["chapters"] as? Bool ?? true))
+        let delivery = try await session.export(to: tmp, options: .init(encoding: encoding, range: range, dither: obj["dither"] as? Bool ?? false, encoded: encoded,
+                                                                        chapters: obj["chapters"] as? Bool ?? true, loudness: target))
+        var headers = ["Content-Disposition": "attachment; filename=\"\(asciiName(session.name)).\(format.fileExtension)\""]
+        if let d = delivery, let target {
+            // What the file measures when decoded again, and what was added before the encoder to get there.
+            headers["X-Jammer-Target-LUFS"] = String(format: "%.1f", target.integrated)
+            headers["X-Jammer-Compensated-DB"] = String(format: "%.2f", d.compensatedDB)
+            headers["X-Jammer-Limited-By-Peak"] = d.limitedByPeak ? "1" : "0"
+            if let l = d.loudness {
+                headers["X-Jammer-Loudness"] = String(format: "%.2f", l)
+                headers["X-Jammer-Loudness-From"] = "file"
+            } else {
+                headers["X-Jammer-Loudness-From"] = "mix"
+            }
+            if let tp = d.truePeak { headers["X-Jammer-True-Peak"] = String(format: "%.2f", tp) }
+        }
         let data = try Data(contentsOf: tmp, options: .mappedIfSafe)
         let types: [ExportFormat: String] = [.wav: "audio/wav", .aiff: "audio/aiff", .flac: "audio/flac", .alac: "audio/mp4", .aac: "audio/mp4", .opus: "audio/ogg", .mp3: "audio/mpeg"]
-        return Response(status: 200, contentType: types[format] ?? "application/octet-stream", body: data,
-                        extraHeaders: ["Content-Disposition": "attachment; filename=\"\(asciiName(session.name)).\(format.fileExtension)\""])
+        return Response(status: 200, contentType: types[format] ?? "application/octet-stream", body: data, extraHeaders: headers)
     }
 }

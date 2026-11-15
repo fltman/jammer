@@ -18,6 +18,12 @@ The status bar shows the progress and the file name when it's done.
 
 Besides WAV, **File › Export Audio…** writes **AIFF** (24-bit), **FLAC** (16 or 24-bit), **Apple Lossless** (ALAC, 24-bit, .m4a) **AAC** (192 kbit/s, .m4a) and **Opus** (96 kbit/s, in an Ogg file as podcast hosts expect), with the encoders built into macOS. The lossless formats give back exactly the samples you hear (Jämmer's tests check it). Broadcast Wave metadata, iXML and markers are written in WAV only. **MP3** (160 kbit/s) uses LAME, which ships with Jämmer as a separate library under the LGPL; the file carries the LAME header, so players can trim the encoder's silence and play it gaplessly.
 
+## Loudness of MP3, AAC and Opus
+
+A lossy encoder changes the loudness a little: an MP3 can come out 0.4 LU quieter than the mix it was made from. So when you've just set the loudness with **Audio › Loudness Preset** and export to MP3, AAC or Opus, Jämmer reads the finished file back, measures it, corrects the level going into the encoder and encodes again (at most twice more), without letting the peaks pass the preset's ceiling. The status bar then says what the file measures, for example "Exported Episode 7.mp3 at −16.0 LUFS (+0.44 dB to make up for the encoder)".
+
+This only happens while the document is as the preset left it. Edit anything afterwards and the export is a plain one again; apply the preset once more when you're done. WAV, AIFF, FLAC and Apple Lossless keep the mix exactly, so there is nothing to correct.
+
 ## Chapters
 
 ![The export dialog with MP3 chosen and Chapters from markers ticked](../screens/export.webp)

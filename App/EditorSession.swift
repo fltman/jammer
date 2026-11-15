@@ -321,6 +321,9 @@ final class EditorSession {
         }.value
         guard results.allSatisfy({ $0.status == .done }) else { return results }
         if end.project != project { commit(end.project, action: action) }
+        if let last = steps.last, last.op == "loudness_preset", let preset = LoudnessPreset(rawValue: last.params["preset"]?.string ?? "") {
+            presetTarget = (.init(integrated: preset.integrated, ceiling: preset.truePeakCeiling), end.project)
+        }
         selection = end.selection
         playhead = end.playhead
         AppClipboard.content = end.clipboard
@@ -456,11 +459,23 @@ final class EditorSession {
         var chapters = true
         /// Also write Podcasting 2.0 JSON chapters next to the file.
         var chaptersJSON = false
+        /// Lossy formats: measure the file as written and correct the gain before the encoder
+        /// until it meets this (at most two corrections, never past the ceiling).
+        var loudness: LoudnessDelivery.Target?
+    }
+
+    /// The target of a loudness preset, while the document is still as that preset left it:
+    /// a lossy export is then delivered at it without being asked.
+    private var presetTarget: (target: LoudnessDelivery.Target, project: Project)?
+    var deliveryTarget: LoudnessDelivery.Target? {
+        guard let p = presetTarget, p.project == project else { return nil }
+        return p.target
     }
 
     /// Renders to a WAV file off the main thread. Keeps the first source's
     /// Broadcast Wave and iXML data when exporting from the start.
-    func export(to url: URL, options: ExportOptions, progress: @escaping @Sendable (Double) -> Void = { _ in }) async throws {
+    @discardableResult
+    func export(to url: URL, options: ExportOptions, progress: @escaping @Sendable (Double) -> Void = { _ in }) async throws -> LoudnessDelivery? {
         // Units of its own: playback keeps going untouched while this renders.
         let plan = await PlanCompiler.mix(project, pool: pool, outOfProcess: Self.pluginSafeMode)
         let range = options.range ?? 0..<project.length
@@ -477,10 +492,22 @@ final class EditorSession {
                 encoded.chapters = chapters
                 encoded.language = project.transcripts.first?.language
             }
+            if let target = options.loudness, encoded.format.loudnessIsCompensated {
+                let project = self.project, pool = self.pool, safe = Self.pluginSafeMode, final = encoded
+                return try await Task.detached(priority: .userInitiated) {
+                    try LoudnessDelivery.deliver(target, encode: { gain in
+                        var p = project
+                        if gain != 0 { try p.changeGain(range, by: gain) }
+                        // The first encode uses the plan already made; a corrected one needs its own.
+                        let use = gain == 0 ? plan : PlanCompiler.mixBlocking(p, pool: pool, outOfProcess: safe)
+                        try EncodedWriter.export(use, range: range, to: url, options: final) { p in progress(p); return true }
+                    }, measure: { EncodedWriter.measureWritten(url, scratch: FileManager.default.temporaryDirectory) })
+                }.value
+            }
             try await Task.detached(priority: .userInitiated) {
                 try EncodedWriter.export(plan, range: range, to: url, options: encoded) { p in progress(p); return true }
             }.value
-            return
+            return nil
         }
         var wav = WAVWriter.Options(encoding: options.encoding, channels: project.channels, sampleRate: project.sampleRate,
                                     dither: options.dither)
@@ -509,5 +536,6 @@ final class EditorSession {
             }
             try writer.finish()
         }.value
+        return nil
     }
 }

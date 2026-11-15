@@ -12,7 +12,7 @@
 4. **Save in**: the folder the results go in.
 5. **Run.**
 
-Each file is saved as "name (Jämmer)" in that folder. Your files are never changed. A result that's already there is skipped, so you can run the same batch again after adding files. If one file can't be read or a step fails on it, the others still finish, and the window says which failed and why. If a loudness recipe couldn't reach its target on some file because of its peaks (Jämmer has no limiter yet), the window lists those files with the level they did reach. Lossy formats can also land a few tenths under a loudness target, because the encoder removes a little; agents get each file's loudness as written.
+Each file is saved as "name (Jämmer)" in that folder. Your files are never changed. A result that's already there is skipped, so you can run the same batch again after adding files. If one file can't be read or a step fails on it, the others still finish, and the window says which failed and why. If a loudness recipe couldn't reach its target on some file because of its peaks (Jämmer has no limiter yet), the window lists those files with the level they did reach. MP3, AAC and Opus files are read back after encoding and corrected so that the file itself meets a loudness recipe's target, not just the mix it was made from (see [Exporting](06-exporting.md)); agents get each file's loudness as written and how much was added.
 
 ## Your own recipes
 

@@ -20,6 +20,44 @@ struct BatchTests {
         return d
     }
 
+    @Test("Lossy export at a target: the file as delivered is measured and corrected, and the result says by how much")
+    func delivered() async throws {
+        let dir = try folder()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let a = dir.appending(path: "in/a.wav")
+        try tone(a, db: -30)
+        let policy = FolderPolicy(allowed: [dir])
+        func run(_ export: [String: Any], steps: [[String: Any]] = [], out: String) async throws -> BatchResult {
+            let body: [String: Any] = ["files": [a.path], "output": dir.appending(path: out).path, "steps": steps, "export": export]
+            return await BatchRunner.run(try BatchRequest.parse(body, policy: policy), media: dir.appending(path: "media"))
+        }
+        func measured(_ path: String) throws -> LoudnessResult {
+            try #require(EncodedWriter.measureWritten(URL(fileURLWithPath: path), scratch: dir.appending(path: "media")))
+        }
+        // An explicit target on a file that is nowhere near it: the gain is found from the encoded file.
+        let explicit = try await run(["format": "aac", "bitRate": 96_000, "targetLUFS": -18], out: "explicit")
+        #expect(explicit.failed.isEmpty && explicit.loudnessFrom == ["file"], "\(explicit.failed)")
+        #expect(abs((explicit.loudness[0] ?? 0) + 18) <= 0.1 && explicit.compensatedDB[0] > 5, "\(explicit.loudness) \(explicit.compensatedDB)")
+        #expect(abs((try measured(explicit.outputs[0]).integrated ?? 0) + 18) <= 0.1)
+        // A preset as the last step is the target too; the ceiling is the preset's.
+        let preset = try await run(["format": "aac", "bitRate": 96_000], steps: [["op": "loudness_preset", "params": ["preset": "apple_podcasts"]]], out: "preset")
+        #expect(abs((preset.loudness[0] ?? 0) + 16) <= 0.1 && preset.limitedByPeak == [false], "\(preset.loudness) \(preset.compensatedDB)")
+        #expect(try measured(preset.outputs[0]).truePeak <= -1 + 0.05)
+        // Switched off: one encode, nothing added.
+        let off = try await run(["format": "aac", "targetLUFS": -18, "compensate": false], out: "off")
+        #expect(off.compensatedDB == [0] && (off.loudness[0] ?? 0) < -25)
+        // A lossless file has nothing to compensate: 0, measured on the file.
+        let flac = try await run(["format": "flac"], steps: [["op": "loudness_preset", "params": ["preset": "apple_podcasts"]]], out: "flac")
+        #expect(flac.compensatedDB == [0] && flac.loudnessFrom == ["file"] && abs((flac.loudness[0] ?? 0) + 16) <= 0.1)
+        // Ogg Opus is read back and corrected like the others (macOS decodes it).
+        let opus = try await run(["format": "opus", "targetLUFS": -18], out: "opus")
+        #expect(opus.failed.isEmpty && opus.loudnessFrom == ["file"] && abs((opus.loudness[0] ?? 0) + 18) <= 0.1, "\(opus.failed) \(opus.loudness)")
+        // Refused before anything runs.
+        #expect(throws: BatchError.self) { try BatchRequest.parse(["files": [a.path], "output": dir.path, "export": ["format": "wav", "targetLUFS": -16]], policy: policy) }
+        #expect(throws: BatchError.self) { try BatchRequest.parse(["files": [a.path], "output": dir.path, "export": ["format": "mp3", "targetLUFS": 3]], policy: policy) }
+        #expect(throws: BatchError.self) { try BatchRequest.parse(["files": [a.path], "output": dir.path, "export": ["format": "aac", "loudness": -16]], policy: policy) }
+    }
+
     @Test("Three files, one broken: two come out at the target loudness, the broken one is reported, the originals are untouched")
     func run() async throws {
         let dir = try folder()
