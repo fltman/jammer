@@ -62,6 +62,7 @@ targets:
         NSHumanReadableCopyright: "© 2026 Anders Bjarby. MIT licence."
         NSPrincipalClass: NSApplication
         JammerHomepage: https://jammer.brattoo.com
+        NSSpeechRecognitionUsageDescription: Jämmer transcribes your recordings on this Mac so you can edit them as text. The audio never leaves the Mac.
         CFBundleDocumentTypes:
           - CFBundleTypeName: Jammer Project
             CFBundleTypeRole: Editor

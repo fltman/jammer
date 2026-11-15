@@ -61,6 +61,8 @@
 	<string>© 2026 Anders Bjarby. MIT licence.</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Jämmer transcribes your recordings on this Mac so you can edit them as text. The audio never leaves the Mac.</string>
 	<key>UTExportedTypeDeclarations</key>
 	<array>
 		<dict>
