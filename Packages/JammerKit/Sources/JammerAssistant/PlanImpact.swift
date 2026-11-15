@@ -79,6 +79,9 @@ public struct PlanImpact: Sendable, Equatable {
                     lines.append(String(format: "Changes the level by %+.1f dB on ", s.params["db"]?.double ?? 0) + "\(clock(secs(Frame(r.count)))) \(where_(r, len)).")
                 case "normalize":
                     lines.append("Sets the \(s.params["target"]?.string ?? "loudness") to \(s.params["level"]?.double.map { String(format: "%g", $0) } ?? "?").")
+                case "loudness_preset":
+                    let preset = LoudnessPreset(rawValue: s.params["preset"]?.string ?? "")
+                    lines.append("Sets the loudness for \(preset?.title ?? "the preset"); if the peaks don't allow the full target, it stops at the ceiling and says so.")
                 case "echo":
                     lines.append("Adds an echo" + (removed < 0 ? " and makes the document \(clock(secs(-removed))) longer." : "."))
                 default:

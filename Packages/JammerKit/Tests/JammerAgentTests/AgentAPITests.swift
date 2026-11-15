@@ -437,3 +437,20 @@ struct EndpointListTests {
         #expect(throws: StepFailure.self) { try StepRunner.validate(Step(op: "restore", params: [:])) }
     }
 }
+
+@Suite("Loudness preset step")
+struct LoudnessPresetStepTests {
+    @Test("Reports when the peaks held the gain back")
+    func limited() {
+        let info = AudioFileInfo(container: .wav, sampleFormat: .float32, bigEndian: false, channels: 2, sampleRate: 48_000,
+                                 channelMask: nil, dataOffset: 0, frames: 480_000, chunks: [], bext: nil, ixml: nil, markers: [])
+        var s = EditState(project: Project(source: SourceRef(name: "t", path: "/dev/null", info: info)))
+        let r = StepRunner.run([Step(op: "loudness_preset", params: ["preset": .string("apple_podcasts")])], on: &s) { _, _ in
+            LoudnessResult(integrated: -20, range: 5, maxMomentary: nil, maxShortTerm: nil, samplePeak: -3, truePeak: -2.5, duration: 10)
+        }
+        #expect(r[0].status == .done)
+        #expect(r[0].info["gainDB"] == 1.5 && r[0].info["limitedByPeak"] == 1 && r[0].info["integratedAfter"] == -18.5)
+        #expect(s.project.tracks[0].clips[0].gainDB == 1.5)
+        #expect(throws: StepFailure.self) { try StepRunner.validate(Step(op: "loudness_preset", params: ["preset": .string("acx")])) }
+    }
+}

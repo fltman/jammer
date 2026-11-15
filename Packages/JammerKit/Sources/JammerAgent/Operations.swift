@@ -120,6 +120,8 @@ public enum Operations {
               params: [.init("target", .string, "What to match.", required: true, options: ["loudness", "peak", "true_peak"]),
                        .init("level", .number, "Target: LUFS for loudness, dBFS for peak, dBTP for true_peak. E.g. -16 or -1.", required: true),
                        start, end]),
+        .init("loudness_preset", "Loudness Preset", "Brings the range (the whole document without a range or selection) to a delivery target in one step. Without a limiter, the gain stops where the true peak would pass the ceiling; info.limitedByPeak is then 1 and integratedAfter shows what was reached.",
+              params: [.init("preset", .string, "The target.", required: true, options: LoudnessPreset.allCases.map(\.rawValue)), start, end]),
         .init("add_marker", "Add Marker", "Adds a marker, or a region when `duration` is given.",
               params: [.init("at", .seconds, "Position in seconds. Defaults to the selection start, else the playhead."),
                        .init("name", .string, "Marker name.", required: true),
@@ -170,6 +172,8 @@ public enum Operations {
               call: ("POST", "/api/v1/documents/{id}/transcribe"), startsJob: true),
         .init("get_transcript", "Read Transcript", "The words as they play now, with ids, times and confidence.",
               params: [start, end], edits: false, call: ("GET", "/api/v1/documents/{id}/transcript")),
+        .init("get_chapters", "Read Chapters", "The markers as Podcasting 2.0 chapters (JSON, version 1.2.0), optionally over start and end.",
+              params: [start, end], edits: false, call: ("GET", "/api/v1/documents/{id}/chapters")),
         .init("measure_loudness", "Measure Loudness", "Integrated LUFS, loudness range, max momentary and short-term, sample and true peak.",
               params: [start, end], edits: false, call: ("GET", "/api/v1/documents/{id}/analysis")),
         .init("analyze_restoration", "Find Problems", "Looks for mains hum, clipping and clicks without changing anything.",
@@ -181,7 +185,8 @@ public enum Operations {
               params: [.init("format", .string, "File format. Default wav.", options: ExportFormat.available.map(\.rawValue)),
                        .init("bitDepth", .number, "wav 16, 24 or 32 (float); aiff, flac and alac 16 or 24. Default 24.", options: nil, range: 16...32),
                        .init("bitRate", .number, "aac (64000–320000, default 192000), mp3 (64000–320000, default 160000) and opus (16000–256000, default 96000), bits per second.", range: 16_000...320_000),
-                       start, end, .init("dither", .boolean, "TPDF dither when writing 16 or 24-bit wav.")],
+                       start, end, .init("dither", .boolean, "TPDF dither when writing 16 or 24-bit wav."),
+                       .init("chapters", .boolean, "mp3: write the markers as ID3 chapters (default true). wav keeps markers as cue points; other formats have no chapters yet.")],
               edits: false, call: ("POST", "/api/v1/documents/{id}/export")),
         .init("restore", "Repair", "Removes hum, repairs clipping, removes clicks or reduces noise. Answers with a job; one undo step brings the original back.",
               params: restoreParams, call: ("POST", "/api/v1/documents/{id}/restore"), startsJob: true),
@@ -439,6 +444,15 @@ public enum StepRunner {
             let change = level - current
             try s.project.changeGain(r, by: change)
             return ["gainDB": (change * 100).rounded() / 100, "before": (current * 100).rounded() / 100]
+        case "loudness_preset":
+            let r = try range(wholeIfNone: true); try checkInside(r)
+            guard let preset = LoudnessPreset(rawValue: p["preset"]?.string ?? "") else { throw StepFailure("loudness_preset: unknown preset.") }
+            let m = measure(s.project, r)
+            guard let plan = preset.plan(for: m) else { throw StepFailure("loudness_preset: the range is silent, so there's nothing to match.") }
+            try s.project.changeGain(r, by: plan.gainDB)
+            func r2(_ v: Double) -> Double { (v * 100).rounded() / 100 }
+            return ["gainDB": plan.gainDB, "integratedBefore": r2(m.integrated ?? 0), "integratedAfter": r2(plan.integratedAfter),
+                    "truePeakAfter": r2(plan.truePeakAfter), "target": preset.integrated, "limitedByPeak": plan.limitedByPeak ? 1 : 0]
         case "add_marker":
             let at = min(frames("at") ?? s.selection?.lowerBound ?? s.playhead, project.length)
             s.project.addMarker(at: at, length: frames("duration") ?? 0, name: p["name"]?.string ?? "Marker")

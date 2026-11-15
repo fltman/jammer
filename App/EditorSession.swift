@@ -173,6 +173,10 @@ final class EditorSession {
             if let failed = r.first(where: { $0.status == .failed }) {
                 status = failed.error
                 NSSound.beep()
+            } else if let info = r.first?.info, let after = info["integratedAfter"], let target = info["target"] {
+                status = info["limitedByPeak"] == 1
+                    ? String(format: "Reached %.1f instead of %.0f LUFS: the peaks held it back (no limiter yet).", after, target)
+                    : String(format: "%@: %.1f LUFS (%+.2f dB)", title, after, info["gainDB"] ?? 0)
             } else if let gain = r.first?.info["gainDB"] {
                 status = String(format: "%@: %+.2f dB", title, gain)
             } else {

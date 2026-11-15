@@ -58,12 +58,13 @@ Opening a document answers `201 Created`. To send the audio inside JSON instead:
 | POST | `/api/v1/documents/{id}/redo` | Redo. |
 | GET | `/api/v1/documents/{id}/analysis` | Loudness of the document, or of `?start=&end=` (seconds): integrated LUFS, range LU, max momentary and short-term, sample peak dBFS, true peak dBTP. |
 | GET | `/api/v1/documents/{id}/waveform` | Min/max per column for `?width=` columns (default 200, max 4000), optionally over `?start=&end=`. Lets you see where the sound is. |
-| POST | `/api/v1/documents/{id}/export` | The rendered audio as bytes. Body: `{"format": "wav"\|"aiff"\|"flac"\|"alac"\|"aac"\|"opus"\|"mp3", "bitDepth", "bitRate", "start", "end", "dither"}`; all optional (24-bit WAV of everything by default). bitDepth: wav 16, 24 or 32; aiff, flac, alac 16 or 24. bitRate: aac 64000–320000 (default 192000), opus 16000–256000 (default 96000; Ogg Opus, mono or stereo), mp3 64000–320000 in standard steps (default 160000). The formats this copy of Jämmer can write are listed in `GET /api/v1/operations` (export). Content-Type follows the format; only WAV carries Broadcast Wave metadata and markers. Up to 2 GB per response; export a range for more. |
+| POST | `/api/v1/documents/{id}/export` | The rendered audio as bytes. Body: `{"format": "wav"\|"aiff"\|"flac"\|"alac"\|"aac"\|"opus"\|"mp3", "bitDepth", "bitRate", "start", "end", "dither"}`; all optional (24-bit WAV of everything by default). bitDepth: wav 16, 24 or 32; aiff, flac, alac 16 or 24. bitRate: aac 64000–320000 (default 192000), opus 16000–256000 (default 96000; Ogg Opus, mono or stereo), mp3 64000–320000 in standard steps (default 160000). The formats this copy of Jämmer can write are listed in `GET /api/v1/operations` (export). `"chapters": true` (default) writes the markers as ID3 chapters in mp3; wav keeps markers as cue points; the other formats have no chapters yet. Content-Type follows the format; only WAV carries Broadcast Wave metadata and markers. Up to 2 GB per response; export a range for more. |
 | POST | `/api/v1/documents/{id}/transcribe` | Starts transcribing the document (a job, see below). Body: `{"language": "sv-SE", "engine": "auto"}`; both optional (the Mac's language and the best engine for it). Answers `202` with the job. |
 | GET | `/api/v1/documents/{id}/transcript` | The transcript as it plays now: `{"words": [{"id", "text", "start", "end", "confidence", "speaker", "partial"}], "text"}`, times in seconds on the timeline, optionally over `?start=&end=`. Empty until transcribed. |
 | GET | `/api/v1/documents/{id}/analysis/restoration` | Looks for problems without changing anything: mains hum (frequency, how prominent), clipping (runs, samples, level) and clicks, over `?start=&end=` and `?tracks=id,id` (default: the selection, else everything; all tracks). Long ranges are sampled. |
 | POST | `/api/v1/documents/{id}/restore/preview` | The repaired audio of a stretch (at most 30 s), without changing the document. Same body as `restore`, with `start` and `end`. Answers a 24-bit WAV; with `Accept: application/json` it answers `{"before": {…}, "after": {…}}` instead: the detector numbers plus `integratedLUFS` and `truePeakDBTP`. |
 | POST | `/api/v1/documents/{id}/restore` | Repairs audio (a job). Body: `{"kind": "dehum"\|"declip"\|"declick", "amount": 0–1, "start", "end", "tracks": [id], "humFrequency", "sensitivity"}`; only `kind` is required. The repaired clips play from new files; the originals are untouched and one undo step brings them back. |
+| GET | `/api/v1/documents/{id}/chapters` | The markers as Podcasting 2.0 chapters: `{"version": "1.2.0", "chapters": [{"startTime", "endTime", "title"}]}` (Content-Type `application/json+chapters`), optionally over `?start=&end=`. |
 | GET | `/api/v1/jobs/{id}` | A job's state. |
 | DELETE | `/api/v1/jobs/{id}` | Cancels a job. |
 | POST | `/api/v1/documents/{id}/play` | Starts playback in the document's window, from `{"at": seconds}` or the playhead. Only works when the window is visible. |
@@ -268,6 +269,16 @@ Sets the level of the range (the whole document without a range or selection) to
 |---|---|---|
 | `target` | string | **Required.** What to match. One of: `loudness`, `peak`, `true_peak`. |
 | `level` | number | **Required.** Target: LUFS for loudness, dBFS for peak, dBTP for true_peak. E.g. -16 or -1. |
+| `start` | seconds | Range start in seconds. With `end`, overrides the selection. |
+| `end` | seconds | Range end in seconds. |
+
+### `loudness_preset`
+
+Brings the range (the whole document without a range or selection) to a delivery target in one step. Without a limiter, the gain stops where the true peak would pass the ceiling; info.limitedByPeak is then 1 and integratedAfter shows what was reached.
+
+| Param | Type | Description |
+|---|---|---|
+| `preset` | string | **Required.** The target. One of: `apple_podcasts`, `spotify`, `youtube`, `ebu_r128`, `atsc_a85`. |
 | `start` | seconds | Range start in seconds. With `end`, overrides the selection. |
 | `end` | seconds | Range end in seconds. |
 

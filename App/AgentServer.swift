@@ -322,6 +322,11 @@ enum AgentRouter {
             case ["transcript"]:
                 try only("GET")
                 return try transcript(session, r)
+            case ["chapters"]:
+                try only("GET")
+                let range = try queryRange(r, session)
+                return Response(status: 200, contentType: "application/json+chapters",
+                                body: try ChapterFormats.podcastingJSON(session.project.chapters(in: range)))
             case ["restore"]:
                 try only("POST")
                 return try restore(session, r)
@@ -704,7 +709,8 @@ enum AgentRouter {
         let tmp = FileManager.default.temporaryDirectory.appending(path: "jammer-export-\(UUID().uuidString).\(format.fileExtension)")
         try UploadStore.checkSpace(for: bytes, at: tmp.deletingLastPathComponent())
         defer { try? FileManager.default.removeItem(at: tmp) }
-        try await session.export(to: tmp, options: .init(encoding: encoding, range: range, dither: obj["dither"] as? Bool ?? false, encoded: encoded))
+        try await session.export(to: tmp, options: .init(encoding: encoding, range: range, dither: obj["dither"] as? Bool ?? false, encoded: encoded,
+                                                         chapters: obj["chapters"] as? Bool ?? true))
         let data = try Data(contentsOf: tmp, options: .mappedIfSafe)
         let types: [ExportFormat: String] = [.wav: "audio/wav", .aiff: "audio/aiff", .flac: "audio/flac", .alac: "audio/mp4", .aac: "audio/mp4", .opus: "audio/ogg", .mp3: "audio/mpeg"]
         return Response(status: 200, contentType: types[format] ?? "application/octet-stream", body: data,

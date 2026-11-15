@@ -175,6 +175,13 @@ final class AssistantModel {
                     return false
                 }
                 messages.append(Message(role: .note, text: "Done (\(steps.count) step\(steps.count == 1 ? "" : "s"), one undo step)."))
+                for res in results where res.op == "loudness_preset" {
+                    if res.info["limitedByPeak"] == 1, let after = res.info["integratedAfter"], let target = res.info["target"] {
+                        messages.append(Message(role: .assistant, text: String(format: "Reached %.1f instead of %.0f LUFS: the peaks held it back. A limiter comes later.", after, target)))
+                    } else if let after = res.info["integratedAfter"] {
+                        messages.append(Message(role: .assistant, text: String(format: "Now at %.1f LUFS.", after)))
+                    }
+                }
                 return true
             } catch {
                 messages.append(Message(role: .note, text: error.localizedDescription))

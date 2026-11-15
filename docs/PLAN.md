@@ -39,7 +39,14 @@ Goal: open a WAV of several hours, zoom smoothly, play, cut, undo, export bit-ex
 | Restoration through new sources; analysis, preview, restore jobs in the API | Done, verified with curl |
 | App: transcript panel, Restore sheet with A/B preview | Done, checked in the app |
 | DeepFilterNet 3 (libDF) with amount control | Waiting for approval to build libDF |
-| KB-Whisper, Parakeet engines; diarisation | Open |
+| KB-Whisper engine (1.7 % WER on synthetic Swedish) | Done |
+| Export: AIFF, FLAC, ALAC, AAC, Ogg Opus (own muxer), MP3 (LAME, dynamic) | Done |
+| Chapters from markers: ID3 CHAP in MP3, Podcasting 2.0 JSON, `GET …/chapters` | Done |
+| Chapters in AAC/M4A (MP4 chapter track) and Ogg Opus (CHAPTERxxx comments) | Open |
+| Loudness presets (Apple Podcasts, Spotify, YouTube, EBU R 128, ATSC A/85), peak-limited gain without a limiter | Done |
+| ACX/Audible preset (RMS −23…−18 dB, peak ≤ −3 dB, noise floor ≤ −60 dB): needs its own measurement and the phase 3 limiter | Planned (phase 3) |
+| Built-in assistant, sibling tools, plan impact | Done (`ASSISTANT.md`) |
+| Parakeet engine; diarisation (pyannote community-1, Core ML conversion) | Open |
 
 Replace the Audio Hijack → RX → Descript → Auphonic chain for speech and podcasts: multitrack for speech with double-ender import, spectrogram view with basic selection, restoration v1 (DeepFilterNet 3 with an amount control; de-click, de-clip, de-hum as DSP), transcription (KB-Whisper, Parakeet, SpeechTranscriber where Swedish is available) with text-based editing, diarisation, filler-word and silence suggestions, loudness presets, export to WAV/BWF, AIFF, FLAC, ALAC, AAC, MP3 (LAME, dynamic) and Opus, chapters, AU hosting, "Edit in Jämmer" from Flimmer, Developer ID + notarisation + Sparkle.
 
