@@ -608,7 +608,8 @@ enum AgentRouter {
 
     /// Audio from a request (raw bytes, base64 JSON or an upload), imported as a source.
     /// Also what the user (and the agent) should know about it, e.g. that the file was cut short.
-    private static func importedSource(_ r: AgentAPI.Request) async throws -> (source: SourceRef, warning: String?) {
+    /// With `sampleRate` (adding to a document), audio at another rate is converted to it; without, the file's own rate is kept.
+    private static func importedSource(_ r: AgentAPI.Request, sampleRate: Double? = nil) async throws -> (source: SourceRef, warning: String?) {
         let type = (r.headers["content-type"] ?? "").lowercased()
         var name = r.query["name"]
         let fileURL: URL
@@ -641,7 +642,7 @@ enum AgentRouter {
         do {
             let url = fileURL
             result = try await Task.detached(priority: .userInitiated) {
-                try AudioImporter.importFile(url, mediaFolder: MediaStore.folder)
+                try AudioImporter.importFile(url, sampleRate: sampleRate, mediaFolder: MediaStore.folder)
             }.value
         } catch {
             try? FileManager.default.removeItem(at: fileURL)
@@ -697,7 +698,8 @@ enum AgentRouter {
 
     /// Adds a track from audio sent like POST /documents (bytes, base64 JSON or upload).
     private static func addTrack(_ session: EditorSession, _ r: AgentAPI.Request) async throws -> Response {
-        let (source, warning) = try await importedSource(r)
+        // A track plays at the document's sample rate, so audio at another rate is converted on the way in.
+        let (source, warning) = try await importedSource(r, sampleRate: session.project.sampleRate)
         var p = session.project
         let track = p.addTrack(source: source, name: r.query["name"] ?? source.name)
         session.commit(p, action: "Add Track")

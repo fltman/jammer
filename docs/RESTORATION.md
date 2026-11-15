@@ -48,3 +48,5 @@ A blind estimate from how the level falls after sounds stop: 30 ms level values 
 | 1.5 s | 1.30 s | 0.73 s |
 
 So: within about 0.1 s up to a second; longer rooms read short, because speech rarely pauses long enough to show them. `present` is `rt60 ≥ 0.3`. It needs pauses and a noise floor some 20 dB or more under the voice: on the LibriVox recording, whose noise sits 20 dB under the reader, it answers `null` ("can't tell") for every room, and the app says "reverb not measurable" rather than a number.
+
+A known false positive, found by an agent reading the guide cold (2026-11-15): on a dry synthetic voice with added noise, the estimate went from "can't tell" before noise reduction to 0.44 s (`present: true`) after it. The denoiser's own fade-outs after each word look like a room's decay to this estimator. So after `denoise`, the reverb figure is not to be trusted; the guide says so.

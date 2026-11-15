@@ -120,7 +120,9 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
                 var added: [UUID] = [], short: [String] = []
                 for url in urls {
                     do {
-                        let r = try await Task.detached { try AudioImporter.importFile(url, mediaFolder: MediaStore.folder) }.value
+                        // At the document's sample rate: a file at another rate is converted, not played at the wrong speed.
+                        let rate = p.sampleRate
+                        let r = try await Task.detached { try AudioImporter.importFile(url, sampleRate: rate, mediaFolder: MediaStore.folder) }.value
                         added.append(p.addTrack(source: r.source, name: url.deletingPathExtension().lastPathComponent).id)
                         if let w = r.warning { short.append(w) }
                     } catch {
