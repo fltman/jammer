@@ -5,9 +5,9 @@
 //
 // Reduce Reverb (WPE): the menu item, restore kind "dereverb", the assistant's hint and the
 // guide follow this; the manual follows it through Config/site-features.json.
-JAMMER_DEREVERB = NO
+JAMMER_DEREVERB = YES
 
 // Freeform areas in the spectrogram (lasso and brush; spectral_edit shapes polygon and brush).
 // With NO only the box is offered; the code stays in the build. Menu, keys, API, guide and
 // manual follow this.
-JAMMER_SPECTRAL_FREEFORM = NO
+JAMMER_SPECTRAL_FREEFORM = YES

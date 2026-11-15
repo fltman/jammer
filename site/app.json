@@ -20,7 +20,7 @@
     },
     {
       "title": "Draw on the spectrogram",
-      "text": "Mark a cough, a click or a phone ringing by where it sits in time and pitch, with a box, then heal it from the sound around it or turn it down.",
+      "text": "Mark a cough, a click or a phone ringing by where it sits in time and pitch, with a box, a lasso or a brush, then heal it from the sound around it or turn it down.",
       "screen": "screens/spectrogram.webp"
     },
     {

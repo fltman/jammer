@@ -63,7 +63,7 @@ Opening a document answers `201 Created`. To send the audio inside JSON instead:
 | GET | `/api/v1/documents/{id}/transcript` | The transcript as it plays now: `{"words": [{"id", "text", "start", "end", "confidence", "speaker", "partial"}], "text", "speakers": [{"id", "name"}]}`, times in seconds on the timeline, optionally over `?start=&end=`. Empty until transcribed. |
 | GET | `/api/v1/documents/{id}/analysis/restoration` | Looks for problems without changing anything: mains hum (frequency, how prominent), clipping (runs, samples, level), clicks and reverberation (`reverb`: `rt60` in seconds, within about 0.1 s up to 1 s and reading short above that, or null when it can't tell (few pauses, or noise close under the voice); `present` when there is enough to reduce), over `?start=&end=` and `?tracks=id,id` (default: the selection, else everything; all tracks). Long ranges are sampled. |
 | POST | `/api/v1/documents/{id}/restore/preview` | The repaired audio of a stretch (at most 30 s), without changing the document. Same body as `restore`, with `start` and `end`. Answers a 24-bit WAV; with `Accept: application/json` it answers `{"before": {…}, "after": {…}}` instead: the detector numbers plus `integratedLUFS` and `truePeakDBTP`. |
-| POST | `/api/v1/documents/{id}/restore` | Repairs audio (a job). Body: `{"kind": "dehum"\|"declip"\|"declick"\|"denoise", "amount": 0–1, "start", "end", "tracks": [id], "humFrequency", "sensitivity"}`; only `kind` is required. The repaired clips play from new files; the originals are untouched and one undo step brings them back. |
+| POST | `/api/v1/documents/{id}/restore` | Repairs audio (a job). Body: `{"kind": "dehum"\|"declip"\|"declick"\|"denoise"\|"dereverb", "amount": 0–1, "start", "end", "tracks": [id], "humFrequency", "sensitivity"}`; only `kind` is required. The repaired clips play from new files; the originals are untouched and one undo step brings them back. |
 | POST | `/api/v1/documents/{id}/tracks` | Adds a track from audio sent like `POST /api/v1/documents` (bytes, base64 or upload; `?name=`). Answers `201` with `{"track": {"id", "name"}, "document"}`; one undo step. For double-enders, add each speaker's recording and the call recording, then run `align_tracks`. |
 | GET | `/api/v1/documents/{id}/tracks/{trackId}/drift?against=<trackId>` | How far two recorders' clocks part: `{"drift": {"ppm", "msPerHour", "confidence"}}`. Needs at least 90 s of overlap. |
 | GET | `/api/v1/documents/{id}/tracks` | The tracks with their ids, clips and plugins (`inserts`). |
@@ -141,7 +141,7 @@ A transcript is a view of the edit: it always reads what plays now. Each word ha
 
 ## Restoration
 
-Look, listen, then repair. `GET …/analysis/restoration` tells you whether there is hum, clipping, clicks or reverberation. `POST …/restore/preview` with `Accept: application/json` gives the numbers before and after for a short stretch, so you can check that a repair helps (and that `amount` isn't too much) without listening. `POST …/restore` then runs it as a job. `dehum` finds 50 or 60 Hz by itself; pass `humFrequency` if it says `no_hum` and you know better. `denoise` reduces steady background noise with DeepFilterNet 3, on this Mac. `amount` blends between the original (0) and the full repair (1). Use `tracks` to repair one speaker in a multitrack recording.
+Look, listen, then repair. `GET …/analysis/restoration` tells you whether there is hum, clipping, clicks or reverberation. `POST …/restore/preview` with `Accept: application/json` gives the numbers before and after for a short stretch, so you can check that a repair helps (and that `amount` isn't too much) without listening. `POST …/restore` then runs it as a job. `dehum` finds 50 or 60 Hz by itself; pass `humFrequency` if it says `no_hum` and you know better. `denoise` reduces steady background noise with DeepFilterNet 3, on this Mac. `dereverb` takes down the room's echo after each sound (the late reverberation, by linear prediction; no model) and leaves the direct sound; its `amount` defaults to 0.7, and it does little when `reverb.present` is false. It lowers the tail by 5 to 10 dB without shortening it, so judge a preview by ear or by level, not by `rt60` after. `amount` blends between the original (0) and the full repair (1). Use `tracks` to repair one speaker in a multitrack recording.
 
 ## Speakers
 
@@ -336,16 +336,19 @@ Resamples a separately recorded track whose recorder's clock ran fast or slow, s
 
 ### `spectral_edit`
 
-Changes a box in the spectrogram, per track, rendered into a new file (the original audio is one undo away). action attenuate lowers it by db; heal rebuilds it from the sound just before and after (for short sounds such as clicks, coughs, a phone ringing: at most 0.5 s, longer fails with reason too_long; use attenuate). shape box takes start, end, low, high. Bad shapes fail with reason bad_shape.
+Changes an area of the spectrogram, per track, rendered into a new file (the original audio is one undo away). action attenuate lowers it by db; heal rebuilds it from the sound just before and after (for short sounds such as clicks, coughs, a phone ringing: at most 0.5 s, longer fails with reason too_long; use attenuate). shape box takes start, end, low, high; polygon takes points [t1, f1, t2, f2, …] (seconds, Hz; at least three corners); brush takes points along the stroke plus radius (Hz) and radiusTime (s). Bad shapes fail with reason bad_shape.
 
 | Param | Type | Description |
 |---|---|---|
 | `action` | string | **Required.** What to do. One of: `attenuate`, `heal`. |
-| `shape` | string | **Required.** The area's kind. One of: `box`. |
+| `shape` | string | **Required.** The area's kind. One of: `box`, `polygon`, `brush`. |
 | `start` | seconds | Range start in seconds. With `end`, overrides the selection. |
 | `end` | seconds | Range end in seconds. |
 | `low` | number | box: lower edge in Hz. |
 | `high` | number | box: upper edge in Hz. |
+| `points` | numbers | polygon, brush: time (s) and frequency (Hz) pairs, flattened. |
+| `radius` | number | brush: Hz around the stroke. Default 200. |
+| `radiusTime` | number | brush: seconds around the stroke. Default 0.02. |
 | `db` | number | attenuate: change in dB, -80 to 0. Default -20. |
 | `tracks` | list | Track ids. Default: every track. |
 

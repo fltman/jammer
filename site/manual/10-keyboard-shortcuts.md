@@ -38,7 +38,7 @@
 | ⌥⌘L | Measure Loudness |
 | ⌥⌘M | Add Marker |
 | ⌥⇧⌘P | Plugins… |
-| B | In the spectrogram: the box tool |
+| B / L / P | In the spectrogram: box, lasso, brush |
 
 ## Transport
 
