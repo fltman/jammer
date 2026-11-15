@@ -206,6 +206,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             restoreItem("Repair Clipping…", "declip"),
             restoreItem("Remove Clicks…", "declick"),
             restoreItem("Reduce Noise…", "denoise"),
+            restoreItem("Reduce Reverb…", "dereverb"),
             item("Attenuate Frequencies…", #selector(EditorWindowController.attenuateFrequencies(_:)), ""),
             item("Attenuate Area…", #selector(EditorWindowController.attenuateArea(_:)), ""),
             item("Heal Area", #selector(EditorWindowController.healArea(_:)), ""),

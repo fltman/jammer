@@ -31,7 +31,7 @@ public struct RestoreRequest: Sendable, Equatable {
             return n.doubleValue
         }
         if kind == .denoise, Restoration.denoiser == nil { throw .notAvailable("denoise isn't available in this build.") }
-        let amount = try number("amount") ?? 1
+        let amount = try number("amount") ?? Double(kind.defaultAmount)
         guard (0...1).contains(amount) else { throw .badRequest("amount must be between 0 and 1.") }
         let hum = try number("humFrequency")
         if let hum, !(20...400).contains(hum) { throw .badRequest("humFrequency must be between 20 and 400 Hz.") }

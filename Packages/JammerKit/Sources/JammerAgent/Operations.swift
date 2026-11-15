@@ -226,7 +226,7 @@ public enum Operations {
     /// way so agents and assistants see one list. Not valid in `steps`.
     static let restoreParams: [OperationSpec.Param] = [
         .init("kind", .string, "The repair.", required: true, options: Restoration.Kind.allCases.map(\.rawValue)),
-        .init("amount", .number, "Blend between the original (0) and the full repair (1). Default 1.", range: 0...1),
+        .init("amount", .number, "Blend between the original (0) and the full repair (1). Default 1; for dereverb 0.7.", range: 0...1),
         start, end,
         .init("tracks", .list, "Track ids to repair. Default: every track."),
         .init("humFrequency", .number, "dehum: the mains frequency; without it 50 or 60 Hz is found.", range: 20...400),

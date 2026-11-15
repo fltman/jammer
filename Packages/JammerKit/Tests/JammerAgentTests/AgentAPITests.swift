@@ -327,6 +327,9 @@ struct RestoreRequestTests {
         let id = UUID()
         let s = try RestoreRequest.parse(["kind": "declick", "amount": 0.5, "sensitivity": 2, "start": 1, "end": 3.5, "tracks": [id.uuidString]])
         #expect(s.settings.amount == 0.5 && s.settings.sensitivity == 2 && s.end == 3.5 && s.tracks == [id])
+        // Reverb reduction starts at 0.7; an amount given is kept.
+        #expect(try RestoreRequest.parse(["kind": "dereverb"]).settings == Restoration.Settings(kind: .dereverb, amount: 0.7))
+        #expect(try RestoreRequest.parse(["kind": "dereverb", "amount": 1]).settings.amount == 1)
     }
 
     @Test("Bad bodies are 400 before anything starts; denoise isn't available yet")

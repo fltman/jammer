@@ -5,7 +5,11 @@ import Foundation
 /// the processed audio (float WAVs in the media folder). The original files are never
 /// touched, and undo is the previous project value, like every other edit.
 extension Restoration {
-    public enum Kind: String, Sendable, Codable, CaseIterable { case dehum, declip, declick, denoise }
+    public enum Kind: String, Sendable, Codable, CaseIterable {
+        case dehum, declip, declick, denoise, dereverb
+        /// Taking all the reverberation out sounds unnatural, so that one starts lower.
+        public var defaultAmount: Float { self == .dereverb ? 0.7 : 1 }
+    }
 
     /// Noise reduction is plugged in by the app (DeepFilterNet through libDF, which the
     /// core doesn't link): one channel in, the same length out, aligned. nil: not available.
@@ -116,6 +120,7 @@ extension Restoration {
         let margin: Frame = switch settings.kind {
         case .dehum: 0
         case .denoise: Frame(sr)
+        case .dereverb: Frame(sr)   // the prediction needs the sound that came before
         default: Frame(sr * 0.25)
         }
         let denoise = Restoration.denoiser
@@ -173,6 +178,8 @@ extension Restoration {
                     report.clippedRuns += r.runs
                 case .denoise:
                     y = settings.amount == 0 ? x : denoise!(x, sr, settings.amount)
+                case .dereverb:
+                    y = dereverb(x, sampleRate: sr, amount: settings.amount)
                 case .declick:
                     let (o, r) = declick(x, amount: settings.amount, sensitivity: settings.sensitivity)
                     y = o
@@ -208,10 +215,16 @@ extension Restoration {
         public var clippedSamples: Int
         public var clipLevel: Float
         public var clicks: Int
+        /// Reverberation time in seconds, roughly, when the audio has enough decays to tell.
+        public var rt60: Double?
         /// Seconds actually examined (long ranges are sampled).
         public var examined: Double
         public var sampled: Bool
+        /// Enough reverberation that Reduce Reverb has something to do.
+        public var reverberant: Bool { (rt60 ?? 0) >= Restoration.reverbThreshold }
     }
+    /// Close-miked speech in a damped room estimates under this; a bare room well over.
+    public static let reverbThreshold = 0.3
 
     /// The timeline mixed to mono over `range`, for the given tracks only.
     public static func mix(_ project: Project, range: Range<Frame>, tracks: Set<UUID>?, pool: SourcePool) -> [Float] {
@@ -254,6 +267,9 @@ extension Restoration {
             a.clippedSamples += runs.reduce(0) { $0 + $1.count }
             a.clicks += detectClicks(m).count
         }
+        // The middle of what the windows say; a window without enough decays says nothing.
+        let times = mixes.compactMap { estimateRT60($0, sampleRate: sr) }.sorted()
+        a.rt60 = times.isEmpty ? nil : times[times.count / 2]
         return a
     }
 

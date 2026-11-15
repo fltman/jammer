@@ -220,7 +220,7 @@ final class AssistantModel {
             do {
                 let req = try RestoreRequest.parse(s.params.mapValues(\.any))
                 let range: Range<Frame>? = req.start.flatMap { a in req.end.map { session.project.frames(a)..<session.project.frames($0) } } ?? session.selection
-                let title = ["dehum": "Remove Hum", "declip": "Repair Clipping", "declick": "Remove Clicks", "denoise": "Reduce Noise"][req.settings.kind.rawValue] ?? "Restore"
+                let title = ["dehum": "Remove Hum", "declip": "Repair Clipping", "declick": "Remove Clicks", "denoise": "Reduce Noise", "dereverb": "Reduce Reverb"][req.settings.kind.rawValue] ?? "Restore"
                 return await runJob(JobRegistry.shared.startRestoration(session, settings: req.settings, range: range, tracks: req.tracks.map(Set.init), action: title))
             } catch {
                 messages.append(Message(role: .note, text: (error as? AgentAPI.APIError)?.message ?? error.localizedDescription))

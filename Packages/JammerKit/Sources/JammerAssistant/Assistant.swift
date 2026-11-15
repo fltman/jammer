@@ -180,7 +180,7 @@ public enum AssistantPrompt {
     Rules:
     - Use only the listed actions and params. Use as few steps as the request needs; add nothing it didn't ask for.
     - Without start and end, an action works on the selection, or on everything when it says so.
-    - Repairs use restore: hum → kind dehum; clicks or pops → declick; clipping or distortion → declip; background noise or hiss → denoise. declick and declip are different.
+    - Repairs use restore: hum → kind dehum; clicks or pops → declick; clipping or distortion → declip; background noise or hiss → denoise; room echo or reverb → dereverb. declick and declip are different.
     - "Cut", "remove" or "ta bort" a time range means delete with that start and end.
     - A speaker or track is given by its number in tracks (e.g. tracks=2).
     - Loudness in LUFS: normalize with target=loudness. Measuring it: measure_loudness.
@@ -218,7 +218,7 @@ public enum PlanParser {
         "lufs": "loudness", "integrated": "loudness", "loudness_lufs": "loudness", "ljudstyrka": "loudness",
         "true_peak_dbtp": "true_peak", "truepeak": "true_peak", "dbtp": "true_peak", "peak_dbfs": "peak", "topp": "peak",
         "hum": "dehum", "brum": "dehum", "clicks": "declick", "click": "declick", "klick": "declick",
-        "clipping": "declip", "noise": "denoise", "brus": "denoise", "equalpower": "equal_power",
+        "clipping": "declip", "noise": "denoise", "brus": "denoise", "reverb": "dereverb", "echo": "dereverb", "eko": "dereverb", "equalpower": "equal_power",
     ]
 
     /// Removes steps that only navigate before an action that doesn't need them.

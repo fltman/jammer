@@ -25,6 +25,7 @@ final class RestoreModel {
     init(session: EditorSession, kind: Restoration.Kind) {
         self.session = session
         self.kind = kind
+        amount = Double(kind.defaultAmount)
     }
 
     var range: Range<Frame> { session.selection ?? 0..<session.project.length }
@@ -45,6 +46,7 @@ final class RestoreModel {
         parts.append(a.hum.map { String(format: "Hum at %.2f Hz (%.0f dB above its surroundings)", $0.frequency, $0.prominence) } ?? "No mains hum")
         parts.append(a.clippedRuns > 0 ? "\(a.clippedRuns) clipped stretch\(a.clippedRuns == 1 ? "" : "es")" : "no clipping")
         parts.append(a.clicks > 0 ? "\(a.clicks) click\(a.clicks == 1 ? "" : "s")" : "no clicks")
+        parts.append(a.rt60.map { String(format: a.reverberant ? "reverb about %.1f s" : "little reverb (%.1f s)", $0) } ?? "reverb not measurable")
         findings = parts.joined(separator: " · ") + (a.sampled ? " (sampled)" : "")
     }
 
@@ -106,7 +108,7 @@ final class RestoreModel {
 
     func apply() {
         stopPreview()
-        let titles: [Restoration.Kind: String] = [.dehum: "Remove Hum", .declip: "Repair Clipping", .declick: "Remove Clicks", .denoise: "Reduce Noise"]
+        let titles: [Restoration.Kind: String] = [.dehum: "Remove Hum", .declip: "Repair Clipping", .declick: "Remove Clicks", .denoise: "Reduce Noise", .dereverb: "Reduce Reverb"]
         _ = JobRegistry.shared.startRestoration(session, settings: settings, range: session.selection, action: titles[kind] ?? "Restore")
     }
 }
@@ -123,7 +125,9 @@ struct RestoreSheet: View {
                 Text("Repair Clipping").tag(Restoration.Kind.declip)
                 Text("Remove Clicks").tag(Restoration.Kind.declick)
                 if Restoration.denoiser != nil { Text("Reduce Noise").tag(Restoration.Kind.denoise) }
+                Text("Reduce Reverb").tag(Restoration.Kind.dereverb)
             }
+            .onChange(of: model.kind) { _, kind in model.amount = Double(kind.defaultAmount) }
             .pickerStyle(.segmented)
             .labelsHidden()
             Text(model.rangeText).font(.callout).foregroundStyle(.secondary)
@@ -179,7 +183,7 @@ struct RestoreSheet: View {
             }
         }
         .padding(20)
-        .frame(width: 520)
+        .frame(width: 660)
         .task { await model.analyse() }
         .onChange(of: model.kind) { model.stopPreview() }
     }

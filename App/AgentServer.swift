@@ -713,7 +713,7 @@ enum AgentRouter {
 
     // MARK: Restoration
 
-    static let restoreTitles: [Restoration.Kind: String] = [.dehum: "Remove Hum", .declip: "Repair Clipping", .declick: "Remove Clicks", .denoise: "Reduce Noise"]
+    static let restoreTitles: [Restoration.Kind: String] = [.dehum: "Remove Hum", .declip: "Repair Clipping", .declick: "Remove Clicks", .denoise: "Reduce Noise", .dereverb: "Reduce Reverb"]
 
     /// The range (explicit, else the selection, else everything) and the tracks (nil = all).
     private static func restoreScope(_ session: EditorSession, start: Double?, end: Double?, tracks: [UUID]?) throws -> (Range<Frame>, Set<UUID>?) {
@@ -756,7 +756,9 @@ enum AgentRouter {
     static func analysisJSON(_ a: Restoration.Analysis) -> [String: Any] {
         ["hum": a.hum.map { ["frequency": $0.frequency, "prominenceDB": ($0.prominence * 10).rounded() / 10] as [String: Any] } ?? NSNull(),
          "clipping": ["runs": a.clippedRuns, "samples": a.clippedSamples, "level": (Double(a.clipLevel) * 10_000).rounded() / 10_000],
-         "clicks": ["count": a.clicks], "examinedSeconds": (a.examined * 100).rounded() / 100, "sampled": a.sampled]
+         "clicks": ["count": a.clicks],
+         "reverb": ["rt60": a.rt60.map { ($0 * 100).rounded() / 100 as Any } ?? NSNull(), "present": a.reverberant] as [String: Any],
+         "examinedSeconds": (a.examined * 100).rounded() / 100, "sampled": a.sampled]
     }
 
     private static func restorationAnalysis(_ session: EditorSession, _ r: AgentAPI.Request) async throws -> Response {

@@ -44,7 +44,7 @@ enum BatchJobs {
         case "restore":
             guard let kind = Restoration.Kind(rawValue: step.params["kind"]?.string ?? "") else { throw BatchError("bad_request", "restore needs kind.") }
             if kind == .denoise, Restoration.denoiser == nil { throw BatchError("not_available", "Noise reduction isn't available in this build.") }
-            let settings = Restoration.Settings(kind: kind, amount: Float(step.params["amount"]?.double ?? 1), humFrequency: step.params["humFrequency"]?.double,
+            let settings = Restoration.Settings(kind: kind, amount: Float(step.params["amount"]?.double ?? Double(kind.defaultAmount)), humFrequency: step.params["humFrequency"]?.double,
                                                 sensitivity: step.params["sensitivity"]?.double ?? 1)
             do { return try Restoration.apply(settings, to: project, pool: pool, media: MediaStore.folder).0 } catch {
                 // Nothing to repair (no hum found, say) isn't a failure for a batch.
