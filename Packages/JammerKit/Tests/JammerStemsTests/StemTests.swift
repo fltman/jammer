@@ -243,3 +243,56 @@ struct InstallTests {
         #expect(try TFCheckpoint(index: model.folder.appending(path: "model.index"), data: model.folder.appending(path: "model.data-00000-of-00001")).entries.count >= 296)
     }
 }
+
+let mrxDir = ProcessInfo.processInfo.environment["JAMMER_MRX_DIR"].map { URL(fileURLWithPath: $0) }
+
+@Suite("MRX checkpoint", .enabled(if: mrxDir != nil))
+struct TorchCheckpointTests {
+    @Test("Every float tensor reads back as PyTorch wrote it")
+    func read() throws {
+        let dir = mrxDir!
+        let ck = try TorchCheckpoint(url: dir.appending(path: "default_mrx_pre_trained_weights.pth"))
+        #expect(ck.entries["_encoders.0.layer.1.weight"]?.shape == [512, 513])
+        let dump = try Data(contentsOf: dir.appending(path: "ref/weights.bin"), options: .alwaysMapped)
+        var at = 0
+        func u32() -> Int { defer { at += 4 }; return Int(dump.subdata(in: at..<(at + 4)).withUnsafeBytes { $0.load(as: UInt32.self) }) }
+        let count = u32()
+        var checked = 0
+        for _ in 0..<count {
+            let n = u32()
+            let name = String(decoding: dump.subdata(in: at..<(at + n)), as: UTF8.self); at += n
+            let rank = u32()
+            let shape = (0..<rank).map { _ in u32() }
+            let size = shape.reduce(1, *) * 4
+            let expected = dump.subdata(in: at..<(at + size)).withUnsafeBytes { Array($0.bindMemory(to: Float.self)) }; at += size
+            if name.hasSuffix("num_batches_tracked") { continue } // int64 counters, not used
+            let got = try ck.floats(name)
+            #expect(got.shape == shape && got.values == expected, "\(name)")
+            checked += 1
+        }
+        #expect(checked > 180)
+    }
+}
+
+@Suite("MRX network", .enabled(if: mrxDir != nil))
+struct MRXTests {
+    @Test("Music, speech and effects match PyTorch running MERL's own code")
+    func parity() throws {
+        let dir = mrxDir!
+        let net = try MRXNet(checkpoint: TorchCheckpoint(url: dir.appending(path: "default_mrx_pre_trained_weights.pth")))
+        let x = try Data(contentsOf: dir.appending(path: "ref/input.f32")).withUnsafeBytes { Array($0.bindMemory(to: Float.self)) }
+        let ref = try Data(contentsOf: dir.appending(path: "ref/output.f32")).withUnsafeBytes { Array($0.bindMemory(to: Float.self)) }
+        let n = x.count / 2
+        let t0 = Date()
+        let out = net.separate(channel: Array(x[0..<n]))
+        print(String(format: "MRX %.1f s of one channel in %.1f s", Double(n) / 44_100, Date().timeIntervalSince(t0)))
+        for (s, name) in MRXNet.sources.enumerated() {
+            let r = Array(ref[(s * 2 * n)..<(s * 2 * n + n)])   // [source][channel 0]
+            var err = 0.0, pow = 0.0
+            for i in 0..<n { let d = Double(out[s][i] - r[i]); err += d * d; pow += Double(r[i] * r[i]) }
+            let snr = 10 * log10(pow / max(err, 1e-30))
+            print(String(format: "MRX %@: SNR %.1f dB vs PyTorch", name, snr))
+            #expect(snr > 60, "\(name)")
+        }
+    }
+}
