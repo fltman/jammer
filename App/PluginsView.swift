@@ -89,7 +89,7 @@ struct PluginsSheet: View {
                     EditorSession.pluginSafeMode = on
                     session.restartPlugins()
                 }
-            Text("Plugins are third-party code. CLAP plugins each run in a helper process of their own, never inside Jämmer. Audio Units run inside Jämmer; if one crashes or misbehaves, turn on safe mode: every Audio Unit then runs in macOS's separate plugin host process. Plugins play 0.3 s ahead, so a change is heard a moment later.")
+            Text((HostedPluginsController.available ? "Plugins are third-party code. CLAP plugins each run in a helper process of their own, never inside Jämmer. Audio Units run inside Jämmer; if one crashes or misbehaves, turn on safe mode: every Audio Unit then runs in macOS's separate plugin host process." : "Plugins are third-party code that runs inside Jämmer. If one crashes or misbehaves, turn on safe mode: every Audio Unit then runs in macOS's separate plugin host process.") + " Plugins play 0.3 s ahead, so a change is heard a moment later.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

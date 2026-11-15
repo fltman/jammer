@@ -223,7 +223,7 @@ struct SiteGuideTests {
         let url = Self.repo.appending(path: "site/agents.md")
         // The site describes the release build, whatever this test process has switched on.
         let guide = AgentAPI.guide(port: AgentAPI.ports[0], appVersion: Self.appVersion,
-                                   features: .init(dereverb: Features.dereverb, spectralFreeform: Features.spectralFreeform))
+                                   features: .init(dereverb: Features.dereverb, spectralFreeform: Features.spectralFreeform, clap: Features.clap))
         if ProcessInfo.processInfo.environment["JAMMER_WRITE_GUIDE"] == "1" {
             try guide.write(to: url, atomically: true, encoding: .utf8)
         }
@@ -554,10 +554,15 @@ struct SpectralEditStepTests {
         #expect(box.params.first { $0.name == "shape" }?.options == ["box"])
         #expect(!box.params.contains { ["points", "radius", "radiusTime"].contains($0.name) } && !box.description.contains("polygon"))
         #expect(Operations.all(freeform: false).count == Operations.all(freeform: true).count)
-        let off = AgentAPI.guide(port: 9003, appVersion: "1", features: .init(dereverb: false, spectralFreeform: false))
-        let on = AgentAPI.guide(port: 9003, appVersion: "1", features: .init(dereverb: true, spectralFreeform: true))
+        let off = AgentAPI.guide(port: 9003, appVersion: "1", features: .init(dereverb: false, spectralFreeform: false, clap: false))
+        let on = AgentAPI.guide(port: 9003, appVersion: "1", features: .init(dereverb: true, spectralFreeform: true, clap: true))
         #expect(!off.contains("polygon") && !off.contains("brush") && !off.contains("dereverb"))
         #expect(on.contains("polygon") && on.contains("brush") && on.contains("dereverb"))
+        // CLAP: the scan call, the id form and the helper-process promise only where the build has it.
+        #expect(on.contains("/api/v1/plugins/scan") && on.contains("clap:com.vendor.plugin") && on.contains("plugin_blocked"))
+        #expect(!off.contains("CLAP") && !off.contains("clap") && !off.contains("plugins/scan") && off.contains("Audio Unit effects (AUv2 and AUv3)"))
+        #expect(Operations.all(freeform: true, clap: false).first { $0.name == "add_insert" }?.description.contains("CLAP") == false)
+        #expect(Operations.all(freeform: true, clap: true).first { $0.name == "add_insert" }?.description.contains("CLAP") == true)
     }
 
     @Test("polygon via JSON numbers; too_long and bad_shape reasons; numbers are validated")
@@ -625,6 +630,7 @@ enum Features {
     }
     /// Read only: the package always has the freeform shapes; the guide is asked for the release's.
     static let spectralFreeform = setting("JAMMER_SPECTRAL_FREEFORM")
+    static let clap = setting("JAMMER_CLAP")
     static let dereverb: Bool = {
         let on = setting("JAMMER_DEREVERB")
         // A stand-in: these tests check parsing and text, not the sound (JammerDereverbTests does that).

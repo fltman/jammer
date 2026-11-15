@@ -25,9 +25,33 @@ public final class HostedInsertUnit: InsertUnit, @unchecked Sendable {
 
     deinit { HostedPlugins.released() }
 
-    public func captureState() -> Data? { host.saveState() }
+    /// Marks settings Jämmer wrote itself, for a plugin that can't save its own.
+    static let ownStateMagic = Data("JAMMER-PARAMS-1\n".utf8)
+
+    /// The plugin's own saved state when it has one. A plugin without that would lose its
+    /// settings when the document is closed, so for those Jämmer keeps the parameter values
+    /// itself (id and value of every parameter that can be set) and puts them back on loading.
+    public func captureState() -> Data? {
+        if let own = host.saveState() { return own }
+        host.refresh()
+        let values = Dictionary(host.parameters.filter { !$0.readonly }.map { (String($0.id), $0.value) }, uniquingKeysWith: { a, _ in a })
+        guard !values.isEmpty, let json = try? JSONSerialization.data(withJSONObject: values, options: [.sortedKeys]) else { return nil }
+        return Self.ownStateMagic + json
+    }
 
     public func apply(_ state: Data) throws {
+        if state.starts(with: Self.ownStateMagic) {
+            guard let values = try? JSONSerialization.jsonObject(with: state.dropFirst(Self.ownStateMagic.count)) as? [String: Double] else {
+                throw PluginError.failed("The saved settings for \(displayName) can't be read.")
+            }
+            let known = Dictionary(host.parameters.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+            for (key, value) in values {
+                // A parameter the plugin no longer has, or can't take, is skipped: the rest still apply.
+                guard let id = UInt32(key), let p = known[id], !p.readonly else { continue }
+                _ = host.set(id, to: min(p.max, max(p.min, value)))
+            }
+            return
+        }
         guard host.loadState(state) else { throw PluginError.failed("The saved settings for \(displayName) couldn't be applied.") }
     }
 

@@ -90,6 +90,7 @@ targets:
           set -eu
           cfg=debug; [ "$CONFIGURATION" = "Release" ] && cfg=release
           cd "$SRCROOT/Packages/JammerKit"
+          [ "${JAMMER_CLAP:-NO}" = "YES" ] || { echo "note: JAMMER_CLAP is off (Config/Features.xcconfig); the plugin helpers are left out of this build"; rm -f "$BUILT_PRODUCTS_DIR/$EXECUTABLE_FOLDER_PATH"/jammer-plugin-*; exit 0; }
           [ -f Vendor/clap/include/clap/clap.h ] || { echo "warning: plugin SDKs not fetched (scripts/fetch-plugin-sdks.sh); VST 3 and CLAP are left out of this build"; exit 0; }
           for product in jammer-plugin-probe jammer-plugin-host; do
             env -i PATH="/usr/bin:/bin:/usr/sbin:/sbin" HOME="$HOME" DEVELOPER_DIR="$DEVELOPER_DIR" xcrun swift build -c "$cfg" --product "$product" --scratch-path "$SRCROOT/build/helpers"

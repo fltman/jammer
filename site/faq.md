@@ -48,7 +48,7 @@ No. Edits are stored in the project and played from the originals; repairs and e
 
 ## Can I use my plugins?
 
-Yes: Audio Unit effects (AUv2 and AUv3) and CLAP plugins can be put on any track. A CLAP plugin runs in a helper program of its own, never inside Jämmer, so one that crashes only goes quiet: its track plays on without it and Jämmer tells you. Audio Units run inside Jämmer; with **Safe mode** on (Audio › Plugins…) they run in macOS's separate plugin host process instead. VST plugins aren't supported yet.
+Yes: Audio Unit effects (AUv2 and AUv3) can be put on any track. They run inside Jämmer; with **Safe mode** on (Audio › Plugins…) they run in macOS's separate plugin host process instead. CLAP and VST plugins aren't supported yet.
 
 ## How do I let an AI agent use Jämmer?
 

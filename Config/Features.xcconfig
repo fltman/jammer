@@ -11,3 +11,10 @@ JAMMER_DEREVERB = YES
 // With NO only the box is offered; the code stays in the build. Menu, keys, API, guide and
 // manual follow this.
 JAMMER_SPECTRAL_FREEFORM = YES
+
+// CLAP plugins, each in a helper process of its own. With NO the two helper programs aren't
+// built into the app, nothing is scanned, and the guide, /operations, the Plugins sheet, the
+// manual, the FAQ and the site mention only Audio Units. NO until two things are done
+// (docs/RELEASE.md): the helpers' entitlement is approved, and a CLAP plugin from another
+// vendor has worked in a signed build.
+JAMMER_CLAP = NO

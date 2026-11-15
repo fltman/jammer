@@ -108,8 +108,18 @@ public enum Operations {
     nonisolated(unsafe) public static var spectralFreeform = true
 
     /// The steps this build offers.
-    public static var all: [OperationSpec] { all(freeform: spectralFreeform) }
-    public static func all(freeform: Bool) -> [OperationSpec] { freeform ? everything : boxOnly }
+    public static var all: [OperationSpec] { all(freeform: spectralFreeform, clap: InsertUnits.external != nil) }
+    public static func all(freeform: Bool, clap: Bool = true) -> [OperationSpec] {
+        let list = freeform ? everything : boxOnly
+        guard !clap else { return list }
+        // Without CLAP the plugins are Audio Units, which run inside Jämmer.
+        return list.map { op in
+            guard op.name == "add_insert" else { return op }
+            var o = op
+            o.description = "Puts an Audio Unit effect on a track, last in its chain unless position says otherwise; its latency is compensated. Plugins are third-party code running with Jämmer's rights. GET /api/v1/plugins lists what's installed. info has latencyMs; ids has the new insert's id."
+            return o
+        }
+    }
     private static let boxOnly: [OperationSpec] = everything.map { op in
         guard op.name == "spectral_edit" else { return op }
         var o = op
@@ -253,7 +263,14 @@ public enum Operations {
         .init("sensitivity", .number, "declick: higher finds quieter clicks. Default 1.", range: 0.1...10),
     ] }
     /// Computed each time: the formats depend on what the app registered (MP3).
-    public static var endpoints: [OperationSpec] { [
+    /// Only in builds that run CLAP plugins.
+    static var scanEndpoint: OperationSpec {
+        .init("scan_plugins", "Scan for Plugins", "Looks for CLAP plugins again, as a job: each bundle is loaded in a helper process with a time limit, so one that crashes or hangs is noted (GET /api/v1/plugins, scan.failed) and the scan goes on.",
+              params: [OperationSpec.Param("force", .boolean, "Load every bundle again, not only new and changed ones. Default false.")],
+              call: ("POST", "/api/v1/plugins/scan"), startsJob: true)
+    }
+    public static var endpoints: [OperationSpec] { fixedEndpoints + (InsertUnits.external != nil ? [scanEndpoint] : []) }
+    static var fixedEndpoints: [OperationSpec] { [
         .init("transcribe", "Transcribe", "Transcribes the document on this Mac; words get ids and times. Answers with a job; the transcript lands as one undo step.",
               params: [.init("language", .string, "BCP 47, e.g. sv-SE or en-US. Default: the Mac's language."),
                        .init("engine", .string, "Recogniser. auto: KB-Whisper for Swedish when installed, else Parakeet (25 European languages) when installed, else Apple. A model that isn't installed fails with reason model_missing; the user installs models in Jämmer's Settings.", options: ["auto", "apple", "parakeet", "whisper"]),
@@ -290,9 +307,6 @@ public enum Operations {
                        OperationSpec.Param("suffix", .string, "Added to each name. Default “ (Jämmer)”."),
                        OperationSpec.Param("overwrite", .boolean, "Replace results that are already there. Default false.")],
               call: ("POST", "/api/v1/batch"), startsJob: true),
-        .init("scan_plugins", "Scan for Plugins", "Looks for CLAP plugins again, as a job: each bundle is loaded in a helper process with a time limit, so one that crashes or hangs is noted (GET /api/v1/plugins, scan.failed) and the scan goes on.",
-              params: [OperationSpec.Param("force", .boolean, "Load every bundle again, not only new and changed ones. Default false.")],
-              call: ("POST", "/api/v1/plugins/scan"), startsJob: true),
         .init("import_fcpxml", "Import Final Cut Pro XML", "Opens the sound of a film timeline (FCPXML from Flimmer, Final Cut Pro or DaVinci Resolve) as a new document: one track per lane with each clip's position, trim, level, linear fades and mute; the pictures become shot markers (shown on the timeline, not chapters). The file and every media file it uses must lie in a folder the user allows in Jämmer's Settings (reason folder_not_allowed otherwise). Nothing in those files is changed.",
               params: [OperationSpec.Param("path", .string, "Absolute path of the .fcpxml file (or .fcpxmld bundle).", required: true)],
               call: ("POST", "/api/v1/import/fcpxml")),

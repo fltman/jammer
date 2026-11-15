@@ -656,6 +656,27 @@ struct HostedPluginTests {
         #expect(HostedPlugins.runningCount == 0)
     }
 
+    @Test("A plugin that can't save its own state keeps its settings anyway: Jämmer stores the parameter values in the document")
+    func withoutState() throws {
+        let dir = FileManager.default.temporaryDirectory.appending(path: "jammer-hostp-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        _ = try install(dir, defines: ["NO_STATE"])
+        var (s, x) = state()
+        let track = s.project.tracks[0].id.uuidString
+        #expect(run(&s, "add_insert", ["track": .string(track), "plugin": .string(id)]).status == .done)
+        #expect(run(&s, "set_insert", ["track": .string(track), "insert": .string("Delay Gain"), "parameter": .string("Gain"), "value": .number(0.5)]).status == .done)
+        let stored = try #require(s.project.tracks[0].inserts[0].state)
+        #expect(String(decoding: stored, as: UTF8.self) == "JAMMER-PARAMS-1\n{\"7\":0.5}", "only what can be set is kept, by parameter id")
+        // Saved, opened again, rendered: the setting is still there.
+        let saved = try JSONDecoder().decode(Project.self, from: JSONEncoder().encode(s.project))
+        #expect(PlanCompiler.mixBlocking(saved, pool: s.pool!).render(from: 0, frames: Int(saved.length)) == x.map { $0 * 0.5 })
+        // A second change builds on the first, and a stored value for a parameter that is gone or out of range does no harm.
+        #expect(run(&s, "set_insert", ["track": .string(track), "insert": .string("Delay Gain"), "parameter": .string("7"), "value": .number(0.25)]).status == .done)
+        #expect(PlanCompiler.mixBlocking(s.project, pool: s.pool!).render(from: 0, frames: 2_000) == x[0..<4_000].map { $0 * 0.25 })
+        s.project.tracks[0].inserts[0].state = Data("JAMMER-PARAMS-1\n{\"7\":9,\"9\":1,\"12345\":3}".utf8)
+        #expect(PlanCompiler.mixBlocking(s.project, pool: s.pool!).render(from: 0, frames: 2_000) == x[0..<4_000].map { $0 * 2 }, "clamped to the parameter's range")
+    }
+
     @Test("The cap on helper processes is said in words; a blocked plugin is refused until it is switched on again; a death is told with the plugin's name")
     func limitsAndDeaths() throws {
         let dir = FileManager.default.temporaryDirectory.appending(path: "jammer-hostp-\(UUID().uuidString)")

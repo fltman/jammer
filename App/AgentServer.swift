@@ -290,18 +290,23 @@ enum AgentRouter {
             try only("GET")
             let q = r.query["q"]?.lowercased()
             let format = r.query["format"]?.lowercased()
-            if let format, PluginID.Format(rawValue: format) == nil { throw APIError.badRequest("format must be au, vst3 or clap.") }
+            if let format, !["au", "clap"].contains(format) { throw APIError.badRequest("format must be au or clap.") }
             let list = PluginCatalog.effects().filter { (q == nil || q!.isEmpty || $0.name.lowercased().contains(q!) || $0.manufacturer.lowercased().contains(q!))
                 && (format == nil || $0.format.rawValue == format) }
             // No file paths: where a plugin is installed is the user's business.
-            return .json(["plugins": list.map { ["id": $0.id.description, "format": $0.format.rawValue, "name": $0.name, "manufacturer": $0.manufacturer, "kind": $0.kind,
-                                                  "version": $0.version, "v3": $0.isV3] as [String: Any] },
-                          "scan": scanJSON(HostedPlugins.current()),
-                          "safeMode": EditorSession.pluginSafeMode,
-                          "note": "Plugins are third-party code. VST 3 and CLAP plugins each run in a helper process of their own, never inside Jämmer; if one crashes or stops answering, its track plays without it and the plugin is switched off until the user switches it on again. Audio Units run inside Jämmer unless Safe Mode is on (Audio › Plugins), which runs every Audio Unit in macOS's separate plugin host process."])
+            var answer: [String: Any] = ["plugins": list.map { ["id": $0.id.description, "format": $0.format.rawValue, "name": $0.name, "manufacturer": $0.manufacturer, "kind": $0.kind,
+                                                                 "version": $0.version, "v3": $0.isV3] as [String: Any] },
+                                         "safeMode": EditorSession.pluginSafeMode]
+            if HostedPluginsController.available {
+                answer["scan"] = scanJSON(HostedPlugins.current())
+                answer["note"] = "Plugins are third-party code. CLAP plugins each run in a helper process of their own, never inside Jämmer; if one crashes or stops answering, its track plays without it and the plugin is switched off until the user switches it on again. Audio Units run inside Jämmer unless Safe Mode is on (Audio › Plugins), which runs every Audio Unit in macOS's separate plugin host process."
+            } else {
+                answer["note"] = "Plugins are third-party code that runs inside Jämmer. If one crashes or misbehaves, turn on Safe Mode in Jämmer (Audio › Plugins) so every Audio Unit runs in macOS's separate plugin host process instead."
+            }
+            return .json(answer)
         case ["api", "v1", "plugins", "scan"]:
             try only("POST")
-            guard HostedPluginsController.available else { throw APIError.notAvailable("This copy of Jämmer can't scan for VST 3 and CLAP plugins.") }
+            guard HostedPluginsController.available else { throw APIError.notAvailable("This copy of Jämmer doesn't run CLAP plugins, so there is nothing to scan for.") }
             let body = try json(r)
             if let unknown = body.keys.first(where: { $0 != "force" }) { throw APIError.badRequest("Unknown field \"\(unknown)\". plugins/scan takes: force.") }
             if let f = body["force"], !(f is Bool) { throw APIError.badRequest("force must be true or false.") }
