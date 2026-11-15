@@ -4,7 +4,7 @@ Numbers behind the repairs that have a claim to check. Hum, clipping and clicks 
 
 ## Reduce Reverb (`restore` kind `dereverb`)
 
-Weighted prediction error (WPE; Nakatani, Yoshioka, Kinoshita, Miyoshi and Juang, 2010), written here from the paper, no model and no dependency. In each frequency band up to 12 kHz the late reverberation is what can be predicted linearly from the band's own past, starting 3 frames (about 30 ms) back and over 24 frames (about 0.25 s); that prediction is subtracted, so the direct sound and early reflections stay. Three iterations. The variance each frame is weighted by is floored at 0.3 % of the band's mean power, which is what keeps noise between words from being lifted. Stereo is processed a channel at a time.
+In debug builds only until the patent question in `RELEASE.md` is decided (`Config/Features.xcconfig`). Weighted prediction error (WPE; Nakatani, Yoshioka, Kinoshita, Miyoshi and Juang, 2010), written here from the paper, no model and no dependency. In each frequency band up to 12 kHz the late reverberation is what can be predicted linearly from the band's own past, starting 3 frames (about 30 ms) back and over 24 frames (about 0.25 s); that prediction is subtracted, so the direct sound and early reflections stay. Three iterations. The variance each frame is weighted by is floored at 0.3 % of the band's mean power, which is what keeps noise between words from being lifted. Stereo is processed a channel at a time.
 
 ### Synthetic bursts (always run, `DereverbTests`)
 

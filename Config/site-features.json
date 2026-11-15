@@ -1,0 +1,19 @@
+{
+ "dereverb": [
+  {
+   "file": "site/manual/13-restoration.md",
+   "on": "**Audio › Remove Hum…, Repair Clipping…, Remove Clicks…, Reduce Noise…, Reduce Reverb…**",
+   "off": "**Audio › Remove Hum…, Repair Clipping…, Remove Clicks…, Reduce Noise…**"
+  },
+  {
+   "file": "site/manual/13-restoration.md",
+   "on": "start around half and listen. |\n| **Reduce Reverb** | Takes down the room: the echo that hangs on after each word in a bare or large room. It works out from the recording itself how each sound keeps ringing and removes that part, leaving the direct sound (no model, nothing to download). Amount starts at 70 %; all the way can sound unnaturally dry. It doesn't remove noise, and on a recording that's already dry it changes next to nothing. |\n",
+   "off": "start around half and listen. |\n"
+  },
+  {
+   "file": "site/manual/13-restoration.md",
+   "on": " The reverb figure is roughly how long a sound takes to die away; under 0.3 s there is little to gain from Reduce Reverb.",
+   "off": " The reverb figure is roughly how long a sound takes to die away."
+  }
+ ]
+}

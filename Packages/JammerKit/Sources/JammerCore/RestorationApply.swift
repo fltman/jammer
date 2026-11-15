@@ -11,6 +11,14 @@ extension Restoration {
         public var defaultAmount: Float { self == .dereverb ? 0.7 : 1 }
     }
 
+    /// Reverb reduction is plugged in the same way (the JammerDereverb module), so a build
+    /// can leave it out. nil: not available.
+    nonisolated(unsafe) public static var dereverber: (@Sendable (_ samples: [Float], _ sampleRate: Double, _ amount: Float) -> [Float])?
+    /// The repairs this build can run.
+    public static var availableKinds: [Kind] {
+        Kind.allCases.filter { ($0 != .dereverb || dereverber != nil) }
+    }
+
     /// Noise reduction is plugged in by the app (DeepFilterNet through libDF, which the
     /// core doesn't link): one channel in, the same length out, aligned. nil: not available.
     nonisolated(unsafe) public static var denoiser: (@Sendable (_ samples: [Float], _ sampleRate: Double, _ amount: Float) -> [Float])?
@@ -50,7 +58,7 @@ extension Restoration {
             case .nothingInRange: "There's no audio in that range."
             case .noHum: "No mains hum found (50 or 60 Hz). Give the frequency to remove it anyway."
             case .unreadable(let n): "Can't read \(n)."
-            case .notAvailable: "Noise reduction isn't available in this build."
+            case .notAvailable: "That repair isn't available in this build."
             }
         }
     }
@@ -123,8 +131,9 @@ extension Restoration {
         case .dereverb: Frame(sr)   // the prediction needs the sound that came before
         default: Frame(sr * 0.25)
         }
-        let denoise = Restoration.denoiser
+        let denoise = Restoration.denoiser, dereverb = Restoration.dereverber
         if settings.kind == .denoise, denoise == nil { throw ApplyError.notAvailable }
+        if settings.kind == .dereverb, dereverb == nil { throw ApplyError.notAvailable }
         let total = source.info.frames
         func read(_ range: Range<Frame>) throws -> [[Float]] {
             let raw = pool.read(source, from: range.lowerBound, count: range.count)
@@ -179,7 +188,7 @@ extension Restoration {
                 case .denoise:
                     y = settings.amount == 0 ? x : denoise!(x, sr, settings.amount)
                 case .dereverb:
-                    y = dereverb(x, sampleRate: sr, amount: settings.amount)
+                    y = settings.amount == 0 ? x : dereverb!(x, sr, settings.amount)
                 case .declick:
                     let (o, r) = declick(x, amount: settings.amount, sensitivity: settings.sensitivity)
                     y = o

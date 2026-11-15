@@ -125,7 +125,7 @@ struct RestoreSheet: View {
                 Text("Repair Clipping").tag(Restoration.Kind.declip)
                 Text("Remove Clicks").tag(Restoration.Kind.declick)
                 if Restoration.denoiser != nil { Text("Reduce Noise").tag(Restoration.Kind.denoise) }
-                Text("Reduce Reverb").tag(Restoration.Kind.dereverb)
+                if Restoration.dereverber != nil { Text("Reduce Reverb").tag(Restoration.Kind.dereverb) }
             }
             .onChange(of: model.kind) { _, kind in model.amount = Double(kind.defaultAmount) }
             .pickerStyle(.segmented)

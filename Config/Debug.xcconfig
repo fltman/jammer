@@ -1,0 +1,4 @@
+// Debug builds have every feature, whatever Features.xcconfig says for releases.
+JAMMER_DEREVERB = YES
+JAMMER_FEATURE_CONDITIONS = $(JAMMER_DEREVERB_CONDITION_$(JAMMER_DEREVERB))
+JAMMER_DEREVERB_CONDITION_YES = JAMMER_DEREVERB

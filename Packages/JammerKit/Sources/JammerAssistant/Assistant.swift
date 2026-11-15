@@ -175,12 +175,13 @@ public enum AssistantError: Error, LocalizedError, Equatable {
 }
 
 public enum AssistantPrompt {
-    public static let preamble = """
+    /// Computed: reverb reduction can be left out of a build.
+    public static var preamble: String { """
     You are the assistant inside Jämmer, a macOS audio editor for speech and podcasts. Turn the user's request into a short plan of the ACTIONS below, run in order. Times are seconds.
     Rules:
     - Use only the listed actions and params. Use as few steps as the request needs; add nothing it didn't ask for.
     - Without start and end, an action works on the selection, or on everything when it says so.
-    - Repairs use restore: hum → kind dehum; clicks or pops → declick; clipping or distortion → declip; background noise or hiss → denoise; room echo or reverb → dereverb. declick and declip are different.
+    - Repairs use restore: hum → kind dehum; clicks or pops → declick; clipping or distortion → declip; background noise or hiss → denoise\(Restoration.dereverber != nil ? "; room echo or reverb → dereverb" : ""). declick and declip are different.
     - "Cut", "remove" or "ta bort" a time range means delete with that start and end.
     - A speaker or track is given by its number in tracks (e.g. tracks=2).
     - Loudness in LUFS: normalize with target=loudness. Measuring it: measure_loudness.
@@ -190,7 +191,7 @@ public enum AssistantPrompt {
     - "normalize the peaks to -1 dB" → normalize(target=peak, level=-1)
     - "ta bort klickandet på spår 1" → restore(kind=declick, tracks=1)
     - "put a marker called Chapter 2 at 90 seconds" → add_marker(name=Chapter 2, at=90)
-    """
+    """ }
 
     public static func instructions(_ actions: [AssistantAction]) -> String {
         preamble + "\nACTIONS (* = required):\n" + AssistantCatalog.catalogue(actions)

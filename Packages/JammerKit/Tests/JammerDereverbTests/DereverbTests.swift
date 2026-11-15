@@ -1,7 +1,10 @@
+// Compiled with the feature (always in debug builds, which is how the tests run).
+#if JAMMER_DEREVERB
 import Accelerate
 import Foundation
 import Testing
 @testable import JammerCore
+@testable import JammerDereverb
 
 @Suite("De-reverb")
 struct DereverbTests {
@@ -57,13 +60,13 @@ struct DereverbTests {
     @Test("A reverberant room: the tails drop, the result is closer to the dry sound, amount 0 changes nothing")
     func reverberant() {
         let d = dry(), wet = room(d)
-        let out = Restoration.dereverb(wet, sampleRate: sr)
+        let out = WPEDereverb.dereverb(wet, sampleRate: sr)
         print(String(format: "DEREVERB tails %.1f → %.1f dB; SI-SDR vs dry %.1f → %.1f dB; RT60 estimate %@ → %@", tail(wet), tail(out), sisdr(wet, d), sisdr(out, d),
                      Restoration.estimateRT60(wet, sampleRate: sr).map { String(format: "%.2f s", $0) } ?? "nil",
                      Restoration.estimateRT60(out, sampleRate: sr).map { String(format: "%.2f s", $0) } ?? "nil"))
         #expect(tail(wet) - tail(out) >= 6)
         #expect(sisdr(out, d) > sisdr(wet, d))
-        #expect(Restoration.dereverb(wet, sampleRate: sr, amount: 0) == wet)
+        #expect(WPEDereverb.dereverb(wet, sampleRate: sr, amount: 0) == wet)
         let rt = Restoration.estimateRT60(wet, sampleRate: sr)
         #expect(rt != nil && (0.35...0.9).contains(rt!), "estimated \(String(describing: rt))")
     }
@@ -71,7 +74,7 @@ struct DereverbTests {
     @Test("Dry sound isn't harmed")
     func dryStays() {
         let d = dry()
-        let out = Restoration.dereverb(d, sampleRate: sr)
+        let out = WPEDereverb.dereverb(d, sampleRate: sr)
         let change = bursts.map { db(out[Int($0.0 * sr)..<Int($0.1 * sr)]) - db(d[Int($0.0 * sr)..<Int($0.1 * sr)]) }
         print("DEREVERB dry change dB:", change.map { String(format: "%.2f", $0) }, "SI-SDR", String(format: "%.1f", sisdr(out, d)))
         #expect(change.allSatisfy { abs($0) <= 0.5 })
@@ -86,7 +89,7 @@ struct DereverbTests {
         let g = Float(pow(10, (speech - 15) / 20))
         let nz = noise(count: wet.count, seed: 43).map { $0 * g * 1.7320508 } // uniform noise at that RMS
         let x = zip(wet, nz).map { $0 + $1 }
-        let out = Restoration.dereverb(x, sampleRate: sr)
+        let out = WPEDereverb.dereverb(x, sampleRate: sr)
         // The floor: well after each tail has died and before the next burst.
         let gaps = [(1.25, 1.45), (2.45, 2.65), (3.7, 3.95), (5.0, 5.4)]
         let before = gaps.map { db(x[Int($0.0 * sr)..<Int($0.1 * sr)]) }.reduce(0, +) / 4, after = gaps.map { db(out[Int($0.0 * sr)..<Int($0.1 * sr)]) }.reduce(0, +) / 4
@@ -124,7 +127,7 @@ struct DereverbEvaluation {
     func voice(file: String, rt60: Double) throws {
         let dry = try load(file, seconds: 20), wet = room(dry, rt60: rt60)
         let t0 = Date()
-        let out = Restoration.dereverb(wet, sampleRate: sr, amount: 1)
+        let out = WPEDereverb.dereverb(wet, sampleRate: sr, amount: 1)
         let took = Date().timeIntervalSince(t0)
         func sisdr(_ est: [Float]) -> Double {
             var dot = 0.0, rr = 0.0
@@ -162,3 +165,13 @@ struct DereverbEvaluation {
         #expect(est[4] != nil && est[4]! >= 0.6)
     }
 }
+
+/// Deterministic pseudo-random values in [-1, 1).
+func noise(count: Int, seed: UInt64 = 1) -> [Float] {
+    var x = seed
+    return (0..<count).map { _ in
+        x = x &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+        return Float(Int32(truncatingIfNeeded: x >> 32)) / 2_147_483_648
+    }
+}
+#endif

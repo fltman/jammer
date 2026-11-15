@@ -1,0 +1,8 @@
+// Features a release can be built without, with no code change (docs/RELEASE.md,
+// "Must be decided before release"). Debug builds always have them (Config/Debug.xcconfig).
+// This file is the switch: the package manifest reads it too, so with NO the code isn't
+// compiled into a release at all. Run scripts/export-agents-guide.sh after changing it.
+//
+// Reduce Reverb (WPE): the menu item, restore kind "dereverb", the assistant's hint and the
+// guide follow this; the manual follows it through Config/site-features.json.
+JAMMER_DEREVERB = NO

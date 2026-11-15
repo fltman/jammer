@@ -221,12 +221,25 @@ struct SiteGuideTests {
     @Test("site/agents.md matches GET /jammer")
     func siteGuide() throws {
         let url = Self.repo.appending(path: "site/agents.md")
+        _ = Features.dereverb
         let guide = AgentAPI.guide(port: AgentAPI.ports[0], appVersion: Self.appVersion)
         if ProcessInfo.processInfo.environment["JAMMER_WRITE_GUIDE"] == "1" {
             try guide.write(to: url, atomically: true, encoding: .utf8)
         }
         let onDisk = try String(contentsOf: url, encoding: .utf8)
         #expect(onDisk == guide, "site/agents.md is stale: run scripts/export-agents-guide.sh")
+    }
+
+    @Test("The manual says what the release build has")
+    func manualFollowsFeatures() throws {
+        let p = Process()
+        p.executableURL = Self.repo.appending(path: "scripts/apply-features.py")
+        p.arguments = ["--check"]
+        let err = Pipe()
+        p.standardError = err
+        try p.run()
+        p.waitUntilExit()
+        #expect(p.terminationStatus == 0, "\(String(data: err.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? "")")
     }
 }
 
@@ -327,9 +340,15 @@ struct RestoreRequestTests {
         let id = UUID()
         let s = try RestoreRequest.parse(["kind": "declick", "amount": 0.5, "sensitivity": 2, "start": 1, "end": 3.5, "tracks": [id.uuidString]])
         #expect(s.settings.amount == 0.5 && s.settings.sensitivity == 2 && s.end == 3.5 && s.tracks == [id])
-        // Reverb reduction starts at 0.7; an amount given is kept.
-        #expect(try RestoreRequest.parse(["kind": "dereverb"]).settings == Restoration.Settings(kind: .dereverb, amount: 0.7))
-        #expect(try RestoreRequest.parse(["kind": "dereverb", "amount": 1]).settings.amount == 1)
+        if Features.dereverb {
+            // Reverb reduction starts at 0.7; an amount given is kept.
+            #expect(try RestoreRequest.parse(["kind": "dereverb"]).settings == Restoration.Settings(kind: .dereverb, amount: 0.7))
+            #expect(try RestoreRequest.parse(["kind": "dereverb", "amount": 1]).settings.amount == 1)
+        } else {
+            // Left out of the build: refused as unavailable, and not offered.
+            #expect(error(["kind": "dereverb"]) == .notAvailable("dereverb isn't available in this build."))
+            #expect(!Restoration.availableKinds.contains(.dereverb))
+        }
     }
 
     @Test("Bad bodies are 400 before anything starts; denoise isn't available yet")
@@ -578,4 +597,18 @@ struct TrackGroupStepTests {
         r = StepRunner.run([Step(op: "set_group", params: ["group": .string(UUID().uuidString), "gainDB": .number(1)])], on: &s, measure: measure)
         #expect(r[0].reason == "not_found")
     }
+}
+
+/// What Config/Features.xcconfig says a release has, mirrored into this test process so the
+/// guide written to site/ and the request tests describe the build that ships.
+enum Features {
+    static let dereverb: Bool = {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent()
+        let text = (try? String(contentsOf: root.appending(path: "Config/Features.xcconfig"), encoding: .utf8)) ?? ""
+        let on = text.split(separator: "\n").contains { $0.replacingOccurrences(of: " ", with: "") == "JAMMER_DEREVERB=YES" }
+        // A stand-in: these tests check parsing and text, not the sound (JammerDereverbTests does that).
+        if on { Restoration.dereverber = { x, _, _ in x } }
+        return on
+    }()
 }

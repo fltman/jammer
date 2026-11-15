@@ -1,3 +1,6 @@
+#if JAMMER_DEREVERB
+import JammerDereverb
+#endif
 import AppKit
 import JammerAgent
 import JammerCore
@@ -40,6 +43,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         NSApp.appearance = NSAppearance(named: .darkAqua)
+        #if JAMMER_DEREVERB
+        // Reverb reduction (WPE); a build can leave it out (Config/Features.xcconfig). Before the menu, which follows it.
+        WPEDereverb.register()
+        #endif
         NSApp.mainMenu = buildMenu()
         // Our own "open documents" handler: AppKit hands document-based apps' opens straight
         // to the document controller, so this is where the sending app can be seen.
@@ -138,6 +145,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         func restoreItem(_ title: String, _ kind: String) -> NSMenuItem {
             let i = item(title, #selector(EditorWindowController.showRestore(_:)))
             i.representedObject = kind
+            if kind == "dereverb" { i.isHidden = Restoration.dereverber == nil }
             return i
         }
 

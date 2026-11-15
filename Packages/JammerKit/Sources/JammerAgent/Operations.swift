@@ -224,14 +224,15 @@ public enum Operations {
 
     /// Work that has an endpoint of its own (jobs, analysis, listening), described the same
     /// way so agents and assistants see one list. Not valid in `steps`.
-    static let restoreParams: [OperationSpec.Param] = [
-        .init("kind", .string, "The repair.", required: true, options: Restoration.Kind.allCases.map(\.rawValue)),
-        .init("amount", .number, "Blend between the original (0) and the full repair (1). Default 1; for dereverb 0.7.", range: 0...1),
+    /// Computed: the kinds depend on what the app registered (reverb reduction can be left out of a build).
+    static var restoreParams: [OperationSpec.Param] { [
+        .init("kind", .string, "The repair.", required: true, options: Restoration.availableKinds.map(\.rawValue)),
+        .init("amount", .number, "Blend between the original (0) and the full repair (1). Default 1" + (Restoration.dereverber != nil ? "; for dereverb 0.7." : "."), range: 0...1),
         start, end,
         .init("tracks", .list, "Track ids to repair. Default: every track."),
         .init("humFrequency", .number, "dehum: the mains frequency; without it 50 or 60 Hz is found.", range: 20...400),
         .init("sensitivity", .number, "declick: higher finds quieter clicks. Default 1.", range: 0.1...10),
-    ]
+    ] }
     /// Computed each time: the formats depend on what the app registered (MP3).
     public static var endpoints: [OperationSpec] { [
         .init("transcribe", "Transcribe", "Transcribes the document on this Mac; words get ids and times. Answers with a job; the transcript lands as one undo step.",
