@@ -361,7 +361,9 @@ enum AgentRouter {
     static func summary(_ s: EditorSession) -> [String: Any] {
         ["id": s.agentID, "name": s.name, "duration": seconds(s, s.project.length), "frames": s.project.length,
          "sampleRate": s.project.sampleRate, "channels": s.project.channels, "tracks": s.project.tracks.count,
-         "edited": s.document?.isDocumentEdited ?? false, "playing": s.isPlaying]
+         "edited": s.document?.isDocumentEdited ?? false, "playing": s.isPlaying,
+         // The document the user is looking at (restored windows can be many; SIBLINGS.md §1).
+         "frontmost": s.window != nil && s.window === NSApp.orderedWindows.first { $0.isVisible && $0.windowController is EditorWindowController }]
     }
 
     static func detail(_ s: EditorSession) -> [String: Any] {

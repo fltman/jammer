@@ -48,10 +48,24 @@ final class AssistantModel {
     var cloudModel = UserDefaults.standard.string(forKey: "assistant.model") ?? "anthropic/claude-sonnet-4.5"
     var cloudEndpoint = UserDefaults.standard.string(forKey: "assistant.endpoint") ?? "https://openrouter.ai/api/v1"
     @ObservationIgnored private var history: [(user: String, reply: String)] = []
+    @ObservationIgnored private var siblings: [Sibling] = []
+    @ObservationIgnored private var scanned: Date?
+    /// The actions offered for the current request (own, plus siblings it names).
+    @ObservationIgnored private(set) var actions: [AssistantAction] = AssistantCatalog.actions
 
     init(session: EditorSession) { self.session = session }
 
-    var actions: [AssistantAction] { AssistantCatalog.actions }
+    /// Glimmer and Flimmer, looked up at most once a minute (SIBLINGS.md §1). Their tools are
+    /// offered only when the request names them, so the on-device model's context stays small.
+    private func actions(for goal: String) async -> [AssistantAction] {
+        if scanned.map({ Date().timeIntervalSince($0) > 60 }) ?? true {
+            siblings = await SiblingDirectory.discover()
+            scanned = Date()
+        }
+        let lower = goal.lowercased()
+        let named = siblings.filter { lower.contains($0.slug) || lower.contains($0.name.lowercased()) }
+        return AssistantCatalog.actions + named.flatMap(\.actions)
+    }
 
     var planner: any AssistantPlanner {
         if useCloud {
@@ -81,6 +95,7 @@ final class AssistantModel {
                 guard await confirmPaid(goal) else { messages.append(Message(role: .note, text: "Not sent.")); return }
             }
             do {
+                actions = await actions(for: goal)
                 let context = AssistantContext(project: session.project, selection: session.selection, playhead: session.playhead)
                 let plan = try await p.plan(goal: goal, context: context, history: history, actions: actions)
                 history.append((goal, plan.reply))
@@ -101,6 +116,10 @@ final class AssistantModel {
     }
 
     func describe(_ s: PlannedStep) -> String {
+        if let a = actions.first(where: { $0.name == s.op }), case .sibling(let slug, _, _) = a.kind {
+            let app = siblings.first { $0.slug == slug }?.name ?? slug
+            return "\(app): \(s.op)" + (s.params.isEmpty ? "" : " (" + s.params.sorted { $0.key < $1.key }.map { "\($0.key) \($0.value.display)" }.joined(separator: ", ") + ")")
+        }
         let title = Operations.named(s.op)?.title ?? Operations.endpoints.first { $0.name == s.op }?.title
             ?? s.op.replacingOccurrences(of: "_", with: " ").capitalized
         let params = s.params.sorted { $0.key < $1.key }.compactMap { k, v -> String? in
@@ -154,6 +173,12 @@ final class AssistantModel {
             }
         }
         for s in plan.steps {
+            if let a = actions.first(where: { $0.name == s.op }), case .sibling(let slug, _, _) = a.kind,
+               let sib = siblings.first(where: { $0.slug == slug }) {
+                guard await flush() else { return }
+                messages.append(Message(role: .note, text: await SiblingDirectory.run(sib, a, s.params)))
+                continue
+            }
             switch s.op {
             case "transcribe", "restore", "measure_loudness", "analyze_restoration":
                 guard await flush() else { return }
