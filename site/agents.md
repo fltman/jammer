@@ -2,7 +2,7 @@
 
 Jämmer 0.1.0 is a native macOS audio editor (speech, restoration, post). This page tells an agent how to drive the running app through its local HTTP API. Everything here works today; nothing else does yet.
 
-- Base URL: `http://127.0.0.1:9003` (this Mac only; the server listens on loopback). Before you change anything, check that `app.name` in `GET /api/v1/status` is exactly `"Jammer"` (ASCII, no ä). The window and splash say "Jämmer"; it's the same app. Glimmer and Flimmer run similar APIs on nearby ports.
+- Base URL: `http://127.0.0.1:9003` (this Mac only; the server listens on loopback). Before you change anything, check that `app.name` in `GET /api/v1/status` is exactly `"Jammer"` (ASCII, no ä); `app.bundleID` is `com.brattoo.jammer`, or `com.brattoo.jammer.debug` for a development build. The window and splash say "Jämmer"; it's the same app. Glimmer and Flimmer run similar APIs on nearby ports.
 - Every request that isn't a GET needs the header **`X-Jammer-Agent: 1`**. Without it you get `403 forbidden`.
 - Don't send an `Origin` header: requests that look like they come from a web page are refused.
 - Audio travels in request and response bodies. The API never reads or writes file paths.

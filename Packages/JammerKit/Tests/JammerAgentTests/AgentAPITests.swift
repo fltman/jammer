@@ -546,3 +546,14 @@ struct SpectralEditStepTests {
         #expect(throws: StepFailure.self) { try StepRunner.validate(Step(op: "spectral_edit", params: ["action": .string("heal"), "shape": .string("brush"), "points": .array([.string("x")])])) }
     }
 }
+
+
+@Suite("Status")
+struct StatusTests {
+    @Test("app carries the bundle id, so debug and release builds never pair up")
+    func bundleID() {
+        let debug = AgentAPI.appInfo(version: "0.1.0", bundleID: "com.brattoo.jammer.debug")
+        #expect(debug["bundleID"] as? String == "com.brattoo.jammer.debug" && debug["name"] as? String == "Jammer")
+        #expect(AgentAPI.appInfo(version: "0.1.0", bundleID: nil)["bundleID"] as? String == "com.brattoo.jammer")
+    }
+}

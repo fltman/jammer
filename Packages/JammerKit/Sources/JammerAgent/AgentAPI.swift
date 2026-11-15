@@ -6,6 +6,12 @@ import Foundation
 /// and Flimmer.
 public enum AgentAPI {
     public static let appName = "Jammer"
+
+    /// The `app` object of GET /api/v1/status (SIBLINGS.md §2): with the bundle id, so a
+    /// sibling never pairs a debug build (com.brattoo.jammer.debug) with a release one.
+    public static func appInfo(version: String, bundleID: String?) -> [String: Any] {
+        ["name": appName, "displayName": "Jämmer", "version": version, "bundleID": bundleID ?? "com.brattoo.jammer"]
+    }
     public static let version = "v1"
     /// Header every state-changing request must carry (a web page can't add it
     /// without a CORS preflight, which the server never grants).
@@ -258,7 +264,7 @@ public enum AgentAPI {
 
         Jämmer \(appVersion) is a native macOS audio editor (speech, restoration, post). This page tells an agent how to drive the running app through its local HTTP API. Everything here works today; nothing else does yet.
 
-        - Base URL: `\(base)` (this Mac only; the server listens on loopback). Before you change anything, check that `app.name` in `GET /api/v1/status` is exactly `"Jammer"` (ASCII, no ä). The window and splash say "Jämmer"; it's the same app. Glimmer and Flimmer run similar APIs on nearby ports.
+        - Base URL: `\(base)` (this Mac only; the server listens on loopback). Before you change anything, check that `app.name` in `GET /api/v1/status` is exactly `"Jammer"` (ASCII, no ä); `app.bundleID` is `com.brattoo.jammer`, or `com.brattoo.jammer.debug` for a development build. The window and splash say "Jämmer"; it's the same app. Glimmer and Flimmer run similar APIs on nearby ports.
         - Every request that isn't a GET needs the header **`\(h): 1`**. Without it you get `403 forbidden`.
         - Don't send an `Origin` header: requests that look like they come from a web page are refused.
         - Audio travels in request and response bodies. The API never reads or writes file paths.

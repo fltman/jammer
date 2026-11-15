@@ -250,7 +250,7 @@ enum AgentRouter {
             return .text(AgentAPI.guide(port: port, appVersion: appVersion))
         case ["api", "v1", "status"]:
             try only("GET")
-            return .json(["app": ["name": AgentAPI.appName, "displayName": "Jämmer", "version": appVersion],
+            return .json(["app": AgentAPI.appInfo(version: appVersion, bundleID: Bundle.main.bundleIdentifier),
                           "api": AgentAPI.version, "port": Int(port),
                           "documents": AgentRegistry.shared.sessions.map(summary),
                           "jobs": JobRegistry.shared.running.map(\.json)])
