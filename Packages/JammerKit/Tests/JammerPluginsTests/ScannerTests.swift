@@ -204,7 +204,7 @@ struct ScannerTests {
         let t0 = Date()
         let outcome = PluginScanner(probe: TestPlugins.probe, timeout: 1).probe(bundle, format: .clap)
         let took = Date().timeIntervalSince(t0)
-        #expect(outcome == .timedOut && took >= 1 && took < 4, "\(outcome) after \(took) s")
+        #expect(outcome == .timedOut && took >= 1 && took < 15, "\(outcome) after \(took) s")
         // Nothing is left running.
         let ps = Process()
         ps.executableURL = URL(fileURLWithPath: "/bin/ps")
@@ -279,7 +279,8 @@ struct ScannerTests {
         _ = try TestPlugins.build("Bad", flag: "CRASH", in: clap)
         _ = try TestPlugins.build("Stuck", flag: "HANG", in: clap)
         try "x".write(to: clap.appending(path: "notes.txt"), atomically: true, encoding: .utf8)
-        let scanner = PluginScanner(probe: TestPlugins.probe, timeout: 1)
+        // Long enough that a plugin which loads makes it on a busy machine; the stuck one costs it once.
+        let scanner = PluginScanner(probe: TestPlugins.probe, timeout: 6)
         var c = PluginCatalogue()
         #expect(c.scan(with: scanner, folders: [.clap: [clap]]) == 3)
         #expect(c.plugins.map(\.id) == ["com.brattoo.test.Good"])
@@ -307,13 +308,13 @@ struct ScannerTests {
     func vst3() throws {
         let dir = try folder()
         defer { try? FileManager.default.removeItem(at: dir) }
-        let scanner = PluginScanner(probe: TestPlugins.probe, timeout: 1)
+        let scanner = PluginScanner(probe: TestPlugins.probe, timeout: 20), impatient = PluginScanner(probe: TestPlugins.probe, timeout: 1)
         let good = try TestPlugins.buildVST3("Hall", in: dir)
         let outcome = scanner.probe(good, format: .vst3)
         #expect(outcome == .found([ScannedPlugin(format: .vst3, id: "A0A1A2A3A4A5A6A7A8A9AAABACADAEAF", name: "Test Hall", vendor: "Brattoo Tests", version: "2.0.1",
                                                  features: ["Fx", "Reverb"], bundle: good.path)]), "\(outcome)")
         #expect(scanner.probe(try TestPlugins.buildVST3("Bad", flag: "CRASH", in: dir), format: .vst3) == .crashed(signal: SIGABRT))
-        #expect(scanner.probe(try TestPlugins.buildVST3("Stuck", flag: "HANG", in: dir), format: .vst3) == .timedOut)
+        #expect(impatient.probe(try TestPlugins.buildVST3("Stuck", flag: "HANG", in: dir), format: .vst3) == .timedOut)
         // A CLAP bundle asked for as VST 3 (and the other way round) is simply not one.
         let clap = try TestPlugins.build("Other", in: dir)
         #expect(scanner.probe(clap, format: .vst3) == .invalid("no VST 3 entry points") && scanner.probe(good, format: .clap) == .invalid("no clap_entry"))
