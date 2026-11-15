@@ -44,6 +44,9 @@ final class AssistantModel {
     var busy = false
     /// A plan waiting for the user's go-ahead (destructive, or from a paid model).
     var pending: AssistantPlan?
+    /// What the pending plan does, worked out from its steps (not from the model's words).
+    var pendingImpact: PlanImpact?
+    @ObservationIgnored private var pendingGoal = ""
     var useCloud = UserDefaults.standard.bool(forKey: "assistant.cloud")
     var cloudModel = UserDefaults.standard.string(forKey: "assistant.model") ?? "anthropic/claude-sonnet-4.5"
     var cloudEndpoint = UserDefaults.standard.string(forKey: "assistant.endpoint") ?? "https://openrouter.ai/api/v1"
@@ -105,6 +108,10 @@ final class AssistantModel {
                 if !plan.dropped.isEmpty { messages.append(Message(role: .note, text: "Left out: " + plan.dropped.joined(separator: "; "))) }
                 guard !plan.steps.isEmpty else { return }
                 if plan.isDestructive(actions) {
+                    let state = EditState(project: session.project, selection: session.selection, playhead: session.playhead,
+                                          pool: session.pool, media: FileManager.default.temporaryDirectory.appending(path: "jammer-impact"))
+                    pendingImpact = PlanImpact.compute(plan, goal: goal, state: state)
+                    pendingGoal = goal
                     pending = plan
                 } else {
                     await run(plan)
@@ -134,12 +141,14 @@ final class AssistantModel {
     func confirmPending() {
         guard let plan = pending else { return }
         pending = nil
+        pendingImpact = nil
         busy = true
         Task { defer { busy = false }; await run(plan) }
     }
 
     func cancelPending() {
         pending = nil
+        pendingImpact = nil
         messages.append(Message(role: .note, text: "Cancelled; nothing changed."))
     }
 
@@ -306,18 +315,35 @@ struct AssistantView: View {
                                 .id(m.id)
                         }
                         if let plan = model.pending {
+                            let impact = model.pendingImpact
+                            let alarming = impact?.isAlarming ?? false
                             VStack(alignment: .leading, spacing: 6) {
                                 Text("The plan").font(.caption.weight(.semibold))
                                 ForEach(Array(plan.steps.enumerated()), id: \.offset) { i, s in
                                     Text("\(i + 1). \(model.describe(s))").font(.caption)
                                 }
+                                if let impact, !impact.lines.isEmpty {
+                                    Text("What it does").font(.caption.weight(.semibold)).padding(.top, 2)
+                                    ForEach(Array(impact.lines.enumerated()), id: \.offset) { _, line in
+                                        Text("• " + line).font(.caption).foregroundStyle(.secondary)
+                                    }
+                                }
+                                ForEach(Array((impact?.warnings ?? []).enumerated()), id: \.offset) { _, w in
+                                    Label(w, systemImage: "exclamationmark.triangle.fill").font(.caption.weight(.semibold)).foregroundStyle(.orange)
+                                }
                                 HStack {
-                                    Button("Run") { model.confirmPending() }.keyboardShortcut(.defaultAction)
-                                    Button("Cancel") { model.cancelPending() }
+                                    if alarming {
+                                        Button("Cancel") { model.cancelPending() }.keyboardShortcut(.defaultAction)
+                                        Button("Run anyway") { model.confirmPending() }
+                                    } else {
+                                        Button("Run") { model.confirmPending() }.keyboardShortcut(.defaultAction)
+                                        Button("Cancel") { model.cancelPending() }
+                                    }
                                 }
                             }
                             .padding(8)
                             .background(RoundedRectangle(cornerRadius: 6).fill(Color.white.opacity(0.06)))
+                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(alarming ? Color.orange : .clear, lineWidth: 1.5))
                         }
                         if model.busy { ProgressView().controlSize(.small) }
                     }

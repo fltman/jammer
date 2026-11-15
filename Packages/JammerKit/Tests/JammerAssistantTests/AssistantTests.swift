@@ -149,4 +149,29 @@ struct AssistantTests {
             #expect(PlanParser.guardrail(task) == nil, "\(task)")
         }
     }
+
+    @Test("Plan impact: numbers from the steps, and warnings for the hold-out set's dangerous plans")
+    func impact() {
+        let (p, pool) = project()
+        let state = EditState(project: p, pool: pool)
+        // "tona ut de sista två sekunderna" planned as a delete.
+        let fadeAsDelete = AssistantPlan(reply: "", steps: [PlannedStep(op: "delete", params: ["start": .number(4), "end": .number(6)])])
+        let a = PlanImpact.compute(fadeAsDelete, goal: "tona ut de sista två sekunderna", state: state)
+        #expect(a.lines == ["Deletes 2.0 s of 6.0 s at the end."])
+        #expect(a.warnings.count == 2)   // 33 % and no removal verb
+        // "radera originalfilen" planned as cutting everything.
+        let cutAll = PlanImpact.compute(AssistantPlan(reply: "", steps: [PlannedStep(op: "cut", params: ["start": .number(0), "end": .number(6)])]),
+                                        goal: "radera originalfilen från disken", state: state)
+        #expect(cutAll.lines.first == "Deletes 6.0 s of 6.0 s the whole document.")
+        #expect(cutAll.fractionRemoved == 1 && cutAll.isAlarming)
+        // A real fade: no warnings.
+        let fade = PlanImpact.compute(AssistantPlan(reply: "", steps: [PlannedStep(op: "fade_out", params: ["start": .number(4), "end": .number(6)])]),
+                                      goal: "tona ut de sista två sekunderna", state: state)
+        #expect(fade.lines == ["Fades out over 2.0 s at the end."] && !fade.isAlarming)
+        // Fillers and pauses asked for: numbers, and no verb warning.
+        let clean = PlanImpact.compute(AssistantPlan(reply: "", steps: [PlannedStep(op: "remove_fillers"), PlannedStep(op: "remove_silences")]),
+                                       goal: "ta bort alla ehm och tystnader", state: state)
+        #expect(clean.lines.count == 2 && clean.lines[0].hasPrefix("Removes 2 words"))
+        #expect(!clean.warnings.contains { $0.contains("doesn't ask") })
+    }
 }
