@@ -170,6 +170,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             restoreItem("Repair Clipping…", "declip"),
             restoreItem("Remove Clicks…", "declick"),
             restoreItem("Reduce Noise…", "denoise"),
+            item("Attenuate Frequencies…", #selector(EditorWindowController.attenuateFrequencies(_:)), ""),
         ]))
         main.addItem(submenu("Transport", [
             // Space and Return are handled by the timeline, so text fields keep them.
@@ -182,6 +183,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             item("Zoom to Fit", #selector(EditorWindowController.zoomToFit(_:)), "0"),
             item("Zoom to Selection", #selector(EditorWindowController.zoomToSelection(_:)), "e"),
             .separator(),
+            item("Show Spectrogram", #selector(EditorWindowController.toggleSpectrogram(_:)), "s", [.command, .option]),
             item("Show Transcript", #selector(EditorWindowController.toggleTranscript(_:)), "t", [.command, .option]),
             item("Show Assistant", #selector(EditorWindowController.toggleAssistant(_:)), "a", [.command, .option]),
             .separator(),

@@ -25,15 +25,22 @@ final class TimelineView: NSView {
     let viewport = Viewport()
     private let metal: WaveformMetalView
     private let overlay: TimelineOverlay
+    private let spectrogram: SpectrogramLayerView
+    var showsSpectrogram: Bool {
+        get { !spectrogram.isHidden }
+        set { spectrogram.isHidden = !newValue; metal.isHidden = newValue; spectrogram.refresh(); refresh(waveform: true) }
+    }
     private var observing = false
 
     init(session: EditorSession) {
         self.session = session
         metal = WaveformMetalView(session: session, viewport: viewport)
         overlay = TimelineOverlay(session: session, viewport: viewport)
+        spectrogram = SpectrogramLayerView(session: session, viewport: viewport)
         super.init(frame: .zero)
         wantsLayer = true
-        for v in [metal, overlay] as [NSView] {
+        spectrogram.isHidden = true
+        for v in [metal, spectrogram, overlay] as [NSView] {
             v.translatesAutoresizingMaskIntoConstraints = false
             addSubview(v)
             NSLayoutConstraint.activate([
@@ -103,7 +110,7 @@ final class TimelineView: NSView {
     }
 
     func refresh(waveform: Bool) {
-        if waveform { metal.invalidate() }
+        if waveform { metal.invalidate(); spectrogram.refresh() }
         overlay.needsDisplay = true
     }
 

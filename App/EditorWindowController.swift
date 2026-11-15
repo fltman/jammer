@@ -146,6 +146,42 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         }
     }
 
+    /// Lowers a frequency band inside the selection (spectral attenuation).
+    @objc func attenuateFrequencies(_ sender: Any?) {
+        guard let window, let sel = session.selection else { NSSound.beep(); return }
+        let alert = NSAlert()
+        alert.messageText = "Attenuate Frequencies"
+        alert.informativeText = "Lowers a frequency band inside the selection, on every track. The original audio stays one undo away."
+        let low = NSTextField(string: "4000"), high = NSTextField(string: "8000"), db = NSTextField(string: "-20")
+        for f in [low, high, db] { f.widthAnchor.constraint(equalToConstant: 80).isActive = true }
+        let grid = NSGridView(views: [[NSTextField(labelWithString: "From (Hz):"), low], [NSTextField(labelWithString: "To (Hz):"), high],
+                                      [NSTextField(labelWithString: "Change (dB):"), db]])
+        grid.frame = NSRect(x: 0, y: 0, width: 240, height: 90)
+        alert.accessoryView = grid
+        alert.addButton(withTitle: "Attenuate")
+        alert.addButton(withTitle: "Cancel")
+        alert.beginSheetModal(for: window) { [session] response in
+            guard response == .alertFirstButtonReturn else { return }
+            let p = session.project, pool = session.pool
+            let band = min(low.doubleValue, high.doubleValue)...max(low.doubleValue, high.doubleValue), gain = min(0, db.doubleValue)
+            Task {
+                session.status = "Attenuating…"
+                let result = await Task.detached { Result { try p.applyingSpectralAttenuation(range: sel, freq: band, gainDB: gain, pool: pool, media: MediaStore.folder) } }.value
+                switch result {
+                case .success(let q):
+                    session.commit(q, action: "Attenuate Frequencies")
+                    session.status = String(format: "Attenuated %.0f–%.0f Hz by %.0f dB.", band.lowerBound, band.upperBound, -gain)
+                case .failure(let e):
+                    session.status = e.localizedDescription
+                }
+            }
+        }
+    }
+
+    @objc func toggleSpectrogram(_ sender: Any?) {
+        timeline.showsSpectrogram.toggle()
+    }
+
     @objc func toggleAssistant(_ sender: Any?) {
         guard let split = window?.contentView as? NSSplitView, split.arrangedSubviews.count > 1 else { return }
         let view = split.arrangedSubviews[1]
@@ -268,6 +304,11 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
             return session.project.length > 0
         }
         if item.action == #selector(zoomToSelection(_:)) { return session.selection != nil }
+        if item.action == #selector(attenuateFrequencies(_:)) { return session.selection != nil }
+        if item.action == #selector(toggleSpectrogram(_:)) {
+            item.title = timeline.showsSpectrogram ? "Show Waveform" : "Show Spectrogram"
+            return true
+        }
         if item.action == #selector(toggleAssistant(_:)) {
             let hidden = ((window?.contentView as? NSSplitView)?.arrangedSubviews.last?.isHidden) ?? true
             item.title = hidden ? "Show Assistant" : "Hide Assistant"

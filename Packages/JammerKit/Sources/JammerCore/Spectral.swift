@@ -4,13 +4,13 @@ import Foundation
 /// Spectrogram columns for drawing, and spectral attenuation of a time–frequency box.
 public enum Spectral {
     /// A short-time Fourier transform with a Hann window.
-    final class STFT {
-        let size: Int
+    public final class STFT: @unchecked Sendable {
+        public let size: Int
         let log2n: vDSP_Length
         let setup: FFTSetup
-        let window: [Float]
+        public let window: [Float]
 
-        init(size: Int) {
+        public init(size: Int) {
             self.size = size
             log2n = vDSP_Length(log2(Double(size)))
             setup = vDSP_create_fftsetup(log2n, FFTRadix(kFFTRadix2))!
@@ -23,7 +23,7 @@ public enum Spectral {
 
         /// Forward transform of `frame` (size samples), windowed: (real, imag), size/2 bins
         /// (bin 0 holds DC in real and Nyquist in imag, vDSP's packing).
-        func forward(_ frame: UnsafePointer<Float>) -> ([Float], [Float]) {
+        public func forward(_ frame: UnsafePointer<Float>) -> ([Float], [Float]) {
             var x = [Float](repeating: 0, count: size)
             vDSP_vmul(frame, 1, window, 1, &x, 1, vDSP_Length(size))
             var re = [Float](repeating: 0, count: size / 2), im = [Float](repeating: 0, count: size / 2)
@@ -130,5 +130,60 @@ public enum Spectral {
             out[i] = x[i] + w * (processed - x[i])
         }
         return out
+    }
+}
+
+extension Project {
+    /// Lowers a frequency band by `gainDB` inside `range` on the given tracks (nil: all),
+    /// bounced per track into a new file like echo. The original audio stays untouched.
+    public func applyingSpectralAttenuation(range: Range<Frame>, freq: ClosedRange<Double>, gainDB: Double, tracks: Set<UUID>? = nil,
+                                            pool: SourcePool, media: URL) throws -> Project {
+        guard freq.lowerBound >= 0, freq.upperBound <= sampleRate / 2, freq.upperBound > freq.lowerBound else {
+            throw EffectError.badValue("The band must lie between 0 Hz and \(Int(sampleRate / 2)) Hz.")
+        }
+        guard (-80...0).contains(gainDB) else { throw EffectError.badValue("gain must be between -80 and 0 dB.") }
+        let r = range.clamped(to: 0..<length)
+        let targets = self.tracks.indices.filter { t in
+            (tracks?.contains(self.tracks[t].id) ?? true) && self.tracks[t].clips.contains { $0.start < r.upperBound && $0.end > r.lowerBound }
+        }
+        guard !r.isEmpty, !targets.isEmpty else { throw EffectError.nothingInRange }
+        try FileManager.default.createDirectory(at: media, withIntermediateDirectories: true)
+        var p = self
+        let words = p.placedWords(in: r)
+        let margin = 4_096
+        for t in targets {
+            var solo = self
+            solo.tracks = [self.tracks[t]]
+            solo.tracks[0].gainDB = 0
+            solo.tracks[0].isMuted = false
+            let plan = PlanCompiler.compile(solo, pool: pool)
+            let lo = max(0, r.lowerBound - Frame(margin)), hi = r.upperBound + Frame(margin)
+            let raw = plan.render(from: lo, frames: Int(hi - lo))
+            var out = [Float](repeating: 0, count: r.count * channels)
+            for c in 0..<channels {
+                let x = stride(from: c, to: raw.count, by: channels).map { raw[$0] }
+                let y = Spectral.attenuate(x, sampleRate: sampleRate, time: Int(r.lowerBound - lo)..<Int(r.upperBound - lo), freq: freq, gainDB: gainDB)
+                for i in 0..<r.count { out[i * channels + c] = y[i + Int(r.lowerBound - lo)] }
+            }
+            let url = media.appending(path: "\(UUID().uuidString.prefix(8)) spectral.wav")
+            let w = try WAVWriter(url: url, options: .init(encoding: .float32, channels: channels, sampleRate: sampleRate))
+            try w.write(out)
+            try w.finish()
+            let src = SourceRef(name: "\(self.tracks[t].name) (attenuated)", path: url.path, info: try AudioFileReader.info(at: url))
+            p.sources.append(src)
+            p.tracks[t].clips = p.tracks[t].clips.flatMap { c -> [Clip] in
+                var parts: [Clip] = []
+                let (left, rest) = c.split(at: r.lowerBound)
+                if let left { parts.append(left) }
+                if let rest { let (_, right) = rest.split(at: r.upperBound); if let right { parts.append(right) } }
+                return parts
+            }
+            p.tracks[t].clips.append(Clip(sourceID: src.id, start: r.lowerBound, length: Frame(r.count)))
+            p.tracks[t].clips.sort { $0.start < $1.start }
+            let mine = words.filter { $0.track == t }.map { w -> Word in var w2 = w.word; w2.start = w.start - r.lowerBound; w2.end = w.end - r.lowerBound; return w2 }
+            if !mine.isEmpty { p.setTranscript(SourceTranscript(sourceID: src.id, language: transcripts.first?.language ?? "und", engine: "carried", words: mine)) }
+        }
+        p.pruneSources()
+        return p
     }
 }

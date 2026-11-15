@@ -35,4 +35,22 @@ struct SpectralTests {
         let z = Spectral.attenuate(x, sampleRate: sr, time: box, freq: 5_000...7_000, gainDB: 0)
         #expect(zip(z, x).allSatisfy { abs($0 - $1) < 1e-5 })
     }
+
+    @Test("On the project: the band goes down in the range, the rest of the timeline is bit-exact")
+    func project() throws {
+        let n = 96_000
+        let mono = sines(n, [(500, 0.3), (6_000, 0.3)])
+        let (p, pool) = memoryProject(mono.flatMap { [$0, $0] })
+        let media = FileManager.default.temporaryDirectory.appending(path: "jammer-spec-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: media) }
+        let q = try p.applyingSpectralAttenuation(range: 30_000..<60_000, freq: 5_000...7_000, gainDB: -40, pool: pool, media: media)
+        func render(_ x: Project) -> [Float] { let plan = PlanCompiler.compile(x, pool: pool); return plan.render(from: 0, frames: Int(plan.length)) }
+        let a = render(p), b = render(q)
+        #expect(Array(b[0..<60_000]) == Array(a[0..<60_000]))          // before the range (stereo frames × 2)
+        #expect(Array(b[120_000...]) == Array(a[120_000...]))           // after it
+        let inside = stride(from: 72_000, to: 108_000, by: 2).map { b[$0] }
+        let insideA = stride(from: 72_000, to: 108_000, by: 2).map { a[$0] }
+        #expect(level(insideA, 6_000) - level(inside, 6_000) > 30)
+        #expect(throws: EffectError.self) { try p.applyingSpectralAttenuation(range: 0..<10, freq: 100...30_000, gainDB: -10, pool: pool, media: media) }
+    }
 }

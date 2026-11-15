@@ -55,3 +55,7 @@ Edits act on all tracks at once, like a waveform editor.
 Playback starts at the selection if there is one, otherwise at the playhead, and stops at the end. If you edit while playing, you hear the change straight away. The volume slider in the transport bar only affects playback in Jämmer, not exports.
 
 Jämmer plays through the Mac's current output device and follows it when you switch in Control Centre or System Settings. If the device runs at another sample rate than the project, Jämmer converts while it plays and leaves the device's setting alone. Exports are always at the project's rate and aren't affected.
+
+## Spectrogram
+
+**View › Show Spectrogram** (⌥⌘S) shows each track as a spectrogram instead of a waveform: time across, frequency up (50 Hz to 16 kHz on a log scale), brightness for level. It's computed for what's on screen, so zoom in to ten minutes or less. Selecting works as in the waveform. **Audio › Attenuate Frequencies…** lowers a frequency band (for example a whistle or a hiss) inside the selection by the number of decibels you give; it renders into a new file like the other repairs, so one undo brings back the original.
