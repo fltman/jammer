@@ -337,7 +337,7 @@ public enum AgentAPI {
         | GET | `/api/v1/uploads/{id}` | How many bytes have arrived. |
         | DELETE | `/api/v1/uploads/{id}` | Throws an upload away. |
 
-        Document ids are stable while the window is open. `GET /api/v1/documents` also lists documents the user opened.
+        Document ids are stable while the window is open. A document a sibling app handed over to edit (SIBLINGS.md §6) has `"linkedFile": {"name", "format", "requester"}` in the document list; the user saves it back with ⌘S, and the API never writes that file. `GET /api/v1/documents` also lists documents the user opened.
 
         ### Big files
 

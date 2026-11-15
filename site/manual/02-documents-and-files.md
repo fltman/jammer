@@ -48,3 +48,11 @@ When you export from the start of the project, the first file's bext and iXML go
 ## Separately recorded speakers (double-enders)
 
 When each speaker recorded their own side (a "double-ender"), choose **File › Import Tracks…** (⇧⌘I) and pick their files, together with the call recording (Zoom, Riverside, a phone recording) if you have one. Jämmer adds each as a track and lines them up by comparing the sound itself, to the sample. The call recording, where everyone is heard, makes the best reference, and Jämmer picks it by itself: the track that matches all the others best. The status bar says how far each track moved and flags a track without a clear match, which is left where it was. Import and alignment are one undo step.
+
+## Editing a clip for Flimmer
+
+When Flimmer sends a clip's sound to Jämmer ("Edit in Jämmer"), it opens as a linked document: the window says **clip.wav · For Flimmer – ⌘S saves back**. Edit as usual, then **File › Save Back to clip.wav** (⌘S) writes the result into that same file, in the same format, sample rate and bit depth, and Flimmer picks it up. Plugins are included, as in an export. WAV files keep their Broadcast Wave and iXML data and other chunks, and get your markers as cue points; AIFF and FLAC are written by the system's encoder, which keeps the audio but not their own extra metadata.
+
+Jämmer never writes the file by itself: autosave keeps your edits in the document, not in the clip. **File › Save a Jämmer Copy…** (⇧⌘S) saves the whole project, with its edit list and transcript, as a `.jammer` package; ⌘S still saves back to the clip.
+
+This works for 16- and 24-bit and 32-bit float WAV, 16- and 24-bit AIFF and FLAC, mono or stereo. Other files from Flimmer open as ordinary new projects.

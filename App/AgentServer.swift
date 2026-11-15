@@ -402,6 +402,7 @@ enum AgentRouter {
         ["id": s.agentID, "name": s.name, "duration": seconds(s, s.project.length), "frames": s.project.length,
          "sampleRate": s.project.sampleRate, "channels": s.project.channels, "tracks": s.project.tracks.count,
          "edited": s.document?.isDocumentEdited ?? false, "playing": s.isPlaying,
+         "linkedFile": s.linkedFile.map { ["name": $0.fileName, "format": $0.format.rawValue, "requester": $0.requester] as [String: Any] } as Any? ?? NSNull(),
          // The document the user is looking at (restored windows can be many; SIBLINGS.md §1).
          "frontmost": s.window != nil && s.window === NSApp.orderedWindows.first { $0.isVisible && $0.windowController is EditorWindowController }]
     }

@@ -41,6 +41,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillFinishLaunching(_ notification: Notification) {
         NSApp.appearance = NSAppearance(named: .darkAqua)
         NSApp.mainMenu = buildMenu()
+        // Our own "open documents" handler: AppKit hands document-based apps' opens straight
+        // to the document controller, so this is where the sending app can be seen.
+        NSAppleEventManager.shared().setEventHandler(self, andSelector: #selector(handleOpenDocuments(_:reply:)),
+                                                     forEventClass: AEEventClass(kCoreEventClass), andEventID: AEEventID(kAEOpenDocuments))
+    }
+
+    @objc func handleOpenDocuments(_ event: NSAppleEventDescriptor, reply: NSAppleEventDescriptor) {
+        guard let list = event.paramDescriptor(forKeyword: keyDirectObject) else { return }
+        let items = list.numberOfItems > 0 ? (1...list.numberOfItems).compactMap { list.atIndex($0) } : [list]
+        open(items.compactMap { $0.coerce(toDescriptorType: typeFileURL)?.fileURLValue ?? $0.fileURLValue }, requester: LinkedEditing.requester(of: event))
+    }
+
+    /// Files from Finder open the ordinary way; from Flimmer or Glimmer, WAV, AIFF and FLAC
+    /// open linked (SIBLINGS.md §6).
+    func open(_ urls: [URL], requester: String?) {
+        for url in urls {
+            if let requester, LinkedEditing.open(url, requester: requester) { continue }
+            NSDocumentController.shared.openDocument(withContentsOf: url, display: true) { _, _, error in
+                if let error { NSApp.presentError(error) }
+            }
+        }
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {

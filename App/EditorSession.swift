@@ -78,6 +78,11 @@ final class EditorSession {
     /// Bumped when the running plugins change (windows and lists refresh).
     var pluginsVersion = 0
 
+    /// Set when a sibling app handed Jämmer a file to edit; ⌘S then saves back into it.
+    var linkedFile: LinkedFile? {
+        didSet { (window?.windowController as? EditorWindowController)?.showLink() }
+    }
+
     /// Turns safe mode on or off and starts every plugin again.
     func restartPlugins() {
         inserts = InsertHost(channels: project.channels, sampleRate: project.sampleRate, outOfProcess: Self.pluginSafeMode)
