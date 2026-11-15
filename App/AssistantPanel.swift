@@ -300,7 +300,7 @@ struct AssistantView: View {
                 Text("Assistant").font(.system(size: 11, weight: .semibold))
                 Spacer()
                 Text(model.useCloud ? model.cloudModel : "On this Mac").font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
-                Button { showSettings.toggle() } label: { Image(systemName: "gearshape") }
+                Button { showSettings.toggle() } label: { Label("Assistant model", systemImage: "gearshape").labelStyle(.iconOnly) }
                     .buttonStyle(.borderless)
                     .help("Model")
                     .popover(isPresented: $showSettings) { settings.padding(14).frame(width: 320) }
@@ -361,10 +361,11 @@ struct AssistantView: View {
             HStack {
                 TextField("Ask the assistant…", text: $model.input, axis: .vertical)
                     .textFieldStyle(.plain)
+                    .accessibilityLabel("Ask the assistant")
                     .lineLimit(1...4)
                     .focused($focused)
                     .onSubmit { model.send() }
-                Button { model.send() } label: { Image(systemName: "arrow.up.circle.fill") }
+                Button { model.send() } label: { Label("Send", systemImage: "arrow.up.circle.fill").labelStyle(.iconOnly) }
                     .buttonStyle(.borderless)
                     .disabled(model.input.trimmingCharacters(in: .whitespaces).isEmpty || model.busy)
             }

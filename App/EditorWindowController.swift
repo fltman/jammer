@@ -154,6 +154,9 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         alert.informativeText = "Lowers a frequency band inside the selection, on every track. The original audio stays one undo away."
         let low = NSTextField(string: "4000"), high = NSTextField(string: "8000"), db = NSTextField(string: "-20")
         for f in [low, high, db] { f.widthAnchor.constraint(equalToConstant: 80).isActive = true }
+        low.setAccessibilityLabel("From, in hertz")
+        high.setAccessibilityLabel("To, in hertz")
+        db.setAccessibilityLabel("Change, in decibels")
         let grid = NSGridView(views: [[NSTextField(labelWithString: "From (Hz):"), low], [NSTextField(labelWithString: "To (Hz):"), high],
                                       [NSTextField(labelWithString: "Change (dB):"), db]])
         grid.frame = NSRect(x: 0, y: 0, width: 240, height: 90)
@@ -259,6 +262,9 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         fromPlayhead.state = session.playhead > 0 ? .on : .off
         fromPlayhead.isEnabled = session.playhead > 0
         for f in [bpm, beats] { f.widthAnchor.constraint(equalToConstant: 70).isActive = true }
+        bpm.setAccessibilityLabel("Beats per minute")
+        beats.setAccessibilityLabel("Beats per bar")
+        unit.setAccessibilityLabel("Beat unit")
         let grid = NSGridView(views: [
             [NSTextField(labelWithString: "BPM:"), bpm],
             [NSTextField(labelWithString: "Time signature:"), NSStackView(views: [beats, NSTextField(labelWithString: "/"), unit])],
@@ -361,11 +367,12 @@ struct TransportBar: View {
     var body: some View {
         HStack(spacing: 14) {
             Button { session.togglePlay() } label: {
-                Image(systemName: session.isPlaying ? "stop.fill" : "play.fill").frame(width: 18)
+                Label(session.isPlaying ? "Stop" : "Play", systemImage: session.isPlaying ? "stop.fill" : "play.fill")
+                    .labelStyle(.iconOnly)
+                    .frame(width: 18)
             }
             .buttonStyle(.borderless)
             .help(session.isPlaying ? "Stop (Space)" : "Play (Space)")
-            .accessibilityLabel(session.isPlaying ? "Stop" : "Play")
             Text(formatTime(session.project.seconds(session.playhead)))
                 .font(.system(.title3, design: .monospaced).weight(.medium))
                 .foregroundStyle(Theme.neonColor)
@@ -379,17 +386,19 @@ struct TransportBar: View {
                 .accessibilityLabel("Bar, beat and tick")
             Spacer()
             HStack(spacing: 6) {
-                Button { timeline.zoom(by: 0.5) } label: { Image(systemName: "minus.magnifyingglass") }
+                Button { timeline.zoom(by: 0.5) } label: { Label("Zoom Out", systemImage: "minus.magnifyingglass").labelStyle(.iconOnly) }
                     .help("Zoom Out (⌘−)")
-                Button { timeline.zoomToFit() } label: { Image(systemName: "arrow.left.and.right") }
+                Button { timeline.zoomToFit() } label: { Label("Zoom to Fit", systemImage: "arrow.left.and.right").labelStyle(.iconOnly) }
                     .help("Zoom to Fit (⌘0)")
-                Button { timeline.zoom(by: 2) } label: { Image(systemName: "plus.magnifyingglass") }
+                Button { timeline.zoom(by: 2) } label: { Label("Zoom In", systemImage: "plus.magnifyingglass").labelStyle(.iconOnly) }
                     .help("Zoom In (⌘+)")
             }
             .buttonStyle(.borderless)
             HStack(spacing: 6) {
-                Image(systemName: "speaker.wave.2").foregroundStyle(.secondary)
-                Slider(value: $session.volume, in: 0...1).frame(width: 90).accessibilityLabel("Playback volume")
+                Image(systemName: "speaker.wave.2").foregroundStyle(.secondary).accessibilityHidden(true)
+                Slider(value: $session.volume, in: 0...1).frame(width: 90)
+                    .accessibilityLabel("Playback volume")
+                    .accessibilityValue("\(Int((session.volume * 100).rounded())) %")
             }
         }
         .padding(.horizontal, 14)

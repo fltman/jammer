@@ -300,11 +300,33 @@ final class TimelineOverlay: NSView {
         self.session = session
         self.viewport = viewport
         super.init(frame: .zero)
-        setAccessibilityRole(.group)
-        setAccessibilityLabel("Timeline")
     }
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+
+    // VoiceOver: the timeline reads as a slider over the playhead. Its value says where
+    // the playhead and the selection are; increment and decrement move 1 s, like the arrows.
+    override func isAccessibilityElement() -> Bool { true }
+    override func accessibilityRole() -> NSAccessibility.Role? { .slider }
+    override func accessibilityRoleDescription() -> String? { "timeline" }
+    override func accessibilityLabel() -> String? { "Timeline" }
+    override func accessibilityValue() -> Any? {
+        let p = session.project
+        var text = "Playhead \(formatTime(p.seconds(session.playhead))) of \(formatTime(p.duration))"
+        if let sel = session.selection {
+            text += ", selection \(formatTime(p.seconds(sel.lowerBound))) to \(formatTime(p.seconds(sel.upperBound)))"
+        }
+        if p.tracks.count > 1 { text += ", \(p.tracks.count) tracks" }
+        return text
+    }
+    override func accessibilityPerformIncrement() -> Bool {
+        session.seek(session.playhead + Frame(session.project.sampleRate))
+        return true
+    }
+    override func accessibilityPerformDecrement() -> Bool {
+        session.seek(session.playhead - Frame(session.project.sampleRate))
+        return true
+    }
 
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { true }

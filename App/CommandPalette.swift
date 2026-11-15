@@ -103,6 +103,7 @@ struct PaletteView: View {
         VStack(spacing: 0) {
             TextField("Type a command", text: $query)
                 .textFieldStyle(.plain)
+                .accessibilityLabel("Command")
                 .font(.title3)
                 .padding(14)
                 .focused($focused)

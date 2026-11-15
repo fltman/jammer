@@ -132,6 +132,8 @@ struct RestoreSheet: View {
                 GridRow {
                     Text("Amount")
                     Slider(value: $model.amount, in: 0...1)
+                        .accessibilityLabel("Amount")
+                        .accessibilityValue("\(Int((model.amount * 100).rounded())) percent")
                     Text("\(Int((model.amount * 100).rounded())) %").monospacedDigit().frame(width: 44, alignment: .trailing)
                 }
                 if model.kind == .dehum {
@@ -151,6 +153,8 @@ struct RestoreSheet: View {
                     GridRow {
                         Text("Sensitivity")
                         Slider(value: $model.sensitivity, in: 0.25...4)
+                            .accessibilityLabel("Sensitivity")
+                            .accessibilityValue(String(format: "%.1f times", model.sensitivity))
                         Text(String(format: "%.1f×", model.sensitivity)).monospacedDigit().frame(width: 44, alignment: .trailing)
                     }
                 }

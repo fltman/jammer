@@ -87,12 +87,13 @@ struct PluginsSheet: View {
             }
             Spacer()
             Button("Edit…") { PluginWindows.show(session, track: track.id, insert: insert.id) }
+                .accessibilityLabel("Edit \(insert.name)")
                 .disabled(session.inserts.instance(insert.id) == nil)
             Button { session.perform("remove_insert", ["track": .string(track.id.uuidString), "insert": .string(insert.id.uuidString)]) } label: {
-                Image(systemName: "trash")
+                Label("Remove \(insert.name)", systemImage: "trash").labelStyle(.iconOnly)
             }
             .buttonStyle(.borderless)
-            .accessibilityLabel("Remove \(insert.name)")
+            .help("Remove \(insert.name)")
         }
     }
 }
@@ -197,6 +198,8 @@ struct GenericPluginView: View {
                         Slider(value: Binding(get: { Double(p.value) }, set: { p.value = AUValue($0); tick += 1 }),
                                in: Double(p.minValue)...Double(max(p.maxValue, p.minValue + 0.0001)))
                             .frame(width: 200)
+                            .accessibilityLabel(p.displayName)
+                            .accessibilityValue(p.string(fromValue: nil))
                         Text(p.string(fromValue: nil)).monospacedDigit().frame(width: 80, alignment: .trailing)
                     }
                 }
