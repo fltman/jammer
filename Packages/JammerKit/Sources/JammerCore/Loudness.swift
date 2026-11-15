@@ -158,6 +158,10 @@ public struct LoudnessMeter {
         return out
     }
 
+    /// K-weighted, channel-weighted mean-square energy of every complete 100 ms block so
+    /// far; LUFS = −0.691 + 10·log10(e).
+    public var blockEnergies: [Double] { subEnergies }
+
     public var result: LoudnessResult {
         let momentary = windows(4)
         let shortTerm = windows(30)

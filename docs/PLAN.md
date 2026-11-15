@@ -57,7 +57,7 @@ Replace the Audio Hijack → RX → Descript → Auphonic chain for speech and p
 | Item | Status |
 |---|---|
 | Per-speaker levelling, static: one gain per speaker over their turns (`level_speakers`) | Done |
-| Per-speaker levelling, dynamic (Auphonic-style, gain riding over time within a speaker) | Next after the static one |
+| Per-speaker levelling, dynamic: centred 3 s short-term over own speech, zero-phase smoothing, segments at pauses > 5 s, pauses never lifted (`level_speakers mode dynamic`) | Done (8 dB drop → both halves within 0.2 LU; spread 8.2 → 1.5 LU; no overshoot after a 7 s pause) |
 | Branching history: a tree of states saved in the package, View › History, `GET …/history` and `POST …/history/{node}`; one agent request is one undo step (explicit groups, AppKit only closes its automatic ones after user events) | Done, verified in the app (jump and undo bit-exact, survives save and open) |
 | Spectral tools: box, lasso, brush in the spectrogram; heal (≤ 0.5 s, log-magnitude interpolation, phase kept) and attenuate; `spectral_edit`; numeric entry | Done, verified in the app |
 | De-bleed: gate outside each track's turns (equal-power ramps, own speech bit-exact) and cancel (GCC-PHAT delay up to 1 s, per-bin transfer learnt where the track is silent); `debleed` | Done (same room −28.7 dB, remote 180 ms −16.1 dB, own voice ±0.0 dB) |

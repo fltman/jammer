@@ -359,6 +359,7 @@ Brings every speaker to the same loudness with one gain each, measured over thei
 
 | Param | Type | Description |
 |---|---|---|
+| `mode` | string | static: one gain per speaker (default). dynamic: rides each speaker's gain over time (3 s short-term loudness over their own speech, looking ahead so speech starts don't pump; pauses never lifted); bounces the tracks into new files. info then also has spreadBeforeLU and spreadAfterLU. One of: `static`, `dynamic`. |
 | `target` | number | LUFS per speaker. Default -18. |
 | `maxGain` | number | Largest change in dB, up or down. Default 12. |
 | `speakers` | list | Speaker ids as strings ("0", "1"). Default: everyone. |

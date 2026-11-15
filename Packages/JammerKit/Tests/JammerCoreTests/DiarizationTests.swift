@@ -324,4 +324,78 @@ struct DiarizationTests {
         #expect(bleed - bleedAfter >= 12, "\(report)")
         #expect(abs(ownAfter - own) <= 0.5)
     }
+
+    // MARK: Dynamic levelling
+
+    /// One speaker on one track; `gainAt` scales the talker over time. Plus a music track nobody talks on.
+    private func riding(_ dir: TempDir, turns: [(Double, Double)], seconds: Double, gainAt: (Double) -> Float) throws -> (Project, SourcePool) {
+        let x = talker(turns, seconds: seconds, seed: 31)
+        let floor = noise(count: x.count, seed: 32).map { $0 * 0.0003 }
+        let mono = x.indices.map { x[$0] * gainAt(Double($0) / sr) + floor[$0] }
+        let url = dir.file("v.wav"), murl = dir.file("m.wav")
+        try writeWAV(mono.flatMap { [$0, $0] }, to: url)
+        try writeWAV(sine(330, amplitudeDB: -30, seconds: seconds), to: murl)
+        var p = Project(source: SourceRef(name: "Voice", path: url.path, info: try AudioFileReader.info(at: url)))
+        p.addTrack(source: SourceRef(name: "Music", path: murl.path, info: try AudioFileReader.info(at: murl)))
+        p.applyDiarization([TrackDiarization(track: p.tracks[0].id, names: ["V"], turns: turns.map { .init(speaker: 0, range: Frame($0.0 * sr)..<Frame($0.1 * sr)) })], engine: "test")
+        return (p, SourcePool())
+    }
+
+    private func loudness(_ p: Project, _ pool: SourcePool, track: Int, _ a: Double, _ b: Double) -> Double {
+        var solo = p
+        solo.tracks = [p.tracks[track]]
+        return LoudnessMeter.measure(PlanCompiler.compile(solo, pool: pool), Frame(a * sr)..<Frame(b * sr)).integrated ?? -99
+    }
+
+    @Test("Dynamic: a speaker who drops 8 dB halfway comes out even; the music track is untouched")
+    func dynamicHalves() throws {
+        let dir = TempDir()
+        let turns = [(1.0, 8.0), (9.0, 16.0), (17.0, 24.0), (25.0, 32.0)]
+        let (p, pool) = try riding(dir, turns: turns, seconds: 33) { $0 < 16.5 ? 1 : 0.4 }
+        var music = p; music.tracks = [p.tracks[1]]
+        let mBefore = PlanCompiler.compile(music, pool: pool).render(from: 0, frames: Int(p.length))
+        let (q, report) = try p.levellingSpeakersDynamically(target: -20, pool: pool, media: dir.file("m"))
+        let first = loudness(q, pool, track: 0, 2, 15), second = loudness(q, pool, track: 0, 18, 31)
+        print(String(format: "LEVEL halves %.2f / %.2f LUFS, spread %.1f → %.1f LU", first, second, report.spreadBefore, report.spreadAfter))
+        #expect(abs(first + 20) <= 1 && abs(second + 20) <= 1)
+        #expect(report.spreadAfter < report.spreadBefore)
+        music = q; music.tracks = [q.tracks[1]]
+        #expect(PlanCompiler.compile(music, pool: pool).render(from: 0, frames: Int(p.length)) == mBefore)
+    }
+
+    @Test("Dynamic: the voice keeps its own rhythm, and a pause isn't lifted")
+    func dynamicShape() throws {
+        let dir = TempDir()
+        let turns = [(1.0, 8.0), (11.0, 18.0)]
+        let (p, pool) = try riding(dir, turns: turns, seconds: 19) { _ in 0.25 }
+        let (q, _) = try p.levellingSpeakersDynamically(target: -18, pool: pool, media: dir.file("m"))
+        func depth(_ x: Project) -> Double {
+            var solo = x; solo.tracks = [x.tracks[0]]
+            let y = PlanCompiler.compile(solo, pool: pool).render(from: Frame(4 * sr), frames: Int(sr))
+            let frame = Int(sr * 0.025)
+            let rms = stride(from: 0, to: y.count / 2 - frame, by: frame).map { s in (s..<(s + frame)).map { Double(y[$0 * 2] * y[$0 * 2]) }.reduce(0, +) }
+            return 10 * log10(rms.max()! / rms.min()!)
+        }
+        #expect(abs(depth(q) - depth(p)) <= 1, "modulation \(depth(p)) → \(depth(q)) dB")
+        let speechGain = loudness(q, pool, track: 0, 6.5, 7.8) - loudness(p, pool, track: 0, 6.5, 7.8)
+        func rms(_ x: Project, _ a: Double, _ b: Double) -> Double {
+            var solo = x; solo.tracks = [x.tracks[0]]
+            let y = PlanCompiler.compile(solo, pool: pool).render(from: Frame(a * sr), frames: Int((b - a) * sr))
+            return 10 * log10(y.map { Double($0 * $0) }.reduce(0, +) / Double(y.count))
+        }
+        let pauseGain = rms(q, 8.6, 10.4) - rms(p, 8.6, 10.4)
+        #expect(pauseGain <= speechGain + 0.2, "pause \(pauseGain) dB vs speech \(speechGain) dB")
+    }
+
+    @Test("Dynamic: speech after a long pause, 6 dB louder, doesn't overshoot in its first second")
+    func dynamicAfterPause() throws {
+        let dir = TempDir()
+        let turns = [(1.0, 8.0), (15.0, 22.0)]
+        let (p, pool) = try riding(dir, turns: turns, seconds: 23) { $0 < 11 ? 0.2 : 0.4 }
+        let (q, _) = try p.levellingSpeakersDynamically(target: -20, pool: pool, media: dir.file("m"))
+        let onset = loudness(q, pool, track: 0, 15.0, 16.0)
+        print(String(format: "LEVEL first second after the pause: %.2f LUFS (target -20)", onset))
+        #expect(onset <= -18, "overshoot \(onset + 20) dB")
+        #expect(abs(loudness(q, pool, track: 0, 16, 21.5) + 20) <= 1)
+    }
 }

@@ -158,7 +158,8 @@ public enum Operations {
                        .init("amount", .number, "gate: dB outside the turns. Default -18.", range: -40...0),
                        .init("maxDelay", .number, "cancel: ms of spread around the found delay (the room or codec). Default 30.", range: 5...100)]),
         .init("level_speakers", "Level Speakers", "Brings every speaker to the same loudness with one gain each, measured over their own turns (needs diarize first; fails with reason no_speakers otherwise). A track that is one speaker gets track gain; a track with several is split in the pauses where the speaker changes. Run loudness_preset afterwards for the mix. info: speakers, maxChangeDB, limitedByMaxGain.",
-              params: [.init("target", .number, "LUFS per speaker. Default -18.", range: -40 ... -10),
+              params: [.init("mode", .string, "static: one gain per speaker (default). dynamic: rides each speaker's gain over time (3 s short-term loudness over their own speech, looking ahead so speech starts don't pump; pauses never lifted); bounces the tracks into new files. info then also has spreadBeforeLU and spreadAfterLU.", options: ["static", "dynamic"]),
+                       .init("target", .number, "LUFS per speaker. Default -18.", range: -40 ... -10),
                        .init("maxGain", .number, "Largest change in dB, up or down. Default 12.", range: 0...30),
                        .init("speakers", .list, "Speaker ids as strings (\"0\", \"1\"). Default: everyone.")]),
         .init("rename_speaker", "Rename Speaker", "Gives a speaker a name, e.g. after diarize. Use it to pair up speakers found on different tracks.",
@@ -628,6 +629,17 @@ public enum StepRunner {
         case "level_speakers":
             guard let pool = s.pool else { throw StepFailure("level_speakers needs the app.") }
             let only = p["speakers"]?.strings.map { Set($0.compactMap(Int.init)) }
+            if p["mode"]?.string == "dynamic" {
+                guard let media = s.media else { throw StepFailure("level_speakers needs the app.") }
+                do {
+                    let (q, r) = try s.project.levellingSpeakersDynamically(target: p["target"]?.double ?? -18, maxGain: p["maxGain"]?.double ?? 12,
+                                                                            only: only, pool: pool, media: media)
+                    s.project = q
+                    return ["speakers": Double(r.speakers), "maxChangeDB": r.maxChangeDB, "spreadBeforeLU": r.spreadBefore, "spreadAfterLU": r.spreadAfter]
+                } catch let e as LevelError {
+                    throw StepFailure("level_speakers: \(e.localizedDescription)", reason: e.reason)
+                }
+            }
             do {
                 let (q, report) = try s.project.levellingSpeakers(target: p["target"]?.double ?? -18, maxGain: p["maxGain"]?.double ?? 12,
                                                                   only: only, pool: pool)
