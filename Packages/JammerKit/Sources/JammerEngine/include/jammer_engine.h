@@ -18,6 +18,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <AudioToolbox/AudioToolbox.h>
+#include <CoreAudio/CoreAudio.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -120,9 +121,26 @@ bool jm_engine_seek_settled(const jm_engine *_Nonnull engine);
 /// Blocks until the worker has rendered ahead (or `timeout_ms` passes). For tests.
 bool jm_engine_wait_primed(jm_engine *_Nonnull engine, int32_t timeout_ms);
 
-/// Audio thread: fills `channels` non-interleaved buffers with `frames` frames.
+/// Audio thread: fills `channels` non-interleaved buffers with `frames` device frames.
 void jm_engine_pull(jm_engine *_Nonnull engine, float *_Nonnull const *_Nonnull outs, int32_t channels,
                     int32_t frames) JM_NONBLOCKING;
+
+/// Describes the device. Call while the device isn't running. `device_rate` is the
+/// device's sample rate: when it differs from the project's, the render worker
+/// resamples (the audio thread never does). Slot i writes engine channel
+/// `sources[i]` to interleaved channel `channels[i]` of output buffer `buffers[i]`
+/// (both from 0); up to 64 slots. Channels without a slot are silent.
+void jm_engine_set_output(jm_engine *_Nonnull engine, double device_rate, const int32_t *_Nonnull buffers,
+                          const int32_t *_Nonnull channels, const int32_t *_Nonnull sources, int32_t count);
+/// The rate the engine is producing for (the project rate until set_output).
+double jm_engine_output_rate(const jm_engine *_Nonnull engine);
+
+/// An AudioDeviceIOProc for a HAL device whose output streams are float32
+/// (interleaved or not), routed by jm_engine_set_output; client_data is the engine.
+OSStatus jm_engine_ioproc(AudioObjectID device, const AudioTimeStamp *_Nonnull now,
+                          const AudioBufferList *_Nonnull input_data, const AudioTimeStamp *_Nonnull input_time,
+                          AudioBufferList *_Nonnull output_data, const AudioTimeStamp *_Nonnull output_time,
+                          void *_Nullable client_data) JM_NONBLOCKING;
 
 /// An AURenderCallback for an output unit fed non-interleaved float32; refCon is the engine.
 OSStatus jm_engine_au_render(void *_Nonnull ref_con, AudioUnitRenderActionFlags *_Nonnull flags,

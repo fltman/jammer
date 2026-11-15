@@ -1,3 +1,4 @@
+import AudioToolbox
 import Foundation
 import JammerEngine
 import Testing
@@ -180,5 +181,109 @@ struct EngineTests {
         #expect(!jm_engine_is_playing(engine))
         #expect(jm_engine_playhead(engine) == Int64(frames))
         #expect(jm_engine_take_peak(engine, 0) > 0)
+    }
+
+    /// A 48 kHz project played to a device at another rate, pulled like an IOProc would.
+    private func playThrough(deviceRate: Double, frames: Int, frequency: Double) -> (out: [Float], playheads: [Int64]) {
+        let mono = (0..<frames).map { Float(0.5 * sin(2 * .pi * frequency * Double($0) / 48_000)) }
+        let src = jm_source_create_memory(mono, Int64(frames), 1)
+        defer { jm_source_release(src) }
+        let plan = jm_plan_create(1, 48_000)
+        defer { jm_plan_release(plan) }
+        let s = jm_plan_add_source(plan, src)
+        let t = jm_plan_add_track(plan, 1, false)
+        jm_plan_add_clip(plan, t, s, 0, 0, Int64(frames), 1, 0, 0, JM_FADE_LINEAR)
+        jm_plan_finalize(plan)
+        let engine = jm_engine_create(1, 48_000, 16_384)
+        defer { jm_engine_destroy(engine) }
+        jm_engine_set_plan(engine, plan)
+        var buffers: [Int32] = [0], channels: [Int32] = [0], sources: [Int32] = [0]
+        jm_engine_set_output(engine, deviceRate, &buffers, &channels, &sources, 1)
+        #expect(jm_engine_output_rate(engine) == deviceRate)
+
+        var out: [Float] = [], playheads: [Int64] = []
+        var block = [Float](repeating: 0, count: 256)
+        func pull() {
+            block.withUnsafeMutableBufferPointer { b in
+                let outs: [UnsafeMutablePointer<Float>] = [b.baseAddress!]
+                outs.withUnsafeBufferPointer { jm_engine_pull(engine, $0.baseAddress!, 1, 256) }
+            }
+        }
+        jm_engine_play(engine, 0)
+        for _ in 0..<2_000 where !jm_engine_seek_settled(engine) { pull(); usleep(500) }
+        #expect(jm_engine_wait_primed(engine, 2_000))
+        var guardCount = 0
+        while jm_engine_is_playing(engine), guardCount < 10_000 {
+            pull()
+            out += block
+            playheads.append(jm_engine_playhead(engine))
+            guardCount += 1
+            _ = jm_engine_wait_primed(engine, 20)
+        }
+        // Drop the silent tail of the last block.
+        while let last = out.last, last == 0 { out.removeLast() }
+        return (out, playheads)
+    }
+
+    @Test("A device at another rate gets resampled audio; the playhead stays in project frames", arguments: [44_100.0, 96_000.0])
+    func resampledPlayback(deviceRate: Double) {
+        let frames = 48_000
+        let (out, playheads) = playThrough(deviceRate: deviceRate, frames: frames, frequency: 1_000)
+        // One second of project audio is one second at the device rate.
+        #expect(abs(out.count - Int(deviceRate)) < 64)
+        #expect(playheads.last == Int64(frames))
+        #expect(zip(playheads, playheads.dropFirst()).allSatisfy { $0 <= $1 })
+        // Still a 1 kHz tone: count rising zero crossings in the middle.
+        let mid = Array(out[Int(deviceRate * 0.25)..<Int(deviceRate * 0.75)])
+        let crossings = zip(mid, mid.dropFirst()).filter { $0 < 0 && $1 >= 0 }.count
+        #expect(abs(crossings - 500) <= 1)
+        let peak = mid.map(abs).max() ?? 0
+        #expect(abs(peak - 0.5) < 0.01)
+    }
+
+    @Test("The IOProc routes into interleaved device buffers: mono to both stereo channels, the rest silent")
+    func ioprocRouting() {
+        let frames = 4_096
+        let mono = (0..<frames).map { Float($0 % 512 - 256) / 512 }
+        let src = jm_source_create_memory(mono, Int64(frames), 1)
+        defer { jm_source_release(src) }
+        let plan = jm_plan_create(1, 48_000)
+        defer { jm_plan_release(plan) }
+        let s = jm_plan_add_source(plan, src)
+        let t = jm_plan_add_track(plan, 1, false)
+        jm_plan_add_clip(plan, t, s, 0, 0, Int64(frames), 1, 0, 0, JM_FADE_LINEAR)
+        jm_plan_finalize(plan)
+        let engine = jm_engine_create(1, 48_000, 8_192)
+        defer { jm_engine_destroy(engine) }
+        jm_engine_set_plan(engine, plan)
+        // A 4-channel interleaved device whose "stereo pair" is channels 3 and 4.
+        var buffers: [Int32] = [0, 0], channels: [Int32] = [2, 3], sources: [Int32] = [0, 0]
+        jm_engine_set_output(engine, 48_000, &buffers, &channels, &sources, 2)
+
+        let n = 256
+        var data = [Float](repeating: 9, count: n * 4)
+        func callIOProc() {
+            data.withUnsafeMutableBytes { raw in
+                var list = AudioBufferList(mNumberBuffers: 1, mBuffers: AudioBuffer(mNumberChannels: 4, mDataByteSize: UInt32(n * 16), mData: raw.baseAddress))
+                var ts = AudioTimeStamp()
+                var input = AudioBufferList()
+                _ = jm_engine_ioproc(0, &ts, &input, &ts, &list, &ts, UnsafeMutableRawPointer(engine))
+            }
+        }
+        jm_engine_play(engine, 100)
+        for _ in 0..<2_000 where !jm_engine_seek_settled(engine) { callIOProc(); usleep(500) }
+        #expect(jm_engine_wait_primed(engine, 2_000))
+        callIOProc()
+        for i in 0..<n {
+            #expect(data[i * 4] == 0 && data[i * 4 + 1] == 0)
+            #expect(data[i * 4 + 2] == mono[100 + i] && data[i * 4 + 3] == mono[100 + i])
+        }
+        #expect(jm_engine_playhead(engine) == 100 + Int64(n))
+        // No client data or no buffers: nothing happens, nothing crashes.
+        var ts = AudioTimeStamp()
+        var empty = AudioBufferList()
+        var output = AudioBufferList()
+        #expect(jm_engine_ioproc(0, &ts, &empty, &ts, &output, &ts, nil) == noErr)
+        #expect(jm_engine_ioproc(0, &ts, &empty, &ts, &output, &ts, UnsafeMutableRawPointer(engine)) == noErr)
     }
 }

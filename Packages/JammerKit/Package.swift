@@ -33,6 +33,7 @@ let package = Package(
         .testTarget(name: "JammerEngineTests", dependencies: ["JammerEngine"]),
         .testTarget(name: "JammerCoreTests", dependencies: ["JammerCore", "JammerEngine"]),
         .testTarget(name: "JammerAgentTests", dependencies: ["JammerAgent", "JammerCore"]),
+        .testTarget(name: "JammerAudioTests", dependencies: ["JammerAudio", "JammerCore", "JammerEngine"]),
     ],
     cxxLanguageStandard: .cxx20
 )
