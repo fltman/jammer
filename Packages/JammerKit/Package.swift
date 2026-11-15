@@ -19,6 +19,9 @@ let releaseHasDereverb = features.split(separator: "\n").contains { $0.replacing
 let dereverbSettings: [SwiftSetting] = [.define("JAMMER_DEREVERB", .when(configuration: .debug))]
     + (releaseHasDereverb ? [.define("JAMMER_DEREVERB", .when(configuration: .release))] : [])
 
+// The plugin-format SDKs (MIT), from scripts/fetch-plugin-sdks.sh.
+let hasCLAP = FileManager.default.fileExists(atPath: Context.packageDirectory + "/Vendor/clap/include/clap/clap.h")
+
 let package = Package(
     name: "JammerKit",
     platforms: [.macOS("27.0")],
@@ -76,6 +79,20 @@ let package = Package(
     ],
     cxxLanguageStandard: .cxx20
 )
+
+// Scanning VST 3 and CLAP plugins in a helper process, so a plugin that crashes or hangs
+// while it is loaded can't touch the app.
+package.products.append(.library(name: "JammerPlugins", targets: ["JammerPlugins"]))
+package.targets.append(.target(name: "JammerPlugins", dependencies: ["JammerCore"]))
+if hasCLAP {
+    package.products.append(.executable(name: "jammer-plugin-probe", targets: ["PluginProbe"]))
+    package.targets += [
+        .executableTarget(name: "PluginProbe", path: "Sources/PluginProbe",
+                          cxxSettings: [.headerSearchPath("../../Vendor/clap/include")],
+                          linkerSettings: [.linkedFramework("CoreFoundation")]),
+        .testTarget(name: "JammerPluginsTests", dependencies: ["JammerPlugins", "JammerCore", "PluginProbe"]),
+    ]
+}
 
 if hasWhisper {
     package.products.append(.library(name: "JammerWhisper", targets: ["JammerWhisper"]))
