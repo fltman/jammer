@@ -56,36 +56,16 @@ public struct PluginScanner: Sendable {
         return [URL(fileURLWithPath: NSHomeDirectory()).appending(path: "Library/Audio/Plug-Ins/\(name)"), URL(fileURLWithPath: "/Library/Audio/Plug-Ins/\(name)")]
     }
 
-    static let sandboxExec = "/usr/bin/sandbox-exec"
 
-    /// What the helper is confined to while a plugin's code runs in it: no network, nothing
-    /// written anywhere, and of the user's files only the plugin folders and the bundle itself.
-    /// (The system, frameworks and the helper stay readable, or nothing could load; names and
-    /// sizes of files can be seen, since finding a bundle means walking down to it, but not what is in them.)
-    func profile(for bundle: URL) -> String {
-        // realpath, not Foundation's resolving: that one drops "/private", and the sandbox sees the real path.
-        func real(_ u: URL) -> String { realpath(u.path, nil).map { p in defer { free(p) }; return String(cString: p) } ?? u.path }
-        func q(_ u: URL) -> String { "\"" + real(u).replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"") + "\"" }
-        let allowed = ([bundle, probe] + readable).map { "(allow file-read* (subpath \(q($0))))" }.joined(separator: "\n")
-        return """
-        (version 1)
-        (allow default)
-        (deny network*)
-        (deny file-write*)
-        (allow file-write* (literal "/dev/null") (literal "/dev/stdout") (literal "/dev/stderr"))
-        (deny file-read* (subpath "/Users") (subpath "/Volumes") (subpath "/private/var/folders") (subpath "/private/tmp") (subpath "/Library/Application Support"))
-        (allow file-read-metadata)
-        \(allowed)
-        """
-    }
+    func profile(for bundle: URL) -> String { Confinement.profile(readable: [bundle, probe] + readable) }
 
     /// Loads one bundle in the helper. Never throws and never blocks longer than `timeout` (plus a moment to kill).
     public func probe(_ bundle: URL, format: PluginFormat) -> ProbeOutcome {
         guard FileManager.default.isExecutableFile(atPath: probe.path) else { return .invalid("The scanner helper is missing.") }
         // Without the confinement there is no scan: third-party code isn't loaded unconfined.
-        guard FileManager.default.isExecutableFile(atPath: Self.sandboxExec) else { return .invalid("This Mac has no sandbox-exec, so plugins can't be scanned safely.") }
+        guard FileManager.default.isExecutableFile(atPath: Confinement.sandboxExec) else { return .invalid("This Mac has no sandbox-exec, so plugins can't be scanned safely.") }
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: Self.sandboxExec)
+        process.executableURL = URL(fileURLWithPath: Confinement.sandboxExec)
         process.arguments = ["-p", profile(for: bundle), probe.path, format.rawValue, bundle.path]
         let out = Pipe(), err = Pipe()
         process.standardOutput = out
@@ -149,5 +129,31 @@ public struct PluginScanner: Sendable {
             }
         }
         func take() -> (Data, Data) { lock.withLock { (out, err) } }
+    }
+}
+
+/// What a helper is confined to while a plugin's code runs in it: no network, nothing written
+/// anywhere, and of the user's files only what is listed (the plugin folders, the bundle).
+/// The system, frameworks and the helper stay readable, or nothing could load; names and sizes
+/// of files can be seen, since finding a bundle means walking down to it, but not what is in them.
+public enum Confinement {
+    public static let sandboxExec = "/usr/bin/sandbox-exec"
+    public static var available: Bool { FileManager.default.isExecutableFile(atPath: sandboxExec) }
+
+    public static func profile(readable: [URL]) -> String {
+        // realpath, not Foundation's resolving: that one drops "/private", and the sandbox sees the real path.
+        func real(_ u: URL) -> String { realpath(u.path, nil).map { p in defer { free(p) }; return String(cString: p) } ?? u.path }
+        func q(_ u: URL) -> String { "\"" + real(u).replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"") + "\"" }
+        let allowed = readable.map { "(allow file-read* (subpath \(q($0))))" }.joined(separator: "\n")
+        return """
+        (version 1)
+        (allow default)
+        (deny network*)
+        (deny file-write*)
+        (allow file-write* (literal "/dev/null") (literal "/dev/stdout") (literal "/dev/stderr"))
+        (deny file-read* (subpath "/Users") (subpath "/Volumes") (subpath "/private/var/folders") (subpath "/private/tmp") (subpath "/Library/Application Support"))
+        (allow file-read-metadata)
+        \(allowed)
+        """
     }
 }

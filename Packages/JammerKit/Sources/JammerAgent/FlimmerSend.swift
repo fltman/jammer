@@ -363,7 +363,8 @@ public enum FlimmerSend {
         let limits = try await client.limits()
         let rate = sendRate(project)
         var uploads: [String] = [], files: [Rendered] = [], notes: [String] = []
-        defer { for f in files { try? FileManager.default.removeItem(at: f.file) } }
+        // Each file sits in a folder of its own (see wavFile); the folder goes with it.
+        defer { for f in files { try? FileManager.default.removeItem(at: f.file.deletingLastPathComponent()) } }
         do {
             // Every file first, so that one that is too large is said before anything is uploaded.
             for (i, item) in items.enumerated() {

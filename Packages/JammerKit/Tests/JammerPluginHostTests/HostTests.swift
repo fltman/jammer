@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 import JammerPluginHost
+import JammerPlugins
 
 /// A real CLAP effect, compiled for the test: a gain with a 64-sample delay (so it has
 /// latency), one automatable parameter, one read-only one, and saved state.
@@ -9,6 +10,12 @@ enum TestEffect {
     #include <clap/clap.h>
     #include <stdlib.h>
     #include <string.h>
+    #include <stdio.h>
+    #include <unistd.h>
+    #include <sys/socket.h>
+    #include <netinet/in.h>
+    static int blocks = 0;
+    static double leaks = 0.25;
     #ifndef CHANNELS
     #define CHANNELS 2
     #endif
@@ -16,7 +23,22 @@ enum TestEffect {
     typedef struct { clap_plugin_t plugin; double gain; float line[2][LAT]; int at; } fx_t;
     static const char *features[] = { CLAP_PLUGIN_FEATURE_AUDIO_EFFECT, NULL };
     static const clap_plugin_descriptor_t desc = { CLAP_VERSION_INIT, "com.brattoo.test.fx", "Delay Gain", "Brattoo Tests", "", "", "", "1.0", "", features };
-    static bool fx_init(const clap_plugin_t *p) { return true; }
+    static bool fx_init(const clap_plugin_t *p) {
+    #ifdef CRASH_ON_INIT
+        abort();
+    #endif
+    #ifdef SNOOP
+        /* Tries what a hosted plugin must not be able to do; the read-only parameter says how many worked. */
+        leaks = 0;
+        FILE *f = fopen(SECRET, "r"); if (f) { leaks += 1; fclose(f); }
+        f = fopen(SECRET ".written", "w"); if (f) { leaks += 1; fclose(f); }
+        int s = socket(AF_INET, SOCK_STREAM, 0);
+        struct sockaddr_in a; memset(&a, 0, sizeof a); a.sin_family = AF_INET; a.sin_port = htons(PORT); a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        if (s >= 0 && connect(s, (struct sockaddr *)&a, sizeof a) == 0) leaks += 1;
+        printf("a plugin that prints to stdout must not disturb the host\\n"); fflush(stdout);
+    #endif
+        return true;
+    }
     static void fx_destroy(const clap_plugin_t *p) { free(p->plugin_data); }
     static bool fx_activate(const clap_plugin_t *p, double sr, uint32_t min, uint32_t max) {
     #ifdef FAIL_ACTIVATE
@@ -41,6 +63,13 @@ enum TestEffect {
     static clap_process_status fx_process(const clap_plugin_t *p, const clap_process_t *pr) {
     #ifdef PROCESS_ERROR
         return CLAP_PROCESS_ERROR;
+    #endif
+        ++blocks;
+    #ifdef CRASH_AT_BLOCK
+        if (blocks == CRASH_AT_BLOCK) abort();
+    #endif
+    #ifdef HANG_AT_BLOCK
+        if (blocks == HANG_AT_BLOCK) for (;;) pause();
     #endif
         fx_t *f = p->plugin_data;
         take(f, pr->in_events);
@@ -69,7 +98,7 @@ enum TestEffect {
         else { info->id = 9; strcpy(info->name, "Meter"); info->min_value = 0; info->max_value = 1; info->flags = CLAP_PARAM_IS_READONLY; }
         return true;
     }
-    static bool params_value(const clap_plugin_t *p, clap_id id, double *v) { fx_t *f = p->plugin_data; if (id == 7) { *v = f->gain; return true; } if (id == 9) { *v = 0.25; return true; } return false; }
+    static bool params_value(const clap_plugin_t *p, clap_id id, double *v) { fx_t *f = p->plugin_data; if (id == 7) { *v = f->gain; return true; } if (id == 9) { *v = leaks; return true; } return false; }
     static bool params_text(const clap_plugin_t *p, clap_id id, double v, char *out, uint32_t n) { return false; }
     static bool params_from(const clap_plugin_t *p, clap_id id, const char *t, double *v) { return false; }
     static void params_flush(const clap_plugin_t *p, const clap_input_events_t *in, const clap_output_events_t *out) { take(p->plugin_data, in); }
@@ -244,5 +273,173 @@ struct HostTests {
         defer { jph_close(np) }
         var data: UnsafeMutablePointer<UInt8>?, size = 0
         #expect(!jph_state_save(np, &data, &size))
+    }
+}
+
+/// The same effect, in a helper process of its own.
+@Suite("A plugin in its own process")
+struct HostProcessTests {
+    static var helper: URL { Bundle(for: Anchor.self).bundleURL.deletingLastPathComponent().appending(path: "jammer-plugin-host") }
+    final class Anchor {}
+
+    func folder() throws -> URL {
+        let d = FileManager.default.temporaryDirectory.appending(path: "jammer-hostp-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
+        return d
+    }
+
+    func start(_ bundle: URL, id: String = "com.brattoo.test.fx", channels: Int = 2, timeout: Double = 20) throws -> PluginHostProcess {
+        try PluginHostProcess(helper: Self.helper, format: .clap, bundle: bundle, id: id, sampleRate: 48_000, channels: channels, timeout: timeout)
+    }
+
+    /// Runs `left` (and its negative on the right) through the plugin in blocks; says which blocks were processed.
+    func run(_ p: PluginHostProcess, _ left: [Float], block: Int = 512, during: (Int) -> Void = { _ in }) -> (out: [[Float]], processed: [Bool]) {
+        let channels = p.channels
+        var out = [[Float]](repeating: [Float](repeating: 0, count: left.count), count: channels), processed: [Bool] = []
+        let input: [[Float]] = channels == 2 ? [left, left.map { -$0 }] : [left]
+        let ins = (0..<channels).map { _ in UnsafeMutablePointer<Float>.allocate(capacity: block) }
+        let outs = (0..<channels).map { _ in UnsafeMutablePointer<Float>.allocate(capacity: block) }
+        defer { (ins + outs).forEach { $0.deallocate() } }
+        let inPointers = UnsafeMutablePointer<UnsafePointer<Float>>.allocate(capacity: channels)
+        let outPointers = UnsafeMutablePointer<UnsafeMutablePointer<Float>>.allocate(capacity: channels)
+        defer { inPointers.deallocate(); outPointers.deallocate() }
+        for c in 0..<channels { inPointers[c] = UnsafePointer(ins[c]); outPointers[c] = outs[c] }
+        var at = 0
+        while at < left.count {
+            let n = min(block, left.count - at)
+            for c in 0..<channels { for i in 0..<n { ins[c][i] = input[c][at + i]; outs[c][i] = 0 } }
+            during(processed.count)
+            processed.append(p.process(inPointers, outPointers, frames: n))
+            for c in 0..<channels { for i in 0..<n { out[c][at + i] = outs[c][i] } }
+            at += n
+        }
+        return (out, processed)
+    }
+
+    let ramp = (0..<8_192).map { Float($0 + 1) / 16_384 }
+
+    @Test("The layout the helper sends parameters in is the C struct's")
+    func layout() {
+        #expect(MemoryLayout<jph_param>.size == 560 && MemoryLayout<jph_param>.offset(of: \.name) == 4 && MemoryLayout<jph_param>.offset(of: \.module) == 260)
+        #expect(MemoryLayout<jph_param>.offset(of: \.min) == 520 && MemoryLayout<jph_param>.offset(of: \.initial) == 544 && MemoryLayout<jph_param>.offset(of: \.hidden) == 554)
+    }
+
+    @Test("Through the helper the sound is the same as hosted directly: latency, parameters, state, any block size")
+    func sameAsDirect() throws {
+        let dir = try folder()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let bundle = try TestEffect.build("Fx", in: dir)
+        let p = try start(bundle)
+        #expect(p.latency == 64 && p.died == nil)
+        #expect(p.parameters.map(\.name) == ["Gain", "Meter"] && p.parameters[0] == .init(id: 7, name: "Gain", module: "Level", min: 0, max: 2, value: 1, initial: 1, stepped: false, readonly: false, hidden: false))
+        #expect(p.parameters[1].readonly && p.parameters[1].value == 0.25)
+        for block in [512, 100, 1] {
+            p.reset()
+            let (out, processed) = run(p, Array(ramp.prefix(block == 1 ? 300 : 2_000)), block: block)
+            #expect(processed.allSatisfy { $0 } && out[0][0..<64].allSatisfy { $0 == 0 })
+            #expect((64..<out[0].count).allSatisfy { out[0][$0] == ramp[$0 - 64] && out[1][$0] == -ramp[$0 - 64] }, "block \(block)")
+        }
+        #expect(p.set(7, to: 0.5) && !p.set(9, to: 1))
+        p.refresh()
+        #expect(p.parameters[0].value == 0.5)
+        p.reset()
+        #expect(run(p, ramp).out[0][100] == ramp[36] * 0.5)
+        let state = try #require(p.saveState())
+        let q = try start(bundle)
+        #expect(q.loadState(state))
+        q.refresh()
+        #expect(q.parameters[0].value == 0.5 && state.count == 8)
+        // A block larger than it was set up for passes through.
+        let (big, processed) = run(q, ramp, block: 600)
+        #expect(processed.first == false && big[0][0..<600] == ramp[0..<600])
+    }
+
+    @Test("A plugin that crashes in the middle: that block and the rest pass through, the death is told once, another plugin is untouched")
+    func crashes() throws {
+        let dir = try folder()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let p = try start(try TestEffect.build("Bad", defines: ["CRASH_AT_BLOCK=5"], in: dir))
+        let other = try start(try TestEffect.build("Fine", in: dir))
+        final class Told: @unchecked Sendable { var deaths: [PluginHostProcess.Death] = [] }
+        let told = Told()
+        p.onDeath = { told.deaths.append($0) }
+        let (out, processed) = run(p, ramp)
+        #expect(processed == [true, true, true, true] + [Bool](repeating: false, count: 12))
+        #expect(p.died == .crashed(signal: SIGABRT) && told.deaths == [.crashed(signal: SIGABRT)])
+        // Four processed blocks (delayed by the plugin), then the sound as it went in.
+        #expect(out[0][2_047] == ramp[2_047 - 64] && Array(out[0][2_048...]) == Array(ramp[2_048...]) && Array(out[1][2_048...]) == ramp[2_048...].map { -$0 })
+        #expect(!p.set(7, to: 0.5) && p.saveState() == nil)
+        #expect(run(other, ramp).processed.allSatisfy { $0 } && other.died == nil)
+    }
+
+    @Test("A plugin that hangs in the middle is given up on at the time limit and killed; the sound goes on")
+    func hangs() throws {
+        let dir = try folder()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let p = try start(try TestEffect.build("Stuck", defines: ["HANG_AT_BLOCK=3"], in: dir), timeout: 1)
+        let pid = p.processIdentifier
+        let t0 = Date()
+        let (out, processed) = run(p, ramp)
+        let took = Date().timeIntervalSince(t0)
+        #expect(processed == [true, true] + [Bool](repeating: false, count: 14) && p.died == .hung && took >= 1 && took < 10, "\(took) s")
+        #expect(Array(out[0][1_024...]) == Array(ramp[1_024...]))
+        usleep(300_000)
+        #expect(kill(pid, 0) != 0, "the helper is still running")
+    }
+
+    @Test("The helper killed from outside in the middle of a render: nothing but that plugin is lost")
+    func killed() throws {
+        let dir = try folder()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let p = try start(try TestEffect.build("Fx", in: dir))
+        let long = (0..<(512 * 400)).map { Float($0 % 1_000) / 2_000 }
+        let pid = p.processIdentifier
+        let (out, processed) = run(p, long, during: { block in if block == 150 { kill(pid, SIGKILL) } })
+        #expect(processed.prefix(150).allSatisfy { $0 } && processed.suffix(240).allSatisfy { !$0 } && p.died == .crashed(signal: SIGKILL), "\(String(describing: p.died))")
+        let first = processed.firstIndex(of: false)!
+        #expect(Array(out[0][(first * 512)...]) == Array(long[(first * 512)...]), "from the block it died in, the sound is what went in")
+    }
+
+    @Test("In the helper a plugin can't read the user's files, write or reach the network, and what it prints doesn't disturb the host")
+    func confined() throws {
+        let dir = try folder()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let secret = dir.appending(path: "secret.txt")
+        try "the user's own".write(to: secret, atomically: true, encoding: .utf8)
+        let listener = socket(AF_INET, SOCK_STREAM, 0)
+        defer { close(listener) }
+        var addr = sockaddr_in()
+        addr.sin_family = sa_family_t(AF_INET)
+        addr.sin_addr.s_addr = inet_addr("127.0.0.1")
+        var len = socklen_t(MemoryLayout<sockaddr_in>.size)
+        let bound = withUnsafeMutablePointer(to: &addr) { $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(listener, $0, len) == 0 && getsockname(listener, $0, &len) == 0 } }
+        #expect(bound && listen(listener, 4) == 0)
+        let real = realpath(secret.path, nil).map { p in defer { free(p) }; return String(cString: p) } ?? secret.path
+        let bundle = try TestEffect.build("Snoop", defines: ["SNOOP", "SECRET=\"\(real)\"", "PORT=\(Int(UInt16(bigEndian: addr.sin_port)))"], in: dir)
+        let p = try start(bundle)
+        #expect(p.parameters[1].value == 0, "the plugin managed \(p.parameters[1].value) of read, write, connect")
+        #expect(!FileManager.default.fileExists(atPath: real + ".written") && run(p, ramp).processed.allSatisfy { $0 })
+        // Hosted directly, outside the confinement, the same plugin does all three: the test plugin does try.
+        var error = [CChar](repeating: 0, count: 256)
+        let direct = try #require(jph_clap_open(bundle.path, "com.brattoo.test.fx", 48_000, 2, 512, &error, 256))
+        defer { jph_close(direct) }
+        var v = 0.0
+        #expect(jph_param_get(direct, 9, &v) && v == 3)
+        try? FileManager.default.removeItem(atPath: real + ".written")
+    }
+
+    @Test("A plugin that won't start says why; one that crashes while loading is reported, not fatal")
+    func startErrors() throws {
+        let dir = try folder()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let bundle = try TestEffect.build("Fx", in: dir)
+        func message(_ body: () throws -> PluginHostProcess) -> String? {
+            do { _ = try body(); return nil } catch { return (error as? PluginHostProcess.StartError)?.message }
+        }
+        #expect(message { try start(bundle, id: "no.such") } == "The bundle has no plugin with that id.")
+        #expect(message { try start(bundle, channels: 1) } == "The plugin doesn't take mono audio.")
+        #expect(message { try start(try TestEffect.build("Dies", defines: ["CRASH_ON_INIT"], in: dir)) } == "The plugin crashed while it was being loaded.")
+        #expect(message { try PluginHostProcess(helper: dir.appending(path: "none"), format: .clap, bundle: bundle, id: "x", sampleRate: 48_000, channels: 2) } == "The plugin host helper is missing.")
+        #expect(message { try PluginHostProcess(helper: Self.helper, format: .vst3, bundle: bundle, id: "x", sampleRate: 48_000, channels: 2) } == "This build can't host vst3 plugins yet.")
     }
 }

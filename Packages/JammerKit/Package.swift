@@ -86,6 +86,7 @@ package.products.append(.library(name: "JammerPlugins", targets: ["JammerPlugins
 package.targets.append(.target(name: "JammerPlugins", dependencies: ["JammerCore"]))
 if hasCLAP {
     package.products.append(.executable(name: "jammer-plugin-probe", targets: ["PluginProbe"]))
+    package.products.append(.executable(name: "jammer-plugin-host", targets: ["PluginHostHelper"]))
     package.targets += [
         .executableTarget(name: "PluginProbe", path: "Sources/PluginProbe",
                           // The VST 3 interface headers too when the SDK is there (the probe says so when it isn't).
@@ -96,7 +97,9 @@ if hasCLAP {
         // into helper processes (and their tests), never into the app.
         .target(name: "JammerPluginHost", cxxSettings: [.headerSearchPath("../../Vendor/clap/include")],
                 linkerSettings: [.linkedFramework("CoreFoundation")]),
-        .testTarget(name: "JammerPluginHostTests", dependencies: ["JammerPluginHost"]),
+        // The process that holds one plugin while it works (one per plugin).
+        .executableTarget(name: "PluginHostHelper", dependencies: ["JammerPluginHost"], path: "Sources/PluginHostHelper"),
+        .testTarget(name: "JammerPluginHostTests", dependencies: ["JammerPluginHost", "JammerPlugins", "PluginHostHelper"]),
     ]
 }
 
