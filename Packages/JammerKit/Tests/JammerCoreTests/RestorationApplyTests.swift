@@ -45,9 +45,9 @@ struct RestorationApplyTests {
         // Outside the range: untouched, bit for bit.
         #expect(Array(out[0..<(48_000 * 2)]) == Array(original[0..<(48_000 * 2)]))
         #expect(Array(out[(144_000 * 2)...]) == Array(original[(144_000 * 2)...]))
-        // Inside (after the notches settle): hum down a lot, voice kept.
-        let left = stride(from: 96_000 * 2, to: 144_000 * 2, by: 2).map { out[$0] }
-        let leftIn = stride(from: 96_000 * 2, to: 144_000 * 2, by: 2).map { original[$0] }
+        // Inside, from its very start (the notches were warmed up before it): hum down a lot, voice kept.
+        let left = stride(from: 48_000 * 2, to: 144_000 * 2, by: 2).map { out[$0] }
+        let leftIn = stride(from: 48_000 * 2, to: 144_000 * 2, by: 2).map { original[$0] }
         func lvl(_ x: [Float], _ f: Double) -> Double { 10 * log10(Restoration.goertzel(x, f, sr)) }
         #expect(lvl(leftIn, 60) - lvl(left, 60) > 25)
         #expect(abs(lvl(leftIn, 220) - lvl(left, 220)) < 0.5)
@@ -75,5 +75,43 @@ struct RestorationApplyTests {
         #expect(throws: CancellationError.self) {
             try Restoration.apply(.init(kind: .declick), to: p, pool: pool, media: dir.file("Media2")) { _ in false }
         }
+    }
+
+    @Test("Only the chosen tracks are repaired; analysis and preview see what's there and change nothing")
+    func tracksAnalysisPreview() throws {
+        let dir = TempDir()
+        var (p, pool, original) = try setup(dir)
+        // A second track playing a clean copy of the same file.
+        let clean = dir.file("clean.wav")
+        let n = original.count / 2
+        try writeWAV((0..<n).flatMap { i -> [Float] in let t = Double(i) / sr; let v = Float(0.3 * sin(2 * .pi * 220 * t)); return [v, v] }, to: clean)
+        let cleanRef = SourceRef(name: "clean", path: clean.path, info: try AudioFileReader.info(at: clean))
+        p.sources.append(cleanRef)
+        p.tracks.append(Track(name: "B", clips: [Clip(sourceID: cleanRef.id, start: 0, length: Frame(n))]))
+        let a = p.tracks[0].id, b = p.tracks[1].id
+
+        let onlyA = Restoration.analyze(p, range: 0..<p.length, tracks: [a], pool: pool)
+        #expect(abs((onlyA.hum?.frequency ?? 0) - 60) < 0.05)
+        #expect(onlyA.clippedRuns == 0 && onlyA.clicks == 0 && !onlyA.sampled)
+        #expect(Restoration.analyze(p, range: 0..<p.length, tracks: [b], pool: pool).hum == nil)
+
+        let (q, report) = try Restoration.apply(.init(kind: .dehum), to: p, tracks: [a], pool: pool, media: dir.file("Media"))
+        #expect(report.clips == 1)
+        #expect(q.tracks[1].clips == p.tracks[1].clips)
+        #expect(q.tracks[0].clips[0].sourceID != p.tracks[0].clips[0].sourceID)
+
+        let range: Range<Frame> = 48_000..<96_000
+        let (_, audio) = try Restoration.preview(.init(kind: .dehum, humFrequency: 60), project: p, range: range, tracks: [a], pool: pool)
+        #expect(audio.count == range.count * 2)
+        // The project value passed in is unchanged: it still plays the originals.
+        #expect(p.tracks[0].clips[0].sourceID == p.sources[0].id)
+    }
+
+    @Test("Long ranges are sampled so analysis stays quick")
+    func sampledAnalysis() throws {
+        let signal = [Float](repeating: 0.1, count: 48_000 * 2 * 120)
+        let (p, pool) = memoryProject(signal)
+        let a = Restoration.analyze(p, range: 0..<p.length, pool: pool, budget: 20)
+        #expect(a.sampled && abs(a.examined - 20) < 0.1)
     }
 }

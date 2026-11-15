@@ -131,6 +131,7 @@ public enum AgentAPI {
         public static func error(_ error: APIError) -> Response {
             var body: [String: Any] = ["code": error.code, "message": error.message]
             if let step = error.step { body["step"] = step }
+            if let reason = error.reason { body["reason"] = reason }
             return .json(["error": body], status: error.status)
         }
 
@@ -154,13 +155,19 @@ public enum AgentAPI {
         public var code: String
         public var message: String
         public var step: Int?
+        /// Why, for agents (e.g. "no_hum", "nothing_in_range").
+        public var reason: String?
 
-        public init(_ status: Int, _ code: String, _ message: String, step: Int? = nil) {
+        public init(_ status: Int, _ code: String, _ message: String, step: Int? = nil, reason: String? = nil) {
             self.status = status
             self.code = code
             self.message = message
             self.step = step
+            self.reason = reason
         }
+
+        /// The request is fine but the document doesn't allow it (checked before any job starts).
+        public static func unprocessable(_ reason: String, _ m: String) -> APIError { APIError(422, "unprocessable", m, reason: reason) }
 
         public static func badRequest(_ m: String) -> APIError { APIError(400, "bad_request", m) }
         public static func notFound(_ m: String) -> APIError { APIError(404, "not_found", m) }
@@ -311,6 +318,9 @@ public enum AgentAPI {
         | POST | `/api/v1/documents/{id}/export` | The rendered audio as bytes. Body: `{"format": "wav", "bitDepth": 16\\|24\\|32, "start", "end", "dither": false}`; all optional (24-bit WAV of everything by default). Up to 2 GB per response; export a range for more. |
         | POST | `/api/v1/documents/{id}/transcribe` | Starts transcribing the document (a job, see below). Body: `{"language": "sv-SE", "engine": "auto"}`; both optional (the Mac's language and the best engine for it). Answers `202` with the job. |
         | GET | `/api/v1/documents/{id}/transcript` | The transcript as it plays now: `{"words": [{"id", "text", "start", "end", "confidence", "speaker", "partial"}], "text"}`, times in seconds on the timeline, optionally over `?start=&end=`. Empty until transcribed. |
+        | GET | `/api/v1/documents/{id}/analysis/restoration` | Looks for problems without changing anything: mains hum (frequency, how prominent), clipping (runs, samples, level) and clicks, over `?start=&end=` and `?tracks=id,id` (default: the selection, else everything; all tracks). Long ranges are sampled. |
+        | POST | `/api/v1/documents/{id}/restore/preview` | The repaired audio of a stretch (at most 30 s), without changing the document. Same body as `restore`, with `start` and `end`. Answers a 24-bit WAV; with `Accept: application/json` it answers `{"before": {…}, "after": {…}}` instead: the detector numbers plus `integratedLUFS` and `truePeakDBTP`. |
+        | POST | `/api/v1/documents/{id}/restore` | Repairs audio (a job). Body: `{"kind": "dehum"\\|"declip"\\|"declick", "amount": 0–1, "start", "end", "tracks": [id], "humFrequency", "sensitivity"}`; only `kind` is required. The repaired clips play from new files; the originals are untouched and one undo step brings them back. |
         | GET | `/api/v1/jobs/{id}` | A job's state. |
         | DELETE | `/api/v1/jobs/{id}` | Cancels a job. |
         | POST | `/api/v1/documents/{id}/play` | Starts playback in the document's window, from `{"at": seconds}` or the playhead. Only works when the window is visible. |
@@ -363,6 +373,7 @@ public enum AgentAPI {
         | 413 | `too_large` | A body over 256 MB (use uploads), an upload over 16 GB, or an export over 2 GB (export a range). |
         | 507 | `insufficient_storage` | Not enough free disk space for the upload or export. |
         | 422 | `step_failed` | A step ran and failed. `error.step` is its index; `results` has the status of every step. Some failures add `error.reason` (`ambiguous`, `not_found`) and numbers such as `error.matches`. |
+        | 422 | `unprocessable` | The request is fine, but the document doesn't allow it; `error.reason` says why (`no_hum`, `nothing_in_range`). Nothing started. |
         | 500 | `internal` | Jämmer failed unexpectedly. The message has the detail. |
 
         ## Jobs
@@ -372,6 +383,10 @@ public enum AgentAPI {
         ## Transcripts
 
         A transcript is a view of the edit: it always reads what plays now. Each word has an `id` that stays the same across edits, undo, redo and saving, so you can keep ids between requests. Delete words with `delete_words` and `{"words": ["<id>", …]}`. You can pass `{"text": "…"}` instead, but it must match in exactly one place; otherwise the step fails with `reason: "ambiguous"` and `matches`, and you pick one with `occurrence` or all with `"all": true`. `correct_word` changes the spelling only.
+
+        ## Restoration
+
+        Look, listen, then repair. `GET …/analysis/restoration` tells you whether there is hum, clipping or clicks. `POST …/restore/preview` with `Accept: application/json` gives the numbers before and after for a short stretch, so you can check that a repair helps (and that `amount` isn't too much) without listening. `POST …/restore` then runs it as a job. `dehum` finds 50 or 60 Hz by itself; pass `humFrequency` if it says `no_hum` and you know better. `amount` blends between the original (0) and the full repair (1). Use `tracks` to repair one speaker in a multitrack recording.
 
         ## Operations
 

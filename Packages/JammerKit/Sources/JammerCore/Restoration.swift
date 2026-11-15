@@ -199,12 +199,7 @@ extension Restoration {
             let lo = max(0, start - order)
             let seg = Array(x[lo..<end])
             if seg.count > order * 4, let a = arCoefficients(seg, order: order, exclude: []) {
-                var e = [Double](repeating: 0, count: seg.count)
-                for n in order..<seg.count {
-                    var p = 0.0
-                    for k in 0..<order { p += a[k] * Double(seg[n - 1 - k]) }
-                    e[n] = Double(seg[n]) - p
-                }
+                let e = predictionError(seg, a)
                 let body = Array(e[order...]).map(abs).sorted()
                 let mad = max(body[body.count / 2], 1e-7)
                 let threshold = mad * 12 / sensitivity
@@ -257,6 +252,7 @@ extension Restoration {
     /// (covariance method), skipping predictions that touch `exclude`.
     static func arCoefficients(_ x: [Float], order: Int, exclude: Set<Int>) -> [Double]? {
         guard order > 0, x.count > order * 2 else { return nil }
+        if exclude.isEmpty { return arCoefficientsFast(x, order: order) }
         var r = [Double](repeating: 0, count: order * order)
         var b = [Double](repeating: 0, count: order)
         var rows = 0
@@ -275,6 +271,48 @@ extension Restoration {
         let trace = (0..<order).reduce(0.0) { $0 + r[$1 * order + $1] }
         for i in 0..<order { r[i * order + i] += trace / Double(order) * 1e-9 + 1e-12 }
         return solve(r, b, order)
+    }
+
+    /// The same covariance-method fit with vDSP dot products (no exclusions).
+    static func arCoefficientsFast(_ x: [Float], order: Int) -> [Double]? {
+        let n = x.count - order
+        var r = [Double](repeating: 0, count: order * order)
+        var b = [Double](repeating: 0, count: order)
+        x.withUnsafeBufferPointer { p in
+            let base = p.baseAddress!
+            // Row i of the regression uses x[order-1-i ..< order-1-i+n].
+            for i in 0..<order {
+                var v: Float = 0
+                vDSP_dotpr(base + (order - 1 - i), 1, base + order, 1, &v, vDSP_Length(n))
+                b[i] = Double(v)
+                for j in i..<order {
+                    vDSP_dotpr(base + (order - 1 - i), 1, base + (order - 1 - j), 1, &v, vDSP_Length(n))
+                    r[i * order + j] = Double(v)
+                    r[j * order + i] = Double(v)
+                }
+            }
+        }
+        let trace = (0..<order).reduce(0.0) { $0 + r[$1 * order + $1] }
+        for i in 0..<order { r[i * order + i] += trace / Double(order) * 1e-9 + 1e-12 }
+        return solve(r, b, order)
+    }
+
+    /// Prediction error e[n] = x[n] − Σ a[k]·x[n-1-k] for n ≥ order (zeros before).
+    static func predictionError(_ x: [Float], _ a: [Double]) -> [Double] {
+        let order = a.count
+        guard x.count > order else { return [Double](repeating: 0, count: x.count) }
+        let n = x.count - order
+        var e = [Float](x[order...])
+        x.withUnsafeBufferPointer { p in
+            let base = p.baseAddress!
+            e.withUnsafeMutableBufferPointer { ep in
+                for k in 0..<order {
+                    var c = Float(-a[k])
+                    vDSP_vsma(base + (order - 1 - k), 1, &c, ep.baseAddress!, 1, ep.baseAddress!, 1, vDSP_Length(n))
+                }
+            }
+        }
+        return [Double](repeating: 0, count: order) + e.map(Double.init)
     }
 
     /// Least-squares AR interpolation (Janssen et al.): the missing samples that

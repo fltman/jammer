@@ -311,6 +311,15 @@ enum AgentRouter {
             case ["transcript"]:
                 try only("GET")
                 return try transcript(session, r)
+            case ["restore"]:
+                try only("POST")
+                return try restore(session, r)
+            case ["restore", "preview"]:
+                try only("POST")
+                return try await restorePreview(session, r)
+            case ["analysis", "restoration"]:
+                try only("GET")
+                return try await restorationAnalysis(session, r)
             case ["export"]:
                 try only("POST")
                 return try await export(session, r)
@@ -497,6 +506,103 @@ enum AgentRouter {
         }
         let langs = Set(session.project.transcripts.map(\.language)).sorted()
         return .json(["words": words, "text": placed.map(\.word.text).joined(separator: " "), "languages": langs])
+    }
+
+    // MARK: Restoration
+
+    static let restoreTitles: [Restoration.Kind: String] = [.dehum: "Remove Hum", .declip: "Repair Clipping", .declick: "Remove Clicks"]
+
+    /// The range (explicit, else the selection, else everything) and the tracks (nil = all).
+    private static func restoreScope(_ session: EditorSession, start: Double?, end: Double?, tracks: [UUID]?) throws -> (Range<Frame>, Set<UUID>?) {
+        let p = session.project
+        var range = 0..<p.length
+        if let start, let end { range = p.frames(start)..<min(p.length, p.frames(end)) }
+        else if let sel = session.selection { range = sel }
+        if let tracks {
+            for id in tracks where !p.tracks.contains(where: { $0.id == id }) {
+                throw APIError.badRequest("No track with id \(id.uuidString). GET /api/v1/documents/{id} lists the tracks.")
+            }
+        }
+        let set = tracks.map(Set.init)
+        let hasAudio = !range.isEmpty && p.tracks.contains { t in (set?.contains(t.id) ?? true) && t.clips.contains { $0.start < range.upperBound && $0.end > range.lowerBound } }
+        guard hasAudio else { throw APIError.unprocessable("nothing_in_range", "There's no audio in that range on those tracks.") }
+        return (range, set)
+    }
+
+    /// Cheap checks before a job starts; finds the hum frequency once so the job doesn't have to.
+    private static func precheck(_ session: EditorSession, _ settings: inout Restoration.Settings, _ range: Range<Frame>, _ tracks: Set<UUID>?) throws {
+        guard settings.kind == .dehum, settings.humFrequency == nil else { return }
+        let probe = range.lowerBound..<min(range.upperBound, range.lowerBound + session.project.frames(20))
+        let mix = Restoration.mix(session.project, range: probe, tracks: tracks, pool: session.pool)
+        guard let hum = Restoration.detectHum(mix, sampleRate: session.project.sampleRate) else {
+            throw APIError.unprocessable("no_hum", "No mains hum found (50 or 60 Hz). Pass humFrequency to remove a hum anyway.")
+        }
+        settings.humFrequency = hum.frequency
+    }
+
+    private static func restore(_ session: EditorSession, _ r: AgentAPI.Request) throws -> Response {
+        let req = try RestoreRequest.parse(try json(r))
+        let (range, tracks) = try restoreScope(session, start: req.start, end: req.end, tracks: req.tracks)
+        var settings = req.settings
+        try precheck(session, &settings, range, tracks)
+        let job = JobRegistry.shared.startRestoration(session, settings: settings, range: range, tracks: tracks,
+                                                      action: restoreTitles[settings.kind] ?? "Restore")
+        return .json(["job": job.json], status: 202)
+    }
+
+    static func analysisJSON(_ a: Restoration.Analysis) -> [String: Any] {
+        ["hum": a.hum.map { ["frequency": $0.frequency, "prominenceDB": ($0.prominence * 10).rounded() / 10] as [String: Any] } ?? NSNull(),
+         "clipping": ["runs": a.clippedRuns, "samples": a.clippedSamples, "level": (Double(a.clipLevel) * 10_000).rounded() / 10_000],
+         "clicks": ["count": a.clicks], "examinedSeconds": (a.examined * 100).rounded() / 100, "sampled": a.sampled]
+    }
+
+    private static func restorationAnalysis(_ session: EditorSession, _ r: AgentAPI.Request) async throws -> Response {
+        let q = try RestoreRequest.parseQuery(r.query)
+        let (range, tracks) = try restoreScope(session, start: q.start, end: q.end, tracks: q.tracks)
+        let project = session.project, pool = session.pool
+        let a = await Task.detached(priority: .userInitiated) { Restoration.analyze(project, range: range, tracks: tracks, pool: pool) }.value
+        var body = analysisJSON(a)
+        body["start"] = seconds(session, range.lowerBound)
+        body["end"] = seconds(session, range.upperBound)
+        return .json(["restoration": body])
+    }
+
+    private static func restorePreview(_ session: EditorSession, _ r: AgentAPI.Request) async throws -> Response {
+        let req = try RestoreRequest.parse(try json(r))
+        let (range, tracks) = try restoreScope(session, start: req.start, end: req.end, tracks: req.tracks)
+        guard session.project.seconds(Frame(range.count)) <= 30.0001 else {
+            throw APIError.badRequest("A preview is at most 30 seconds. Pass start and end.")
+        }
+        var settings = req.settings
+        try precheck(session, &settings, range, tracks)
+        let project = session.project, pool = session.pool, s = settings
+        let wantsJSON = (r.headers["accept"] ?? "").contains("application/json")
+        let result = await Task.detached(priority: .userInitiated) { () -> Result<(Project, [Float]), Error> in
+            Result { try Restoration.preview(s, project: project, range: range, tracks: tracks, pool: pool) }
+        }.value
+        let (repaired, audio) = try result.get()
+        if wantsJSON {
+            let measured = await Task.detached(priority: .userInitiated) { () -> [(Restoration.Analysis, LoudnessResult)] in
+                [project, repaired].map { p in
+                    (Restoration.analyze(p, range: range, tracks: tracks, pool: pool), LoudnessMeter.measure(PlanCompiler.compile(p, pool: pool), range))
+                }
+            }.value
+            let (before, after) = (measured[0], measured[1]).self
+            func json(_ m: (Restoration.Analysis, LoudnessResult)) -> [String: Any] {
+                var d = analysisJSON(m.0)
+                d["integratedLUFS"] = m.1.integrated.map { ($0 * 100).rounded() / 100 } ?? NSNull()
+                d["truePeakDBTP"] = m.1.truePeak.isFinite ? (m.1.truePeak * 100).rounded() / 100 : NSNull()
+                return d
+            }
+            return .json(["before": json(before), "after": json(after), "start": seconds(session, range.lowerBound), "end": seconds(session, range.upperBound)])
+        }
+        let tmp = FileManager.default.temporaryDirectory.appending(path: "jammer-preview-\(UUID().uuidString).wav")
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let w = try WAVWriter(url: tmp, options: .init(encoding: .int24, channels: project.channels, sampleRate: project.sampleRate))
+        try w.write(audio)
+        try w.finish()
+        return Response(status: 200, contentType: "audio/wav", body: try Data(contentsOf: tmp),
+                        extraHeaders: ["Content-Disposition": "attachment; filename=\"preview.wav\""])
     }
 
     private static func undoRedo(_ session: EditorSession, redo: Bool) throws -> Response {

@@ -313,3 +313,39 @@ struct TranscriptStepTests {
         _ = try JSONSerialization.data(withJSONObject: ["job": j])
     }
 }
+
+@Suite("Restore requests")
+struct RestoreRequestTests {
+    func error(_ body: [String: Any]) -> AgentAPI.APIError? {
+        do { _ = try RestoreRequest.parse(body); return nil } catch { return error }
+    }
+
+    @Test("Valid bodies parse with defaults")
+    func valid() throws {
+        let r = try RestoreRequest.parse(["kind": "dehum"])
+        #expect(r.settings == Restoration.Settings(kind: .dehum) && r.start == nil && r.tracks == nil)
+        let id = UUID()
+        let s = try RestoreRequest.parse(["kind": "declick", "amount": 0.5, "sensitivity": 2, "start": 1, "end": 3.5, "tracks": [id.uuidString]])
+        #expect(s.settings.amount == 0.5 && s.settings.sensitivity == 2 && s.end == 3.5 && s.tracks == [id])
+    }
+
+    @Test("Bad bodies are 400 before anything starts; denoise isn't available yet")
+    func invalid() {
+        for body: [String: Any] in [[:], ["kind": "louder"], ["kind": "dehum", "amount": 1.5], ["kind": "dehum", "amount": true],
+                                    ["kind": "dehum", "humFrequency": 5], ["kind": "declip", "humFrequency": 50],
+                                    ["kind": "declick", "sensitivity": 0], ["kind": "dehum", "start": 2],
+                                    ["kind": "dehum", "start": 3, "end": 1], ["kind": "dehum", "tracks": ["x"]],
+                                    ["kind": "dehum", "tracks": []], ["kind": "dehum", "volume": 3]] {
+            #expect(error(body)?.status == 400, "\(body)")
+        }
+        #expect(error(["kind": "denoise"])?.status == 409)
+    }
+
+    @Test("Precondition errors carry a reason")
+    func reason() throws {
+        let e = AgentAPI.APIError.unprocessable("no_hum", "No hum.")
+        let r = AgentAPI.Response.error(e)
+        let json = try JSONSerialization.jsonObject(with: r.body) as! [String: [String: Any]]
+        #expect(r.status == 422 && json["error"]?["reason"] as? String == "no_hum" && json["error"]?["code"] as? String == "unprocessable")
+    }
+}

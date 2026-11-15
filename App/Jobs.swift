@@ -1,18 +1,25 @@
 import Foundation
 import JammerAgent
+import Observation
 import JammerCore
 import JammerSpeech
 
 /// Running and recently finished jobs (transcription for now). Main actor; the
 /// work itself runs in detached tasks.
 @MainActor
+@Observable
 final class JobRegistry {
     static let shared = JobRegistry()
     private(set) var jobs: [String: Job] = [:]
-    private var tasks: [String: Task<Void, Never>] = [:]
+    @ObservationIgnored private var tasks: [String: Task<Void, Never>] = [:]
     /// Finished jobs stay readable for this long.
-    private let keep: TimeInterval = 3_600
-    private var finishedAt: [String: Date] = [:]
+    @ObservationIgnored private let keep: TimeInterval = 3_600
+    @ObservationIgnored private var finishedAt: [String: Date] = [:]
+
+    /// The newest job of `kind` for a document, running or not.
+    func latest(_ kind: String, document: String) -> Job? {
+        jobs.values.filter { $0.kind == kind && $0.documentID == document }.max { $0.id < $1.id }
+    }
 
     var running: [Job] { jobs.values.filter { !$0.isFinished }.sorted { $0.id < $1.id } }
 
@@ -49,6 +56,55 @@ final class JobRegistry {
             jobs[id] = nil
             finishedAt[id] = nil
         }
+    }
+
+    /// Repairs the clips in `range` (all when nil) and commits the result as one undo step.
+    func startRestoration(_ session: EditorSession, settings: Restoration.Settings, range: Range<Frame>?, tracks: Set<UUID>? = nil,
+                          action: String) -> Job {
+        var job = Job(kind: "restore", documentID: session.agentID)
+        jobs[job.id] = job
+        let project = session.project
+        let pool = session.pool
+        let media = MediaStore.folder
+        let id = job.id
+        tasks[id] = Task { [weak self, weak session] in
+            job.status = .running
+            self?.update(job)
+            let outcome = await Task.detached(priority: .userInitiated) { () -> Result<(Project, Restoration.ApplyReport), Error> in
+                Result {
+                    try Restoration.apply(settings, to: project, range: range, tracks: tracks, pool: pool, media: media) { p in
+                        Task { @MainActor in
+                            guard var j = self?.jobs[id], !j.isFinished else { return }
+                            j.progress = min(0.99, p)
+                            self?.update(j)
+                        }
+                        return !Task.isCancelled
+                    }
+                }
+            }.value
+            guard self?.jobs[id]?.status != .cancelled else { return }
+            switch outcome {
+            case .success(let (newProject, report)):
+                session?.commitRestoration(newProject, basedOn: project, action: action)
+                job.status = .done
+                job.progress = 1
+                var result: [String: JSONValue] = ["clips": .number(Double(report.clips))]
+                if let f = report.humFrequency { result["humFrequency"] = .number(f) }
+                if settings.kind == .declip { result["clippedRuns"] = .number(Double(report.clippedRuns)) }
+                if settings.kind == .declick { result["clicks"] = .number(Double(report.clicks)) }
+                job.result = result
+            case .failure(let error):
+                job.status = .failed
+                let code = switch error as? Restoration.ApplyError {
+                case .noHum: "no_hum"
+                case .nothingInRange: "nothing_in_range"
+                default: "restore_failed"
+                }
+                job.error = (code, error.localizedDescription)
+            }
+            self?.finish(job)
+        }
+        return job
     }
 
     /// Transcribes every source the session's clips use that has no transcript yet

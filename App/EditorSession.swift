@@ -77,6 +77,38 @@ final class EditorSession {
         commit(p, action: "Transcribe")
     }
 
+    /// A finished repair. If the user edited meanwhile, the repaired clips are carried
+    /// over by id onto the current project, so neither the edit nor the repair is lost.
+    func commitRestoration(_ repaired: Project, basedOn base: Project, action: String) {
+        guard project != base else { commit(repaired, action: action); return }
+        var p = project
+        let byID = Dictionary(repaired.tracks.flatMap(\.clips).map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        let changed = Set(byID.keys.filter { id in base.tracks.flatMap(\.clips).first { $0.id == id }.map { $0.sourceID != byID[id]!.sourceID } ?? false })
+        var touched = false
+        for t in p.tracks.indices {
+            for c in p.tracks[t].clips.indices where changed.contains(p.tracks[t].clips[c].id) {
+                let old = p.tracks[t].clips[c], new = byID[old.id]!
+                // Only if the clip still covers the same stretch of audio.
+                guard old.sourceID == base.tracks.flatMap(\.clips).first(where: { $0.id == old.id })?.sourceID,
+                      old.sourceStart == base.tracks.flatMap(\.clips).first(where: { $0.id == old.id })?.sourceStart,
+                      old.length == new.length else { continue }
+                p.tracks[t].clips[c].sourceID = new.sourceID
+                p.tracks[t].clips[c].sourceStart = new.sourceStart
+                touched = true
+            }
+        }
+        guard touched else { status = "The audio changed while repairing; nothing was applied."; return }
+        for s in repaired.sources where p.source(s.id) == nil { p.sources.append(s) }
+        for t in repaired.transcripts where !p.transcripts.contains(where: { $0.sourceID == t.sourceID }) { p.transcripts.append(t) }
+        p.pruneSources()
+        commit(p, action: action)
+    }
+
+    /// While previewing a repair: play `plan` instead of the document (nil goes back).
+    func setPreviewPlan(_ preview: RenderPlan?) {
+        output.setPlan(preview ?? plan)
+    }
+
     /// Used when a document is read, without undo.
     func load(_ newProject: Project) {
         replace(with: newProject)

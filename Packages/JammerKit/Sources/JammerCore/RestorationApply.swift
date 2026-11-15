@@ -47,14 +47,16 @@ extension Restoration {
 
     /// Repairs the clips inside `range` (everything when nil). New files go in `media`.
     /// `progress` gets 0…1; returning false cancels (CancellationError).
-    public static func apply(_ settings: Settings, to project: Project, range: Range<Frame>? = nil, pool: SourcePool,
-                             media: URL, progress: (Double) -> Bool = { _ in true }) throws -> (Project, ApplyReport) {
+    public static func apply(_ settings: Settings, to project: Project, range: Range<Frame>? = nil, tracks: Set<UUID>? = nil,
+                             pool: SourcePool, media: URL, progress: (Double) -> Bool = { _ in true }) throws -> (Project, ApplyReport) {
         var p = project
         let r = range ?? 0..<p.length
         guard !r.isEmpty else { throw ApplyError.nothingInRange }
         p.split(at: r.lowerBound)
         p.split(at: r.upperBound)
-        let targets = p.tracks.indices.flatMap { t in p.tracks[t].clips.indices.compactMap { c in r.contains(p.tracks[t].clips[c].start) ? (t, c) : nil } }
+        let targets = p.tracks.indices.filter { tracks?.contains(p.tracks[$0].id) ?? true }.flatMap { t in
+            p.tracks[t].clips.indices.compactMap { c in r.contains(p.tracks[t].clips[c].start) ? (t, c) : nil }
+        }
         guard !targets.isEmpty else { throw ApplyError.nothingInRange }
         try FileManager.default.createDirectory(at: media, withIntermediateDirectories: true)
         var report = ApplyReport()
@@ -116,6 +118,12 @@ extension Restoration {
             guard let f = settings.humFrequency ?? detectHum(mix, sampleRate: sr)?.frequency else { throw ApplyError.noHum }
             report.humFrequency = f
             dehum = (0..<channels).map { _ in Dehum(frequency: f, sampleRate: sr) }
+            // Let the notches settle on the audio just before the stretch, when there is some.
+            let pre = max(0, segment.lowerBound - Frame(sr))
+            if pre < segment.lowerBound {
+                let warm = try read(pre..<segment.lowerBound)
+                for ch in 0..<channels { _ = dehum[ch].process(warm[ch]) }
+            }
         }
         var clipLevel: Float?
         if settings.kind == .declip {
@@ -169,5 +177,78 @@ extension Restoration {
         }
         try writer.finish()
         return report
+    }
+}
+
+
+// MARK: - Looking before repairing
+
+extension Restoration {
+    /// What the detectors find in a stretch of the timeline, without changing anything.
+    public struct Analysis: Sendable, Equatable {
+        public var hum: HumEstimate?
+        public var clippedRuns: Int
+        public var clippedSamples: Int
+        public var clipLevel: Float
+        public var clicks: Int
+        /// Seconds actually examined (long ranges are sampled).
+        public var examined: Double
+        public var sampled: Bool
+    }
+
+    /// The timeline mixed to mono over `range`, for the given tracks only.
+    public static func mix(_ project: Project, range: Range<Frame>, tracks: Set<UUID>?, pool: SourcePool) -> [Float] {
+        var p = project
+        if let tracks { p.tracks.removeAll { !tracks.contains($0.id) } }
+        let plan = PlanCompiler.compile(p, pool: pool)
+        let ch = project.channels
+        let raw = plan.render(from: range.lowerBound, frames: range.count)
+        return (0..<range.count).map { i in (0..<ch).reduce(Float(0)) { $0 + raw[i * ch + $1] } / Float(ch) }
+    }
+
+    /// Runs the detectors. Ranges longer than `budget` seconds are sampled in
+    /// evenly spread windows so this stays quick enough to call synchronously.
+    public static func analyze(_ project: Project, range: Range<Frame>, tracks: Set<UUID>? = nil, pool: SourcePool,
+                               budget: Double = 60) -> Analysis {
+        let sr = project.sampleRate
+        let budgetFrames = Frame(sr * budget)
+        var windows: [Range<Frame>] = [range]
+        if Frame(range.count) > budgetFrames {
+            let n = 10, w = budgetFrames / Frame(n)
+            let step = (Frame(range.count) - w) / Frame(n - 1)
+            windows = (0..<n).map { range.lowerBound + Frame($0) * step }.map { $0..<($0 + w) }
+        }
+        var a = Analysis(hum: nil, clippedRuns: 0, clippedSamples: 0, clipLevel: 0, clicks: 0, examined: 0, sampled: windows.count > 1)
+        var humMix: [Float] = []
+        var peak: Float = 0
+        var mixes: [[Float]] = []
+        for w in windows {
+            let m = mix(project, range: w, tracks: tracks, pool: pool)
+            mixes.append(m)
+            if humMix.count < Int(sr * 20) { humMix += m.prefix(Int(sr * 20) - humMix.count) }
+            peak = max(peak, m.map(abs).max() ?? 0)
+            a.examined += Double(w.count) / sr
+        }
+        a.hum = detectHum(humMix, sampleRate: sr)
+        a.clipLevel = peak
+        for m in mixes {
+            let runs = clippedRuns(m, level: peak).runs
+            a.clippedRuns += runs.count
+            a.clippedSamples += runs.reduce(0) { $0 + $1.count }
+            a.clicks += detectClicks(m).count
+        }
+        return a
+    }
+
+    /// The repaired audio of `range` (interleaved, project channels) without changing
+    /// the project: for A/B listening and for agents. Files go to a temporary folder.
+    public static func preview(_ settings: Settings, project: Project, range: Range<Frame>, tracks: Set<UUID>?,
+                               pool: SourcePool) throws -> (project: Project, audio: [Float]) {
+        let tmp = FileManager.default.temporaryDirectory.appending(path: "jammer-preview-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let (repaired, _) = try apply(settings, to: project, range: range, tracks: tracks, pool: pool, media: tmp)
+        // Render before the files go away; the pool keeps them open by id.
+        let plan = PlanCompiler.compile(repaired, pool: pool)
+        return (repaired, plan.render(from: range.lowerBound, frames: range.count))
     }
 }
