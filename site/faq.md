@@ -48,7 +48,7 @@ No. Edits are stored in the project and played from the originals; repairs and e
 
 ## Can I use my plugins?
 
-Yes: Audio Unit effects (AUv2 and AUv3) can be put on any track. Plugins from developers other than Apple run in a process of their own, so one that crashes can't take Jämmer down.
+Yes: Audio Unit effects (AUv2 and AUv3) can be put on any track. With **Safe mode** on (Audio › Plugins…), every plugin runs in macOS's separate plugin host process instead of inside Jämmer.
 
 ## How do I let an AI agent use Jämmer?
 

@@ -292,7 +292,7 @@ enum AgentRouter {
             return .json(["plugins": list.map { ["id": $0.id.description, "name": $0.name, "manufacturer": $0.manufacturer, "kind": $0.kind,
                                                   "version": $0.version, "v3": $0.isV3] as [String: Any] },
                           "safeMode": EditorSession.pluginSafeMode,
-                          "note": "Plugins are third-party code that runs with Jämmer's rights. If one crashes or misbehaves, turn on Safe Mode in Jämmer (Audio › Plugins) so every plugin runs out of process."])
+                          "note": "Plugins are third-party code that runs with Jämmer's rights. If one crashes or misbehaves, turn on Safe Mode in Jämmer (Audio › Plugins) so every plugin runs in macOS's separate plugin host process instead of inside Jämmer."])
         case ["api", "v1", "operations"]:
             try only("GET")
             return .json(["operations": AgentAPI.operations])

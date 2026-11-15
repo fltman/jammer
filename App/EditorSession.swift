@@ -41,7 +41,8 @@ final class EditorSession {
     @ObservationIgnored private(set) var plan: RenderPlan
     /// The units playing the tracks' inserts. Exports and measurements make their own.
     @ObservationIgnored private(set) var inserts: InsertHost
-    /// Safe mode: every plugin loads out of process, so a crash can't take Jämmer down.
+    /// Safe mode: every plugin loads in Apple's host process instead of Jämmer's (tried 2026-11-15:
+    /// AUHostingServiceXPC appears and the unit processes). That a crash there leaves Jämmer standing isn't tested.
     static var pluginSafeMode: Bool {
         get { UserDefaults.standard.bool(forKey: "plugins.safeMode") }
         set { UserDefaults.standard.set(newValue, forKey: "plugins.safeMode") }

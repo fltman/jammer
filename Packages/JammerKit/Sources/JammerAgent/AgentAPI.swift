@@ -438,7 +438,7 @@ public enum AgentAPI {
 
         A track can run through Audio Unit effects (AUv2 and AUv3) before its gain. `GET /api/v1/plugins` lists what's installed; `add_insert` puts one on a track (by id like `aufx/lmtr/appl` or by its exact name) and answers its id in `info.insert`; `GET …/tracks/{trackId}/inserts/{insert}` lists its parameters with their ranges; `set_insert` changes one parameter, a factory preset or bypass; `remove_insert` takes it off. A value outside a parameter's range fails with `reason: "out_of_range"`; nothing is clipped. Every change is one undo step, settings are saved in the document, and each plugin's latency is compensated so the tracks stay in time. Exports and loudness measurements (including `normalize` and `loudness_preset`) hear the plugins. You can't open a plugin's window; the user can, under Audio › Plugins.
 
-        Plugins are third-party code that runs with Jämmer's rights. If one crashes or misbehaves, the right fix is safe mode (Audio › Plugins, or ask the user): every plugin then runs in a process of its own. Plugins whose developer isn't Apple always run that way, for safety. Errors: `plugin_not_found`, `plugin_unsupported_format` (it can't take the document's mono or stereo float audio), `plugin_failed` (it didn't start).
+        Plugins are third-party code that runs with Jämmer's rights. If one crashes or misbehaves, the right fix is safe mode (Audio › Plugins, or ask the user): every plugin then runs in macOS's separate plugin host process instead of inside Jämmer. Errors: `plugin_not_found`, `plugin_unsupported_format` (it can't take the document's mono or stereo float audio), `plugin_failed` (it didn't start).
 
         ## Sibling apps
 

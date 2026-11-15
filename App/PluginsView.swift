@@ -56,7 +56,7 @@ struct PluginsSheet: View {
                     EditorSession.pluginSafeMode = on
                     session.restartPlugins()
                 }
-            Text("Plugins are third-party code that runs with Jämmer's rights. If one crashes or misbehaves, turn on safe mode: a plugin that fails then can't take Jämmer down with it. Plugins play 0.3 s ahead, so a change is heard a moment later.")
+            Text("Plugins are third-party code that runs with Jämmer's rights. If one crashes or misbehaves, turn on safe mode: every plugin then runs in macOS's separate plugin host process instead of inside Jämmer. Plugins play 0.3 s ahead, so a change is heard a moment later.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
