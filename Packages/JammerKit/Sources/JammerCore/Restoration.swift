@@ -133,9 +133,9 @@ extension Restoration {
 
     /// Finds runs of at least `minRun` samples stuck at the extremes (within
     /// `tolerance` of the largest absolute value). Returns half-open index ranges.
-    public static func clippedRuns(_ x: [Float], minRun: Int = 3, tolerance: Float = 0.001) -> (level: Float, runs: [Range<Int>]) {
+    public static func clippedRuns(_ x: [Float], minRun: Int = 3, tolerance: Float = 0.001, level: Float? = nil) -> (level: Float, runs: [Range<Int>]) {
         var peak: Float = 0
-        vDSP_maxmgv(x, 1, &peak, vDSP_Length(x.count))
+        if let level { peak = level } else { vDSP_maxmgv(x, 1, &peak, vDSP_Length(x.count)) }
         guard peak > 0 else { return (0, []) }
         let threshold = peak * (1 - tolerance)
         var runs: [Range<Int>] = []
@@ -154,8 +154,8 @@ extension Restoration {
     /// Rebuilds clipped runs by least-squares AR interpolation, keeping each
     /// rebuilt sample at least at the clip level and on the clipped side.
     /// Runs longer than `maxRun` are left alone (not clipping, or beyond repair).
-    public static func declip(_ x: [Float], amount: Float = 1, order: Int = 24, maxRun: Int = 400) -> (output: [Float], report: ClipReport) {
-        let (level, runs) = clippedRuns(x)
+    public static func declip(_ x: [Float], amount: Float = 1, order: Int = 24, maxRun: Int = 400, level knownLevel: Float? = nil) -> (output: [Float], report: ClipReport) {
+        let (level, runs) = clippedRuns(x, level: knownLevel)
         let usable = runs.filter { $0.count <= maxRun }
         guard !usable.isEmpty else { return (x, ClipReport(runs: 0, samples: 0, level: level)) }
         var y = x

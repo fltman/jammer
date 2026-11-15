@@ -1,0 +1,173 @@
+import Accelerate
+import Foundation
+
+/// Applying a repair to the project: the clips in a range get new sources that hold
+/// the processed audio (float WAVs in the media folder). The original files are never
+/// touched, and undo is the previous project value, like every other edit.
+extension Restoration {
+    public enum Kind: String, Sendable, Codable, CaseIterable { case dehum, declip, declick }
+
+    public struct Settings: Sendable, Equatable {
+        public var kind: Kind
+        /// 0…1, blend between the original and the full repair.
+        public var amount: Float
+        /// De-hum: the mains frequency; nil finds it (50 or 60 Hz, refined).
+        public var humFrequency: Double?
+        /// De-click: higher finds quieter clicks.
+        public var sensitivity: Double
+
+        public init(kind: Kind, amount: Float = 1, humFrequency: Double? = nil, sensitivity: Double = 1) {
+            self.kind = kind
+            self.amount = amount
+            self.humFrequency = humFrequency
+            self.sensitivity = sensitivity
+        }
+    }
+
+    public struct ApplyReport: Sendable, Equatable {
+        public var clips = 0
+        public var humFrequency: Double?
+        public var clippedRuns = 0
+        public var clicks = 0
+    }
+
+    public enum ApplyError: Error, LocalizedError, Equatable {
+        case nothingInRange
+        case noHum
+        case unreadable(String)
+
+        public var errorDescription: String? {
+            switch self {
+            case .nothingInRange: "There's no audio in that range."
+            case .noHum: "No mains hum found (50 or 60 Hz). Give the frequency to remove it anyway."
+            case .unreadable(let n): "Can't read \(n)."
+            }
+        }
+    }
+
+    /// Repairs the clips inside `range` (everything when nil). New files go in `media`.
+    /// `progress` gets 0…1; returning false cancels (CancellationError).
+    public static func apply(_ settings: Settings, to project: Project, range: Range<Frame>? = nil, pool: SourcePool,
+                             media: URL, progress: (Double) -> Bool = { _ in true }) throws -> (Project, ApplyReport) {
+        var p = project
+        let r = range ?? 0..<p.length
+        guard !r.isEmpty else { throw ApplyError.nothingInRange }
+        p.split(at: r.lowerBound)
+        p.split(at: r.upperBound)
+        let targets = p.tracks.indices.flatMap { t in p.tracks[t].clips.indices.compactMap { c in r.contains(p.tracks[t].clips[c].start) ? (t, c) : nil } }
+        guard !targets.isEmpty else { throw ApplyError.nothingInRange }
+        try FileManager.default.createDirectory(at: media, withIntermediateDirectories: true)
+        var report = ApplyReport()
+        let totalFrames = Double(targets.reduce(Frame(0)) { $0 + p.tracks[$1.0].clips[$1.1].length })
+        var doneFrames = 0.0
+        for (t, c) in targets {
+            let clip = p.tracks[t].clips[c]
+            guard let src = p.source(clip.sourceID) else { continue }
+            let url = media.appending(path: "\(UUID().uuidString.prefix(8)) \(settings.kind.rawValue).wav")
+            let segment = clip.sourceStart..<(clip.sourceStart + clip.length)
+            let r = try render(settings, source: src, segment: segment, pool: pool, to: url) { f in
+                progress((doneFrames + f * Double(clip.length)) / max(1, totalFrames))
+            }
+            doneFrames += Double(clip.length)
+            report.clips += 1
+            report.humFrequency = report.humFrequency ?? r.humFrequency
+            report.clippedRuns += r.clippedRuns
+            report.clicks += r.clicks
+            let info = try AudioFileReader.info(at: url)
+            let newSource = SourceRef(name: "\(src.name) (\(settings.kind.rawValue))", path: url.path, info: info, originalPath: src.originalPath ?? src.path)
+            p.sources.append(newSource)
+            // The words heard in that stretch move to the new file, same ids.
+            if let tr = p.transcripts.first(where: { $0.sourceID == src.id }) {
+                let words = tr.words.filter { $0.end > segment.lowerBound && $0.start < segment.upperBound }.map { w -> Word in
+                    var w = w
+                    w.start = max(0, w.start - segment.lowerBound)
+                    w.end = min(clip.length, w.end - segment.lowerBound)
+                    return w
+                }
+                p.transcripts.append(SourceTranscript(sourceID: newSource.id, language: tr.language, engine: tr.engine, words: words, speakers: tr.speakers))
+            }
+            p.tracks[t].clips[c].sourceID = newSource.id
+            p.tracks[t].clips[c].sourceStart = 0
+        }
+        p.pruneSources()
+        return (p, report)
+    }
+
+    /// Processes `segment` of a source, all channels, into a float WAV at `url`.
+    static func render(_ settings: Settings, source: SourceRef, segment: Range<Frame>, pool: SourcePool, to url: URL,
+                       progress: (Double) -> Bool) throws -> ApplyReport {
+        let channels = source.info.channels
+        let sr = source.info.sampleRate
+        let writer = try WAVWriter(url: url, options: .init(encoding: .float32, channels: channels, sampleRate: sr))
+        var report = ApplyReport()
+        // Clicks and clipping need context on both sides; hum filters carry state.
+        let window = Frame(sr * 10)
+        let margin: Frame = settings.kind == .dehum ? 0 : Frame(sr * 0.25)
+        let total = source.info.frames
+        func read(_ range: Range<Frame>) throws -> [[Float]] {
+            let raw = pool.read(source, from: range.lowerBound, count: range.count)
+            guard raw.count == range.count * channels else { throw ApplyError.unreadable(source.name) }
+            return (0..<channels).map { ch in stride(from: ch, to: raw.count, by: channels).map { raw[$0] } }
+        }
+        var dehum: [Dehum] = []
+        if settings.kind == .dehum {
+            let probe = try read(segment.lowerBound..<min(segment.upperBound, segment.lowerBound + Frame(sr * 20)))
+            let mix = (0..<probe[0].count).map { i in probe.reduce(Float(0)) { $0 + $1[i] } / Float(channels) }
+            guard let f = settings.humFrequency ?? detectHum(mix, sampleRate: sr)?.frequency else { throw ApplyError.noHum }
+            report.humFrequency = f
+            dehum = (0..<channels).map { _ in Dehum(frequency: f, sampleRate: sr) }
+        }
+        var clipLevel: Float?
+        if settings.kind == .declip {
+            // One level for the whole stretch, so every window agrees on what "clipped" means.
+            var peak: Float = 0
+            var at = segment.lowerBound
+            while at < segment.upperBound {
+                let n = Int(min(window, segment.upperBound - at))
+                let raw = pool.read(source, from: at, count: n)
+                var m: Float = 0
+                vDSP_maxmgv(raw, 1, &m, vDSP_Length(raw.count))
+                peak = max(peak, m)
+                at += Frame(n)
+            }
+            clipLevel = peak
+        }
+        var at = segment.lowerBound
+        while at < segment.upperBound {
+            let end = min(segment.upperBound, at + window)
+            let lo = max(0, at - margin), hi = min(total, end + margin)
+            let chans = try read(lo..<hi)
+            var out: [[Float]] = []
+            for ch in 0..<channels {
+                let x = chans[ch]
+                let y: [Float]
+                switch settings.kind {
+                case .dehum:
+                    y = dehum[ch].process(x, amount: settings.amount)
+                case .declip:
+                    let (o, r) = declip(x, amount: settings.amount, level: clipLevel)
+                    y = o
+                    report.clippedRuns += r.runs
+                case .declick:
+                    let (o, r) = declick(x, amount: settings.amount, sensitivity: settings.sensitivity)
+                    y = o
+                    // Count clicks whose start lies in this window's own part.
+                    report.clicks += r.clicks.filter { $0.lowerBound >= Int(at - lo) && $0.lowerBound < Int(end - lo) }.count
+                }
+                out.append(Array(y[Int(at - lo)..<Int(end - lo)]))
+            }
+            let n = out[0].count
+            var interleaved = [Float](repeating: 0, count: n * channels)
+            for ch in 0..<channels { for i in 0..<n { interleaved[i * channels + ch] = out[ch][i] } }
+            try writer.write(interleaved)
+            at = end
+            if !progress(Double(at - segment.lowerBound) / Double(max(1, segment.count))) {
+                try? writer.finish()
+                try? FileManager.default.removeItem(at: url)
+                throw CancellationError()
+            }
+        }
+        try writer.finish()
+        return report
+    }
+}
