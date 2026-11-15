@@ -192,6 +192,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             op("Normalize True Peak to −1 dBTP", "normalize", ["target": .string("true_peak"), "level": .number(-1)]),
             submenu("Loudness Preset", LoudnessPreset.allCases.map { op($0.title, "loudness_preset", ["preset": .string($0.rawValue)]) }),
             op("Level Speakers", "level_speakers"),
+            submenu("Remove Bleed", [op("Gate Each Track Outside Its Speaker", "debleed", ["method": .string("gate")]),
+                                     op("Cancel the Other Tracks' Leak", "debleed", ["method": .string("cancel")])]),
             .separator(),
             item("Measure Loudness", #selector(EditorWindowController.analyzeLoudness(_:)), "l", [.command, .option]),
             item("Add Marker", #selector(EditorWindowController.addMarker(_:)), "m", [.command, .option]),

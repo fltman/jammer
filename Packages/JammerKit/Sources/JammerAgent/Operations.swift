@@ -152,6 +152,11 @@ public enum Operations {
                        .init("radiusTime", .number, "brush: seconds around the stroke. Default 0.02.", range: 0.001...1),
                        .init("db", .number, "attenuate: change in dB, -80 to 0. Default -20.", range: -80...0),
                        .init("tracks", .list, "Track ids. Default: every track.")]),
+        .init("debleed", "Remove Bleed", "Removes the other speakers from each track of a multitrack recording. gate lowers a track outside its own speaker's turns (needs diarize mode by_track; reason no_speakers otherwise); best when people don't talk over each other. cancel subtracts the other tracks' leak: the delay is found by cross-correlation up to about 1 s (a remote guest's voice coming back out of headphones arrives 50–500 ms late), and the leak is learnt where the track's own speaker is silent, so their voice is kept; needs two or more tracks that play together (reason needs_tracks). Each processed track plays from a new file; the original is one undo away. info: tracks, reductionDB.",
+              params: [.init("method", .string, "How to remove it.", required: true, options: ["gate", "cancel"]),
+                       .init("tracks", .list, "Track ids. Default: every track (gate: those with speakers)."),
+                       .init("amount", .number, "gate: dB outside the turns. Default -18.", range: -40...0),
+                       .init("maxDelay", .number, "cancel: ms of spread around the found delay (the room or codec). Default 30.", range: 5...100)]),
         .init("level_speakers", "Level Speakers", "Brings every speaker to the same loudness with one gain each, measured over their own turns (needs diarize first; fails with reason no_speakers otherwise). A track that is one speaker gets track gain; a track with several is split in the pauses where the speaker changes. Run loudness_preset afterwards for the mix. info: speakers, maxChangeDB, limitedByMaxGain.",
               params: [.init("target", .number, "LUFS per speaker. Default -18.", range: -40 ... -10),
                        .init("maxGain", .number, "Largest change in dB, up or down. Default 12.", range: 0...30),
@@ -608,6 +613,17 @@ public enum StepRunner {
                 throw StepFailure("spectral_edit: \(e.localizedDescription)", reason: e.reason)
             } catch let e as EffectError {
                 throw StepFailure("spectral_edit: \(e.localizedDescription)", reason: "nothing_in_range")
+            }
+        case "debleed":
+            guard let pool = s.pool, let media = s.media else { throw StepFailure("debleed needs the app.") }
+            let ids = p["tracks"]?.strings.map { $0.compactMap(UUID.init(uuidString:)) }
+            do {
+                let (q, report) = try s.project.debleeding(method: p["method"]?.string ?? "gate", tracks: ids, amountDB: p["amount"]?.double ?? -18,
+                                                           windowMs: p["maxDelay"]?.double ?? 30, pool: pool, media: media)
+                s.project = q
+                return ["tracks": Double(report.tracks), "reductionDB": report.reductionDB]
+            } catch let e as DebleedError {
+                throw StepFailure("debleed: \(e.localizedDescription)", reason: e.reason)
             }
         case "level_speakers":
             guard let pool = s.pool else { throw StepFailure("level_speakers needs the app.") }

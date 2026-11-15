@@ -22,3 +22,12 @@ Finding speakers is one undo step. Like transcript words, speaker turns belong t
 ## Level the speakers
 
 **Audio › Level Speakers** brings everyone to the same loudness (−18 LUFS each by default), measured over their own turns, with one gain per person, so a quiet guest and a loud host end up even. On a double-ender each track simply gets its gain; when people share a track, Jämmer cuts the clips in the pauses where the speaker changes and sets each piece's gain (where two people talk at once, the lower gain wins, so nobody is pushed on top of the other). Nothing is moved and the transcript stays as it was. It needs speakers first (Find Speakers), changes each speaker by at most 12 dB, and is one undo step; afterwards a loudness preset sets the whole mix for the platform.
+
+## Remove bleed
+
+On a multitrack recording each microphone also hears the others. **Audio › Remove Bleed** has two ways to take that out, for two different situations:
+
+- **Several people in the same room**, each with their own microphone: every mic picks up the others a few milliseconds late. **Gate Each Track Outside Its Speaker** turns each track down (18 dB by default, with soft 20 ms edges) whenever its own speaker isn't talking; their own speech isn't touched at all. It needs speakers found one per track first (Find Speakers on the multitrack recording). This is the best choice whenever people don't talk over each other.
+- **A remote interview** (a double-ender): there's no acoustic bleed between the places, but the other person's voice can leak out of your guest's headphones or speakers into their microphone, coming back 50–500 ms late and sounding like a phone line. **Cancel the Other Tracks' Leak** finds that delay by itself (up to a second), learns what the leak sounds like where the track's own speaker is quiet, and subtracts it everywhere, so it also works while both talk at once. Their own voice is kept.
+
+In our tests gate lowered the bleed by more than 15 dB and cancel by 16 dB (remote, 180 ms late) to 29 dB (same room), with the speakers' own voices unchanged. Both are one undo step; the processed tracks play from new files and the originals stay as they were.

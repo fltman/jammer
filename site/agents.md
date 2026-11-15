@@ -342,6 +342,17 @@ Changes an area of the spectrogram, per track, rendered into a new file (the ori
 | `db` | number | attenuate: change in dB, -80 to 0. Default -20. |
 | `tracks` | list | Track ids. Default: every track. |
 
+### `debleed`
+
+Removes the other speakers from each track of a multitrack recording. gate lowers a track outside its own speaker's turns (needs diarize mode by_track; reason no_speakers otherwise); best when people don't talk over each other. cancel subtracts the other tracks' leak: the delay is found by cross-correlation up to about 1 s (a remote guest's voice coming back out of headphones arrives 50–500 ms late), and the leak is learnt where the track's own speaker is silent, so their voice is kept; needs two or more tracks that play together (reason needs_tracks). Each processed track plays from a new file; the original is one undo away. info: tracks, reductionDB.
+
+| Param | Type | Description |
+|---|---|---|
+| `method` | string | **Required.** How to remove it. One of: `gate`, `cancel`. |
+| `tracks` | list | Track ids. Default: every track (gate: those with speakers). |
+| `amount` | number | gate: dB outside the turns. Default -18. |
+| `maxDelay` | number | cancel: ms of spread around the found delay (the room or codec). Default 30. |
+
 ### `level_speakers`
 
 Brings every speaker to the same loudness with one gain each, measured over their own turns (needs diarize first; fails with reason no_speakers otherwise). A track that is one speaker gets track gain; a track with several is split in the pauses where the speaker changes. Run loudness_preset afterwards for the mix. info: speakers, maxChangeDB, limitedByMaxGain.

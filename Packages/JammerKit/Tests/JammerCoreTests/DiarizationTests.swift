@@ -254,4 +254,74 @@ struct DiarizationTests {
         #expect(PlanCompiler.compile(music, pool: pool).render(from: 0, frames: Int(p.length)) == before)
         #expect(throws: LevelError.self) { try Project(sampleRate: sr, channels: 2).levellingSpeakers(pool: pool) }
     }
+
+    // MARK: De-bleed
+
+    /// Talker A and B on their own tracks, each with the other leaking in: delayed, filtered, at `leakDB`.
+    private func leaky(_ dir: TempDir, delay: Double, leakDB: Double, band: ClosedRange<Double>) throws -> (Project, SourcePool, [(Double, Double)], [(Double, Double)]) {
+        let seconds = 30.0
+        let aTurns = [(1.0, 6.0), (11.0, 15.0), (21.0, 25.0)], bTurns = [(6.6, 10.5), (15.6, 20.5), (25.6, 29.0)]
+        let a = talker(aTurns, seconds: seconds, seed: 21), b = talker(bTurns, seconds: seconds, seed: 22)
+        func leak(_ x: [Float]) -> [Float] {
+            // One-pole high- and low-pass for the band, then delay and level.
+            let hp = Float(exp(-2 * .pi * band.lowerBound / sr)), lp = Float(exp(-2 * .pi * band.upperBound / sr))
+            var y = [Float](repeating: 0, count: x.count), h: Float = 0, l: Float = 0, prev: Float = 0
+            for i in x.indices {
+                h = hp * (h + x[i] - prev); prev = x[i]
+                l = (1 - lp) * h + lp * l
+                y[i] = l
+            }
+            let d = Int(delay * sr), g = Float(pow(10, leakDB / 20))
+            return (0..<x.count).map { $0 >= d ? y[$0 - d] * g : 0 }
+        }
+        let floor = noise(count: a.count, seed: 23).map { $0 * 0.0002 }
+        var p: Project?
+        for (name, own, other) in [("A", a, b), ("B", b, a)] {
+            let l = leak(other)
+            let mono = (0..<own.count).map { own[$0] + l[$0] + floor[$0] }
+            let url = dir.file("\(name)-\(UUID().uuidString.prefix(4)).wav")
+            try writeWAV(mono.flatMap { [$0, $0] }, to: url)
+            let ref = SourceRef(name: name, path: url.path, info: try AudioFileReader.info(at: url))
+            if p == nil { p = Project(source: ref) } else { p!.addTrack(source: ref) }
+        }
+        return (p!, SourcePool(), aTurns, bTurns)
+    }
+
+    private func trackLevel(_ p: Project, _ pool: SourcePool, track: Int, in spans: [(Double, Double)]) -> Double {
+        var solo = p
+        solo.tracks = [p.tracks[track]]
+        let x = PlanCompiler.compile(solo, pool: pool).render(from: 0, frames: Int(p.length))
+        var e = 0.0, n = 0
+        for (a, b) in spans { for i in stride(from: Int((a + 0.3) * sr), to: Int((b - 0.3) * sr), by: 3) { e += Double(x[i * 2] * x[i * 2]); n += 1 } }
+        return 10 * log10(e / Double(n))
+    }
+
+    @Test("Gate: the leak outside a track's own turns drops; its own speech stays bit for bit")
+    func gate() throws {
+        let dir = TempDir()
+        var (p, pool, aTurns, bTurns) = try leaky(dir, delay: 0.003, leakDB: -20, band: 100...6_000)
+        p.applyDiarization(Diarization.byTrack(p, pool: pool, tracks: p.tracks.map(\.id)), engine: "by-track")
+        let before = trackLevel(p, pool, track: 0, in: bTurns)
+        var soloA = p; soloA.tracks = [p.tracks[0]]
+        let ownBefore = PlanCompiler.compile(soloA, pool: pool).render(from: Frame(2 * sr), frames: Int(3 * sr))
+        let (q, report) = try p.debleeding(method: "gate", pool: pool, media: dir.file("m"))
+        #expect(before - trackLevel(q, pool, track: 0, in: bTurns) >= 15, "gate \(report)")
+        soloA = q; soloA.tracks = [q.tracks[0]]
+        #expect(PlanCompiler.compile(soloA, pool: pool).render(from: Frame(2 * sr), frames: Int(3 * sr)) == ownBefore)
+        _ = aTurns
+        #expect(throws: DebleedError.noSpeakers) { try Project(sampleRate: sr, channels: 2).debleeding(method: "gate", pool: pool, media: dir.file("m")) }
+    }
+
+    @Test("Cancel, same room (3 ms, low-passed, −20 dB) and at a distance (180 ms, telephone band, −30 dB)",
+          arguments: [(0.003, -20.0, 100.0...6_000.0), (0.18, -30.0, 300.0...3_400.0)])
+    func cancel(delay: Double, leakDB: Double, band: ClosedRange<Double>) throws {
+        let dir = TempDir()
+        let (p, pool, aTurns, bTurns) = try leaky(dir, delay: delay, leakDB: leakDB, band: band)
+        let bleed = trackLevel(p, pool, track: 0, in: bTurns), own = trackLevel(p, pool, track: 0, in: aTurns)
+        let (q, report) = try p.debleeding(method: "cancel", tracks: [p.tracks[0].id], pool: pool, media: dir.file("m"))
+        let bleedAfter = trackLevel(q, pool, track: 0, in: bTurns), ownAfter = trackLevel(q, pool, track: 0, in: aTurns)
+        print(String(format: "DEBLEED delay %.0f ms: leak %.1f → %.1f dB (−%.1f), own voice %+.2f dB", delay * 1_000, bleed, bleedAfter, bleed - bleedAfter, ownAfter - own))
+        #expect(bleed - bleedAfter >= 12, "\(report)")
+        #expect(abs(ownAfter - own) <= 0.5)
+    }
 }
