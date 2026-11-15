@@ -171,18 +171,11 @@ final class EditorSession {
         historyVersion += 1
     }
 
-    /// One change, one undo step. AppKit only closes its automatic undo group after a
-    /// user event, so changes from agents (no events in between) piled into one group and
-    /// one undo took several back. Each change now gets an explicit top-level group,
-    /// closing a stale automatic one first. Inside undo or redo the manager's own group is
-    /// open and the registration goes there.
+    /// One change, one undo step, also for agent requests and finished jobs (no user
+    /// events between them): see UndoManager.separateStep.
     private func undoGroup(_ body: () -> Void) {
-        guard let um = undoManager, !um.isUndoing, !um.isRedoing else { body(); return }
-        // An automatic group left open since the last event belongs to an earlier change.
-        while um.groupingLevel > 0 { um.endUndoGrouping() }
-        um.beginUndoGrouping()
-        body()
-        um.endUndoGrouping()
+        guard let um = undoManager else { body(); return }
+        um.separateStep(body)
     }
 
     /// The document's history (View › History, `GET …/history`).
