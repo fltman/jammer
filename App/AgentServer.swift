@@ -241,7 +241,13 @@ enum AgentRouter {
             try only("GET")
             return .json(["app": ["name": AgentAPI.appName, "displayName": "Jämmer", "version": appVersion],
                           "api": AgentAPI.version, "port": Int(port),
-                          "documents": AgentRegistry.shared.sessions.map(summary)])
+                          "documents": AgentRegistry.shared.sessions.map(summary),
+                          "jobs": JobRegistry.shared.running.map(\.json)])
+        case let p where p.count == 4 && Array(p.prefix(3)) == ["api", "v1", "jobs"]:
+            try only("GET", "DELETE")
+            let job = r.method == "GET" ? JobRegistry.shared.job(p[3]) : JobRegistry.shared.cancel(p[3])
+            guard let job else { throw APIError.notFound("No job with id \(p[3]).") }
+            return .json(["job": job.json])
         case ["api", "v1", "operations"]:
             try only("GET")
             return .json(["operations": AgentAPI.operations])
@@ -292,6 +298,19 @@ enum AgentRouter {
             case ["waveform"]:
                 try only("GET")
                 return try waveform(session, r)
+            case ["transcribe"]:
+                try only("POST")
+                let body = try json(r)
+                let lang = (body["language"] as? String) ?? Locale.current.identifier(.bcp47)
+                if let e = body["engine"] as? String, !["auto", "apple"].contains(e) {
+                    throw APIError.badRequest("engine must be \"auto\" or \"apple\".")
+                }
+                let job = JobRegistry.shared.startTranscription(session, locale: Locale(identifier: lang),
+                                                                replace: body["replace"] as? Bool ?? false)
+                return .json(["job": job.json], status: 202)
+            case ["transcript"]:
+                try only("GET")
+                return try transcript(session, r)
             case ["export"]:
                 try only("POST")
                 return try await export(session, r)
@@ -456,11 +475,28 @@ enum AgentRouter {
             return d
         }
         if let failed = results.firstIndex(where: { $0.status == .failed }) {
-            return .json(["error": ["code": "step_failed", "step": failed,
-                                    "message": "Step \(failed) (\(results[failed].op)) failed: \((results[failed].error ?? "").trimmingCharacters(in: CharacterSet(charactersIn: "."))). Nothing was changed."] as [String: Any],
+            var err: [String: Any] = ["code": "step_failed", "step": failed,
+                                      "message": "Step \(failed) (\(results[failed].op)) failed: \((results[failed].error ?? "").trimmingCharacters(in: CharacterSet(charactersIn: "."))). Nothing was changed."]
+            if let reason = results[failed].reason { err["reason"] = reason }
+            for (k, v) in results[failed].details { err[k] = v == v.rounded() ? Int(v) as Any : v as Any }
+            return .json(["error": err,
                           "results": list, "document": detail(session)], status: 422)
         }
         return .json(["results": list, "document": detail(session)])
+    }
+
+    private static func transcript(_ session: EditorSession, _ r: AgentAPI.Request) throws -> Response {
+        let range = try queryRange(r, session)
+        let placed = session.project.placedWords(in: range)
+        let words = placed.map { w -> [String: Any] in
+            var d: [String: Any] = ["id": w.word.id.uuidString, "text": w.word.text,
+                                    "start": seconds(session, w.start), "end": seconds(session, w.end), "partial": w.isPartial]
+            d["confidence"] = w.word.confidence.map { ($0 * 100).rounded() / 100 } ?? NSNull()
+            d["speaker"] = w.word.speaker ?? NSNull()
+            return d
+        }
+        let langs = Set(session.project.transcripts.map(\.language)).sorted()
+        return .json(["words": words, "text": placed.map(\.word.text).joined(separator: " "), "languages": langs])
     }
 
     private static func undoRedo(_ session: EditorSession, redo: Bool) throws -> Response {

@@ -6,7 +6,7 @@ import JammerCore
 /// from this list, so they can't drift from what the app actually does.
 public struct OperationSpec: Sendable, Identifiable {
     public struct Param: Sendable {
-        public enum Kind: String, Sendable { case seconds, number, string, boolean }
+        public enum Kind: String, Sendable { case seconds, number, string, boolean, list }
         public var name: String
         public var kind: Kind
         public var description: String
@@ -86,6 +86,15 @@ public enum Operations {
                        .init("at", .seconds, "Where the tempo starts. Defaults to 0, the start of the document."),
                        .init("beats", .number, "Beats per bar (1–64). Give it with `unit`; without both, the time signature in effect at `at` is kept."),
                        .init("unit", .number, "Note value of a beat: 1, 2, 4, 8, 16 or 32 (4 is a quarter note).")]),
+        .init("delete_words", "Delete Words", "Removes words from the audio by their transcript, closing the gaps (ripple). Give word ids (best: they stay valid across edits, undo and saving) or the text to find. Text must match in exactly one place, unless you pass `occurrence` or `all`.",
+              params: [.init("words", .list, "Word ids from GET /api/v1/documents/{id}/transcript."),
+                       .init("text", .string, "A word or phrase as it reads in the transcript; case and punctuation don't count."),
+                       .init("occurrence", .number, "With `text`: which match, counting from 1."),
+                       .init("all", .boolean, "With `text`: every match."),
+                       .init("bridge", .seconds, "Also remove pauses up to this long between the deleted words. Default 0.")]),
+        .init("correct_word", "Correct Word", "Changes how a word is spelled in the transcript. The audio doesn't change.",
+              params: [.init("word", .string, "The word's id.", required: true),
+                       .init("text", .string, "The corrected text.", required: true)]),
         .init("remove_tempo_change", "Remove Tempo Change", "Removes the tempo change at exactly `at` (see `tempo.changes` in the document). The first one can't be removed, only changed with `set_tempo`.",
               params: [.init("at", .seconds, "Position of the change in seconds.", required: true)]),
     ]
@@ -111,6 +120,7 @@ public enum JSONValue: Sendable, Equatable {
     case number(Double)
     case string(String)
     case bool(Bool)
+    case array([JSONValue])
     case null
 
     public init?(_ any: Any) {
@@ -118,6 +128,10 @@ public enum JSONValue: Sendable, Equatable {
             self = CFGetTypeID(n) == CFBooleanGetTypeID() ? .bool(n.boolValue) : .number(n.doubleValue)
         } else if let s = any as? String {
             self = .string(s)
+        } else if let a = any as? [Any] {
+            var items: [JSONValue] = []
+            for x in a { guard let v = JSONValue(x) else { return nil }; items.append(v) }
+            self = .array(items)
         } else if any is NSNull {
             self = .null
         } else {
@@ -136,6 +150,12 @@ public enum JSONValue: Sendable, Equatable {
     public var string: String? {
         if case .string(let s) = self { return s }
         return nil
+    }
+
+    public var strings: [String]? {
+        guard case .array(let a) = self else { return nil }
+        let s = a.compactMap(\.string)
+        return s.count == a.count ? s : nil
     }
 }
 
@@ -161,11 +181,21 @@ public struct StepResult: Sendable, Equatable {
     public var error: String?
     /// Extra facts the step found (e.g. the gain normalize applied).
     public var info: [String: Double] = [:]
+    /// Why it failed, for agents: e.g. "ambiguous", "not_found".
+    public var reason: String?
+    /// Numbers that go with the reason, e.g. ["matches": 3].
+    public var details: [String: Double] = [:]
 }
 
 public struct StepFailure: Error, LocalizedError {
     public var message: String
-    public init(_ message: String) { self.message = message }
+    public var reason: String?
+    public var details: [String: Double]
+    public init(_ message: String, reason: String? = nil, details: [String: Double] = [:]) {
+        self.message = message
+        self.reason = reason
+        self.details = details
+    }
     public var errorDescription: String? { message }
 }
 
@@ -188,7 +218,9 @@ public enum StepRunner {
                 let info = try apply(step, to: &state, measure: measure)
                 results.append(StepResult(op: step.op, status: .done, info: info))
             } catch {
-                results.append(StepResult(op: step.op, status: .failed, error: error.localizedDescription))
+                let f = error as? StepFailure
+                results.append(StepResult(op: step.op, status: .failed, error: error.localizedDescription,
+                                          reason: f?.reason, details: f?.details ?? [:]))
                 failed = true
                 // Nothing from a failed request is kept.
                 for i in results.indices where results[i].status == .done { results[i].status = .reverted }
@@ -218,6 +250,8 @@ public enum StepRunner {
                 }
             case .boolean:
                 guard case .bool = value else { throw StepFailure("\(step.op): \"\(key)\" must be true or false.") }
+            case .list:
+                guard value.strings != nil else { throw StepFailure("\(step.op): \"\(key)\" must be a list of strings.") }
             }
         }
     }
@@ -316,6 +350,51 @@ public enum StepRunner {
             let before = s.project.markers.count
             s.project.markers.removeAll { $0.name == name }
             guard s.project.markers.count < before else { throw StepFailure("remove_marker: no marker named \"\(name)\".") }
+        case "delete_words":
+            let bridge = frames("bridge") ?? 0
+            let ids: Set<UUID>
+            if let list = p["words"]?.strings {
+                guard p["text"] == nil else { throw StepFailure("delete_words: give words or text, not both.") }
+                var set = Set<UUID>()
+                let known = Set(project.placedWords().map(\.word.id))
+                for w in list {
+                    guard let id = UUID(uuidString: w), known.contains(id) else {
+                        throw StepFailure("delete_words: no word with id \(w) plays in the document.", reason: "not_found")
+                    }
+                    set.insert(id)
+                }
+                ids = set
+            } else if let text = p["text"]?.string {
+                let matches = project.findPhrase(text)
+                guard !matches.isEmpty else { throw StepFailure("delete_words: \"\(text)\" isn't in the transcript.", reason: "not_found", details: ["matches": 0]) }
+                if p["all"].map({ $0 == .bool(true) }) == true {
+                    ids = Set(matches.flatMap { $0 })
+                } else if let n = p["occurrence"]?.double {
+                    guard n == n.rounded(), n >= 1, Int(n) <= matches.count else {
+                        throw StepFailure("delete_words: occurrence must be 1–\(matches.count).", reason: "not_found", details: ["matches": Double(matches.count)])
+                    }
+                    ids = Set(matches[Int(n) - 1])
+                } else {
+                    guard matches.count == 1 else {
+                        throw StepFailure("delete_words: \"\(text)\" occurs \(matches.count) times. Pass occurrence (1–\(matches.count)), all: true, or word ids.",
+                                          reason: "ambiguous", details: ["matches": Double(matches.count)])
+                    }
+                    ids = Set(matches[0])
+                }
+            } else {
+                throw StepFailure("delete_words needs words (ids) or text.")
+            }
+            let removed = project.ranges(ofWords: ids, bridge: bridge).reduce(Frame(0)) { $0 + Frame($1.count) }
+            try s.project.deleteWords(ids, bridge: bridge)
+            s.selection = nil
+            return ["words": Double(ids.count), "removedSeconds": (project.seconds(removed) * 1_000).rounded() / 1_000]
+        case "correct_word":
+            guard let id = UUID(uuidString: p["word"]?.string ?? "") else { throw StepFailure("correct_word: word must be a word id.", reason: "not_found") }
+            let text = (p["text"]?.string ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty else { throw StepFailure("correct_word: text can't be empty. Use delete_words to remove a word.") }
+            do { try s.project.correctWord(id, to: text) } catch {
+                throw StepFailure("correct_word: no word with id \(id.uuidString).", reason: "not_found")
+            }
         case "set_tempo":
             var meter: Meter?
             switch (p["beats"]?.double, p["unit"]?.double) {

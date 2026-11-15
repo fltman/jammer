@@ -309,6 +309,10 @@ public enum AgentAPI {
         | GET | `/api/v1/documents/{id}/analysis` | Loudness of the document, or of `?start=&end=` (seconds): integrated LUFS, range LU, max momentary and short-term, sample peak dBFS, true peak dBTP. |
         | GET | `/api/v1/documents/{id}/waveform` | Min/max per column for `?width=` columns (default 200, max 4000), optionally over `?start=&end=`. Lets you see where the sound is. |
         | POST | `/api/v1/documents/{id}/export` | The rendered audio as bytes. Body: `{"format": "wav", "bitDepth": 16\\|24\\|32, "start", "end", "dither": false}`; all optional (24-bit WAV of everything by default). Up to 2 GB per response; export a range for more. |
+        | POST | `/api/v1/documents/{id}/transcribe` | Starts transcribing the document (a job, see below). Body: `{"language": "sv-SE", "engine": "auto"}`; both optional (the Mac's language and the best engine for it). Answers `202` with the job. |
+        | GET | `/api/v1/documents/{id}/transcript` | The transcript as it plays now: `{"words": [{"id", "text", "start", "end", "confidence", "speaker", "partial"}], "text"}`, times in seconds on the timeline, optionally over `?start=&end=`. Empty until transcribed. |
+        | GET | `/api/v1/jobs/{id}` | A job's state. |
+        | DELETE | `/api/v1/jobs/{id}` | Cancels a job. |
         | POST | `/api/v1/documents/{id}/play` | Starts playback in the document's window, from `{"at": seconds}` or the playhead. Only works when the window is visible. |
         | POST | `/api/v1/documents/{id}/stop` | Stops playback. |
         | POST | `/api/v1/uploads` | Starts an upload for a big file. Answers `{"upload": {"id": "…", "size": 0}}`. |
@@ -358,8 +362,16 @@ public enum AgentAPI {
         | 409 | `not_available` | Not possible right now: nothing to undo, the window isn't visible for playback, the upload offset is wrong. |
         | 413 | `too_large` | A body over 256 MB (use uploads), an upload over 16 GB, or an export over 2 GB (export a range). |
         | 507 | `insufficient_storage` | Not enough free disk space for the upload or export. |
-        | 422 | `step_failed` | A step ran and failed. `error.step` is its index; `results` has the status of every step. |
+        | 422 | `step_failed` | A step ran and failed. `error.step` is its index; `results` has the status of every step. Some failures add `error.reason` (`ambiguous`, `not_found`) and numbers such as `error.matches`. |
         | 500 | `internal` | Jämmer failed unexpectedly. The message has the detail. |
+
+        ## Jobs
+
+        Work that takes a while (transcription) runs as a job. The request that starts it answers `202` with `{"job": {"id", "kind", "status", "progress"}}`. `status` is `queued`, `running`, `done`, `failed` or `cancelled`; `progress` goes from 0 to 1. Poll `GET /api/v1/jobs/{id}` every second or two. When it's `done`, `result` has a summary and the document has changed (one undo step); a failed job has `error: {code, message}`. `DELETE /api/v1/jobs/{id}` cancels. Running jobs are also listed under `jobs` in `GET /api/v1/status`. The user can keep editing while a job runs; words are anchored to the audio itself, so they land right regardless.
+
+        ## Transcripts
+
+        A transcript is a view of the edit: it always reads what plays now. Each word has an `id` that stays the same across edits, undo, redo and saving, so you can keep ids between requests. Delete words with `delete_words` and `{"words": ["<id>", …]}`. You can pass `{"text": "…"}` instead, but it must match in exactly one place; otherwise the step fails with `reason: "ambiguous"` and `matches`, and you pick one with `occurrence` or all with `"all": true`. `correct_word` changes the spelling only.
 
         ## Operations
 

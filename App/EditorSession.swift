@@ -70,6 +70,13 @@ final class EditorSession {
         undoManager?.setActionName(action)
     }
 
+    /// A finished transcription: one undo step. Sources the project no longer uses are skipped.
+    func applyTranscripts(_ ts: [SourceTranscript]) {
+        var p = project
+        for t in ts where p.source(t.sourceID) != nil { p.setTranscript(t) }
+        commit(p, action: "Transcribe")
+    }
+
     /// Used when a document is read, without undo.
     func load(_ newProject: Project) {
         replace(with: newProject)

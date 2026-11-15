@@ -144,6 +144,35 @@ extension Project {
         throw TranscriptError.unknownWord
     }
 
+    /// Where a phrase is spoken, as the transcript reads now: each match is the
+    /// word ids in order. Case and punctuation don't count; letters like å, ä, ö do.
+    public func findPhrase(_ text: String) -> [[UUID]] {
+        let wanted = Self.tokens(text)
+        guard !wanted.isEmpty else { return [] }
+        let placed = placedWords()
+        let have = placed.map { Self.tokens($0.word.text).joined(separator: " ") }
+        var out: [[UUID]] = []
+        var i = 0
+        while i + wanted.count <= placed.count {
+            // A word may hold several tokens ("podden." → "podden"); compare joined runs.
+            if (0..<wanted.count).allSatisfy({ have[i + $0] == wanted[$0] }) {
+                out.append(placed[i..<(i + wanted.count)].map(\.word.id))
+                i += wanted.count
+            } else {
+                i += 1
+            }
+        }
+        return out
+    }
+
+    static func tokens(_ s: String) -> [String] {
+        s.lowercased()
+            .unicodeScalars.map { CharacterSet.punctuationCharacters.contains($0) || CharacterSet.symbols.contains($0) ? " " : String($0) }
+            .joined()
+            .split(whereSeparator: \.isWhitespace)
+            .map(String.init)
+    }
+
     /// Adds or replaces the transcript of a source.
     public mutating func setTranscript(_ t: SourceTranscript) {
         transcripts.removeAll { $0.sourceID == t.sourceID }

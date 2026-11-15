@@ -118,3 +118,62 @@ struct TranscriptTests {
         #expect(p.transcripts.isEmpty)
     }
 }
+
+@Suite("Transcript ids and jobs")
+struct TranscriptIdentityTests {
+    private func project() -> (Project, [Word]) {
+        let signal = [Float](repeating: 0.1, count: 480_000 * 2)
+        var (p, _) = memoryProject(signal)
+        let texts = ["Hej", "och", "välkommen", "till", "podden.", "Hej", "igen"]
+        let words = texts.enumerated().map { Word(text: $1, start: Frame($0) * 48_000, end: Frame($0) * 48_000 + 30_000) }
+        p.setTranscript(SourceTranscript(sourceID: p.sources[0].id, language: "sv-SE", engine: "test", words: words))
+        return (p, words)
+    }
+
+    @Test("Word ids survive edits, undo and redo, and saving and opening the project")
+    func stableIDs() throws {
+        var (p, words) = project()
+        let ids = Set(words.map(\.id))
+        var history = [p]
+        try p.delete(50_000..<60_000); history.append(p)
+        let clip = try p.copy(96_000..<200_000); try p.paste(clip, at: 0); history.append(p)
+        try p.changeGain(0..<p.length, by: -3); history.append(p)
+        for state in history {
+            #expect(Set(state.placedWords().map(\.word.id)).isSubset(of: ids))
+        }
+        // Undo back to the start: the same ids in the same order.
+        #expect(history[0].placedWords().map(\.word.id) == words.map(\.id))
+        // Redo to the end and round-trip through project.json.
+        let reopened = try ProjectPackage.decode(ProjectPackage.encode(history.last!))
+        #expect(reopened.placedWords().map(\.word.id) == history.last!.placedWords().map(\.word.id))
+        #expect(reopened.placedWords().map(\.word.id).contains(words[2].id))
+    }
+
+    @Test("A transcript that finishes after the user edited still lands on the right audio")
+    func editDuringJob() throws {
+        var (p, words) = project()
+        let finished = p.transcripts[0]
+        // The job started on the untouched project; meanwhile the user edits.
+        p.transcripts = []
+        try p.delete(0..<96_000)                  // drops "Hej", "och"
+        try p.insertGap(at: 48_000, length: 24_000)
+        // The result arrives and is set on the edited project.
+        p.setTranscript(finished)
+        let placed = p.placedWords()
+        #expect(placed.map(\.word.text) == ["välkommen", "till", "podden.", "Hej", "igen"])
+        // "välkommen" was at 96 000 in the source; after deleting 96 000 frames it's at 0.
+        #expect(placed[0].start == 0 && placed[0].word.id == words[2].id)
+        // "till" (source 144 000) sits after the inserted gap: 48 000 + 24 000.
+        #expect(placed[1].start == 72_000)
+    }
+
+    @Test("Phrases are found across words, ignoring case and punctuation")
+    func phrases() {
+        let (p, words) = project()
+        #expect(p.findPhrase("hej").count == 2)
+        #expect(p.findPhrase("Välkommen till podden") == [[words[2].id, words[3].id, words[4].id]])
+        #expect(p.findPhrase("podden hej") == [[words[4].id, words[5].id]])
+        #expect(p.findPhrase("valkommen").isEmpty)
+        #expect(p.findPhrase(" ... ").isEmpty)
+    }
+}

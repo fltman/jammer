@@ -229,3 +229,87 @@ struct SiteGuideTests {
         #expect(onDisk == guide, "site/agents.md is stale: run scripts/export-agents-guide.sh")
     }
 }
+
+@Suite("Transcript steps and jobs")
+struct TranscriptStepTests {
+    private let measure: StepRunner.Measure = { _, _ in
+        LoudnessResult(integrated: -20, range: 5, maxMomentary: -15, maxShortTerm: -17, samplePeak: -3, truePeak: -2.5, duration: 1)
+    }
+
+    /// "hej och välkommen hej igen", one word a second.
+    private func state() -> (EditState, [Word]) {
+        let info = AudioFileInfo(container: .wav, sampleFormat: .float32, bigEndian: false, channels: 2, sampleRate: 48_000,
+                                 channelMask: nil, dataOffset: 0, frames: 480_000, chunks: [], bext: nil, ixml: nil, markers: [])
+        var p = Project(source: SourceRef(name: "t", path: "/dev/null", info: info))
+        let words = ["Hej", "och", "välkommen.", "Hej", "igen"].enumerated().map {
+            Word(text: $1, start: Frame($0) * 48_000, end: Frame($0) * 48_000 + 24_000)
+        }
+        p.setTranscript(SourceTranscript(sourceID: p.sources[0].id, language: "sv-SE", engine: "test", words: words))
+        return (EditState(project: p), words)
+    }
+
+    private func run(_ s: inout EditState, _ op: String, _ params: [String: JSONValue]) -> StepResult {
+        StepRunner.run([Step(op: op, params: params)], on: &s, measure: measure)[0]
+    }
+
+    @Test("delete_words by id removes exactly those words")
+    func byID() {
+        var (s, words) = state()
+        let r = run(&s, "delete_words", ["words": .array([.string(words[1].id.uuidString), .string(words[2].id.uuidString)])])
+        #expect(r.status == .done)
+        #expect(s.project.transcriptText() == "Hej Hej igen")
+        #expect(r.info["words"] == 2)
+        let bad = run(&s, "delete_words", ["words": .array([.string(UUID().uuidString)])])
+        #expect(bad.status == .failed && bad.reason == "not_found")
+    }
+
+    @Test("Text must be unambiguous unless occurrence or all is given")
+    func byText() {
+        var (s, words) = state()
+        let r = run(&s, "delete_words", ["text": .string("hej")])
+        #expect(r.status == .failed && r.reason == "ambiguous" && r.details["matches"] == 2)
+        #expect(s.project.transcriptText() == "Hej och välkommen. Hej igen")
+        #expect(run(&s, "delete_words", ["text": .string("hej"), "occurrence": .number(2)]).status == .done)
+        #expect(s.project.transcriptText() == "Hej och välkommen. igen")
+        #expect(s.project.placedWords().first?.word.id == words[0].id)
+        var t = state().0
+        #expect(run(&t, "delete_words", ["text": .string("HEJ"), "all": .bool(true)]).status == .done)
+        #expect(t.project.transcriptText() == "och välkommen. igen")
+        var u = state().0
+        #expect(run(&u, "delete_words", ["text": .string("välkommen")]).status == .done)
+        #expect(run(&u, "delete_words", ["text": .string("hej"), "occurrence": .number(3)]).reason == "not_found")
+        #expect(run(&u, "delete_words", ["text": .string("finns inte")]).reason == "not_found")
+        #expect(run(&u, "delete_words", [:]).status == .failed)
+    }
+
+    @Test("correct_word changes text only; list params are checked")
+    func correct() throws {
+        var (s, words) = state()
+        let before = s.project.tracks
+        #expect(run(&s, "correct_word", ["word": .string(words[2].id.uuidString), "text": .string("Välkomna")]).status == .done)
+        #expect(s.project.transcriptText() == "Hej och Välkomna Hej igen")
+        #expect(s.project.tracks == before)
+        #expect(run(&s, "correct_word", ["word": .string("nope"), "text": .string("x")]).reason == "not_found")
+        #expect(throws: StepFailure.self) { try StepRunner.validate(Step(op: "delete_words", params: ["words": .string("x")])) }
+        // JSON arrays parse into list params.
+        let body = #"{"steps":[{"op":"delete_words","params":{"words":["a","b"]}}]}"#
+        let parsed = try AgentAPI.parseSteps(Data(body.utf8))
+        #expect(parsed.steps[0].params["words"]?.strings == ["a", "b"])
+    }
+
+    @Test("Jobs have the series' shape")
+    func jobShape() throws {
+        var job = Job(id: "J1", kind: "transcribe", documentID: "D")
+        #expect(job.json["status"] as? String == "queued")
+        job.status = .failed
+        job.progress = 0.4567
+        job.error = ("unsupported_language", "No Swedish here.")
+        job.result = ["words": .number(12)]
+        let j = job.json
+        #expect(Set(j.keys) == ["id", "kind", "status", "progress", "error", "result", "document"])
+        #expect(j["progress"] as? Double == 0.457)
+        #expect((j["error"] as? [String: String]) == ["code": "unsupported_language", "message": "No Swedish here."])
+        #expect(job.isFinished)
+        _ = try JSONSerialization.data(withJSONObject: ["job": j])
+    }
+}

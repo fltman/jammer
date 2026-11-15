@@ -35,6 +35,8 @@ targets:
         product: JammerAudio
       - package: JammerKit
         product: JammerAgent
+      - package: JammerKit
+        product: JammerSpeech
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.brattoo.jammer
