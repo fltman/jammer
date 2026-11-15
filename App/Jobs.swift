@@ -3,6 +3,7 @@ import JammerAgent
 import Observation
 import JammerCore
 import JammerSpeech
+import JammerWhisper
 
 /// Running and recently finished jobs (transcription for now). Main actor; the
 /// work itself runs in detached tasks.
@@ -117,7 +118,12 @@ final class JobRegistry {
         let used = Set(project.tracks.flatMap { $0.clips.map(\.sourceID) })
         let todo = project.sources.filter { src in used.contains(src.id) && (replace || !project.transcripts.contains { $0.sourceID == src.id }) }
         let pool = session.pool
-        let engine = AppleSpeechEngine()
+        // KB-Whisper for Swedish when its model is installed (it scores far better, see
+        // docs/TRANSCRIPTION.md); Apple's recognisers otherwise.
+        let store = ModelStore.standard()
+        let kb = ModelSpec.catalogue.first { store.isInstalled($0) }
+        let engine: any TranscriptionEngine = (locale.language.languageCode?.identifier == "sv" && kb != nil)
+            ? WhisperEngine(model: kb!, path: store.path(for: kb!)) : AppleSpeechEngine()
         let id = job.id
         let total = Double(todo.reduce(Frame(0)) { $0 + $1.info.frames })
         tasks[id] = Task { [weak self, weak session] in

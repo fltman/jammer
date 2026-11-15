@@ -1,5 +1,7 @@
 import AppKit
 import JammerAgent
+import JammerCore
+import JammerDenoise
 
 /// Operations with preset parameters, for menus and the palette.
 enum MenuPresets {
@@ -39,6 +41,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Noise reduction: DeepFilterNet 3 with the model that ships in the app.
+        if let model = Bundle.main.url(forResource: "DeepFilterNet3_onnx", withExtension: "tar.gz"), let d = try? Denoiser(modelPath: model) {
+            d.register()
+        }
         AgentServer.shared.start()
         if UserDefaults.standard.object(forKey: AgentSplashView.showAtLaunchKey) as? Bool ?? true {
             Task {
@@ -158,6 +164,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             restoreItem("Remove Hum…", "dehum"),
             restoreItem("Repair Clipping…", "declip"),
             restoreItem("Remove Clicks…", "declick"),
+            restoreItem("Reduce Noise…", "denoise"),
         ]))
         main.addItem(submenu("Transport", [
             // Space and Return are handled by the timeline, so text fields keep them.
@@ -171,6 +178,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             item("Zoom to Selection", #selector(EditorWindowController.zoomToSelection(_:)), "e"),
             .separator(),
             item("Show Transcript", #selector(EditorWindowController.toggleTranscript(_:)), "t", [.command, .option]),
+            item("Show Assistant", #selector(EditorWindowController.toggleAssistant(_:)), "a", [.command, .option]),
             .separator(),
             item("Enter Full Screen", #selector(NSWindow.toggleFullScreen(_:)), "f", [.command, .control]),
         ]))

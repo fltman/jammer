@@ -106,7 +106,7 @@ final class RestoreModel {
 
     func apply() {
         stopPreview()
-        let titles: [Restoration.Kind: String] = [.dehum: "Remove Hum", .declip: "Repair Clipping", .declick: "Remove Clicks"]
+        let titles: [Restoration.Kind: String] = [.dehum: "Remove Hum", .declip: "Repair Clipping", .declick: "Remove Clicks", .denoise: "Reduce Noise"]
         _ = JobRegistry.shared.startRestoration(session, settings: settings, range: session.selection, action: titles[kind] ?? "Restore")
     }
 }
@@ -122,6 +122,7 @@ struct RestoreSheet: View {
                 Text("Remove Hum").tag(Restoration.Kind.dehum)
                 Text("Repair Clipping").tag(Restoration.Kind.declip)
                 Text("Remove Clicks").tag(Restoration.Kind.declick)
+                if Restoration.denoiser != nil { Text("Reduce Noise").tag(Restoration.Kind.denoise) }
             }
             .pickerStyle(.segmented)
             .labelsHidden()

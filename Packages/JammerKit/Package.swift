@@ -73,7 +73,7 @@ if hasDeepFilter {
     package.targets += [
         .binaryTarget(name: "DeepFilter", path: "Vendor/DeepFilter.xcframework"),
         .target(name: "JammerDenoise", dependencies: ["DeepFilter", "JammerCore"],
-                linkerSettings: [.linkedFramework("Security"), .linkedFramework("CoreFoundation"), .linkedFramework("AVFoundation")]),
+                linkerSettings: [.linkedFramework("AVFoundation")]),
         .testTarget(name: "JammerDenoiseTests", dependencies: ["JammerDenoise", "JammerCore"]),
     ]
 }

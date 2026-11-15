@@ -19,11 +19,14 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
     let session: EditorSession
     let timeline: TimelineView
     let transcript: TranscriptPanel
+    let assistant: AssistantModel
+    private var assistantView: NSView!
 
     init(session: EditorSession) {
         self.session = session
         timeline = TimelineView(session: session)
         transcript = TranscriptPanel(session: session)
+        assistant = AssistantModel(session: session)
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1_200, height: 640),
                               styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                               backing: .buffered, defer: false)
@@ -49,7 +52,18 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         transport.setContentHuggingPriority(.required, for: .vertical)
         statusBar.setContentHuggingPriority(.required, for: .vertical)
         timeline.setContentHuggingPriority(.defaultLow, for: .vertical)
-        window.contentView = stack
+        let assistantHost = NSHostingView(rootView: AssistantView(model: assistant))
+        assistantHost.widthAnchor.constraint(greaterThanOrEqualToConstant: 260).isActive = true
+        assistantHost.isHidden = !UserDefaults.standard.bool(forKey: "assistant.visible")
+        let split = NSSplitView()
+        split.isVertical = true
+        split.dividerStyle = .thin
+        split.addArrangedSubview(stack)
+        split.addArrangedSubview(assistantHost)
+        split.setHoldingPriority(.defaultLow, forSubviewAt: 0)
+        split.setHoldingPriority(.defaultHigh, forSubviewAt: 1)
+        window.contentView = split
+        DispatchQueue.main.async { split.setPosition(split.frame.width - 320, ofDividerAt: 0) }
         window.center()
         window.setFrameAutosaveName("JammerEditor")
         window.makeFirstResponder(timeline.firstResponderView)
@@ -71,6 +85,14 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
     @objc func zoomOut(_ sender: Any?) { timeline.zoom(by: 0.5) }
     @objc func zoomToFit(_ sender: Any?) { timeline.zoomToFit() }
     @objc func zoomToSelection(_ sender: Any?) { timeline.zoomToSelection() }
+
+    @objc func toggleAssistant(_ sender: Any?) {
+        guard let split = window?.contentView as? NSSplitView, split.arrangedSubviews.count > 1 else { return }
+        let view = split.arrangedSubviews[1]
+        view.isHidden.toggle()
+        UserDefaults.standard.set(!view.isHidden, forKey: "assistant.visible")
+        if !view.isHidden { split.setPosition(split.frame.width - 320, ofDividerAt: 0) }
+    }
 
     @objc func toggleTranscript(_ sender: Any?) {
         transcript.isHidden.toggle()
@@ -183,6 +205,11 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
             return session.project.length > 0
         }
         if item.action == #selector(zoomToSelection(_:)) { return session.selection != nil }
+        if item.action == #selector(toggleAssistant(_:)) {
+            let hidden = ((window?.contentView as? NSSplitView)?.arrangedSubviews.last?.isHidden) ?? true
+            item.title = hidden ? "Show Assistant" : "Hide Assistant"
+            return true
+        }
         if item.action == #selector(toggleTranscript(_:)) {
             item.title = transcript.isHidden ? "Show Transcript" : "Hide Transcript"
             return true

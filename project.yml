@@ -26,6 +26,8 @@ targets:
     platform: macOS
     sources:
       - App
+      - path: Packages/JammerKit/Vendor/DeepFilterNet3_onnx.tar.gz
+        buildPhase: resources
     dependencies:
       - package: JammerKit
         product: JammerEngine
@@ -37,9 +39,17 @@ targets:
         product: JammerAgent
       - package: JammerKit
         product: JammerSpeech
+      - package: JammerKit
+        product: JammerAssistant
+      - package: JammerKit
+        product: JammerWhisper
+      - package: JammerKit
+        product: JammerDenoise
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.brattoo.jammer
+        # The Rust static library (libDF) can't be loaded whole, which the debug dylib does.
+        ENABLE_DEBUG_DYLIB: NO
         PRODUCT_NAME: Jammer
         CODE_SIGN_STYLE: Automatic
         CODE_SIGN_IDENTITY: "-"
