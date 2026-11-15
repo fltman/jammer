@@ -271,6 +271,20 @@ enum AgentRouter {
                 if e.reason == "bad_request" { throw APIError.badRequest(e.message) }
                 throw APIError.unprocessable(e.reason, e.message)
             }
+        case ["api", "v1", "import", "fcpxml"]:
+            try only("POST")
+            guard let body = (try? JSONSerialization.jsonObject(with: r.body)) as? [String: Any] else { throw APIError.badRequest("The body isn't a JSON object.") }
+            do {
+                // Like batch: the file and its media must lie in a folder the user allowed in Settings › Agents.
+                let timeline = try TimelineImport.check(body, policy: AgentFolders.policy)
+                let opened = try await TimelineImporter.open(timeline)
+                guard let session = opened.session else { throw APIError.internalError("The document window didn't open.") }
+                return .json(["document": detail(session), "import": TimelineImport.json(opened.imported)], status: 201)
+            } catch let e as BatchError {
+                if e.reason == "bad_request" { throw APIError.badRequest(e.message) }
+                if e.reason == "not_found" { throw APIError.notFound(e.message) }
+                throw APIError.unprocessable(e.reason, e.message)
+            }
         case ["api", "v1", "plugins"]:
             try only("GET")
             let q = r.query["q"]?.lowercased()
@@ -461,6 +475,7 @@ enum AgentRouter {
         d["markers"] = p.markers.map { m -> [String: Any] in
             var e: [String: Any] = ["name": m.name, "at": seconds(s, m.position), "frame": m.position]
             if m.length > 0 { e["duration"] = seconds(s, m.length) }
+            if let k = m.kind { e["kind"] = k.rawValue }
             return e
         }
         d["tempo"] = ["changes": p.tempo.changes.map { c -> [String: Any] in

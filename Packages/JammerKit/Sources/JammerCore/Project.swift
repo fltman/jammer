@@ -31,6 +31,25 @@ public struct SourceRef: Codable, Hashable, Sendable, Identifiable {
 
 public enum FadeShape: String, Codable, Sendable, CaseIterable { case linear, equalPower }
 
+/// Where a clip or track came from when it was imported from another program's timeline
+/// (Flimmer through FCPXML). Carried through every edit and saved, so the way back can be
+/// built; nothing reads it yet.
+public struct Origin: Codable, Hashable, Sendable {
+    public var app: String
+    public var clipId: String?
+    public var trackId: String?
+    public var linkedShotId: String?
+    public var exportVersion: String?
+
+    public init(app: String, clipId: String? = nil, trackId: String? = nil, linkedShotId: String? = nil, exportVersion: String? = nil) {
+        self.app = app
+        self.clipId = clipId
+        self.trackId = trackId
+        self.linkedShotId = linkedShotId
+        self.exportVersion = exportVersion
+    }
+}
+
 /// A stretch of a source placed on a track.
 public struct Clip: Codable, Hashable, Sendable, Identifiable {
     public var id: UUID
@@ -42,9 +61,10 @@ public struct Clip: Codable, Hashable, Sendable, Identifiable {
     public var fadeIn: Frame
     public var fadeOut: Frame
     public var fadeShape: FadeShape
+    public var origin: Origin?
 
     public init(id: UUID = UUID(), sourceID: UUID, sourceStart: Frame = 0, start: Frame, length: Frame,
-                gainDB: Double = 0, fadeIn: Frame = 0, fadeOut: Frame = 0, fadeShape: FadeShape = .equalPower) {
+                gainDB: Double = 0, fadeIn: Frame = 0, fadeOut: Frame = 0, fadeShape: FadeShape = .equalPower, origin: Origin? = nil) {
         self.id = id
         self.sourceID = sourceID
         self.sourceStart = sourceStart
@@ -54,6 +74,7 @@ public struct Clip: Codable, Hashable, Sendable, Identifiable {
         self.fadeIn = fadeIn
         self.fadeOut = fadeOut
         self.fadeShape = fadeShape
+        self.origin = origin
     }
 
     public var end: Frame { start + length }
@@ -88,6 +109,7 @@ public struct Track: Codable, Hashable, Sendable, Identifiable {
     public var inserts: [Insert]
     /// Tracks that belong together (the stems of one separated track) share a group id.
     public var group: UUID?
+    public var origin: Origin?
 
     public init(id: UUID = UUID(), name: String, clips: [Clip] = [], gainDB: Double = 0, isMuted: Bool = false, inserts: [Insert] = []) {
         self.id = id
@@ -98,7 +120,7 @@ public struct Track: Codable, Hashable, Sendable, Identifiable {
         self.inserts = inserts
     }
 
-    private enum CodingKeys: String, CodingKey { case id, name, clips, gainDB, isMuted, inserts, group }
+    private enum CodingKeys: String, CodingKey { case id, name, clips, gainDB, isMuted, inserts, group, origin }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -109,6 +131,7 @@ public struct Track: Codable, Hashable, Sendable, Identifiable {
         isMuted = try c.decode(Bool.self, forKey: .isMuted)
         inserts = try c.decodeIfPresent([Insert].self, forKey: .inserts) ?? []
         group = try c.decodeIfPresent(UUID.self, forKey: .group)
+        origin = try c.decodeIfPresent(Origin.self, forKey: .origin)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -120,6 +143,7 @@ public struct Track: Codable, Hashable, Sendable, Identifiable {
         try c.encode(isMuted, forKey: .isMuted)
         if !inserts.isEmpty { try c.encode(inserts, forKey: .inserts) }
         try c.encodeIfPresent(group, forKey: .group)
+        try c.encodeIfPresent(origin, forKey: .origin)
     }
 
     public var end: Frame { clips.map(\.end).max() ?? 0 }
@@ -131,12 +155,17 @@ public struct Marker: Codable, Hashable, Sendable, Identifiable {
     /// 0 for a point; otherwise a region.
     public var length: Frame
     public var name: String
+    /// nil: an ordinary marker. A shot marks where a picture sat in an imported film timeline:
+    /// shown on the timeline, but not a chapter.
+    public var kind: Kind?
+    public enum Kind: String, Codable, Sendable { case shot }
 
-    public init(id: UUID = UUID(), position: Frame, length: Frame = 0, name: String) {
+    public init(id: UUID = UUID(), position: Frame, length: Frame = 0, name: String, kind: Kind? = nil) {
         self.id = id
         self.position = position
         self.length = length
         self.name = name
+        self.kind = kind
     }
 }
 

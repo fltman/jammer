@@ -122,4 +122,47 @@ struct BatchTests {
         #expect(reason(["files": [dir.appending(path: "in/a.wav").path], "output": dir.appending(path: "in").path, "suffix": "", "overwrite": true]) == "would_overwrite_source")
         #expect(reason(["files": [dir.appending(path: "in/a.wav").path], "output": dir.appending(path: "in").path, "overwrite": true]) == nil)
     }
+
+    @Test("Timeline import: the file and the media it names must lie in an allowed folder")
+    func timelineImport() throws {
+        let dir = try folder()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let outside = FileManager.default.temporaryDirectory.appending(path: "jammer-outside-\(UUID().uuidString)").resolvingSymlinksInPath()
+        try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: outside) }
+        try tone(dir.appending(path: "in/a.wav"), db: -20)
+        try tone(outside.appending(path: "secret.wav"), db: -20)
+        func fcpxml(_ src: String) -> Data {
+            Data("""
+            <fcpxml version="1.11"><resources><asset id="a1" name="a.wav" hasAudio="1"><media-rep kind="original-media" src="\(src)"/></asset></resources>
+            <library><event><project name="P"><sequence audioRate="48k"><spine><gap offset="0s" start="0s" duration="4s">
+            <asset-clip ref="a1" lane="-1" offset="1s" start="0s" duration="2s" audioRole="dialogue"/></gap></spine></sequence></project></event></library></fcpxml>
+            """.utf8)
+        }
+        let policy = FolderPolicy(allowed: [dir])
+        func reason(_ body: [String: Any]) -> String? {
+            do { _ = try TimelineImport.check(body, policy: policy); return nil } catch { return (error as? BatchError)?.reason }
+        }
+        let good = dir.appending(path: "good.fcpxml"), leaks = dir.appending(path: "leaks.fcpxml"), dotdot = dir.appending(path: "dotdot.fcpxml")
+        try fcpxml("in/a.wav").write(to: good)
+        try fcpxml("file://\(outside.path)/secret.wav").write(to: leaks)
+        try fcpxml("../\(outside.lastPathComponent)/secret.wav").write(to: dotdot)
+        let t = try TimelineImport.check(["path": good.path], policy: policy)
+        #expect(t.tracks.count == 1 && t.tracks[0].name == "dialogue" && t.media == [dir.appending(path: "in/a.wav")])
+        // The timeline itself outside, media outside by an absolute path, by .., and through a symlink.
+        try fcpxml("a.wav").write(to: outside.appending(path: "t.fcpxml"))
+        #expect(reason(["path": outside.appending(path: "t.fcpxml").path]) == "folder_not_allowed")
+        #expect(reason(["path": leaks.path]) == "folder_not_allowed")
+        #expect(reason(["path": dotdot.path]) == "folder_not_allowed")
+        try FileManager.default.createSymbolicLink(at: dir.appending(path: "in/link.wav"), withDestinationURL: outside.appending(path: "secret.wav"))
+        let linked = dir.appending(path: "linked.fcpxml")
+        try fcpxml("in/link.wav").write(to: linked)
+        #expect(reason(["path": linked.path]) == "folder_not_allowed")
+        #expect(reason(["path": "relative.fcpxml"]) == "bad_request" && reason(["path": good.path, "extra": 1]) == "bad_request")
+        #expect(reason(["path": dir.appending(path: "none.fcpxml").path]) == "not_found")
+        try Data("nope".utf8).write(to: dir.appending(path: "bad.fcpxml"))
+        #expect(reason(["path": dir.appending(path: "bad.fcpxml").path]) == "unreadable")
+        // The menu command has no policy: the user chose the file.
+        #expect(try TimelineImport.check(["path": leaks.path], policy: nil).media.count == 1)
+    }
 }

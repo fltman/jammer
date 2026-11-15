@@ -21,7 +21,7 @@ extension Project {
     /// file is covered.
     public func chapters(in range: Range<Frame>? = nil) -> [Chapter] {
         let r = range ?? 0..<length
-        let starts = markers.filter { r.contains($0.position) }.sorted { $0.position < $1.position }
+        let starts = markers.filter { r.contains($0.position) && $0.kind != .shot }.sorted { $0.position < $1.position }
         guard !starts.isEmpty else { return [] }
         var list: [(String, Frame)] = starts.map { ($0.name, $0.position - r.lowerBound) }
         if list[0].1 > 0 { list.insert(("Start", 0), at: 0) }

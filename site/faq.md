@@ -36,7 +36,7 @@ Because its weights aren't free to use. The Demucs code is MIT, but its author h
 
 ## Which files can I open?
 
-WAV (including RF64 and BW64 for files over 4 GB), AIFF and AIFF-C are edited straight from the file. MP3, AAC/M4A, FLAC, ALAC and CAF are decoded once into a 32-bit float WAV that Jämmer keeps in its Application Support folder.
+WAV (including RF64 and BW64 for files over 4 GB), AIFF and AIFF-C are edited straight from the file. MP3, AAC/M4A, FLAC, ALAC and CAF are decoded once into a 32-bit float WAV that Jämmer keeps in its Application Support folder. A film timeline exported as Final Cut Pro XML (from Flimmer, Final Cut Pro or DaVinci Resolve) opens with **File › Import Final Cut Pro XML…**: its sound becomes tracks, with a marker for each picture.
 
 ## Which files can I export?
 
@@ -56,7 +56,7 @@ When Jämmer starts, the splash shows a line under "For your agent". Click Copy 
 
 ## What can an agent do, and what can't it?
 
-It can do what the menus do: open audio, read the document and its transcript, measure loudness, edit, repair, transcribe, find and level speakers, add plugins, move through the history and export. Every request is one undo step, and a request that fails changes nothing. It can start playback only in a window you can see, it can't download models, and it can't open plugin windows. It can't touch files by their path either, except to run a batch inside a folder you've allowed in Settings › Agents.
+It can do what the menus do: open audio, read the document and its transcript, measure loudness, edit, repair, transcribe, find and level speakers, add plugins, move through the history and export. Every request is one undo step, and a request that fails changes nothing. It can start playback only in a window you can see, it can't download models, and it can't open plugin windows. It can't touch files by their path either, except to run a batch or import a film timeline inside a folder you've allowed in Settings › Agents.
 
 ## Does it work with VoiceOver?
 

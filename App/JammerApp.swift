@@ -60,6 +60,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func showSettings(_ sender: Any?) { SettingsWindow.show() }
     @objc func showBatch(_ sender: Any?) { BatchWindow.show() }
+    @objc func importTimeline(_ sender: Any?) { TimelineImporter.choose() }
 
     @objc func handleOpenDocuments(_ event: NSAppleEventDescriptor, reply: NSAppleEventDescriptor) {
         guard let list = event.paramDescriptor(forKeyword: keyDirectObject) else { return }
@@ -175,6 +176,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             item("Collect Audio and Save", #selector(JammerDocument.collectAudio(_:)), ""),
             .separator(),
             item("Import Tracks…", #selector(EditorWindowController.importTracks(_:)), "i", [.command, .shift]),
+            item("Import Final Cut Pro XML…", #selector(AppDelegate.importTimeline(_:)), ""),
             item("Export Audio…", #selector(EditorWindowController.exportAudio(_:)), "e", [.command, .shift]),
             item("Batch…", #selector(AppDelegate.showBatch(_:)), "b", [.command, .option]),
         ]))
