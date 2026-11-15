@@ -300,7 +300,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
 
     /// Audio › Separate Stems: every track with audio into vocals, drums, bass and other.
     @objc func separateStems(_ sender: Any?) {
-        guard Stems.model.isInstalled else {
+        let model = (sender as? NSMenuItem)?.representedObject as? String ?? "music4"
+        guard Stems.isInstalled(model) else {
             session.status = StemError.modelMissing.localizedDescription
             NSSound.beep()
             return
@@ -310,8 +311,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
             NSSound.beep()
             return
         }
-        _ = JobRegistry.shared.startSeparation(session, tracks: nil)
-        session.status = "Separating stems…"
+        _ = JobRegistry.shared.startSeparation(session, tracks: nil, model: model)
+        session.status = model == "dialog" ? "Separating speech, music and effects… (this one takes a while)" : "Separating stems…"
     }
 
     @objc func showPlugins(_ sender: Any?) {

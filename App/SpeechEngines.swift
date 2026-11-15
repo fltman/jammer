@@ -18,7 +18,24 @@ enum Stems {
             return n
         }
     }
-    static func forget() { lock.withLock { cached = nil } }
+    static func forget() { lock.withLock { cached = nil; cachedSoundtrack = nil } }
+
+    static let soundtrack = StemModel.Soundtrack(modelsFolder: ModelStore.standard().folder)
+    nonisolated(unsafe) private static var cachedSoundtrack: MRXNet?
+    static func soundtrackNet() throws -> MRXNet {
+        try lock.withLock {
+            if let cachedSoundtrack { return cachedSoundtrack }
+            let n = try soundtrack.loadNet()
+            cachedSoundtrack = n
+            return n
+        }
+    }
+
+    /// "music4" (Spleeter) or "dialog" (MRX).
+    static func isInstalled(_ model: String) -> Bool { model == "dialog" ? soundtrack.isInstalled : Stems.model.isInstalled }
+    static func engine(_ model: String) throws -> StemEngine {
+        model == "dialog" ? SoundtrackEngine(try soundtrackNet()) : MaskingEngine(try net())
+    }
 }
 
 /// Which recogniser transcribes: chosen per request ("auto", "apple", "parakeet",

@@ -170,7 +170,7 @@ final class JobRegistry {
     }
 
     /// Splits tracks into stems (Spleeter); the stems replace the tracks as one undo step.
-    func startSeparation(_ session: EditorSession, tracks: [UUID]?) -> Job {
+    func startSeparation(_ session: EditorSession, tracks: [UUID]?, model: String = "music4") -> Job {
         var job = Job(kind: "separate", documentID: session.agentID)
         jobs[job.id] = job
         let project = session.project, pool = session.pool, id = job.id
@@ -179,8 +179,8 @@ final class JobRegistry {
             self?.update(job)
             let result = await Task.detached(priority: .userInitiated) { () -> Result<(Project, StemReport), Error> in
                 Result {
-                    let net = try Stems.net()
-                    return try project.separatingStems(tracks: tracks, with: net, pool: pool, media: MediaStore.folder) { p in
+                    let engine = try Stems.engine(model)
+                    return try project.separatingStems(tracks: tracks, engine: engine, pool: pool, media: MediaStore.folder) { p in
                         Task { @MainActor in
                             guard var j = self?.jobs[id], !j.isFinished else { return }
                             j.progress = min(0.99, p)
@@ -203,7 +203,9 @@ final class JobRegistry {
                 job.status = .done
                 job.progress = 1
                 job.result = ["stems": .array(report.stems.map { .string($0) }), "tracks": .array(report.tracks.map { .string($0.uuidString) }),
-                              "note": .string("Sound above the model's 11 kHz, and whatever the model leaves, is in other; the stems add up to the original.")]
+                              "model": .string(model),
+                              "note": .string(model == "dialog" ? "What the model leaves is shared between music and effects; the stems add up to the original."
+                                                               : "Sound above the model's 11 kHz, and whatever the model leaves, is in other; the stems add up to the original.")]
             case .failure(let e):
                 job.status = .failed
                 job.error = ((e as? StemError)?.reason ?? "separation_failed", e.localizedDescription)

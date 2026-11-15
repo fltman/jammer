@@ -28,7 +28,7 @@ No. Jämmer doesn't rely on any service run by us. Models are fetched from their
 
 ## Which models does it use, and how big are they?
 
-Noise reduction (DeepFilterNet 3, 8 MB) ships inside the app. The rest are optional downloads under **Jämmer › Settings… › Models**, each shown with its size and licence before you download it, and removable there: KB-Whisper small (175 MB) or medium (539 MB) for the most accurate Swedish transcription, Parakeet TDT 0.6B v3 (about 630 MB) for 25 European languages, the speaker model (about 20 MB), and the stem model (146 MB). Without any download, transcription uses the Mac's own recogniser. The assistant uses the model built into macOS.
+Noise reduction (DeepFilterNet 3, 8 MB) ships inside the app. The rest are optional downloads under **Jämmer › Settings… › Models**, each shown with its size and licence before you download it, and removable there: KB-Whisper small (175 MB) or medium (539 MB) for the most accurate Swedish transcription, Parakeet TDT 0.6B v3 (about 630 MB) for 25 European languages, the speaker model (about 20 MB), and the two stem models (146 MB for music, 122 MB for soundtracks). Without any download, transcription uses the Mac's own recogniser. The assistant uses the model built into macOS.
 
 ## Why no HTDemucs stem separation?
 

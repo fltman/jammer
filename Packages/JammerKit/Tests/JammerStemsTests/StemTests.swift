@@ -187,12 +187,13 @@ struct RealSeparationTests {
 struct ProjectStemTests {
     @Test("A track becomes grouped stem tracks that null against it, at 44.1 kHz stereo and at 48 kHz mono; words follow")
     func project() throws {
-        for (rate, channels, limit) in [(44_100.0, 2, -100.0), (48_000.0, 1, -40.0)] {
+        for (rate, channels, limit) in [(44_100.0, 2, -100.0), (48_000.0, 1, -100.0)] {
             let dir = FileManager.default.temporaryDirectory.appending(path: "jammer-stems-\(UUID().uuidString)")
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             defer { try? FileManager.default.removeItem(at: dir) }
             let n = Int(rate * 3)
-            let mono = (0..<n).map { i -> Float in let t = Double(i) / rate; return Float(0.3 * sin(2 * .pi * 200 * t) + 0.2 * sin(2 * .pi * 3_000 * t)) }
+            // With a tone just under Nyquist: at 48 kHz it's above what 44.1 kHz carries.
+            let mono = (0..<n).map { i -> Float in let t = Double(i) / rate; return Float(0.3 * sin(2 * .pi * 200 * t) + 0.2 * sin(2 * .pi * 3_000 * t) + 0.1 * sin(2 * .pi * (rate / 2 - 800) * t)) }
             let url = dir.appending(path: "song.wav")
             let w = try WAVWriter(url: url, options: .init(encoding: .float32, channels: channels, sampleRate: rate))
             try w.write(channels == 2 ? mono.flatMap { [$0, $0] } : mono); try w.finish()
@@ -294,5 +295,51 @@ struct MRXTests {
             print(String(format: "MRX %@: SNR %.1f dB vs PyTorch", name, snr))
             #expect(snr > 60, "\(name)")
         }
+    }
+}
+
+@Suite("Soundtrack separation", .enabled(if: mrxDir != nil))
+struct SoundtrackTests {
+    @Test("Speech comes out of a soundtrack; the stems null against the mix, also across chunk borders")
+    func separates() throws {
+        let net = try MRXNet(checkpoint: TorchCheckpoint(url: mrxDir!.appending(path: "default_mrx_pre_trained_weights.pth")))
+        // Speech (macOS Alva) over a chord and noise bursts, 7 s, stereo at 44.1 kHz.
+        let url = URL(fileURLWithPath: "$JAMMER_TEST_MEDIA/iso-speech.aiff")
+        let info = try AudioFileReader.info(at: url)
+        let raw = SourcePool().read(SourceRef(name: "s", path: url.path, info: info), from: 0, count: Int(info.frames))
+        let v = try Alignment.resample(stride(from: 0, to: raw.count, by: info.channels).map { raw[$0] }, channels: 1, from: info.sampleRate, to: 44_100)
+        let n = min(v.count, 44_100 * 7)
+        let peak = v.prefix(n).map(abs).max() ?? 1
+        var seed: UInt64 = 5
+        var speech = [Float](repeating: 0, count: n), mix = [Float](repeating: 0, count: n * 2)
+        for i in 0..<n {
+            let t = Double(i) / 44_100
+            speech[i] = v[i] / peak * 0.4
+            let music = Float(0.12 * (sin(2 * .pi * 220 * t) + sin(2 * .pi * 277.2 * t) + sin(2 * .pi * 329.6 * t)))
+            seed = seed &* 6_364_136_223_846_793_005 &+ 1
+            let fx = Float(Int32(truncatingIfNeeded: seed >> 32)) / 2_147_483_648 * Float(0.2 * exp(-(t.truncatingRemainder(dividingBy: 1.5)) * 6))
+            let m = speech[i] + music + fx
+            mix[i * 2] = m; mix[i * 2 + 1] = m
+        }
+        var engine = SoundtrackEngine(net)
+        engine.chunk = 3; engine.overlap = 1    // several chunks in 7 s
+        var stems = [[Float]](repeating: [], count: 3)
+        let t0 = Date()
+        try engine.separate(mix, progress: { _ in true }) { s, b in stems[s] += b }
+        #expect(stems.allSatisfy { $0.count == mix.count })
+        var err = 0.0, pow = 0.0
+        for i in 0..<mix.count { let d = Double(stems[0][i] + stems[1][i] + stems[2][i] - mix[i]); err += d * d; pow += Double(mix[i] * mix[i]) }
+        func sisdr(_ est: [Float]) -> Double {
+            var dot = 0.0, rr = 0.0
+            for i in 0..<n { dot += Double(est[i * 2]) * Double(speech[i]); rr += Double(speech[i] * speech[i]) }
+            let a = dot / rr
+            var e = 0.0
+            for i in 0..<n { let d = Double(est[i * 2]) - a * Double(speech[i]); e += d * d }
+            return 10 * log10(a * a * rr / e)
+        }
+        let null = 10 * log10(max(err, 1e-30) / pow)
+        print(String(format: "MRX soundtrack: speech SI-SDR %.1f dB in the mix → %.1f dB in its stem; null %.1f dB; %.1f s for 7 s stereo", sisdr(mix), sisdr(stems[0]), null, Date().timeIntervalSince(t0)))
+        #expect(null < -60)
+        #expect(sisdr(stems[0]) > sisdr(mix) + 3)
     }
 }

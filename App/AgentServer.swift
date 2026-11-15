@@ -352,7 +352,8 @@ enum AgentRouter {
             case ["separate"]:
                 try only("POST")
                 let body = try json(r)
-                if let m = body["model"] as? String, m != "music4" { throw APIError.badRequest("model must be \"music4\".") }
+                let model = (body["model"] as? String) ?? "music4"
+                guard ["music4", "dialog"].contains(model) else { throw APIError.badRequest("model must be \"music4\" or \"dialog\".") }
                 var ids: [UUID]? = nil
                 if let list = body["tracks"] as? [String] {
                     ids = try list.map { s in
@@ -360,11 +361,11 @@ enum AgentRouter {
                         return id
                     }
                 }
-                guard Stems.model.isInstalled else { throw APIError.unprocessable("model_missing", StemError.modelMissing.localizedDescription) }
+                guard Stems.isInstalled(model) else { throw APIError.unprocessable("model_missing", StemError.modelMissing.localizedDescription) }
                 if let t = session.project.tracks.first(where: { (ids?.contains($0.id) ?? true) && !$0.inserts.isEmpty && !$0.clips.isEmpty }) {
                     throw APIError.unprocessable("has_inserts", StemError.hasInserts(t.name).localizedDescription)
                 }
-                return .json(["job": JobRegistry.shared.startSeparation(session, tracks: ids).json], status: 202)
+                return .json(["job": JobRegistry.shared.startSeparation(session, tracks: ids, model: model).json], status: 202)
             case ["diarize"]:
                 try only("POST")
                 return try diarize(session, r)

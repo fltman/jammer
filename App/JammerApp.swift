@@ -217,7 +217,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 i.representedObject = n
                 return i
             }),
-            item("Separate Stems", #selector(EditorWindowController.separateStems(_:)), ""),
+            submenu("Separate Stems", ["music4": "Vocals, Drums, Bass, Other (music)", "dialog": "Speech, Music, Effects (soundtrack)"].sorted { $0.key > $1.key }.map { model, title in
+                let i = item(title, #selector(EditorWindowController.separateStems(_:)), "")
+                i.representedObject = model
+                return i
+            }),
             item("Plugins…", #selector(EditorWindowController.showPlugins(_:)), "p", [.command, .option, .shift]),
         ]))
         main.addItem(submenu("Transport", [

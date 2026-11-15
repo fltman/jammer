@@ -75,6 +75,12 @@ final class ModelsModel {
                              installed: { stems.isInstalled },
                              install: { p in try await stems.install(progress: p) },
                              remove: { Stems.forget(); try stems.remove() }))
+        let soundtrack = Stems.soundtrack
+        rows.append(ModelRow(id: "soundtrack", title: StemModel.Soundtrack.title, use: "Audio › Separate Stems › Speech, Music, Effects: for film and video sound. From MERL's own repository.",
+                             bytes: StemModel.Soundtrack.downloadBytes, licence: StemModel.Soundtrack.licence,
+                             installed: { soundtrack.isInstalled },
+                             install: { p in try await soundtrack.install(progress: p) },
+                             remove: { Stems.forget(); try soundtrack.remove() }))
         return rows
     }()
 

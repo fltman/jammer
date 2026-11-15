@@ -13,11 +13,28 @@
 | What | Result |
 |---|---|
 | Sum of stems minus the original (null test), 44.1 kHz stereo | −138 dB |
-| The same through a 48 kHz mono project (resampled in and out) | −82 dB |
+| The same through a 48 kHz mono project with a tone above 22 kHz (the last stem takes what the conversion loses) | −145 dB |
 | A 15 kHz tone | all of it in "other" |
 | Synthetic song (spoken voice, bass line, drum hits), SI-SDR in the mix → in its stem | voice −7.0 → 22.0 dB; bass 6.6 → 31.5 dB; drums −18.4 → −1.6 dB |
 | In the app: mix loudness and true peak before and after separating | −13.85 LUFS, −3.99 dBTP both times |
 | Speed | 8 s of audio in 3.2 s in the package test; 8 s in the debug app |
+
+## Soundtracks: MRX
+
+`"model": "dialog"` uses MERL's MRX (Petermann et al., "The Cocktail Fork Problem", ICASSP 2022), which gives speech, music and effects.
+
+- **Weights:** `default_mrx_pre_trained_weights.pth` from MERL's repository (git LFS, 122 MB, SHA-256 `9cecc071…0a0c`, MIT: "All files … SPDX-License-Identifier: MIT"). `TorchCheckpoint` reads the `torch.save` file itself (a stored zip with a pickle); every float tensor is identical to what PyTorch loads.
+- **Network:** `MRXNet`, after MERL's `mrx.py`, on the CPU with Accelerate (three STFT resolutions, encoders, three bidirectional LSTM stacks, nine mask decoders). Against PyTorch running MERL's own code on the same 4 s of audio: 121–129 dB SNR per source.
+- **Around it,** as in MERL's `separate.py`: the mix goes in at −27 LUFS and comes back at its own level; what the three estimates leave is shared between music and effects ("music_sfx" consistency), so the stems add up to the mix and speech stays as estimated. Long audio runs in 24 s chunks overlapping by 4 s, crossfaded; MERL's code takes the whole file at once.
+
+| What | Result |
+|---|---|
+| Sum of stems minus the mix, across chunk borders | −144 dB |
+| Synthetic scene (spoken voice over a chord and noise bursts), speech SI-SDR in the mix → in its stem, with 3 s chunks | −5.5 → 1.6 dB |
+| In the app, 8 s at 48 kHz stereo: mix loudness and true peak before and after | −16.04 LUFS, −3.78 dBTP both times |
+| Speed, debug build | 28 s for 8 s of stereo; not yet measured in a release build |
+
+The synthetic scene is a poor stand-in for a film mix (the model was trained on real speech, music and sound effects), so the 1.6 dB says little about real material; it shows the pipeline separates in the right direction. Training-data caveat: see `LICENSES.md`.
 
 ## Caveats
 
