@@ -65,7 +65,8 @@ public struct OperationSpec: Sendable, Identifiable {
     /// The operations an assistant with a small tool budget should get first ("core");
     /// the rest are "advanced" (SIBLINGS.md §3).
     public static let core: Set<String> = ["delete", "gain", "fade_in", "fade_out", "normalize", "loudness_preset", "delete_words",
-                                           "echo", "transcribe", "get_transcript", "restore", "measure_loudness", "export", "diarize"]
+                                           "echo", "transcribe", "get_transcript", "restore", "measure_loudness", "export", "diarize",
+                                           "level_speakers"]
     public var tier: String { Self.core.contains(name) ? "core" : "advanced" }
 
     /// Every parameter including the document id in the path, for endpoints; GET parameters go in the query.
@@ -139,6 +140,10 @@ public enum Operations {
               params: [.init("track", .string, "The track to correct.", required: true),
                        .init("against", .string, "Track to measure against (the call recording is best). Default: the best-matching track."),
                        .init("ppm", .number, "The drift in parts per million (positive: it ran fast). Skips the measurement.", range: -2_000...2_000)]),
+        .init("level_speakers", "Level Speakers", "Brings every speaker to the same loudness with one gain each, measured over their own turns (needs diarize first; fails with reason no_speakers otherwise). A track that is one speaker gets track gain; a track with several is split in the pauses where the speaker changes. Run loudness_preset afterwards for the mix. info: speakers, maxChangeDB, limitedByMaxGain.",
+              params: [.init("target", .number, "LUFS per speaker. Default -18.", range: -40 ... -10),
+                       .init("maxGain", .number, "Largest change in dB, up or down. Default 12.", range: 0...30),
+                       .init("speakers", .list, "Speaker ids as strings (\"0\", \"1\"). Default: everyone.")]),
         .init("rename_speaker", "Rename Speaker", "Gives a speaker a name, e.g. after diarize. Use it to pair up speakers found on different tracks.",
               params: [.init("speaker", .string, "The speaker's id as a string (\"0\", \"1\", …) or current name.", required: true),
                        .init("name", .string, "The new name.", required: true)]),
@@ -553,6 +558,18 @@ public enum StepRunner {
             }
             s.project = try s.project.correctingDrift(of: track, ppm: ppm!, pool: pool, media: media)
             return ["ppm": (ppm! * 10).rounded() / 10, "msPerHour": (ppm! * 3.6 * 10).rounded() / 10, "confidence": (confidence * 1_000).rounded() / 1_000]
+        case "level_speakers":
+            guard let pool = s.pool else { throw StepFailure("level_speakers needs the app.") }
+            let only = p["speakers"]?.strings.map { Set($0.compactMap(Int.init)) }
+            do {
+                let (q, report) = try s.project.levellingSpeakers(target: p["target"]?.double ?? -18, maxGain: p["maxGain"]?.double ?? 12,
+                                                                  only: only, pool: pool)
+                s.project = q
+                return ["speakers": Double(report.gains.count), "maxChangeDB": (report.maxChangeDB * 100).rounded() / 100,
+                        "limitedByMaxGain": report.limited ? 1 : 0]
+            } catch let e as LevelError {
+                throw StepFailure("level_speakers: \(e.localizedDescription)", reason: e.reason)
+            }
         case "rename_speaker":
             do {
                 try s.project.renameSpeaker(p["speaker"]?.string ?? "", to: p["name"]?.string ?? "")

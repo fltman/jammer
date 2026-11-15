@@ -192,4 +192,66 @@ struct DiarizationTests {
         let w = q.placedWords().first { $0.word.text == "ja" }
         #expect(w != nil && abs(w!.start - Frame(25 * sr)) <= 80 && w!.word.speaker == 1)
     }
+
+    // MARK: Levelling
+
+    @Test("Level speakers on one track: −30 and −20 LUFS come out together; words keep ids and times")
+    func levelOneTrack() throws {
+        let dir = TempDir()
+        let seconds = 24.0
+        let aTurns = [(1.0, 5.0), (9.0, 13.0), (17.0, 21.0)], bTurns = [(5.6, 8.4), (13.6, 16.4), (21.4, 23.5)]
+        let a = talker(aTurns, seconds: seconds, seed: 11).map { $0 * 0.3 }   // about 10 dB quieter
+        let b = talker(bTurns, seconds: seconds, seed: 12).map { $0 * 0.95 }
+        let mono = zip(a, b).map { $0 + $1 }
+        let url = dir.file("mix.wav")
+        try writeWAV(mono.flatMap { [$0, $0] }, to: url)
+        var p = Project(source: SourceRef(name: "mix", path: url.path, info: try AudioFileReader.info(at: url)))
+        let pool = SourcePool()
+        let src = p.sources[0].id
+        p.setTranscript(SourceTranscript(sourceID: src, language: "sv-SE", engine: "t",
+                                         words: [Word(text: "a", start: Frame(2 * sr), end: Frame(2.5 * sr)), Word(text: "b", start: Frame(6 * sr), end: Frame(6.4 * sr))]))
+        let turns = aTurns.map { TrackDiarization.Turn(speaker: 0, range: Frame($0.0 * sr)..<Frame($0.1 * sr)) }
+            + bTurns.map { TrackDiarization.Turn(speaker: 1, range: Frame($0.0 * sr)..<Frame($0.1 * sr)) }
+        p.applyDiarization([TrackDiarization(track: p.tracks[0].id, names: ["A", "B"], turns: turns)], engine: "test")
+        let before = p.speakerLoudness(pool: pool)
+        #expect(abs((before[1] ?? 0) - (before[0] ?? 0)) > 8, "\(before)")
+        let words = p.placedWords().map { ($0.word.id, $0.start, $0.end) }
+        let placed = p.placedTurns().map { ($0.speaker, $0.start, $0.end) }
+        let (q, report) = try p.levellingSpeakers(target: -20, pool: pool)
+        let after = q.speakerLoudness(pool: pool)
+        #expect(abs((after[0] ?? 0) - (after[1] ?? 0)) < 0.5, "after \(after)")
+        #expect(abs((after[0] ?? 0) + 20) < 0.5)
+        #expect(!report.limited && q.tracks[0].clips.count > 1)
+        #expect(q.placedWords().map { ($0.word.id, $0.start, $0.end) }.elementsEqual(words, by: { $0 == $1 }))
+        // Turns land in the same places (pieces may be split at clip edges; merge to compare).
+        func merged(_ x: [(Int, Frame, Frame)]) -> [(Int, Frame, Frame)] {
+            x.sorted { ($0.1, $0.0) < ($1.1, $1.0) }.reduce(into: []) { acc, t in
+                if let l = acc.last, l.0 == t.0, t.1 <= l.2 { acc[acc.count - 1].2 = max(l.2, t.2) } else { acc.append(t) }
+            }
+        }
+        #expect(merged(q.placedTurns().map { ($0.speaker, $0.start, $0.end) }).elementsEqual(merged(placed), by: { $0 == $1 }))
+    }
+
+    @Test("Level speakers by track: track gains; a track without speakers stays bit for bit")
+    func levelByTrack() throws {
+        let dir = TempDir()
+        var (p, pool, _) = try doubleEnder(dir)
+        // A third track nobody was found on.
+        let url = dir.file("music.wav")
+        try writeWAV(sine(220, amplitudeDB: -30, seconds: 30), to: url)
+        p.addTrack(source: SourceRef(name: "music", path: url.path, info: try AudioFileReader.info(at: url)))
+        p.tracks[1].gainDB = -8
+        p.applyDiarization(Diarization.byTrack(p, pool: pool, tracks: [p.tracks[0].id, p.tracks[1].id]), engine: "by-track")
+        var music = p
+        music.tracks = [p.tracks[2]]
+        let before = PlanCompiler.compile(music, pool: pool).render(from: 0, frames: Int(p.length))
+        let (q, _) = try p.levellingSpeakers(target: -24, pool: pool)
+        let after = q.speakerLoudness(pool: pool)
+        #expect(abs((after[0] ?? 0) - (after[1] ?? 0)) < 0.5, "\(after)")
+        #expect(q.tracks[0].clips == p.tracks[0].clips && q.tracks[1].clips == p.tracks[1].clips)
+        #expect(q.tracks[0].gainDB != 0 && q.tracks[1].gainDB != -8)
+        music.tracks = [q.tracks[2]]
+        #expect(PlanCompiler.compile(music, pool: pool).render(from: 0, frames: Int(p.length)) == before)
+        #expect(throws: LevelError.self) { try Project(sampleRate: sr, channels: 2).levellingSpeakers(pool: pool) }
+    }
 }

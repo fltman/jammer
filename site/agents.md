@@ -151,7 +151,7 @@ Plugins are third-party code that runs with Jämmer's rights. If one crashes or 
 
 ## Sibling apps
 
-Glimmer and Flimmer call Jämmer the same way you do (see their own guides). They add `X-Sibling: <slug>`; Jämmer logs it and shows "Requested by …" in the window, and it gives no extra rights. `GET /api/v1/operations` lists every op with `params` as a JSON Schema, plus `paid`, `undoable` and `startsJob`, so an assistant can turn them into tools named `jammer.<op>`. `tier` is `"core"` for the 14 most useful ones and `"advanced"` for the rest: start from core when tools are scarce.
+Glimmer and Flimmer call Jämmer the same way you do (see their own guides). They add `X-Sibling: <slug>`; Jämmer logs it and shows "Requested by …" in the window, and it gives no extra rights. `GET /api/v1/operations` lists every op with `params` as a JSON Schema, plus `paid`, `undoable` and `startsJob`, so an assistant can turn them into tools named `jammer.<op>`. `tier` is `"core"` for the 15 most useful ones and `"advanced"` for the rest: start from core when tools are scarce.
 
 ## Operations
 
@@ -321,6 +321,16 @@ Resamples a separately recorded track whose recorder's clock ran fast or slow, s
 | `track` | string | **Required.** The track to correct. |
 | `against` | string | Track to measure against (the call recording is best). Default: the best-matching track. |
 | `ppm` | number | The drift in parts per million (positive: it ran fast). Skips the measurement. |
+
+### `level_speakers`
+
+Brings every speaker to the same loudness with one gain each, measured over their own turns (needs diarize first; fails with reason no_speakers otherwise). A track that is one speaker gets track gain; a track with several is split in the pauses where the speaker changes. Run loudness_preset afterwards for the mix. info: speakers, maxChangeDB, limitedByMaxGain.
+
+| Param | Type | Description |
+|---|---|---|
+| `target` | number | LUFS per speaker. Default -18. |
+| `maxGain` | number | Largest change in dB, up or down. Default 12. |
+| `speakers` | list | Speaker ids as strings ("0", "1"). Default: everyone. |
 
 ### `rename_speaker`
 

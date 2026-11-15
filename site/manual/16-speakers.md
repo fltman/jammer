@@ -18,3 +18,7 @@ The model calls them Speaker 1, Speaker 2 and so on; agents can rename them (`re
 ## Edits and undo
 
 Finding speakers is one undo step. Like transcript words, speaker turns belong to the recorded audio, so they stay right while you cut, move and delete. Run Find Speakers again to start over; it replaces the speakers on the tracks it looks at.
+
+## Level the speakers
+
+**Audio › Level Speakers** brings everyone to the same loudness (−18 LUFS each by default), measured over their own turns, with one gain per person, so a quiet guest and a loud host end up even. On a double-ender each track simply gets its gain; when people share a track, Jämmer cuts the clips in the pauses where the speaker changes and sets each piece's gain (where two people talk at once, the lower gain wins, so nobody is pushed on top of the other). Nothing is moved and the transcript stays as it was. It needs speakers first (Find Speakers), changes each speaker by at most 12 dB, and is one undo step; afterwards a loudness preset sets the whole mix for the platform.

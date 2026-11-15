@@ -54,6 +54,11 @@ Replace the Audio Hijack → RX → Descript → Auphonic chain for speech and p
 
 ## Phase 2: Layers and restoration
 
+| Item | Status |
+|---|---|
+| Per-speaker levelling, static: one gain per speaker over their turns (`level_speakers`) | Done |
+| Per-speaker levelling, dynamic (Auphonic-style, gain riding over time within a speaker) | Next after the static one |
+
 Stem separation with stems as first-class layers, spectral painting tools, dialogue/music/effects separation, de-reverb and de-bleed, per-speaker levelling, batch processing, branching history, VST3 and CLAP with a scanner process, FCPXML import from Flimmer, Music Understanding for tempo and beats.
 
 ## Phase 3: Mix, mastering and post
