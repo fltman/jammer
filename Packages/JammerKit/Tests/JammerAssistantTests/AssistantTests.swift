@@ -122,4 +122,13 @@ struct AssistantTests {
     func schema() throws {
         _ = try OnDevicePlanner.schema(actions)
     }
+
+    @Test("The keyword safety net adds a missed filler or pause step, and nothing else")
+    func augment() {
+        let only = AssistantPlan(reply: "", steps: [PlannedStep(op: "remove_silences", params: ["min_length": .number(1)])])
+        #expect(PlanParser.augment(goal: "ta bort alla ehm och tystnader längre än en sekund", plan: only).steps.map(\.op) == ["remove_fillers", "remove_silences"])
+        #expect(PlanParser.augment(goal: "remove the pauses", plan: AssistantPlan(reply: "", steps: [])).steps.map(\.op) == ["remove_silences"])
+        #expect(PlanParser.augment(goal: "normalisera till -16 LUFS", plan: only).steps.map(\.op) == ["remove_silences"])
+        #expect(PlanParser.augment(goal: "cut 10 to 15", plan: AssistantPlan(reply: "", steps: [PlannedStep(op: "delete")])).steps.map(\.op) == ["delete"])
+    }
 }

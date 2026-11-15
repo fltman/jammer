@@ -43,7 +43,7 @@ public struct OnDevicePlanner: AssistantPlanner {
         let response = try await session.respond(to: AssistantPrompt.prompt(goal: goal, context: context, history: history),
                                                  schema: try Self.schema(actions),
                                                  options: GenerationOptions(samplingMode: .greedy))
-        return try Self.decode(response.content, actions: actions, context: context)
+        return PlanParser.augment(goal: goal, plan: try Self.decode(response.content, actions: actions, context: context))
     }
 
     static func decode(_ content: GeneratedContent, actions: [AssistantAction], context: AssistantContext? = nil) throws -> AssistantPlan {
@@ -123,7 +123,7 @@ public struct OpenRouterPlanner: AssistantPlanner {
         let (data, response) = try await session.data(for: req)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else { throw AssistantError.http(status, String(decoding: data.prefix(300), as: UTF8.self)) }
-        return try Self.decode(data, actions: actions)
+        return PlanParser.augment(goal: goal, plan: try Self.decode(data, actions: actions))
     }
 
     static func decode(_ data: Data, actions: [AssistantAction]) throws -> AssistantPlan {

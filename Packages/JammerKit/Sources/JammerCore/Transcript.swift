@@ -165,7 +165,7 @@ extension Project {
         return out
     }
 
-    static func tokens(_ s: String) -> [String] {
+    public static func tokens(_ s: String) -> [String] {
         s.lowercased()
             .unicodeScalars.map { CharacterSet.punctuationCharacters.contains($0) || CharacterSet.symbols.contains($0) ? " " : String($0) }
             .joined()

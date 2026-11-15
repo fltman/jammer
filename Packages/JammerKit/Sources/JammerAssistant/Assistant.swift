@@ -277,6 +277,24 @@ public enum PlanParser {
         return PlannedStep(op: op, params: params, why: why)
     }
 
+    /// A keyword safety net for the small model's most common miss: with several tasks in
+    /// one sentence it may plan only one. If the request names filler words or pauses and
+    /// the plan has no step for them, the macro is added (fillers first).
+    public static func augment(goal: String, plan: AssistantPlan) -> AssistantPlan {
+        let words = Set(Project.tokens(goal))
+        let fillerKeys: Set<String> = Project.fillerWords.union(["fyllnadsord", "utfyllnadsord", "filler", "fillers", "ehms", "ums"])
+        let pauseKeys: Set<String> = ["tystnad", "tystnader", "tystnaderna", "paus", "pauser", "pauserna", "silence", "silences", "pause", "pauses"]
+        var out = plan
+        let ops = Set(plan.steps.map(\.op))
+        if !words.isDisjoint(with: fillerKeys), !ops.contains("remove_fillers"), !ops.contains("delete_words") {
+            out.steps.insert(PlannedStep(op: "remove_fillers", why: "The request mentions filler words."), at: 0)
+        }
+        if !words.isDisjoint(with: pauseKeys), !ops.contains("remove_silences"), !ops.contains("delete"), !ops.contains("silence") {
+            out.steps.append(PlannedStep(op: "remove_silences", why: "The request mentions pauses."))
+        }
+        return out
+    }
+
     /// Checks steps against the registry (types, ranges, required params).
     public static func validate(_ plan: AssistantPlan, actions: [AssistantAction]) -> AssistantPlan {
         var out = plan

@@ -1,0 +1,30 @@
+# The assistant
+
+Ask Jämmer in Swedish or English and it does the editing: "ta bort alla ehm och tystnader längre än en sekund", "normalize to −16 LUFS", "ta bort brummet på talare 2", "fade in the first two seconds".
+
+## Open it
+
+**View › Show Assistant** (⌥⌘A), or **Ask the Assistant…** in the command palette (⌘K). The chat opens beside the timeline; type a request and press Return.
+
+## What happens
+
+- The assistant turns your request into a plan of Jämmer's own commands: the same ones as the menus and the agent API, so it can only do what Jämmer can do.
+- A plan that removes or replaces audio (deleting, cutting, removing filler words or pauses, repairs, echo) is shown first, with **Run** and **Cancel**. Other plans, such as changing the level or measuring loudness, run straight away.
+- All the editing in a plan is **one undo step**. Transcribing and repairs run as their own steps in between (they take a moment; the status bar shows the progress).
+- Removing filler words needs a transcript; the assistant transcribes first if there isn't one.
+- Questions like "how loud is it?" are answered in the chat.
+
+## Which model
+
+Click the gear in the assistant's header.
+
+| Choice | What it means |
+|---|---|
+| **On this Mac** (default) | Apple's on-device model. Free, private, works offline; nothing leaves the Mac. Understands Swedish and English (and Danish, Norwegian, German and more). |
+| **OpenRouter** | A model of your choice on OpenRouter (or a compatible service), with your own key. The key is kept in your Keychain. Every request asks first and shows the approximate price; only your request and a short description of the document (length, tracks, the start of the transcript) are sent, never the audio. |
+
+## Good to know
+
+- Speakers are tracks: "talare 2" or "track 2" means the second track.
+- If a request is unclear, the assistant asks instead of guessing.
+- How well the on-device model picks the right commands was measured on a fixed set of requests; see the project's `docs/ASSISTANT.md`. It's good at single tasks; with several tasks in one sentence it sometimes does only one, so check the plan, or ask for one thing at a time.
