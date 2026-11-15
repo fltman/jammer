@@ -6,7 +6,7 @@ import Testing
 
 /// How well a planner picks the right actions on a fixed set of requests.
 /// `JAMMER_ASSISTANT_EVAL=1` runs it against the on-device model.
-@Suite("Assistant evaluation", .enabled(if: ProcessInfo.processInfo.environment["JAMMER_ASSISTANT_EVAL"] != nil))
+@Suite("Assistant evaluation", .serialized, .enabled(if: ProcessInfo.processInfo.environment["JAMMER_ASSISTANT_EVAL"] != nil))
 struct AssistantEval {
     struct Case {
         var goal: String

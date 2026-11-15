@@ -5,7 +5,7 @@ import Testing
 @testable import JammerAssistant
 
 /// Runs a hold-out set once against the on-device model. `JAMMER_HOLDOUT=1`.
-@Suite("Assistant hold-out", .enabled(if: ProcessInfo.processInfo.environment["JAMMER_HOLDOUT"] != nil))
+@Suite("Assistant hold-out", .serialized, .enabled(if: ProcessInfo.processInfo.environment["JAMMER_HOLDOUT"] != nil))
 struct HoldoutEval {
     static func matches(_ have: JSONValue?, _ want: String, tracks: [String]) -> Bool {
         let text = AssistantEval.text(have)
