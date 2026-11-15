@@ -56,6 +56,23 @@ public struct AudioFileInfo: Sendable, Equatable, Codable {
     public var ixml: String?
     public var markers: [FileMarker]
 
+    public init(container: Container, sampleFormat: SampleFormat, bigEndian: Bool, channels: Int, sampleRate: Double,
+                channelMask: UInt32? = nil, dataOffset: Int64, frames: Int64, chunks: [Chunk] = [],
+                bext: BroadcastExtension? = nil, ixml: String? = nil, markers: [FileMarker] = []) {
+        self.container = container
+        self.sampleFormat = sampleFormat
+        self.bigEndian = bigEndian
+        self.channels = channels
+        self.sampleRate = sampleRate
+        self.channelMask = channelMask
+        self.dataOffset = dataOffset
+        self.frames = frames
+        self.chunks = chunks
+        self.bext = bext
+        self.ixml = ixml
+        self.markers = markers
+    }
+
     public var bytesPerFrame: Int { sampleFormat.bitsPerSample / 8 * channels }
     public var duration: Double { sampleRate > 0 ? Double(frames) / sampleRate : 0 }
 

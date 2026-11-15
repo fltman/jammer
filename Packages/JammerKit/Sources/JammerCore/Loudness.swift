@@ -15,6 +15,17 @@ public struct LoudnessResult: Codable, Sendable, Equatable {
     public var truePeak: Double
     public var duration: Double
 
+    public init(integrated: Double?, range: Double?, maxMomentary: Double?, maxShortTerm: Double?,
+                samplePeak: Double, truePeak: Double, duration: Double) {
+        self.integrated = integrated
+        self.range = range
+        self.maxMomentary = maxMomentary
+        self.maxShortTerm = maxShortTerm
+        self.samplePeak = samplePeak
+        self.truePeak = truePeak
+        self.duration = duration
+    }
+
     public var json: [String: Any] {
         func r(_ v: Double?) -> Any { v.map { $0.isFinite ? ($0 * 100).rounded() / 100 : -999 } ?? NSNull() }
         return ["integratedLUFS": r(integrated), "rangeLU": r(range), "maxMomentaryLUFS": r(maxMomentary),

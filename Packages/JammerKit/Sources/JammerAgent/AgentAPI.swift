@@ -1,0 +1,379 @@
+import Foundation
+
+/// The local HTTP API that lets agents drive Jammer: request parsing, the
+/// security rules, the error format and the guide. Pure, so it's tested
+/// without a socket; the app owns the listener. Same conventions as Glimmer
+/// and Flimmer.
+public enum AgentAPI {
+    public static let appName = "Jammer"
+    public static let version = "v1"
+    /// Header every state-changing request must carry (a web page can't add it
+    /// without a CORS preflight, which the server never grants).
+    public static let agentHeader = "X-Jammer-Agent"
+    /// 9003 first, then Jammer's own range (Glimmer has 91xx, Flimmer 92xx).
+    public static let ports: [UInt16] = [9003] + Array(9301...9319)
+    public static let guidePath = "/jammer"
+
+    /// Largest body sent in one request. Bigger files go through /api/v1/uploads.
+    public static let maxBody = 256 * 1024 * 1024
+    /// Largest upload assembled from chunks.
+    public static let maxUpload: Int64 = 16 * 1024 * 1024 * 1024
+    /// Largest export returned in one response.
+    public static let maxExport: Int64 = 2 * 1024 * 1024 * 1024
+
+    public static func agentPrompt(port: UInt16) -> String {
+        "Learn all about Jämmer and how to interact with it: fetch and follow this guide http://127.0.0.1:\(port)\(guidePath)"
+    }
+
+    // MARK: HTTP
+
+    public struct Request: Sendable, Equatable {
+        public var method: String
+        public var path: String
+        public var query: [String: String]
+        /// Header names lowercased.
+        public var headers: [String: String]
+        public var body: Data
+
+        public init(method: String, path: String, query: [String: String] = [:], headers: [String: String] = [:], body: Data = Data()) {
+            self.method = method
+            self.path = path
+            self.query = query
+            self.headers = headers
+            self.body = body
+        }
+
+        public var segments: [String] { path.split(separator: "/").map(String.init) }
+    }
+
+    public enum ParseResult: Equatable {
+        case incomplete
+        case request(Request)
+        case invalid(String)
+    }
+
+    /// Parses one HTTP/1.1 request from the bytes received so far.
+    public static func parse(_ data: Data) -> ParseResult {
+        guard let headerEnd = data.range(of: Data("\r\n\r\n".utf8)) else {
+            return data.count > 64 * 1024 ? .invalid("Headers too large.") : .incomplete
+        }
+        guard let head = String(data: data[data.startIndex..<headerEnd.lowerBound], encoding: .utf8) else {
+            return .invalid("Headers are not UTF-8.")
+        }
+        var lines = head.components(separatedBy: "\r\n")
+        let requestLine = lines.removeFirst().split(separator: " ")
+        guard requestLine.count >= 2 else { return .invalid("Malformed request line.") }
+        var headers: [String: String] = [:]
+        for line in lines {
+            guard let colon = line.firstIndex(of: ":") else { continue }
+            headers[line[..<colon].trimmingCharacters(in: .whitespaces).lowercased()] =
+                line[line.index(after: colon)...].trimmingCharacters(in: .whitespaces)
+        }
+        let length = Int(headers["content-length"] ?? "0") ?? -1
+        guard length >= 0 else { return .invalid("Bad Content-Length.") }
+        guard length <= maxBody else { return .invalid("Body too large: send at most 256 MB per request, or use /api/v1/uploads.") }
+        if headers["transfer-encoding"]?.lowercased().contains("chunked") == true {
+            return .invalid("Chunked bodies aren't supported; send Content-Length.")
+        }
+        let bodyStart = headerEnd.upperBound
+        guard data.count - (bodyStart - data.startIndex) >= length else { return .incomplete }
+        let body = data[bodyStart..<(bodyStart + length)]
+        let target = String(requestLine[1])
+        let parts = target.split(separator: "?", maxSplits: 1)
+        var query: [String: String] = [:]
+        if parts.count > 1 {
+            for pair in parts[1].split(separator: "&") {
+                let kv = pair.split(separator: "=", maxSplits: 1).map { String($0).removingPercentEncoding ?? String($0) }
+                query[kv[0]] = kv.count > 1 ? kv[1] : ""
+            }
+        }
+        let path = String(parts.first ?? "/").removingPercentEncoding ?? "/"
+        return .request(Request(method: String(requestLine[0]).uppercased(), path: path.isEmpty ? "/" : path,
+                                query: query, headers: headers, body: Data(body)))
+    }
+
+    public struct Response: Sendable {
+        public var status: Int
+        public var contentType: String
+        public var body: Data
+        public var extraHeaders: [String: String]
+
+        public init(status: Int, contentType: String, body: Data, extraHeaders: [String: String] = [:]) {
+            self.status = status
+            self.contentType = contentType
+            self.body = body
+            self.extraHeaders = extraHeaders
+        }
+
+        public static func json(_ object: Any, status: Int = 200) -> Response {
+            let data = (try? JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])) ?? Data("{}".utf8)
+            return Response(status: status, contentType: "application/json; charset=utf-8", body: data + Data("\n".utf8))
+        }
+
+        public static func text(_ string: String, contentType: String = "text/markdown; charset=utf-8", status: Int = 200) -> Response {
+            Response(status: status, contentType: contentType, body: Data(string.utf8))
+        }
+
+        public static func error(_ error: APIError) -> Response {
+            var body: [String: Any] = ["code": error.code, "message": error.message]
+            if let step = error.step { body["step"] = step }
+            return .json(["error": body], status: error.status)
+        }
+
+        public var serialized: Data {
+            var head = "HTTP/1.1 \(status) \(Self.reason(status))\r\n"
+            head += "Content-Type: \(contentType)\r\nContent-Length: \(body.count)\r\nConnection: close\r\n"
+            head += "Cache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\n"
+            for (k, v) in extraHeaders.sorted(by: { $0.key < $1.key }) { head += "\(k): \(v)\r\n" }
+            return Data((head + "\r\n").utf8) + body
+        }
+
+        static func reason(_ status: Int) -> String {
+            [200: "OK", 201: "Created", 400: "Bad Request", 402: "Payment Required", 403: "Forbidden",
+             404: "Not Found", 405: "Method Not Allowed", 409: "Conflict", 413: "Payload Too Large",
+             422: "Unprocessable Content", 500: "Internal Server Error", 503: "Service Unavailable"][status] ?? "Status"
+        }
+    }
+
+    public struct APIError: Error, Sendable, Equatable {
+        public var status: Int
+        public var code: String
+        public var message: String
+        public var step: Int?
+
+        public init(_ status: Int, _ code: String, _ message: String, step: Int? = nil) {
+            self.status = status
+            self.code = code
+            self.message = message
+            self.step = step
+        }
+
+        public static func badRequest(_ m: String) -> APIError { APIError(400, "bad_request", m) }
+        public static func notFound(_ m: String) -> APIError { APIError(404, "not_found", m) }
+        public static func forbidden(_ m: String) -> APIError { APIError(403, "forbidden", m) }
+        public static func notAvailable(_ m: String) -> APIError { APIError(409, "not_available", m) }
+        public static func paidNotAllowed(_ m: String) -> APIError { APIError(402, "paid_not_allowed", m) }
+        public static func tooLarge(_ m: String) -> APIError { APIError(413, "too_large", m) }
+        public static func internalError(_ m: String) -> APIError { APIError(500, "internal", m) }
+    }
+
+    /// The security rules, checked before routing:
+    /// - the Host must be this machine (stops DNS rebinding),
+    /// - requests from web pages (an Origin header) are refused,
+    /// - anything that changes state needs the agent header.
+    public static func check(_ request: Request, port: UInt16) -> APIError? {
+        let host = (request.headers["host"] ?? "").lowercased()
+        let allowed = ["127.0.0.1", "localhost", "[::1]"].flatMap { ["\($0):\(port)", $0] }
+        guard allowed.contains(host) else {
+            return .forbidden("Host must be 127.0.0.1:\(port) or localhost:\(port).")
+        }
+        if request.headers["origin"] != nil {
+            return .forbidden("Requests from web pages are not accepted. Call the API from a local process (curl, a script, an agent).")
+        }
+        if request.method != "GET", request.method != "HEAD", request.headers[agentHeader.lowercased()] != "1" {
+            return .forbidden("Add the header \(agentHeader): 1 to every request that isn't a GET.")
+        }
+        return nil
+    }
+
+    /// Parses `{"steps": [{"op", "params"}], "allowPaid": false}`, checking ops and params before anything runs.
+    public static func parseSteps(_ body: Data) throws(APIError) -> (steps: [Step], allowPaid: Bool) {
+        guard let obj = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any] else {
+            throw .badRequest("The body isn't a JSON object. Send {\"steps\": [{\"op\": \"…\", \"params\": {…}}]}.")
+        }
+        guard let raw = obj["steps"] as? [Any], !raw.isEmpty else {
+            throw .badRequest("Send {\"steps\": [{\"op\": \"…\", \"params\": {…}}]}. GET /api/v1/operations lists the ops.")
+        }
+        let allowPaid = obj["allowPaid"] as? Bool ?? false
+        var steps: [Step] = []
+        for (i, item) in raw.enumerated() {
+            guard let dict = item as? [String: Any], let op = dict["op"] as? String else {
+                throw .badRequest("Step \(i) needs an \"op\".")
+            }
+            guard let spec = Operations.named(op) else {
+                throw APIError(404, "not_found", "Step \(i): unknown op \"\(op)\". GET /api/v1/operations lists them.", step: i)
+            }
+            var params: [String: JSONValue] = [:]
+            if let p = dict["params"] {
+                guard let pd = p as? [String: Any] else { throw APIError(400, "bad_request", "Step \(i): \"params\" must be an object.", step: i) }
+                for (k, v) in pd {
+                    guard let jv = JSONValue(v) else { throw APIError(400, "bad_request", "Step \(i): \"\(k)\" must be a number, string or boolean.", step: i) }
+                    params[k] = jv
+                }
+            }
+            let step = Step(op: op, params: params)
+            do { try StepRunner.validate(step) } catch {
+                throw APIError(400, "bad_request", "Step \(i): \(error.localizedDescription)", step: i)
+            }
+            if spec.paid, !allowPaid {
+                throw APIError(402, "paid_not_allowed", "Step \(i) (\(op)) calls a paid service. Pass \"allowPaid\": true to allow it.", step: i)
+            }
+            steps.append(step)
+        }
+        return (steps, allowPaid)
+    }
+
+    // MARK: Operations
+
+    public static var operations: [[String: Any]] {
+        Operations.all.map { op in
+            ["name": op.name, "title": op.title, "description": op.description, "paid": op.paid, "edits": op.edits,
+             "params": op.params.map { p -> [String: Any] in
+                 var d: [String: Any] = ["name": p.name, "type": p.kind.rawValue, "description": p.description, "required": p.required]
+                 if let o = p.options { d["options"] = o }
+                 return d
+             }]
+        }
+    }
+
+    // MARK: Guide
+
+    /// What an agent fetches first: what Jammer is and exactly how to drive it.
+    public static func guide(port: UInt16, appVersion: String) -> String {
+        let base = "http://127.0.0.1:\(port)"
+        let h = agentHeader
+        var s = """
+        # Jämmer: guide for agents
+
+        Jämmer \(appVersion) is a native macOS audio editor (speech, restoration, post). This page tells an agent how to drive the running app through its local HTTP API. Everything here works today; nothing else does yet.
+
+        - Base URL: `\(base)` (this Mac only; the server listens on loopback). Check that `app.name` in `GET /api/v1/status` is `"Jammer"` before you change anything: Glimmer and Flimmer run similar APIs on nearby ports.
+        - Every request that isn't a GET needs the header **`\(h): 1`**. Without it you get `403 forbidden`.
+        - Don't send an `Origin` header: requests that look like they come from a web page are refused.
+        - Audio travels in request and response bodies. The API never reads or writes file paths.
+        - Edits land in document windows the user can see, and can be undone. One `steps` request is one undo step. The source files are never changed.
+        - Times are in **seconds** (decimals allowed). Jämmer rounds them to the nearest sample; replies give both seconds and frames.
+        - Steps that cost money are refused unless you pass `"allowPaid": true`. Nothing costs money yet: all processing runs on the Mac.
+
+        ## Quick start
+
+        Run these in order. Replace `talk.wav` with any audio file (WAV, AIFF, MP3, AAC/M4A, FLAC, ALAC, CAF).
+
+        ```sh
+        BASE=\(base)
+
+        # 1. Is Jämmer there? Check "app": {"name": "Jammer", …}.
+        curl -s $BASE/api/v1/status
+
+        # 2. Open the file as a new document. The reply contains its id.
+        curl -s -X POST -H '\(h): 1' -H 'Content-Type: audio/wav' \\
+             --data-binary @talk.wav "$BASE/api/v1/documents?name=Talk"
+        # → {"document": {"id": "3F2A…", "duration": 754.2, …}}
+        ID=3F2A…
+
+        # 3. Measure it: loudness (LUFS), loudness range, true peak.
+        curl -s $BASE/api/v1/documents/$ID/analysis
+
+        # 4. Edit: cut the first 2.5 seconds, fade in, then bring it to -16 LUFS.
+        curl -s -X POST -H '\(h): 1' -H 'Content-Type: application/json' \\
+             -d '{"steps": [{"op": "delete", "params": {"start": 0, "end": 2.5}},
+                            {"op": "fade_in", "params": {"start": 0, "end": 0.5}},
+                            {"op": "normalize", "params": {"target": "loudness", "level": -16}}]}' \\
+             $BASE/api/v1/documents/$ID/steps
+
+        # 5. Export the result as a 24-bit WAV.
+        curl -s -X POST -H '\(h): 1' -H 'Content-Type: application/json' \\
+             -d '{"format": "wav", "bitDepth": 24}' $BASE/api/v1/documents/$ID/export -o talk-edited.wav
+        ```
+
+        Opening a document answers `201 Created`. To send the audio inside JSON instead: `-d '{"audio": "<base64 of the file>", "name": "Talk"}'`. Files over 256 MB go through uploads (below).
+
+        ## Endpoints
+
+        | Method | Path | What it does |
+        |---|---|---|
+        | GET | `\(guidePath)` | This guide (Markdown). |
+        | GET | `/api/v1/status` | App name and version, API version, port, open documents. |
+        | GET | `/api/v1/operations` | Every step operation with its parameters (JSON). |
+        | GET | `/api/v1/documents` | The open documents. |
+        | POST | `/api/v1/documents` | Open audio: raw bytes (`Content-Type: audio/…` or `application/octet-stream`, optional `?name=`), JSON `{"audio": "<base64>", "name"}`, or JSON `{"upload": "<id>", "name"}`. |
+        | GET | `/api/v1/documents/{id}` | Duration, sample rate, channels, tracks and clips, markers, selection, playhead. |
+        | POST | `/api/v1/documents/{id}/steps` | Run steps in order. Body: `{"steps": [{"op": "…", "params": {…}}], "allowPaid": false}`. |
+        | POST | `/api/v1/documents/{id}/undo` | Undo the last change (a whole `steps` request counts as one). |
+        | POST | `/api/v1/documents/{id}/redo` | Redo. |
+        | GET | `/api/v1/documents/{id}/analysis` | Loudness of the document, or of `?start=&end=` (seconds): integrated LUFS, range LU, max momentary and short-term, sample peak dBFS, true peak dBTP. |
+        | GET | `/api/v1/documents/{id}/waveform` | Min/max per column for `?width=` columns (default 200, max 4000), optionally over `?start=&end=`. Lets you see where the sound is. |
+        | POST | `/api/v1/documents/{id}/export` | The rendered audio as bytes. Body: `{"format": "wav", "bitDepth": 16\\|24\\|32, "start", "end", "dither": false}`; all optional (24-bit WAV of everything by default). Up to 2 GB per response; export a range for more. |
+        | POST | `/api/v1/documents/{id}/play` | Starts playback in the document's window, from `{"at": seconds}` or the playhead. Only works when the window is visible. |
+        | POST | `/api/v1/documents/{id}/stop` | Stops playback. |
+        | POST | `/api/v1/uploads` | Starts an upload for a big file. Answers `{"upload": {"id": "…", "size": 0}}`. |
+        | PUT | `/api/v1/uploads/{id}?offset=N` | Appends a chunk (≤ 256 MB). `offset` must equal the bytes received so far. |
+        | GET | `/api/v1/uploads/{id}` | How many bytes have arrived. |
+
+        Document ids are stable while the window is open. `GET /api/v1/documents` also lists documents the user opened.
+
+        ### Big files
+
+        ```sh
+        UP=$(curl -s -X POST -H '\(h): 1' $BASE/api/v1/uploads | sed -E 's/.*"id" *: *"([^"]+)".*/\\1/')
+        split -b 100m long.wav part.
+        OFF=0; for p in part.*; do
+          curl -s -X PUT -H '\(h): 1' --data-binary @$p "$BASE/api/v1/uploads/$UP?offset=$OFF" >/dev/null
+          OFF=$((OFF + $(stat -f%z $p)))
+        done
+        curl -s -X POST -H '\(h): 1' -H 'Content-Type: application/json' -d "{\\"upload\\": \\"$UP\\"}" $BASE/api/v1/documents
+        ```
+
+        Uploads are kept until they're opened or the app quits.
+
+        ### Steps
+
+        A steps request runs every step in order and stops at the first failure; later steps are reported as `skipped`, and nothing from that request is applied. The reply lists each step:
+
+        ```json
+        {"results": [{"index": 0, "op": "delete", "status": "done"},
+                     {"index": 1, "op": "normalize", "status": "done", "info": {"gainDB": 3.4, "before": -19.4}}],
+         "document": {…}}
+        ```
+
+        Ranges: most operations take `start` and `end` in seconds. Without them they act on the selection (`select`, `select_all`); `gain` and `normalize` act on everything when there's no range and no selection. Edits work on all tracks at once, like a waveform editor.
+
+        ## Errors
+
+        Errors are JSON: `{"error": {"code": "…", "message": "…"}}`. A failed step also gives its index: `{"error": {"code": "step_failed", "message": "…", "step": 1}}`.
+
+        | Status | Code | Meaning |
+        |---|---|---|
+        | 400 | `bad_request` | The body or a parameter is malformed. The message says which (and `step` which step). |
+        | 402 | `paid_not_allowed` | A step costs money and `allowPaid` wasn't `true`. |
+        | 403 | `forbidden` | Missing `\(h): 1`, an `Origin` header, or a Host other than this Mac. |
+        | 404 | `not_found` | No such document, upload, path or operation. |
+        | 405 | `method_not_allowed` | Wrong HTTP method for the path. |
+        | 409 | `not_available` | Not possible right now: nothing to undo, the window isn't visible for playback, the upload offset is wrong. |
+        | 413 | `too_large` | A body over 256 MB (use uploads), or an export over 2 GB (export a range). |
+        | 422 | `step_failed` | A step ran and failed. `error.step` is its index; `results` has the status of every step. |
+        | 500 | `internal` | Jämmer failed unexpectedly. The message has the detail. |
+
+        ## Operations
+
+        These are the `op` values for `steps`, with their `params`. The same list is available as JSON from `GET /api/v1/operations`.
+
+        """
+        for op in Operations.all {
+            s += "\n### `\(op.name)`\(op.paid ? " (paid)" : "")\n\n\(op.description)\n"
+            if op.params.isEmpty {
+                s += "\nNo params: `{\"op\": \"\(op.name)\"}`\n"
+                continue
+            }
+            s += "\n| Param | Type | Description |\n|---|---|---|\n"
+            for p in op.params {
+                var d = p.description.replacingOccurrences(of: "|", with: "\\|")
+                if p.required { d = "**Required.** " + d }
+                if let o = p.options { d += " One of: `" + o.joined(separator: "`, `") + "`." }
+                s += "| `\(p.name)` | \(p.kind.rawValue) | \(d) |\n"
+            }
+        }
+        s += """
+
+        ## Good to know
+
+        - Nothing is destructive: clips play from the original files, so you can always undo. `GET /api/v1/documents/{id}` shows the clips.
+        - Measure before and after: `analysis` gives the numbers, `waveform` shows the shape.
+        - Common targets: podcasts −16 LUFS (Apple) with true peak at most −1 dBTP; EBU broadcast −23 LUFS.
+        - The user may be editing the same document. Read it before you act on it, and keep requests small.
+        - Playback is for the user to hear what you did. Don't start it unless they asked; recording can only be started by the user.
+
+        """
+        return s
+    }
+}
