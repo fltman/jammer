@@ -56,7 +56,7 @@ When Jämmer starts, the splash shows a line under "For your agent". Click Copy 
 
 ## What can an agent do, and what can't it?
 
-It can do what the menus do: open audio, read the document and its transcript, measure loudness, edit, repair, transcribe, find and level speakers, add plugins, move through the history and export. Every request is one undo step, and a request that fails changes nothing. It can start playback only in a window you can see, it can't download models, and it can't open plugin windows.
+It can do what the menus do: open audio, read the document and its transcript, measure loudness, edit, repair, transcribe, find and level speakers, add plugins, move through the history and export. Every request is one undo step, and a request that fails changes nothing. It can start playback only in a window you can see, it can't download models, and it can't open plugin windows. It can't touch files by their path either, except to run a batch inside a folder you've allowed in Settings › Agents.
 
 ## Does it work with VoiceOver?
 

@@ -1,6 +1,6 @@
 # Settings
 
-**Jämmer › Settings…** (⌘,) holds the speech models (below). A few other choices are remembered where you make them:
+**Jämmer › Settings…** (⌘,) has two tabs: **Models** (below) and **Agents**. A few other choices are remembered where you make them:
 
 | Setting | Where | What it does |
 |---|---|---|
@@ -11,6 +11,10 @@
 | Safe mode for plugins | Audio › Plugins… | Runs every plugin in a process of its own |
 
 Window size and position are remembered too.
+
+## Agents
+
+**Folders agents may use**: an agent normally works only on the documents you have open. Batch processing reads and writes files by path, and an agent can do that only inside the folders listed here. Add one with **Add Folder…**; remove it to take the permission back. The list starts empty. Batches you start yourself from File › Batch… don't need it.
 
 ## Models
 

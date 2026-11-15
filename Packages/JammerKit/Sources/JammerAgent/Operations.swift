@@ -74,6 +74,7 @@ public struct OperationSpec: Sendable, Identifiable {
     public var allParams: [Param] {
         guard let call else { return params }
         let id = Param("id", .string, "The document id (GET /api/v1/documents lists them).", required: true).at("path")
+        if !call.path.contains("{id}") { return params }
         return [id] + (call.method == "GET" ? params.map { $0.location == nil ? $0.at("query") : $0 } : params)
     }
 
@@ -262,6 +263,13 @@ public enum Operations {
               params: [.init("model", .string, "Which separation. Default music4.", options: ["music4", "dialog"]),
                        .init("tracks", .list, "Track ids. Default: every track with audio.")],
               call: ("POST", "/api/v1/documents/{id}/separate"), startsJob: true),
+        .init("batch", "Batch", "Processes files without opening them, as a job: each file gets the steps, then the jobs (restore, transcribe, diarize, separate), and is exported into output as “name<suffix>.<format>”. Every path must lie in a folder the user allowed in Settings › Agents (reason folder_not_allowed otherwise; GET /api/v1/status has agentFolders, the count). Inputs are never written over (would_overwrite_source); existing results are skipped unless overwrite; one file failing doesn't stop the rest.",
+              params: [OperationSpec.Param("files", .list, "Absolute paths of audio files."),
+                       OperationSpec.Param("folder", .string, "Or a folder: every audio file directly in it."),
+                       OperationSpec.Param("output", .string, "The folder results go in.", required: true),
+                       OperationSpec.Param("suffix", .string, "Added to each name. Default “ (Jämmer)”."),
+                       OperationSpec.Param("overwrite", .boolean, "Replace results that are already there. Default false.")],
+              call: ("POST", "/api/v1/batch"), startsJob: true),
         .init("get_chapters", "Read Chapters", "The markers as Podcasting 2.0 chapters (JSON, version 1.2.0), optionally over start and end.",
               params: [start, end], edits: false, call: ("GET", "/api/v1/documents/{id}/chapters")),
         .init("measure_loudness", "Measure Loudness", "Integrated LUFS, loudness range, max momentary and short-term, sample and true peak.",

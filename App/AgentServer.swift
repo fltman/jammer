@@ -252,7 +252,7 @@ enum AgentRouter {
         case ["api", "v1", "status"]:
             try only("GET")
             return .json(["app": AgentAPI.appInfo(version: appVersion, bundleID: Bundle.main.bundleIdentifier),
-                          "api": AgentAPI.version, "port": Int(port),
+                          "api": AgentAPI.version, "port": Int(port), "agentFolders": AgentFolders.urls.count,
                           "documents": AgentRegistry.shared.sessions.map(summary),
                           "jobs": JobRegistry.shared.running.map(\.json)])
         case let p where p.count == 4 && Array(p.prefix(3)) == ["api", "v1", "jobs"]:
@@ -260,6 +260,17 @@ enum AgentRouter {
             let job = r.method == "GET" ? JobRegistry.shared.job(p[3]) : JobRegistry.shared.cancel(p[3])
             guard let job else { throw APIError.notFound("No job with id \(p[3]).") }
             return .json(["job": job.json])
+        case ["api", "v1", "batch"]:
+            try only("POST")
+            guard let body = (try? JSONSerialization.jsonObject(with: r.body)) as? [String: Any] else { throw APIError.badRequest("The body isn't a JSON object.") }
+            do {
+                // Paths from an agent must lie in a folder the user allowed in Settings › Agents.
+                let request = try BatchRequest.parse(body, policy: AgentFolders.policy)
+                return .json(["job": JobRegistry.shared.startBatch(request).json, "files": request.inputs.count], status: 202)
+            } catch let e as BatchError {
+                if e.reason == "bad_request" { throw APIError.badRequest(e.message) }
+                throw APIError.unprocessable(e.reason, e.message)
+            }
         case ["api", "v1", "plugins"]:
             try only("GET")
             let q = r.query["q"]?.lowercased()

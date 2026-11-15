@@ -169,6 +169,31 @@ final class JobRegistry {
         return job
     }
 
+    /// Processes files without windows (File › Batch…, POST /api/v1/batch).
+    func startBatch(_ request: BatchRequest, done: (@MainActor (BatchResult) -> Void)? = nil) -> Job {
+        var job = Job(kind: "batch")
+        jobs[job.id] = job
+        let id = job.id
+        tasks[id] = Task { [weak self] in
+            job.status = .running
+            self?.update(job)
+            let result = await BatchRunner.run(request, media: MediaStore.folder, job: BatchJobs.hook, progress: { p in
+                Task { @MainActor in
+                    guard var j = self?.jobs[id], !j.isFinished else { return }
+                    j.progress = min(0.99, p)
+                    self?.update(j)
+                }
+            }, cancelled: { Task.isCancelled })
+            done?(result)
+            guard self?.jobs[id]?.status != .cancelled else { return }
+            job.status = .done
+            job.progress = 1
+            job.result = result.json
+            self?.finish(job)
+        }
+        return job
+    }
+
     /// Splits tracks into stems (Spleeter); the stems replace the tracks as one undo step.
     func startSeparation(_ session: EditorSession, tracks: [UUID]?, model: String = "music4") -> Job {
         var job = Job(kind: "separate", documentID: session.agentID)

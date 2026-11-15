@@ -333,6 +333,7 @@ public enum AgentAPI {
         | POST | `/api/v1/documents/{id}/separate` | Splits tracks into stems (a job). Body: `{"model": "music4"\\|"dialog", "tracks": [id]}`; both optional. Result: `{"stems": [names], "tracks": [ids]}`. |
         | GET | `/api/v1/documents/{id}/history` | The history tree: `{"current", "pruned", "limit", "nodes": [{"id", "parent", "action", "time", "branch"}]}`. A change made after an undo starts a branch; the old future stays reachable. |
         | POST | `/api/v1/documents/{id}/history/{node}` | Goes to that step (any branch). One undo step; `undo` goes back. |
+        | POST | `/api/v1/batch` | Processes files by path (a job). Body: `{"files": [paths] or "folder": path, "steps": […], "jobs": [{"op", "params"}], "export": {"format", "bitDepth", "bitRate", "chapters"}, "output": path, "suffix", "overwrite"}`. Result: `{"done", "outputs", "skipped", "failed"}`. |
         | GET | `/api/v1/plugins` | The Audio Unit effects installed on this Mac, optionally filtered by `?q=`: `{"plugins": [{"id", "name", "manufacturer", "kind", "version", "v3"}], "safeMode"}`. |
         | POST | `/api/v1/documents/{id}/diarize` | Finds who speaks when (a job). Body: `{"mode": "by_track"\\|"ml", "tracks": [id], "speakers", "minSpeakers", "maxSpeakers"}`; all optional. The result has `speakers` (names) and `seconds` (each one's speaking time) in order of id. |
         | GET | `/api/v1/documents/{id}/speakers` | `{"speakers": [{"id", "name", "seconds"}], "turns": [{"speaker", "track", "start", "end"}]}`, as it plays now, optionally over `?start=&end=`. |
@@ -407,6 +408,10 @@ public enum AgentAPI {
         ## Speakers
 
         `POST …/diarize` labels the document with speakers as a job. For a double-ender (several tracks playing at once, one person per track) the default is `"mode": "by_track"`: each track is its speaker, named after the track, and bleed from the other tracks doesn't count. Otherwise it's `"ml"`, a diarisation model run on each track; tell it `speakers` when you know how many, especially for similar voices and short back-and-forth, where it's much weaker (docs/DIARISATION.md has the numbers). If `ml` finds only one speaker, the job's result has a `hint`: when the recording is a conversation, run it again with `speakers`, since the model often merges voices that sound alike. The first `ml` run downloads the model (about 20 MB); if that fails the job fails with `error.code` `model_unavailable`. Afterwards `GET …/speakers` lists who talks when, `GET …/transcript` gives each word a `speaker` id and lists `speakers`, and `rename_speaker` names them ("0" → "Anna"). Turns are anchored in the audio, so they stay right through edits.
+
+        ## Batch
+
+        Everything else in this API works on documents the user has open; `POST /api/v1/batch` is the one call that reads and writes files by path. So it only works inside folders the user has allowed under Jämmer › Settings… › Agents ("Folders agents may use"; the list starts empty, and `agentFolders` in `GET /api/v1/status` is how many there are). A path outside them, also through a symlink or `..`, answers 422 with reason `folder_not_allowed`: ask the user to add the folder. Each file is processed without a window: `steps` as in `…/steps`, then `jobs` (`restore`, `transcribe`, `diarize`, `separate`, with the same parameters as their endpoints), then exported into `output` as “name (Jämmer).mp3” (or your `suffix` and format). The input files are never changed, not even with `overwrite` (reason `would_overwrite_source`); a result that already exists is skipped unless `overwrite` is true; a file that fails is listed under `failed` and the rest carry on.
 
         ## Stems
 

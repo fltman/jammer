@@ -11,6 +11,7 @@
 | ⇧⌘S | Duplicate (for a clip from Flimmer: Save a Jämmer Copy…) |
 | ⇧⌘I | Import Tracks… |
 | ⇧⌘E | Export Audio… |
+| ⌥⌘B | Batch… |
 | ⌘, | Settings… |
 | ⌘Q | Quit Jämmer |
 

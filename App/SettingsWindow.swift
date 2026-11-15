@@ -17,7 +17,7 @@ enum SettingsWindow {
         let w = EscClosingWindow(contentRect: .zero, styleMask: [.titled, .closable], backing: .buffered, defer: false)
         w.title = "Settings"
         w.isReleasedWhenClosed = false
-        w.contentViewController = NSHostingController(rootView: ModelsSettings())
+        w.contentViewController = NSHostingController(rootView: SettingsTabs())
         w.center()
         w.makeKeyAndOrderFront(nil)
         window = w
@@ -146,5 +146,47 @@ struct ModelsSettings: View {
         }
         .padding(20)
         .frame(width: 560)
+    }
+}
+
+/// Settings › Agents: the folders agents may read from and write to.
+struct AgentSettings: View {
+    @State private var folders = AgentFolders.urls
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Agents").font(.title2.bold())
+            Text("Folders agents may use").font(.headline)
+            Text("Agents work on the documents you have open. Batch processing is the one thing that reads and writes files by path, and an agent can only do that inside the folders listed here. The list starts empty.")
+                .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            ForEach(folders, id: \.self) { url in
+                HStack {
+                    Image(systemName: "folder").accessibilityHidden(true)
+                    Text(url.path).lineLimit(1).truncationMode(.middle)
+                    Spacer()
+                    Button("Remove") { AgentFolders.remove(url); folders = AgentFolders.urls }.accessibilityLabel("Remove \(url.lastPathComponent)")
+                }
+            }
+            if folders.isEmpty { Text("No folders: agents can't run batches.").foregroundStyle(.secondary) }
+            Button("Add Folder…") {
+                let p = NSOpenPanel()
+                p.canChooseDirectories = true
+                p.canChooseFiles = false
+                p.canCreateDirectories = true
+                p.message = "Agents may read audio from this folder and write results into it"
+                if p.runModal() == .OK, let url = p.url { AgentFolders.add(url); folders = AgentFolders.urls }
+            }
+        }
+        .padding(20)
+        .frame(width: 560, alignment: .leading)
+    }
+}
+
+struct SettingsTabs: View {
+    var body: some View {
+        TabView {
+            ModelsSettings().tabItem { Label("Models", systemImage: "square.and.arrow.down") }
+            AgentSettings().tabItem { Label("Agents", systemImage: "terminal") }
+        }
     }
 }
