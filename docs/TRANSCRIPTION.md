@@ -30,7 +30,11 @@ Synthetic speech is clean and evenly paced, so these numbers flatter every engin
 |---|---|---|---|---|
 | Apple dictation (sv-SE) | Alva, 180 wpm | 118 | 6 / 3 / 2 | 9.3 % |
 | Apple dictation (sv-SE) | Alva, 230 wpm | 118 | 12 / 2 / 2 | 13.6 % |
+| KB-Whisper small (q5_0, whisper.cpp, Metal) | Alva, 180 wpm | 118 | 2 / 0 / 0 | 1.7 % |
+| KB-Whisper small (q5_0, whisper.cpp, Metal) | Alva, 230 wpm | 118 | 2 / 0 / 0 | 1.7 % |
 
 All: 11.4 % WER over 236 words; 84 s of audio in 3.8 s (22× real time, including starting the recogniser for each sentence). Some errors are only formatting: numbers come out as digits ("en minut" → "1 minut", "sexton" → "16"), which the scorer counts as substitutions. Real errors: "podd" → "tåg", "LUFS" → "luft", "Kapitelmarkeringar" → "Kapitel marar", and dropped "och".
 
-KB-Whisper (small, then medium) is next in this table; it becomes the default for Swedish only if it scores better here. Its model files are listed with size and SHA-256 in `JammerSpeech/Models.swift` and download from a configurable source (Hugging Face by default) into `Application Support/Jammer/Models` (`JAMMER_MODELS_DIR` during development), verified before use. The runtime, whisper.cpp (MIT), has no prebuilt Apple binary in its releases, so it has to be compiled from source; that's waiting for a go-ahead.
+KB-Whisper small: 1.7 % WER over 236 words at 8× real time (84 s in 10.4 s, beam search, model loaded once). Its only errors: "podd" → "pog"/"pogg" and "sexton" → "16". It beats Apple dictation clearly on this test, so it becomes the default for Swedish once its model is installed; Apple dictation remains the fallback that needs no download. Medium is next in this table.
+
+A bug the benchmark caught: Whisper's tokens are bytes and can split a UTF-8 character, so "för" came out as "f��r" when tokens were decoded one by one. Words are now decoded only once complete. Its model files are listed with size and SHA-256 in `JammerSpeech/Models.swift` and download from a configurable source (Hugging Face by default) into `Application Support/Jammer/Models` (`JAMMER_MODELS_DIR` during development), verified before use. The runtime, whisper.cpp (MIT), has no prebuilt Apple binary in its releases; `scripts/build-whisper.sh` builds it from a pinned commit (v1.9.5) into `Packages/JammerKit/Vendor/whisper.xcframework` (not committed), and the package includes the Whisper engine only when that exists.

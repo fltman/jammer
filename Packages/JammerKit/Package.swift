@@ -1,5 +1,10 @@
 // swift-tools-version: 6.2
+import Foundation
 import PackageDescription
+
+// whisper.cpp is built from pinned source by scripts/build-whisper.sh; until then the
+// package builds without the Whisper engine.
+let hasWhisper = FileManager.default.fileExists(atPath: Context.packageDirectory + "/Vendor/whisper.xcframework")
 
 let package = Package(
     name: "JammerKit",
@@ -45,3 +50,13 @@ let package = Package(
     ],
     cxxLanguageStandard: .cxx20
 )
+
+if hasWhisper {
+    package.products.append(.library(name: "JammerWhisper", targets: ["JammerWhisper"]))
+    package.targets += [
+        .binaryTarget(name: "whisper", path: "Vendor/whisper.xcframework"),
+        .target(name: "JammerWhisper", dependencies: ["whisper", "JammerSpeech", "JammerCore"],
+                linkerSettings: [.linkedFramework("Accelerate"), .linkedFramework("Metal"), .linkedFramework("MetalKit"), .linkedLibrary("c++")]),
+        .testTarget(name: "JammerWhisperTests", dependencies: ["JammerWhisper", "JammerSpeech", "JammerCore"]),
+    ]
+}

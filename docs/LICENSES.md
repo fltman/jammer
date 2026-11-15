@@ -13,6 +13,8 @@ Jämmer is MIT. Every third-party component and model is listed here **before** 
 |---|---|---|---|---|
 | Apple frameworks (AudioToolbox, AVFAudio, Accelerate, Metal, Network, AppKit, SwiftUI) | macOS 27 SDK | Apple SDK | System frameworks | — |
 
+| whisper.cpp with ggml | v1.9.5 (d1be6fd) | MIT, "Copyright (c) 2023-2026 The ggml authors" ([LICENSE](https://github.com/ggml-org/whisper.cpp/blob/master/LICENSE), read 2026-11-15) | Static library built from source by `scripts/build-whisper.sh` (Metal, Accelerate; no examples, no server); runs KB-Whisper | 2026-11-15 |
+
 ## Derived algorithms (no code copied)
 
 | What | Source | Licence | Note |
@@ -56,5 +58,4 @@ When any CC-BY-4.0 model is installed, About › Acknowledgements lists: NVIDIA 
 | Component | Licence (to verify) | Plan |
 |---|---|---|
 | LAME (MP3 encoder) | LGPL | Dynamic library only, phase 1 |
-| whisper.cpp (runtime for KB-Whisper) | MIT (to read) | Phase 1 transcription |
 | Sparkle | MIT | Updates |
