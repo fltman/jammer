@@ -17,6 +17,7 @@ let package = Package(
         .library(name: "JammerAudio", targets: ["JammerAudio"]),
         .library(name: "JammerAgent", targets: ["JammerAgent"]),
         .library(name: "JammerSpeech", targets: ["JammerSpeech"]),
+        .library(name: "JammerAssistant", targets: ["JammerAssistant"]),
     ],
     targets: [
         // The realtime core. C++20 behind a C API; the compiler proves the
@@ -42,11 +43,15 @@ let package = Package(
             dependencies: ["JammerCore"],
             linkerSettings: [.linkedFramework("Speech"), .linkedFramework("AVFoundation")]
         ),
+        // The built-in assistant: plans from the same operation registry, on-device by default.
+        .target(name: "JammerAssistant", dependencies: ["JammerAgent", "JammerCore"],
+                linkerSettings: [.linkedFramework("FoundationModels")]),
         // The local agent API: parsing, security rules, operations and the guide. Pure.
         .target(name: "JammerAgent", dependencies: ["JammerCore"]),
         .testTarget(name: "JammerEngineTests", dependencies: ["JammerEngine"]),
         .testTarget(name: "JammerCoreTests", dependencies: ["JammerCore", "JammerEngine"]),
         .testTarget(name: "JammerAgentTests", dependencies: ["JammerAgent", "JammerCore"]),
+        .testTarget(name: "JammerAssistantTests", dependencies: ["JammerAssistant", "JammerAgent", "JammerCore"]),
         .testTarget(name: "JammerSpeechTests", dependencies: ["JammerSpeech", "JammerCore"]),
         .testTarget(name: "JammerAudioTests", dependencies: ["JammerAudio", "JammerCore", "JammerEngine"]),
     ],
