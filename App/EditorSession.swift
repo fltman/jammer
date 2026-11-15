@@ -376,7 +376,7 @@ final class EditorSession {
     // MARK: Peaks
 
     static var peakCache: URL {
-        FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appending(path: "com.brattoo.jammer/Peaks")
+        FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appending(path: "\(Bundle.main.bundleIdentifier ?? "com.brattoo.jammer")/Peaks")
     }
 
     private func loadPeaks() {

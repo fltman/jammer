@@ -6,7 +6,14 @@ import JammerCore
 /// the mix back into the same file, in place, and autosave never touches it.
 @MainActor
 enum LinkedEditing {
-    static let siblings = ["com.brattoo.flimmer": "Flimmer", "com.brattoo.glimmer": "Glimmer"]
+    /// Sibling apps by bundle id; debug builds talk to the siblings' debug builds (SIBLINGS.md §1).
+    static let siblings: [String: String] = {
+        #if DEBUG
+        ["com.brattoo.flimmer.debug": "Flimmer", "com.brattoo.glimmer.debug": "Glimmer"]
+        #else
+        ["com.brattoo.flimmer": "Flimmer", "com.brattoo.glimmer": "Glimmer"]
+        #endif
+    }()
 
     /// The sibling app that sent an "open" Apple event, or nil (Finder, Dock…).
     static func requester(of event: NSAppleEventDescriptor) -> String? {

@@ -7,7 +7,8 @@ import SwiftUI
 
 /// The user's own keys, in the Keychain only.
 enum Keychain {
-    static let service = "com.brattoo.jammer"
+    /// The app's bundle id, so debug builds keep their keys apart (com.brattoo.jammer.debug).
+    static let service = Bundle.main.bundleIdentifier ?? "com.brattoo.jammer"
 
     static func get(_ account: String) -> String? {
         let q: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,

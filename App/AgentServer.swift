@@ -224,7 +224,7 @@ enum AgentRouter {
         }
     }
 
-    static let siblingLog = Logger(subsystem: "com.brattoo.jammer", category: "siblings")
+    static let siblingLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "com.brattoo.jammer", category: "siblings")
     static let siblingNames = ["glimmer": "Glimmer", "flimmer": "Flimmer", "jammer": "Jämmer"]
 
     private static func dispatch(_ r: AgentAPI.Request, port: UInt16) async throws -> Response {
