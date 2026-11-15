@@ -110,7 +110,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
                         return
                     }
                 }
-                guard let reference = p.tracks.first?.id, p.tracks.count > added.count else {
+                guard p.tracks.count > 1 else {
                     session.commit(p, action: "Import Tracks")
                     session.status = "Imported \(added.count) tracks."
                     return
@@ -119,11 +119,14 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
                 let pool = session.pool
                 let (aligned, notes) = await Task.detached { () -> (Project, [String]) in
                     var q = p
-                    let results = q.alignTracks(to: reference, tracks: added, pool: pool)
-                    var notes: [String] = []
-                    for id in added {
+                    // The call recording (where everyone is heard) makes the best reference.
+                    let reference = q.suggestedReference(pool: pool) ?? q.tracks[0].id
+                    let others = q.tracks.map(\.id).filter { $0 != reference }
+                    let results = q.alignTracks(to: reference, tracks: others, pool: pool, minConfidence: 0.3)
+                    var notes = ["reference \(q.tracks.first { $0.id == reference }?.name ?? "?")"]
+                    for id in others {
                         guard let t = q.tracks.first(where: { $0.id == id }), let r = results[id] else { continue }
-                        if r.confidence < 0.5 {
+                        if r.confidence < 0.3 {
                             notes.append("\(t.name): no clear match (\(String(format: "%.2f", r.confidence))), left at the start")
                         } else {
                             var note = "\(t.name): \(String(format: "%+.3f", q.seconds(r.offset))) s"

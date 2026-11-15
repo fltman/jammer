@@ -120,6 +120,10 @@ public enum Operations {
               params: [.init("target", .string, "What to match.", required: true, options: ["loudness", "peak", "true_peak"]),
                        .init("level", .number, "Target: LUFS for loudness, dBFS for peak, dBTP for true_peak. E.g. -16 or -1.", required: true),
                        start, end]),
+        .init("align_tracks", "Line Up Tracks", "Lines up separately recorded tracks (double-enders) by their sound. Use the call recording (Zoom, Riverside, phone), where everyone is heard, as the reference; without one, the track that matches the others best is used. Tracks without a clear match don't move.",
+              params: [.init("reference", .string, "Track id to line up with. Default: the best-matching track."),
+                       .init("tracks", .list, "Track ids to move. Default: all the others."),
+                       .init("window", .seconds, "Seconds from the start to compare. Default 120.", range: 10...600)]),
         .init("loudness_preset", "Loudness Preset", "Brings the range (the whole document without a range or selection) to a delivery target in one step. Without a limiter, the gain stops where the true peak would pass the ceiling; info.limitedByPeak is then 1 and integratedAfter shows what was reached.",
               params: [.init("preset", .string, "The target.", required: true, options: LoudnessPreset.allCases.map(\.rawValue)), start, end]),
         .init("add_marker", "Add Marker", "Adds a marker, or a region when `duration` is given.",
@@ -444,6 +448,27 @@ public enum StepRunner {
             let change = level - current
             try s.project.changeGain(r, by: change)
             return ["gainDB": (change * 100).rounded() / 100, "before": (current * 100).rounded() / 100]
+        case "align_tracks":
+            guard let pool = s.pool else { throw StepFailure("align_tracks needs the app.") }
+            let ref: UUID
+            if let r = p["reference"]?.string {
+                guard let id = UUID(uuidString: r), project.tracks.contains(where: { $0.id == id }) else { throw StepFailure("align_tracks: no track with id \(r).", reason: "not_found") }
+                ref = id
+            } else {
+                guard project.tracks.count > 1, let id = project.suggestedReference(pool: pool) else { throw StepFailure("align_tracks needs at least two tracks.") }
+                ref = id
+            }
+            let ids = p["tracks"]?.strings?.compactMap(UUID.init(uuidString:))
+            let results = s.project.alignTracks(to: ref, tracks: ids, pool: pool, window: p["window"]?.double ?? 120, minConfidence: 0.3)
+            var info: [String: Double] = ["tracks": Double(results.count)]
+            for (i, t) in s.project.tracks.enumerated() {
+                guard let r = results[t.id] else { continue }
+                info["track\(i + 1)OffsetSeconds"] = (project.seconds(r.offset) * 10_000).rounded() / 10_000
+                info["track\(i + 1)Confidence"] = r.confidence
+                info["track\(i + 1)Moved"] = r.confidence >= 0.3 && r.offset != 0 ? 1 : 0
+            }
+            if let refIndex = s.project.tracks.firstIndex(where: { $0.id == ref }) { info["referenceTrack"] = Double(refIndex + 1) }
+            return info
         case "loudness_preset":
             let r = try range(wholeIfNone: true); try checkInside(r)
             guard let preset = LoudnessPreset(rawValue: p["preset"]?.string ?? "") else { throw StepFailure("loudness_preset: unknown preset.") }

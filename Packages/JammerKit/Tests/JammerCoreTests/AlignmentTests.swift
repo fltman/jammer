@@ -79,3 +79,60 @@ struct DoubleEnderTests {
         #expect(p.tracks[2].clips[0].start == 0)
     }
 }
+
+@Suite("Double-ender with a call recording")
+struct CallMixTests {
+    /// Two different voices taking turns, a call recording of both with its own latency,
+    /// a crude codec (low-pass and coarse quantisation) and noise, and each speaker's own
+    /// recorder started at a different time.
+    @Test("Each local track lines up with the call mix within a few samples; the mix is suggested as reference")
+    func callMix() {
+        let n = 48_000 * 40
+        let rate = 48_000.0
+        var xa: UInt64 = 11, xb: UInt64 = 23
+        func noise(_ x: inout UInt64) -> Float {
+            x = x &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+            return Float(Int32(truncatingIfNeeded: x >> 32)) / 2_147_483_648
+        }
+        // Turns: A speaks in the first half of every 6 s, B in the second; different timbres.
+        var a = [Float](repeating: 0, count: n + 96_000), b = a
+        for i in 0..<a.count {
+            let t = Double(i) / rate
+            let phase = t.truncatingRemainder(dividingBy: 6)
+            let envA = phase < 3 ? max(0, sin(2 * .pi * 2.1 * t)) : 0
+            let envB = phase >= 3 ? max(0, sin(2 * .pi * 1.6 * t + 0.7)) : 0
+            a[i] = Float(envA) * (0.4 * noise(&xa) + 0.2 * Float(sin(2 * .pi * 140 * t)))
+            b[i] = Float(envB) * (0.4 * noise(&xb) + 0.2 * Float(sin(2 * .pi * 210 * t)))
+        }
+        // The call mix: both, 137 ms late, low-passed, quantised to 8 bits, with a little noise.
+        let latency = 6_576
+        var mix = [Float](repeating: 0, count: n)
+        var lp: Float = 0
+        var xn: UInt64 = 5
+        for i in 0..<n {
+            let k = i - latency + 48_000
+            let v = k >= 0 && k < a.count ? a[k] + b[k] : 0
+            lp += 0.35 * (v - lp)
+            mix[i] = (lp * 127).rounded() / 127 + 0.01 * noise(&xn)
+        }
+        // Local recorders: A started 2.3 s into the conversation's timeline, B 0.4 s.
+        let startA = 110_400, startB = 19_200
+        let localA = (0..<n).map { i -> Float in let k = i + startA; return k < a.count ? a[k] : 0 }
+        let localB = (0..<n).map { i -> Float in let k = i + startB; return k < b.count ? b[k] : 0 }
+        var (p, pool) = memoryProject(localA.flatMap { [$0, $0] })
+        let info = p.sources[0].info
+        for (name, data) in [("Guest", localB), ("Zoom", mix)] {
+            let ref = SourceRef(name: name, path: "/dev/null", info: info)
+            pool.register(ref.id, memory: data.flatMap { [$0, $0] }, channels: 2)
+            p.addTrack(source: ref)
+        }
+        let mixID = p.tracks[2].id
+        #expect(p.suggestedReference(pool: pool, window: 30, maxLag: 5) == mixID)
+        let results = p.alignTracks(to: mixID, pool: pool, window: 30, maxLag: 5, minConfidence: 0.3)
+        // In the mix, A's content at conversation time T sits at T − 48 000 + latency.
+        let expectA = Frame(startA - 48_000 + latency), expectB = Frame(startB - 48_000 + latency)
+        let gotA = results[p.tracks[0].id]?.offset ?? .max, gotB = results[p.tracks[1].id]?.offset ?? .max
+        #expect(abs(gotA - expectA) <= 3, "A: \(gotA) vs \(expectA), confidence \(results[p.tracks[0].id]?.confidence ?? -1)")
+        #expect(abs(gotB - expectB) <= 3, "B: \(gotB) vs \(expectB), confidence \(results[p.tracks[1].id]?.confidence ?? -1)")
+    }
+}

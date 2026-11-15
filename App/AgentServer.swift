@@ -322,6 +322,23 @@ enum AgentRouter {
             case ["transcript"]:
                 try only("GET")
                 return try transcript(session, r)
+            case ["tracks"]:
+                try only("POST")
+                return try await addTrack(session, r)
+            case let t where t.count == 3 && t[0] == "tracks" && t[2] == "drift":
+                try only("GET")
+                guard let id = UUID(uuidString: t[1]), session.project.tracks.contains(where: { $0.id == id }) else {
+                    throw APIError.notFound("No track with id \(t[1]).")
+                }
+                guard let against = r.query["against"].flatMap(UUID.init(uuidString:)) ?? session.project.tracks.first(where: { $0.id != id })?.id else {
+                    throw APIError.badRequest("Pass ?against=<track id>.")
+                }
+                let p = session.project, pool = session.pool
+                guard let d = await Task.detached(operation: { p.drift(of: id, against: against, pool: pool) }).value else {
+                    throw APIError.unprocessable("too_short", "The tracks overlap too little to measure drift (at least 90 s).")
+                }
+                return .json(["drift": ["ppm": (d.partsPerMillion * 10).rounded() / 10, "msPerHour": (d.partsPerMillion * 3.6 * 10).rounded() / 10,
+                                        "confidence": min(d.start.confidence, d.end.confidence)]])
             case ["chapters"]:
                 try only("GET")
                 let range = try queryRange(r, session)
@@ -434,6 +451,17 @@ enum AgentRouter {
     }
 
     private static func createDocument(_ r: AgentAPI.Request) async throws -> Response {
+        let source = try await importedSource(r)
+        guard let controller = NSDocumentController.shared as? JammerDocumentController else {
+            throw APIError.internalError("The document controller isn't Jämmer's.")
+        }
+        let doc = controller.open(Project(source: source), name: source.name)
+        guard let session = doc.session else { throw APIError.internalError("The document window didn't open.") }
+        return .json(["document": detail(session)], status: 201)
+    }
+
+    /// Audio from a request (raw bytes, base64 JSON or an upload), imported as a source.
+    private static func importedSource(_ r: AgentAPI.Request) async throws -> SourceRef {
         let type = (r.headers["content-type"] ?? "").lowercased()
         var name = r.query["name"]
         let fileURL: URL
@@ -475,12 +503,7 @@ enum AgentRouter {
         if result.decoded { try? FileManager.default.removeItem(at: fileURL) }
         var source = result.source
         source.name = name ?? "Agent audio"
-        guard let controller = NSDocumentController.shared as? JammerDocumentController else {
-            throw APIError.internalError("The document controller isn't Jämmer's.")
-        }
-        let doc = controller.open(Project(source: source), name: source.name)
-        guard let session = doc.session else { throw APIError.internalError("The document window didn't open.") }
-        return .json(["document": detail(session)], status: 201)
+        return source
     }
 
     /// A header-safe file name.
@@ -510,6 +533,15 @@ enum AgentRouter {
                           "results": list, "document": detail(session)], status: 422)
         }
         return .json(["results": list, "document": detail(session)])
+    }
+
+    /// Adds a track from audio sent like POST /documents (bytes, base64 JSON or upload).
+    private static func addTrack(_ session: EditorSession, _ r: AgentAPI.Request) async throws -> Response {
+        let source = try await importedSource(r)
+        var p = session.project
+        let track = p.addTrack(source: source, name: r.query["name"] ?? source.name)
+        session.commit(p, action: "Add Track")
+        return .json(["track": ["id": track.id.uuidString, "name": track.name], "document": detail(session)], status: 201)
     }
 
     private static func transcript(_ session: EditorSession, _ r: AgentAPI.Request) throws -> Response {

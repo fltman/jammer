@@ -213,3 +213,21 @@ extension Project {
         return Alignment.Drift(start: s, end: e, frames: parted, partsPerMillion: Double(parted) / Double(end - w - begin) * 1_000_000)
     }
 }
+
+extension Project {
+    /// The track that lines up best with all the others: in a double-ender that's the call
+    /// recording (Zoom, Riverside, phone), where every speaker can be heard.
+    public func suggestedReference(pool: SourcePool, window: Double = 60, maxLag: Double = 10) -> UUID? {
+        guard tracks.count > 2 else { return tracks.first?.id }
+        let span = 0..<min(length, frames(window + maxLag))
+        let monos = tracks.indices.map { soloMono($0, span, pool: pool) }
+        var best: (Int, Double)?
+        for i in tracks.indices {
+            let score = tracks.indices.filter { $0 != i }.map {
+                Alignment.offset(reference: monos[i], other: monos[$0], sampleRate: sampleRate, maxLag: frames(maxLag)).confidence
+            }.reduce(0, +)
+            if best == nil || score > best!.1 { best = (i, score) }
+        }
+        return best.map { tracks[$0.0].id }
+    }
+}
