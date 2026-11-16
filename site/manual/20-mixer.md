@@ -54,6 +54,17 @@ A VCA group moves several tracks and buses together without anything being route
 
 When to use which: a **bus** when the tracks should share a plugin or be one thing on the way out; a **VCA group** when they should only move together.
 
+## A plugin that listens to another track (sidechain)
+
+A compressor or a gate with a sidechain input can be made to listen to another track or bus than the one it sits on: music that ducks under a voice while it plays, with your own compressor. In **Audio › Plugins…**, a plugin that has such an input gets a **Key** menu; choose the track or bus it should listen to, or None. The plugin hears that strip after its fader, in time with the sound it works on, whatever other plugins are on the way.
+
+- Only a plugin with a sidechain input has the menu. One that has the input but can't be given a key where it runs says why instead.
+- A key that would make a loop (a plugin listening to something that its own strip feeds) is refused.
+- Solo keeps a key's source running, silently, so a ducked track stays ducked while you listen to it alone.
+- Freezing a strip freezes what its plugin did with the key; changing the key's source afterwards is refused until you unfreeze.
+
+What has been tried and what hasn't: one compressor from another maker, as an Audio Unit, keyed from a track and from a bus, measured, played and exported. Not tried: a plugin running in **Safe Mode** (or one that macOS won't load into Jämmer and that therefore runs in a process of its own). There a key can't be delivered, and Jämmer is written to say so in the Key menu's place rather than seem to work; that message has not been seen with an installed plugin. If a keyed plugin doesn't react, look there first, and switch Safe Mode off for it.
+
 ## Solo
 
 Tick **Solo** on a strip to hear only that one; tick several to hear those. Soloing a bus lets through the tracks that go to it, by their output or by a send.
@@ -99,4 +110,4 @@ An export through the master's limiter answers what the file measured in the `X-
 
 An agent freezes with `POST …/freeze` and thaws with `POST …/unfreeze` (`{"strip": id}`); a step that would change a frozen strip's sound fails with reason `frozen`. An agent solos with `POST …/solo` (`{"strips": [ids]}`, `[]` to end it); the answer says that it affects listening only.
 
-Not there yet: sidechain keys (a plugin on one track listening to another).
+An agent gives a plugin a key with `set_insert` and `key` (a track or bus id, or `"none"`); every listed plugin has `hasKeyInput`, its `key`, and `keyRefusal` when it has the input but can't be fed where it runs.

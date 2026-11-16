@@ -124,10 +124,9 @@ public enum Operations {
     nonisolated(unsafe) public static var spectralFreeform = true
 
     /// The steps this build offers.
-    /// Sidechain keys (`set_insert` `key`). Off until a real plugin with a sidechain input has been
-    /// through it (docs/RELEASE.md); a build that has it switched off doesn't offer the parameter and
-    /// refuses it.
-    nonisolated(unsafe) public static var sidechain = false
+    /// Sidechain keys (`set_insert` `key`). On in every build since 2026-11-17 (docs/RELEASE.md, item 7);
+    /// a build that has it switched off doesn't offer the parameter and refuses it.
+    nonisolated(unsafe) public static var sidechain = true
     /// For a test that tries the keyed path without switching it on for every other test in the process.
     @TaskLocal public static var sidechainForThisTask: Bool?
     static var sidechainOn: Bool { sidechainForThisTask ?? sidechain }
@@ -155,7 +154,11 @@ public enum Operations {
     ]
 
     public static var all: [OperationSpec] {
-        let list = all(freeform: spectralFreeform, clap: InsertUnits.external != nil) + (automationOn ? automationSteps : [])
+        withKeys(all(freeform: spectralFreeform, clap: InsertUnits.external != nil)) + (automationOn ? automationSteps : [])
+    }
+    /// A list of steps with `key` on `set_insert` where the build has sidechain keys: what the guide for a
+    /// set of features describes, and what `all` offers.
+    public static func withKeys(_ list: [OperationSpec]) -> [OperationSpec] {
         guard sidechainOn else { return list }
         return list.map { op in
             guard op.name == "set_insert" else { return op }

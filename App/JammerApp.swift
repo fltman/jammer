@@ -53,14 +53,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Lasso and brush can be left out of a build (Config/Features.xcconfig): only the box then.
         Operations.spectralFreeform = false
         #endif
+        // Sidechain keys: in every build since 2026-11-17 (Anders's decision), with what hasn't been seen
+        // written in the manual (Safe Mode's refusal with an installed plugin). In a release this is about
+        // Audio Units, since CLAP and VST 3 are off there.
+        Operations.sidechain = true
         #if DEBUG
         // `-registerAudioUnit <path to a .component>`: loads that Audio Unit as a host loads a plugin and
         // registers it in this process only, so a plugin that is not installed on the Mac can be tried in
         // the app (the sidechain test plugin, docs/LICENSES.md "Used in tests only"). Nothing is installed.
         if let path = UserDefaults.standard.string(forKey: "registerAudioUnit") { DebugAudioUnit.register(path) }
-        // Sidechain keys are in debug builds only until a real plugin with a sidechain input has been
-        // through them (docs/RELEASE.md, rehearsal item 7).
-        Operations.sidechain = true
         // Automation is in debug builds only until lanes are shown and drawn in the window (docs/MIXER.md):
         // what changes how a project sounds without being seen isn't shipped.
         Operations.automation = true

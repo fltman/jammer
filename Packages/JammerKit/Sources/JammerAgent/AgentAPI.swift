@@ -486,7 +486,7 @@ public enum AgentAPI {
         These are the `op` values for `steps`, with their `params`. `GET /api/v1/operations` has the same list as JSON, followed by the calls that have their own endpoint (those have a `call` field and can't be used as steps).
 
         """
-        for op in Operations.all(freeform: features.spectralFreeform, clap: features.clap) {
+        for op in Operations.withKeys(Operations.all(freeform: features.spectralFreeform, clap: features.clap)) {
             s += "\n### `\(op.name)`\(op.paid ? " (paid)" : "")\n\n\(op.description)\n"
             if op.params.isEmpty {
                 s += "\nNo params: `{\"op\": \"\(op.name)\"}`\n"

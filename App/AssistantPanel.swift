@@ -85,7 +85,7 @@ final class AssistantModel {
     static let evaluatedLocally = ["qwen3:8b"]
     static var showHidden: Bool { UserDefaults.standard.bool(forKey: "assistant.showHiddenProviders") }
 
-    var provider: TextProvider? { TextProvider.offered(showHidden: Self.showHidden).first { $0.id == source } }
+    var provider: TextProvider? { TextProvider.offered().first { $0.id == source } }
     var model: String { chosen[source] ?? "" }
     var sourceName: String { source == "device" ? "On this Mac" : source == "ollama" ? "Ollama" : provider?.name ?? "On this Mac" }
     var summary: String { source == "device" || model.isEmpty ? sourceName : "\(sourceName): \(model)" }
@@ -496,7 +496,7 @@ struct AssistantView: View {
             Picker("Model", selection: $model.source) {
                 Text("On this Mac (Apple, free, private)").tag("device")
                 if model.ollamaVersion != nil { Text("Ollama on this Mac (free, private)").tag("ollama") }
-                ForEach(TextProvider.offered(showHidden: AssistantModel.showHidden)) { p in
+                ForEach(TextProvider.offered()) { p in
                     Text("\(p.name) (your key, paid)").tag(p.id)
                 }
             }

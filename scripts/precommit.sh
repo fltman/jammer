@@ -20,6 +20,8 @@ scripts/export-agents-guide.sh > "$out/guide.out" 2>&1 || fail "the agents guide
 [[ ! -x "$tools/check-zsh-path.sh" ]] || "$tools/check-zsh-path.sh" scripts > "$out/path.out" 2>&1 || fail "a script uses zsh's path as a variable"
 [[ -d Jammer.xcodeproj ]] || xcodegen generate > /dev/null 2>&1
 xcodebuild -project Jammer.xcodeproj -scheme Jammer -configuration Debug -derivedDataPath build/dd build > "$out/app.out" 2>&1 || fail "the app didn't build"
+# The signed app's entitlements, read as the system reads them, against what is decided.
+scripts/check-entitlements.sh > "$out/entitlements.out" 2>&1 || fail "the signed app's entitlements are not what is decided ($(head -1 "$out/entitlements.out"))"
 scripts/test.sh > "$out/suite.out" 2>&1 || fail "the test suite: $(grep -c '✘ Test' "$out/suite.out") failing"
 [[ "$(grep -c '✘' "$out/suite.out")" == 0 ]] || fail "the test suite printed a failure"
 (cd "$tools/../site" && node build.mjs --strict) > "$out/site.out" 2>&1 || fail "the strict site build"

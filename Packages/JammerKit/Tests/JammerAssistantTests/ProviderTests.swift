@@ -66,10 +66,13 @@ struct ProviderTests {
         #expect(keyed >= 4)
     }
 
-    @Test("One list: the seven providers by slug, three of them shown, none with a model id written in")
+    @Test("One list: the seven providers by slug, all of them shown, each untried one saying so, none with a model id written in")
     func registry() {
         #expect(TextProvider.all.map(\.id) == ["openrouter", "berget", "grunden", "openai", "anthropic", "xai", "google"])
-        #expect(TextProvider.offered().map(\.id) == ["openrouter", "berget", "grunden"] && TextProvider.offered(showHidden: true).count == 7)
+        #expect(TextProvider.offered().map(\.id) == TextProvider.all.map(\.id))
+        // What is true is said: a service that has never answered a real request from Jämmer says so where its key is entered.
+        #expect(TextProvider.all.allSatisfy { $0.tried || $0.note.hasSuffix(TextProvider.untried) })
+        #expect(TextProvider.all.allSatisfy { !$0.tried || !$0.note.contains(TextProvider.untried) })
         #expect(TextProvider.all.allSatisfy { $0.endpoint.scheme == "https" && !$0.note.isEmpty && $0.id.allSatisfy { $0.isLowercase } })
         #expect(TextProvider.named("berget")?.endpoint.absoluteString == "https://api.berget.ai/v1" && TextProvider.named("grunden")?.endpoint.absoluteString == "https://api.grunden.ai/v1")
         #expect(TextProvider.named("klang") == nil)

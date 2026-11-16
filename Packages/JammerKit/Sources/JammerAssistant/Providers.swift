@@ -23,32 +23,37 @@ public struct TextProvider: Sendable, Identifiable, Equatable {
     /// The base that `chat/completions`, `responses`, `messages` and `models` hang under.
     public var endpoint: URL
     public var shape: Shape
-    /// Shown in the app. A paid route stays hidden until it has been tried with a real, paid request
-    /// (PROVIDERS.md, rule 3); Berget and Grunden are shown on the strength of their documentation.
-    public var visible: Bool
+    /// Whether the service has answered a real request from Jämmer. Every built service is shown, in every
+    /// build, by its name and without a mark in the list (PROVIDERS.md, rule 3, as rewritten 2026-11-16);
+    /// what is true is said where the key is entered and in the manual: one that hasn't been tried says so.
+    public var tried: Bool
     /// One line for where the key is entered: what was read of the provider's terms that a user should know.
-    public var note: String
+    public var about: String
+    /// `about`, and for a service that has never answered a real request from Jämmer, that it is built
+    /// from the provider's documentation and not tried.
+    public var note: String { tried ? about : about + " " + Self.untried }
+    public static let untried = "Built from the documentation, not tried with a real request."
 
     public static let all: [TextProvider] = [
-        TextProvider(id: "openrouter", name: "OpenRouter", endpoint: URL(string: "https://openrouter.ai/api/v1")!, shape: .chatCompletions, visible: true,
-                     note: "Many models behind one key; each request goes to the model's own provider."),
-        TextProvider(id: "berget", name: "Berget", endpoint: URL(string: "https://api.berget.ai/v1")!, shape: .chatCompletions, visible: true,
-                     note: "Runs in Stockholm; says it never stores prompts or answers. Built from Berget's documentation, not yet tried with a paid request."),
-        TextProvider(id: "grunden", name: "Grunden", endpoint: URL(string: "https://api.grunden.ai/v1")!, shape: .chatCompletions, visible: true,
-                     note: "Processes everything in Sweden by its own account. Built from Grunden's documentation, not yet tried with a paid request."),
-        TextProvider(id: "openai", name: "OpenAI", endpoint: URL(string: "https://api.openai.com/v1")!, shape: .responses, visible: false,
-                     note: "Says API data isn't used for training unless you opt in."),
-        TextProvider(id: "anthropic", name: "Anthropic", endpoint: URL(string: "https://api.anthropic.com/v1")!, shape: .anthropic, visible: false,
-                     note: "With an API key from the Claude Console."),
-        TextProvider(id: "xai", name: "xAI", endpoint: URL(string: "https://api.x.ai/v1")!, shape: .responses, visible: false,
-                     note: "Grok models."),
-        TextProvider(id: "google", name: "Google", endpoint: URL(string: "https://generativelanguage.googleapis.com/v1beta/openai")!, shape: .chatCompletions, visible: false,
-                     note: "Gemini through Google's OpenAI-compatible route, which Google calls beta."),
+        TextProvider(id: "openrouter", name: "OpenRouter", endpoint: URL(string: "https://openrouter.ai/api/v1")!, shape: .chatCompletions, tried: false,
+                     about: "Many models behind one key; each request goes to the model's own provider."),
+        TextProvider(id: "berget", name: "Berget", endpoint: URL(string: "https://api.berget.ai/v1")!, shape: .chatCompletions, tried: false,
+                     about: "Runs in Stockholm; says it never stores prompts or answers."),
+        TextProvider(id: "grunden", name: "Grunden", endpoint: URL(string: "https://api.grunden.ai/v1")!, shape: .chatCompletions, tried: false,
+                     about: "Processes everything in Sweden by its own account."),
+        TextProvider(id: "openai", name: "OpenAI", endpoint: URL(string: "https://api.openai.com/v1")!, shape: .responses, tried: false,
+                     about: "Says API data isn't used for training unless you opt in."),
+        TextProvider(id: "anthropic", name: "Anthropic", endpoint: URL(string: "https://api.anthropic.com/v1")!, shape: .anthropic, tried: false,
+                     about: "With an API key from the Claude Console."),
+        TextProvider(id: "xai", name: "xAI", endpoint: URL(string: "https://api.x.ai/v1")!, shape: .responses, tried: false,
+                     about: "Grok models."),
+        TextProvider(id: "google", name: "Google", endpoint: URL(string: "https://generativelanguage.googleapis.com/v1beta/openai")!, shape: .chatCompletions, tried: false,
+                     about: "Gemini through Google's OpenAI-compatible route, which Google calls beta."),
     ]
 
     public static func named(_ id: String) -> TextProvider? { all.first { $0.id == id } }
-    /// The ones offered in the app. `showHidden` is for trying a hidden one on purpose (a debug setting).
-    public static func offered(showHidden: Bool = false) -> [TextProvider] { all.filter { $0.visible || showHidden } }
+    /// The ones offered in the app: all of them.
+    public static func offered() -> [TextProvider] { all }
 }
 
 /// One model a provider offers for text, as its own list describes it.

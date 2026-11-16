@@ -543,6 +543,7 @@ Changes a plugin on a track: bypass, a factory preset, or one parameter by ident
 | `preset` | string | A factory preset, by name. |
 | `parameter` | string | Parameter identifier, e.g. global.0, or its exact name. |
 | `value` | number | The parameter's new value, in its unit. |
+| `key` | string | A sidechain key: the id of the track or bus the plugin listens to (its signal after the fader, in step with the audio), or "none" to take the key away. Only for a plugin with a sidechain input (reason no_key_input otherwise); a key that would be fed by what it controls is refused (routing_loop). |
 
 ### `remove_insert`
 

@@ -805,9 +805,13 @@ struct InsertStepTests {
         let a = p.tracks[0].id.uuidString, k = p.tracks[1].id.uuidString
         let plain = p.tracks[0].inserts[0].id.uuidString, gate = p.tracks[0].inserts[1].id.uuidString
         // A build without sidechain keys: the parameter isn't in the schema and is refused.
-        #expect(!Operations.all.first { $0.name == "set_insert" }!.params.contains { $0.name == "key" })
-        let off = run(["track": .string(a), "insert": .string(gate), "key": .string(k)])
-        #expect(off.status == .failed && (off.error ?? "").contains("has no parameter \"key\"") && s.project == p, "\(off.error ?? "")")
+        Operations.$sidechainForThisTask.withValue(false) {
+            #expect(!Operations.all.first { $0.name == "set_insert" }!.params.contains { $0.name == "key" })
+            let off = run(["track": .string(a), "insert": .string(gate), "key": .string(k)])
+            #expect(off.status == .failed && (off.error ?? "").contains("has no parameter \"key\"") && s.project == p, "\(off.error ?? "")")
+        }
+        // Every build has them since 2026-11-17.
+        #expect(Operations.sidechain)
         Operations.$sidechainForThisTask.withValue(true) {
             #expect(Operations.all.first { $0.name == "set_insert" }!.params.contains { $0.name == "key" })
             var r = run(["track": .string(a), "insert": .string(plain), "key": .string(k)])
