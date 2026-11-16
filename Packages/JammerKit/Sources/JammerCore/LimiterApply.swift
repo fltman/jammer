@@ -60,6 +60,7 @@ extension Project {
         let solos = targets.map { t -> RenderPlan in
             var solo = self
             solo.tracks = [tracks[t]]
+            solo.withoutMixer()
             solo.tracks[0].gainDB = 0
             solo.tracks[0].isMuted = false
             solo.tracks[0].inserts = []

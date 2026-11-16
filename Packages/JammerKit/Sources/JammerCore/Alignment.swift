@@ -161,6 +161,7 @@ extension Project {
     func soloMono(_ t: Int, _ range: Range<Frame>, pool: SourcePool) -> [Float] {
         var solo = self
         solo.tracks = [tracks[t]]
+        solo.withoutMixer()
         solo.tracks[0].isMuted = false
         solo.tracks[0].gainDB = 0
         let raw = PlanCompiler.compile(solo, pool: pool).render(from: range.lowerBound, frames: range.count)
@@ -283,6 +284,7 @@ extension Project {
         let end = tracks[t].end
         var solo = self
         solo.tracks = [tracks[t]]
+        solo.withoutMixer()
         solo.tracks[0].gainDB = 0
         solo.tracks[0].isMuted = false
         let raw = PlanCompiler.compile(solo, pool: pool).render(from: first, frames: Int(end - first))

@@ -158,8 +158,22 @@ public enum PlanCompiler {
     public static func compile(_ project: Project, pool: SourcePool, inserts: ChainProvider? = nil) -> RenderPlan {
         let plan = jm_plan_create(Int32(project.channels), project.sampleRate)
         var indices: [UUID: Int32] = [:]
+        // The buses first, when the project uses the mixer at all; otherwise the plan is the one it always was.
+        var busIndex: [UUID: Int32] = [:]
+        let routed = project.usesMixer
+        if routed {
+            for b in project.buses {
+                let pan = project.channels == 2 ? Mixer.panGains(b.pan) : (1, 1)
+                busIndex[b.id] = jm_plan_add_bus(plan, Float(dbToGain(b.gainDB)), b.isMuted, pan.0, pan.1)
+            }
+            for b in project.buses { if let o = b.output, let to = busIndex[o], let from = busIndex[b.id] { jm_plan_set_bus_output(plan, from, to) } }
+        }
         for t in project.tracks {
             let track = jm_plan_add_track(plan, Float(dbToGain(t.gainDB)), t.isMuted)
+            if routed {
+                let pan = project.channels == 2 ? Mixer.panGains(t.pan) : (1, 1)
+                jm_plan_set_track_route(plan, track, t.output.flatMap { busIndex[$0] } ?? -1, pan.0, pan.1)
+            }
             if let inserts, t.inserts.contains(where: { !$0.bypass }) { inserts.attachChain(for: t, to: plan, index: track) }
             for c in t.clips {
                 guard let ref = project.source(c.sourceID) else { continue }

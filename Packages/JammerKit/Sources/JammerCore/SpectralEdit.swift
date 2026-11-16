@@ -233,6 +233,7 @@ extension Project {
         for ti in targets {
             var solo = self
             solo.tracks = [self.tracks[ti]]
+            solo.withoutMixer()
             solo.tracks[0].gainDB = 0
             solo.tracks[0].isMuted = false
             let plan = PlanCompiler.compile(solo, pool: pool)

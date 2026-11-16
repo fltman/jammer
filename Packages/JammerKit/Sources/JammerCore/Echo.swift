@@ -92,6 +92,7 @@ extension Project {
             // This track alone, at unity track gain (the track gain still applies afterwards).
             var solo = self
             solo.tracks = [self.tracks[t]]
+            solo.withoutMixer()
             solo.tracks[0].gainDB = 0
             solo.tracks[0].isMuted = false
             let plan = PlanCompiler.compile(solo, pool: pool)

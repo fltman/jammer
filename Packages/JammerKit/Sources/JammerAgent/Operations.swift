@@ -201,11 +201,26 @@ public enum Operations {
                        .init("lookahead", .number, "ms before the speech that it starts going down. Default: the attack, so it is down when the first word comes.", range: 0...2_000),
                        .init("stack", .boolean, "True to duck on top of an earlier ducking instead of replacing it."),
                        start, end]),
-        .init("set_track", "Change Track", "Changes one track: its gain, mute or name.",
+        .init("set_track", "Change Track", "Changes one track: its gain, mute, name, pan, or the bus it goes to.",
               params: [.init("track", .string, "Track id.", required: true),
                        .init("gainDB", .number, "The track's gain in dB: the new value, not a change to the old one.", range: -96...24),
                        .init("muted", .boolean, "True to mute."),
-                       .init("name", .string, "A new name.")]),
+                       .init("name", .string, "A new name."),
+                       .init("pan", .number, "−1 (left) to 1 (right), 0 the centre. Stereo documents only.", range: -1...1),
+                       .init("output", .string, "The id of the bus the track goes to, or \"master\" for the output.")]),
+        .init("add_bus", "Add Bus", "Adds a bus to the mixer: tracks routed to it (set_track output) are summed, given the bus's gain and pan, and passed on to the output or to another bus. The answer's `bus` is its number in `GET …/mixer`, where its id is.",
+              params: [.init("name", .string, "What the bus is called.", required: true),
+                       .init("output", .string, "The id of the bus this one feeds. Default: the output.")]),
+        .init("set_bus", "Change Bus", "Changes one bus: its name, gain, pan, mute, or where it goes. A route that would send a bus back into itself is refused (reason routing_loop).",
+              params: [.init("bus", .string, "Bus id (GET …/mixer shows it).", required: true),
+                       .init("name", .string, "A new name."),
+                       .init("gainDB", .number, "The bus's gain in dB: the new value.", range: -96...24),
+                       .init("pan", .number, "−1 (left) to 1 (right), 0 the centre. Stereo documents only.", range: -1...1),
+                       .init("muted", .boolean, "True to mute everything that goes through the bus."),
+                       .init("output", .string, "The id of the bus this one feeds, or \"master\" for the output.")]),
+        .init("remove_bus", "Remove Bus", "Takes a bus away. Refused while tracks or buses are routed to it (reason in_use), unless `reroute` says where they go instead.",
+              params: [.init("bus", .string, "Bus id.", required: true),
+                       .init("reroute", .string, "Where what was routed to the bus goes: a bus id, or \"master\".")]),
         .init("set_group", "Change Group", "Moves the gain of every track in a group (the stems of one separated track) by the same amount, so their balance stays.",
               params: [.init("group", .string, "Group id (GET …/tracks shows it).", required: true),
                        .init("gainDB", .number, "Change in dB, added to each track's gain.", required: true, range: -48...48)]),
@@ -548,6 +563,13 @@ public enum StepRunner {
         let project = s.project
         func frames(_ key: String) -> Frame? { p[key]?.double.map { project.frames($0) } }
         /// The explicit range, else the selection, else (when allowed) everything.
+        /// A route given as a bus id or "master": nil when the parameter isn't there, `.some(nil)` for the output.
+        func route(_ v: JSONValue?, _ op: String) throws -> UUID?? {
+            guard let text = v?.string else { return nil }
+            if text == "master" { return .some(nil) }
+            guard let id = UUID(uuidString: text) else { throw StepFailure("\(op): a route is a bus id or \"master\".", reason: "not_found") }
+            return .some(id)
+        }
         func range(wholeIfNone: Bool = false) throws -> Range<Frame> {
             if let a = frames("start"), let b = frames("end") {
                 guard b > a else { throw StepFailure("\(step.op): end must be after start.") }
@@ -756,6 +778,26 @@ public enum StepRunner {
             if let g = p["gainDB"]?.double { s.project.tracks[t].gainDB = g }
             if let m = p["muted"], case .bool(let v) = m { s.project.tracks[t].isMuted = v }
             if let n = p["name"]?.string, !n.trimmingCharacters(in: .whitespaces).isEmpty { s.project.tracks[t].name = n }
+            if p["pan"] != nil || p["output"] != nil {
+                do { try s.project.setTrackRoute(id, pan: p["pan"]?.double, output: try route(p["output"], "set_track")) }
+                catch let e as Mixer.Failure { throw StepFailure("set_track: " + (e.errorDescription ?? ""), reason: e.reason) }
+            }
+        case "add_bus":
+            do {
+                let out = try route(p["output"], "add_bus")
+                try s.project.addBus(name: p["name"]?.string ?? "", output: out ?? nil)
+                return ["bus": Double(s.project.buses.count), "buses": Double(s.project.buses.count)]
+            } catch let e as Mixer.Failure { throw StepFailure("add_bus: " + (e.errorDescription ?? ""), reason: e.reason) }
+        case "set_bus":
+            guard let id = UUID(uuidString: p["bus"]?.string ?? "") else { throw StepFailure("set_bus: no such bus.", reason: "not_found") }
+            var muted: Bool?
+            if let m = p["muted"], case .bool(let v) = m { muted = v }
+            do { try s.project.setBus(id, name: p["name"]?.string, gainDB: p["gainDB"]?.double, pan: p["pan"]?.double, muted: muted, output: try route(p["output"], "set_bus")) }
+            catch let e as Mixer.Failure { throw StepFailure("set_bus: " + (e.errorDescription ?? ""), reason: e.reason) }
+        case "remove_bus":
+            guard let id = UUID(uuidString: p["bus"]?.string ?? "") else { throw StepFailure("remove_bus: no such bus.", reason: "not_found") }
+            do { try s.project.removeBus(id, reroute: try route(p["reroute"], "remove_bus")) }
+            catch let e as Mixer.Failure { throw StepFailure("remove_bus: " + (e.errorDescription ?? ""), reason: e.reason) }
         case "set_group":
             guard let id = UUID(uuidString: p["group"]?.string ?? ""), project.tracks.contains(where: { $0.group == id }) else {
                 throw StepFailure("set_group: no such group.", reason: "not_found")

@@ -40,6 +40,7 @@ extension Project {
             for t in Set(mine.map(\.track)) where !tracks[t].isMuted {
                 var solo = self
                 solo.tracks = [tracks[t]]
+                solo.withoutMixer()
                 let plan = PlanCompiler.compile(solo, pool: pool)
                 for turn in mine where turn.track == t { plan.render(turn.start..<turn.end) { meter.process($0) } }
             }
@@ -167,6 +168,7 @@ extension Project {
             guard !mine.isEmpty else { continue }
             var solo = self
             solo.tracks = [tracks[t]]
+            solo.withoutMixer()
             solo.tracks[0].gainDB = 0
             let first = tracks[t].clips.map(\.start).min()!, end = tracks[t].end
             let plan = PlanCompiler.compile(solo, pool: pool)

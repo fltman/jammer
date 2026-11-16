@@ -1,6 +1,19 @@
 # Mixer: buses, sends, VCA, sidechain, delay compensation, freeze
 
-Phase 3, part 2. This is the sketch that goes to the coordinator before any of it is built, with the measurements it rests on. Nothing below is in the app yet.
+Phase 3, part 2. The sketch as the coordinator approved it on 2026-11-16, with the measurements it rests on, and what has been built of it.
+
+## Built so far
+
+**Step 1, 2026-11-16: buses, routing and pan.** `Bus` and `Track.pan`/`output` in the model; the engine sums each track into its bus or the output and each bus into the one it feeds (`renderRouted`), a path taken only when the project uses the mixer. Steps `add_bus`, `set_bus`, `remove_bus`, and `pan` and `output` on `set_track`; `GET …/mixer`; **Audio › Mixer…** (⌥⌘X).
+
+- Tested (`MixerTests`): a project that uses none of it is the same file and the same samples; through a bus at 0 dB in the centre the mix is bit for bit the unrouted one; bus gains multiply through nested buses to within 1e-7; a muted bus silences what goes through it and nothing else; the same output in 512-frame blocks as in one piece; pan exact at the centre and at both ends, never over 1; loops, missing buses, a bus in use, a 65th bus and values out of range refused with their reasons; a bounce of a panned track on a bus is not panned or lowered twice; the limiter keeps the routed mix under the ceiling.
+- Hostile files: twin bus ids, routes to nowhere, a loop, levels and pans outside what is possible are put right and said when the project opens; more than 64 buses is refused in words. (JSON has no NaN or infinity, so a file can't carry one.) The engine cuts a loop handed to it as well, without trusting the model.
+- The saved format: a project that uses the mixer is format 2; without it, format 1 as before. The package reader refused formats newer than it knows already, so a Jämmer from before the mixer says "saved by a newer Jämmer" for a mixer project. This build reads both.
+- Every operation that renders one track by itself for a bounce or an analysis (15 places) renders it without the mixer, so pan and bus are applied once, after.
+- In the app: a bus through the API took the music 12 dB down (−15.4 → −19.0 LUFS for the mix), a loop and an in-use removal were refused with `routing_loop` and `in_use`, the sheet read through the accessibility API with every control named, a Mute box ticked by hand landed in the model, and three undos brought the document back to one that doesn't use the mixer.
+- The assistant can add a bus by name (given to the on-device model only when the request says bus or submix); changing and removing one need an id it isn't told.
+
+Not built: sends, delay compensation across buses, the master strip and its limiter, VCAs, sidechain keys, freeze, solo, plugins on buses.
 
 ## What the render path costs today (measured 2026-11-16)
 

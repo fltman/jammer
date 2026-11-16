@@ -48,7 +48,45 @@ void Renderer::mixClip(const Plan &plan, const Clip &c, float trackGain, int64_t
     }
 }
 
+/// Adds `n` interleaved frames of `in` to `to`, times `gain`, with the pan's two gains on a stereo signal.
+static inline void addStrip(const float *in, float *to, int64_t n, int32_t channels, float gain, float panL, float panR) {
+    if (channels == 2) {
+        const float l = gain * panL, r = gain * panR;
+        for (int64_t i = 0; i < n; ++i) {
+            to[i * 2] += in[i * 2] * l;
+            to[i * 2 + 1] += in[i * 2 + 1] * r;
+        }
+    } else {
+        for (int64_t i = 0; i < n * channels; ++i) to[i] += in[i] * gain;
+    }
+}
+
+/// The mix through the buses: each track into its bus or the output, then each bus into the one it
+/// feeds, in the order finalize worked out.
+void Renderer::renderRouted(const Plan &plan, int64_t start, int64_t frames, float *out) {
+    const size_t samples = size_t(frames * channels_);
+    std::memset(out, 0, samples * sizeof(float));
+    bus_.resize(plan.buses.size());
+    for (auto &b : bus_) b.assign(samples, 0.0f);
+    track_.resize(samples);
+    for (size_t t = 0; t < plan.tracks.size(); ++t) {
+        const Track &track = plan.tracks[t];
+        if (track.mute) continue;
+        if (track.chain) track.chain->process(plan, int32_t(t), *this, start, frames, track_.data());
+        else renderTrack(plan, int32_t(t), start, frames, track_.data());
+        float *to = track.bus >= 0 && size_t(track.bus) < bus_.size() ? bus_[size_t(track.bus)].data() : out;
+        addStrip(track_.data(), to, frames, channels_, track.gain, track.panL, track.panR);
+    }
+    for (int32_t b : plan.busOrder) {
+        const Bus &bus = plan.buses[size_t(b)];
+        if (bus.mute) continue;
+        float *to = bus.output >= 0 && size_t(bus.output) < bus_.size() ? bus_[size_t(bus.output)].data() : out;
+        addStrip(bus_[size_t(b)].data(), to, frames, channels_, bus.gain, bus.panL, bus.panR);
+    }
+}
+
 void Renderer::render(const Plan &plan, int64_t start, int64_t frames, float *out) {
+    if (plan.routed) { renderRouted(plan, start, frames, out); return; }
     std::memset(out, 0, size_t(frames * channels_) * sizeof(float));
     const int64_t end = start + frames;
     for (const Clip &c : plan.clips) {
@@ -114,6 +152,30 @@ void jm_plan_add_clip(jm_plan *plan, int32_t track, int32_t source, int64_t sour
                            fade_in, fade_out, shape});
 }
 
+int32_t jm_plan_add_bus(jm_plan *plan, float gain, bool mute, float pan_l, float pan_r) {
+    Plan &p = *plan->ptr;
+    if (p.finalized) return -1;
+    p.buses.push_back(Bus{gain, mute, pan_l, pan_r, -1});
+    p.routed = true;
+    return int32_t(p.buses.size() - 1);
+}
+
+void jm_plan_set_bus_output(jm_plan *plan, int32_t bus, int32_t output) {
+    Plan &p = *plan->ptr;
+    if (p.finalized || bus < 0 || size_t(bus) >= p.buses.size()) return;
+    p.buses[size_t(bus)].output = output >= 0 && size_t(output) < p.buses.size() && output != bus ? output : -1;
+}
+
+void jm_plan_set_track_route(jm_plan *plan, int32_t track, int32_t bus, float pan_l, float pan_r) {
+    Plan &p = *plan->ptr;
+    if (p.finalized || track < 0 || size_t(track) >= p.tracks.size()) return;
+    Track &t = p.tracks[size_t(track)];
+    t.bus = bus >= 0 && size_t(bus) < p.buses.size() ? bus : -1;
+    t.panL = pan_l;
+    t.panR = pan_r;
+    p.routed = true;
+}
+
 void jm_plan_set_chain(jm_plan *plan, int32_t track, jm_chain *chain) {
     Plan &p = *plan->ptr;
     if (p.finalized || track < 0 || size_t(track) >= p.tracks.size()) return;
@@ -126,6 +188,24 @@ void jm_plan_finalize(jm_plan *plan) {
     std::stable_sort(p.clips.begin(), p.clips.end(), [](const Clip &a, const Clip &b) { return a.start < b.start; });
     p.length = 0;
     for (const Clip &c : p.clips) p.length = std::max(p.length, c.end());
+    // The buses, each before the one it feeds. A bus caught in a loop (the document model refuses
+    // those; this is the engine not trusting it) goes straight to the output instead.
+    p.busOrder.clear();
+    std::vector<int> state(p.buses.size(), 0); // 0 not seen, 1 being placed, 2 placed
+    std::vector<int32_t> reversed;
+    for (size_t first = 0; first < p.buses.size(); ++first) {
+        std::vector<int32_t> path;
+        int32_t b = int32_t(first);
+        while (b >= 0 && state[size_t(b)] == 0) {
+            state[size_t(b)] = 1;
+            path.push_back(b);
+            b = p.buses[size_t(b)].output;
+        }
+        if (b >= 0 && state[size_t(b)] == 1) p.buses[size_t(path.back())].output = -1; // closes a loop: cut it here
+        for (auto it = path.rbegin(); it != path.rend(); ++it) { state[size_t(*it)] = 2; reversed.push_back(*it); }
+    }
+    // `reversed` has every bus after the one it feeds; the sum runs the other way.
+    p.busOrder.assign(reversed.rbegin(), reversed.rend());
     p.finalized = true;
 }
 

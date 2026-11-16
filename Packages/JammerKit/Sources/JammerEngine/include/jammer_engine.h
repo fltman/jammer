@@ -83,6 +83,15 @@ int32_t jm_plan_add_track(jm_plan *_Nonnull plan, float gain, bool mute);
 void jm_plan_add_clip(jm_plan *_Nonnull plan, int32_t track, int32_t source, int64_t source_start,
                       int64_t timeline_start, int64_t length, float gain,
                       int64_t fade_in, int64_t fade_out, jm_fade_shape shape);
+/// Adds a bus: what is routed to it is summed, given this gain and pan, and passed on (to the output
+/// until `jm_plan_set_bus_output` says another bus). `pan_l` and `pan_r` are the gains of the left and
+/// right channel, 1 and 1 at the centre; they only apply to stereo plans. Returns its index.
+int32_t jm_plan_add_bus(jm_plan *_Nonnull plan, float gain, bool mute, float pan_l, float pan_r);
+/// Sends a bus on to another bus (-1: the output). A bus can't feed itself; a loop is cut at finalize.
+void jm_plan_set_bus_output(jm_plan *_Nonnull plan, int32_t bus, int32_t output);
+/// Routes a track to a bus (-1: the output) with a pan. A plan where nothing is routed or panned
+/// renders exactly as it did before buses existed.
+void jm_plan_set_track_route(jm_plan *_Nonnull plan, int32_t track, int32_t bus, float pan_l, float pan_r);
 /// Sorts and freezes the plan. Must be called before rendering or publishing.
 void jm_plan_finalize(jm_plan *_Nonnull plan);
 void jm_plan_release(jm_plan *_Nullable plan);

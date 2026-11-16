@@ -35,8 +35,43 @@ public enum ProjectSafety {
         guard clips <= limits.clips else { throw tooMany(clips, "clips", limits.clips) }
         guard p.sources.count <= limits.sources else { throw tooMany(p.sources.count, "audio files", limits.sources) }
         guard p.markers.count <= limits.markers else { throw tooMany(p.markers.count, "markers", limits.markers) }
+        // More buses than Jämmer makes is a file that Jämmer didn't make: refused, not cut down in silence.
+        guard p.buses.count <= Mixer.maxBuses else { throw tooMany(p.buses.count, "buses", Mixer.maxBuses) }
 
         var notes: [String] = []
+        // The mixer: buses with two of the same id, routes to buses that aren't there, loops, and values
+        // that are not levels or pans. What can be put right is put right and said; a loop is cut where it closes.
+        do {
+            var seen = Set<UUID>(), unique: [Bus] = []
+            for b in p.buses where seen.insert(b.id).inserted { unique.append(b) }
+            if unique.count < p.buses.count { notes.append("\(p.buses.count - unique.count) bus\(p.buses.count - unique.count == 1 ? "" : "es") had the same id as another and \(p.buses.count - unique.count == 1 ? "was" : "were") left out.") }
+            p.buses = unique
+            var fixed = 0, lost = 0
+            func level(_ v: Double) -> Double { v.isFinite ? min(Mixer.gainRange.upperBound, max(Mixer.gainRange.lowerBound, v)) : 0 }
+            func pan(_ v: Double) -> Double { v.isFinite && p.channels == 2 ? min(1, max(-1, v)) : 0 }
+            for i in p.buses.indices {
+                let b = p.buses[i]
+                p.buses[i].gainDB = level(b.gainDB)
+                p.buses[i].pan = pan(b.pan)
+                p.buses[i].name = String(b.name.prefix(200))
+                if p.buses[i].name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { p.buses[i].name = "Bus \(i + 1)" }
+                if p.buses[i].gainDB != b.gainDB || p.buses[i].pan != b.pan { fixed += 1 }
+                if let o = b.output, !seen.contains(o) || o == b.id { p.buses[i].output = nil; lost += 1 }
+            }
+            for i in p.buses.indices {
+                guard let o = p.buses[i].output, p.loops(bus: p.buses[i].id, into: o) else { continue }
+                p.buses[i].output = nil
+                lost += 1
+            }
+            for t in p.tracks.indices {
+                let old = p.tracks[t].pan
+                p.tracks[t].pan = pan(old)
+                if p.tracks[t].pan != old { fixed += 1 }
+                if let o = p.tracks[t].output, !seen.contains(o) { p.tracks[t].output = nil; lost += 1 }
+            }
+            if lost > 0 { notes.append("\(lost) route\(lost == 1 ? "" : "s") in the mixer led to a bus that isn't there, or round in a circle, and now go\(lost == 1 ? "es" : "") to the output.") }
+            if fixed > 0 { notes.append("\(fixed) level\(fixed == 1 ? "" : "s") or pan\(fixed == 1 ? "" : "s") in the mixer \(fixed == 1 ? "was" : "were") outside what is possible and \(fixed == 1 ? "was" : "were") put inside.") }
+        }
         // Sources whose description of their own audio makes no sense can't be played.
         let before = p.sources.count
         p.sources.removeAll { s in

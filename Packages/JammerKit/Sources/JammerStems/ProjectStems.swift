@@ -229,6 +229,7 @@ extension Project {
             let first = tracks[t].clips.map(\.start).min()!, end = tracks[t].end
             var solo = self
             solo.tracks = [tracks[t]]
+            solo.withoutMixer()
             solo.tracks[0].gainDB = 0
             solo.tracks[0].isMuted = false
             let raw = PlanCompiler.compile(solo, pool: pool).render(from: first, frames: Int(end - first))

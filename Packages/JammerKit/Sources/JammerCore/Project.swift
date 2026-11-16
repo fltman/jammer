@@ -141,6 +141,10 @@ public struct Track: Codable, Hashable, Sendable, Identifiable {
     /// Set by `duck`: what the track played before it was ducked, so ducking again starts from
     /// that and not from the ducked sound. Only meant while the track still plays the ducked file.
     public var ducked: DuckOrigin?
+    /// −1 (left) … 0 (centre) … 1 (right); see `Mixer.panGains`. Stereo documents only.
+    public var pan: Double = 0
+    /// The bus the track goes to; nil: the output.
+    public var output: UUID?
 
     public init(id: UUID = UUID(), name: String, clips: [Clip] = [], gainDB: Double = 0, isMuted: Bool = false, inserts: [Insert] = []) {
         self.id = id
@@ -151,7 +155,7 @@ public struct Track: Codable, Hashable, Sendable, Identifiable {
         self.inserts = inserts
     }
 
-    private enum CodingKeys: String, CodingKey { case id, name, clips, gainDB, isMuted, inserts, group, origin, ducked }
+    private enum CodingKeys: String, CodingKey { case id, name, clips, gainDB, isMuted, inserts, group, origin, ducked, pan, output }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -164,6 +168,8 @@ public struct Track: Codable, Hashable, Sendable, Identifiable {
         group = try c.decodeIfPresent(UUID.self, forKey: .group)
         origin = try c.decodeIfPresent(Origin.self, forKey: .origin)
         ducked = try c.decodeIfPresent(DuckOrigin.self, forKey: .ducked)
+        pan = try c.decodeIfPresent(Double.self, forKey: .pan) ?? 0
+        output = try c.decodeIfPresent(UUID.self, forKey: .output)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -177,6 +183,9 @@ public struct Track: Codable, Hashable, Sendable, Identifiable {
         try c.encodeIfPresent(group, forKey: .group)
         try c.encodeIfPresent(origin, forKey: .origin)
         try c.encodeIfPresent(ducked, forKey: .ducked)
+        // Written only when used, so a project that doesn't use the mixer is the file it always was.
+        if pan != 0 { try c.encode(pan, forKey: .pan) }
+        try c.encodeIfPresent(output, forKey: .output)
     }
 
     public var end: Frame { clips.map(\.end).max() ?? 0 }
@@ -235,8 +244,19 @@ public enum EditError: Error, LocalizedError, Equatable {
 /// The whole document. A value: an undo step is the previous value.
 public struct Project: Codable, Equatable, Sendable {
     public static let formatVersion = 1
+    /// What a project that uses the mixer is saved as. An app that only knows format 1 refuses it and
+    /// says a newer Jämmer is needed, instead of playing every track straight to the output.
+    public static let mixerFormatVersion = 2
+    public static let newestFormatVersion = 2
+
+    public struct NeedsNewer: Error, LocalizedError, Equatable {
+        public var version: Int
+        public var errorDescription: String? { "This project was saved by a newer Jämmer (format \(version)) and uses things this version doesn't have. Open it in a newer Jämmer." }
+    }
 
     public var formatVersion: Int
+    /// The mixer's buses. None: every track goes to the output, as before there was a mixer.
+    public var buses: [Bus] = []
     public var sampleRate: Double
     public var channels: Int
     public var tracks: [Track]
@@ -284,11 +304,32 @@ public struct Project: Codable, Equatable, Sendable {
         self.transcripts = transcripts
     }
 
-    private enum CodingKeys: String, CodingKey { case formatVersion, sampleRate, channels, tracks, markers, sources, tempo, transcripts, speakers, speakerTurns, imported }
+    private enum CodingKeys: String, CodingKey { case formatVersion, sampleRate, channels, tracks, markers, sources, tempo, transcripts, speakers, speakerTurns, imported, buses }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(usesMixer ? Self.mixerFormatVersion : Self.formatVersion, forKey: .formatVersion)
+        try c.encode(sampleRate, forKey: .sampleRate)
+        try c.encode(channels, forKey: .channels)
+        try c.encode(tracks, forKey: .tracks)
+        try c.encode(markers, forKey: .markers)
+        try c.encode(sources, forKey: .sources)
+        try c.encode(tempo, forKey: .tempo)
+        try c.encode(transcripts, forKey: .transcripts)
+        try c.encode(speakers, forKey: .speakers)
+        try c.encode(speakerTurns, forKey: .speakerTurns)
+        try c.encodeIfPresent(imported, forKey: .imported)
+        if !buses.isEmpty { try c.encode(buses, forKey: .buses) }
+    }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        formatVersion = try c.decode(Int.self, forKey: .formatVersion)
+        let version = try c.decode(Int.self, forKey: .formatVersion)
+        // A format this app doesn't know is not opened as if it did.
+        guard version <= Self.newestFormatVersion else { throw NeedsNewer(version: version) }
+        // In memory the version is always the same: what the file is saved as is decided when it is saved.
+        formatVersion = Self.formatVersion
+        buses = try c.decodeIfPresent([Bus].self, forKey: .buses) ?? []
         sampleRate = try c.decode(Double.self, forKey: .sampleRate)
         channels = try c.decode(Int.self, forKey: .channels)
         tracks = try c.decode([Track].self, forKey: .tracks)

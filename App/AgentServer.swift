@@ -447,6 +447,9 @@ enum AgentRouter {
             case ["speakers"]:
                 try only("GET")
                 return try speakers(session, r)
+            case ["mixer"]:
+                try only("GET")
+                return .json(["mixer": mixerJSON(session.project)])
             case ["tracks"]:
                 try only("GET", "POST")
                 if r.method == "GET" { return .json(["tracks": session.project.tracks.map { trackJSON(session, $0) }]) }
@@ -550,9 +553,25 @@ enum AgentRouter {
         return d
     }
 
+    /// The mixer as it is: every track and bus with its level, pan, mute and where it goes ("master" for
+    /// the output), and for each bus what comes into it.
+    static func mixerJSON(_ p: Project) -> [String: Any] {
+        func to(_ id: UUID?) -> String { id?.uuidString ?? "master" }
+        let tracks = p.tracks.map { t -> [String: Any] in
+            ["id": t.id.uuidString, "name": t.name, "gainDB": t.gainDB, "pan": t.pan, "muted": t.isMuted, "output": to(t.output)]
+        }
+        let buses = p.buses.map { b -> [String: Any] in
+            ["id": b.id.uuidString, "name": b.name, "gainDB": b.gainDB, "pan": b.pan, "muted": b.isMuted, "output": to(b.output),
+             "inputs": ["tracks": p.tracks.filter { $0.output == b.id }.map(\.id.uuidString), "buses": p.buses.filter { $0.output == b.id }.map(\.id.uuidString)]]
+        }
+        return ["tracks": tracks, "buses": buses, "usesMixer": p.usesMixer, "panAvailable": p.channels == 2,
+                "limits": ["buses": Mixer.maxBuses, "gainDB": [Mixer.gainRange.lowerBound, Mixer.gainRange.upperBound], "pan": [-1, 1]]]
+    }
+
     static func trackJSON(_ s: EditorSession, _ t: Track) -> [String: Any] {
         let p = s.project
         return ["id": t.id.uuidString, "name": t.name, "gainDB": t.gainDB, "muted": t.isMuted, "group": t.group?.uuidString ?? NSNull(),
+                "pan": t.pan, "output": t.output?.uuidString ?? "master",
                 "inserts": t.inserts.map { i -> [String: Any] in
                     var d: [String: Any] = ["id": i.id.uuidString, "plugin": i.plugin.description, "name": i.name, "bypass": i.bypass]
                     if let f = s.inserts.failure(i.id) { d["error"] = ["reason": f.reason, "message": f.localizedDescription] }

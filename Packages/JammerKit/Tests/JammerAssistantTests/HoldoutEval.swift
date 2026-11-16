@@ -22,7 +22,7 @@ struct HoldoutEval {
     @Test("Hold-out set, on-device (JAMMER_HOLDOUT=1 or 2)")
     func run() async throws {
         let which = ProcessInfo.processInfo.environment["JAMMER_HOLDOUT"]
-        let set = which == "3" ? HoldoutSet3.cases : which == "2" ? HoldoutSet2.cases : HoldoutSet1.cases
+        let set = which == "4" ? HoldoutSet4.cases : which == "3" ? HoldoutSet3.cases : which == "2" ? HoldoutSet2.cases : HoldoutSet1.cases
         let info = AudioFileInfo(container: .wav, sampleFormat: .float32, bigEndian: false, channels: 2, sampleRate: 48_000,
                                  channelMask: nil, dataOffset: 0, frames: 48_000 * 60, chunks: [], bext: nil, ixml: nil, markers: [])
         var p = Project(source: SourceRef(name: "Anna", path: "/dev/null", info: info))
@@ -59,7 +59,8 @@ struct HoldoutEval {
             let k = byKind[c.kind] ?? (0, 0)
             byKind[c.kind] = (k.0 + (ok ? 1 : 0), k.1 + 1)
             let shown = plan.steps.map { s in s.op + (s.params.isEmpty ? "" : "(" + s.params.sorted { $0.key < $1.key }.map { "\($0.key)=\(AssistantEval.text($0.value))" }.joined(separator: ", ") + ")") }.joined(separator: "; ")
-            let planned = failure.map { "error: \($0)" } ?? (shown.isEmpty ? "(no steps) “\(plan.reply.prefix(70))”" : shown)
+            let planned = (failure.map { "error: \($0)" } ?? (shown.isEmpty ? "(no steps) “\(plan.reply.prefix(70))”" : shown))
+                + (plan.dropped.isEmpty ? "" : " [left out: \(plan.dropped.joined(separator: "; "))]")
             rows.append("| \(c.kind) | \(c.goal) | \(c.ops.isEmpty ? "(no steps)" : c.ops.joined(separator: ", ")) | \(planned) | \(ok ? (notes.isEmpty ? "✓" : "ops ✓, " + notes.joined(separator: " ")) : "✗") |")
         }
         let kinds = ["task", "multi", "clarify", "refuse", "answer"].compactMap { k in byKind[k].map { "\(k) \($0.0)/\($0.1)" } }.joined(separator: ", ")

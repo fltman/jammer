@@ -61,12 +61,28 @@ A rule from this: the three sets are run (`scripts/eval-assistant.sh`) whenever 
 | Hold-out 1 (24) | 2026-11-15 | Regression set since the changes it led to |
 | Hold-out 2 (23) | 2026-11-15 | Regression set since 2026-11-16 (two pause rules came from it) |
 | Hold-out 3 (29) | 2026-11-16, written without looking at any model's answers | **Unseen.** Run once as a baseline; nothing has been changed because of it |
+| Hold-out 4 (6, the mixer) | 2026-11-16, written without looking at any model's answers | Regression set since the same day: two changes came from its first run (below) |
 
 Hold-out 3, baseline 2026-11-16, on-device: 18/29 (task 14/22, multi 1/2, clarify 2/2, refuse 1/2, answer 0/1), no figure of the model's own, 0 plans that would have changed the document without a yes. It has the four newer actions that the on-device model only gets when the request names them (`duck` and `detect_tempo` right; `level_speakers` and `loudness_preset` wrong), and a six-step request.
 
 **The answer limit and a long plan.** The six-step request ("fade in…, lower the volume by 3 dB, add a marker…, add a marker…, fade out… and normalize to −16 LUFS") comes back whole: six steps in 359 tokens, the same with the limit at 700 and at 3 000 (a six-step plan written by hand in the model's form is 217 tokens). So the limit doesn't cut real plans. Two of the six steps are lost for another reason: the model left out `db` for the level change and wrote `target = "level=-16"` for the normalization, so Jämmer shows four steps and says "Left out: gain (gain needs "db"); normalize (normalize needs "level")". With several tasks in one sentence the on-device model is still the weaker choice.
 
 When a change is made because of something set 3 showed, it becomes a regression set and a new one is written first.
+
+**The mixer's first actions (2026-11-16).** `add_bus` is given to the assistant (to the on-device model only when the request says bus or submix); `set_bus` and `remove_bus` are not, because they need a bus id the assistant isn't told. Hold-out set 4 was written for it, unseen, and run:
+
+| | Standard | Hold-out 1 | Hold-out 2 | Hold-out 3 | Hold-out 4 |
+|---|---|---|---|---|---|
+| Before the mixer's actions | 17/18 | 21/24 | 17/23 | 18/29 | – |
+| With them, first run | 17/18 | 21/24 | 17/23 | 18/29 | 1/6 |
+| After the two changes below | 17/18 | 21/24 | 18/23 | 18/29 | 4/6 |
+
+What set 4's first run showed, and what was changed (which is why it is a regression set now):
+
+1. "create a bus called Music" was answered "What should I change?" by Jämmer's own guard before the model was asked: the guard's list of words that mean an action had none of the mixer's or the mastering steps'. They are in it now.
+2. The model did choose `add_bus`, and gave the name under another name than the parameter's (the step was left out as "add_bus needs name", and the model's sentence said "Bus Music created."). A value given under a name the action doesn't have is now taken as the one required value that is missing, when there is exactly one of each (`PlanParser.typed`). It is a general rule, not one for buses: it also moved one request in hold-out 2 to right.
+
+Still wrong in set 4: the two requests the assistant can't do ("pan Erik a little to the left", "ta bort bussen Musik") are answered with a step that moves the playhead or the selection instead of a refusal. In the app such a plan is not run and the user gets a refusal (`ReplyGuard`, the rule about steps that only move the playhead); the sets count the plan as the model made it, so they count as wrong. The same rule 2 has a cost that shows in hold-out 3: "what's the weather like in Stockholm" used to come back as a step left out for a missing value and now comes back as `set_playhead(at=0)`, so that set's refusals went from 1 of 2 to 0 of 2 while a task went from wrong to right (18/29 both times). In the app that request, too, ends as a refusal.
 
 **After `limit` was added (2026-11-16).** The on-device model is given it only when the request names it (limit, ceiling, tak, true peak); it waits for a yes like everything that replaces audio. The sets run again, on-device: standard 17/18, holdout1 21/24, holdout2 17/23, holdout3 18/29. Before it: standard 17/18, holdout1 21/24, holdout2 17/23, holdout3 18/29. Run again the same day after `loudness_preset` got `limit` and a new description: the same four figures.
 

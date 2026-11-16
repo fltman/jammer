@@ -30,8 +30,8 @@ public enum ProjectPackage {
         var project: Project
         do {
             let v = try JSONDecoder().decode(Version.self, from: data)
-            guard v.formatVersion <= Project.formatVersion else {
-                throw AudioFileError.unsupported("This project was saved by a newer Jammer (format \(v.formatVersion)).")
+            guard v.formatVersion <= Project.newestFormatVersion else {
+                throw AudioFileError.unsupported("This project was saved by a newer Jämmer (format \(v.formatVersion)) and uses things this version doesn't have. Open it in a newer Jämmer.")
             }
             project = try JSONDecoder().decode(Project.self, from: data)
         } catch let e as AudioFileError { throw e } catch {

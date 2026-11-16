@@ -62,6 +62,7 @@ Opening a document answers `201 Created`. To send the audio inside JSON instead:
 | POST | `/api/v1/documents/{id}/transcribe` | Starts transcribing the document (a job, see below). Body: `{"language": "sv-SE", "engine": "auto"}`; both optional (the Mac's language and the best engine for it). `engine`: `auto`, `apple`, `parakeet` (25 European languages) or `whisper` (KB-Whisper, Swedish). Models are installed by the user in Jämmer's Settings, never by the API; asking for one that isn't there answers 422 with reason `model_missing`. Every track is transcribed, and a recogniser finds "words" in music too: in a document with a music track, expect words on it that nobody said, and don't take a track with words to be speech. Answers `202` with the job. |
 | GET | `/api/v1/documents/{id}/transcript` | The transcript as it plays now: `{"words": [{"id", "text", "start", "end", "confidence", "speaker", "partial"}], "text", "speakers": [{"id", "name"}]}`, times in seconds on the timeline, optionally over `?start=&end=`. Empty until transcribed. |
 | GET | `/api/v1/documents/{id}/analysis/rhythm` | The tempo and beats of music, without changing anything; `?start=&end=` and `?tracks=id,id` as for the loudness (it looks at up to 120 s from the start of the range, which has to be at least 8 s). Answers `{"rhythm": {"bpm", "firstBeat", "beats": [seconds…], "pulse", "alternatives": [half, double], "start", "end", "analysedSeconds"}}`. `pulse` is how strongly the sound itself repeats at that beat (0 to 1; a click track is near 1, a dense song around 0.3). Only music with one steady tempo has an answer: for speech, noise, silence, or music whose tempo changes, `bpm` is `null`, `beats` and `alternatives` are empty and `reason` is `no_steady_tempo`. A fast tempo can come back at half speed (174 as 87): `alternatives` always holds half and double, and the `detect_tempo` step takes `multiply` or the `bpm` you know. Where bars begin is not found. Tried on click and drum tracks at known tempi (within 0.1 BPM, first beat within 20 ms), one synthesised song, and speech, noise and silence (all refused). |
+| GET | `/api/v1/documents/{id}/mixer` | The mixer: `{"tracks": [{"id", "name", "gainDB", "pan", "muted", "output"}], "buses": [{"id", "name", "gainDB", "pan", "muted", "output", "inputs": {"tracks": [ids], "buses": [ids]}}], "usesMixer", "panAvailable", "limits"}`. `output` is a bus id, or `"master"` for the output. Change it with the steps `add_bus`, `set_bus`, `remove_bus` and `set_track` (`pan`, `output`). `pan` is −1 (left) to 1 (right) and only for stereo documents; at 0 a strip is untouched, and a document that uses none of this plays exactly as it did before the mixer. A route that would send a bus back into itself fails with reason `routing_loop`; removing a bus that something is routed to fails with `in_use` unless `reroute` is given. |
 | GET | `/api/v1/documents/{id}/analysis/acx` | Measures the document against ACX's (Audible's) published audio submission requirements, as read on the date in `readOn`, without changing anything: `{"statement", "source", "articleDate", "readOn", "measuredOn": "mp3"\|"mix", "failed": [names], "requirements": [{"name", "required" (ACX's words), "measured", "pass": true\|false\|null, "note"}]}`. Names: `rms` (−23 to −18 dB), `peak` (sample peak and true peak both no higher than −3), `noiseFloor` (no higher than −60 dB RMS), `format` (192 kbps or higher constant bit rate MP3 at 44.1 kHz), `channels`, `length` (120 minutes at most), `roomTone` (5 s at most at each end), `narration`. The document is encoded to that MP3 (converted to 44.1 kHz when it is at another rate) and measured as it decodes; if no MP3 could be made, `format` fails and the rest is measured on the mix. `pass: null` is something one file's measurement can't decide. It says what was measured, never that ACX approves. |
 | GET | `/api/v1/documents/{id}/analysis/restoration` | Looks for problems without changing anything: mains hum (frequency, how prominent), clipping (runs, samples, level), clicks (`count`: impulses of a few samples that stand out from the sound around them; a voice's own pulses and a note's attack aren't counted, and in dense music only clicks well over the music are found), the noise floor (`noiseFloor`: `dBFS`, the RMS level of the pauses, and `pauseSeconds`, how much pause it was measured over; null without pauses of 150 ms or more that are 10 dB under the loud parts) and reverberation (`reverb`: `rt60` in seconds, within about 0.1 s up to 1 s and reading short above that, or null when it can't tell (few pauses, or noise close under the voice); on sound that has been through `denoise` or `dehum` (also in their previews) it isn't measured at all, because what those repairs leave after each word reads as a room: `rt60` and `present` are then null and `unknown` is `"after_noise_reduction"`, so judge reverberation before those repairs; `present` when there is enough to reduce), over `?start=&end=` and `?tracks=id,id` (default: the selection, else everything; all tracks). Long ranges are sampled. |
 | POST | `/api/v1/documents/{id}/restore/preview` | The repaired audio of a stretch (at most 30 s), without changing the document. Same body as `restore`, with `start` and `end`. Answers a 24-bit WAV; with `Accept: application/json` it answers `{"before": {…}, "after": {…}}` instead: the detector numbers plus `integratedLUFS` and `truePeakDBTP`. This is not a job: the answer comes when the stretch has been processed, which can take about as long as the stretch plays, so preview a few seconds and allow a long timeout. |
@@ -386,7 +387,7 @@ Lowers tracks (music, atmosphere) while there is speech on other tracks and lets
 
 ### `set_track`
 
-Changes one track: its gain, mute or name.
+Changes one track: its gain, mute, name, pan, or the bus it goes to.
 
 | Param | Type | Description |
 |---|---|---|
@@ -394,6 +395,39 @@ Changes one track: its gain, mute or name.
 | `gainDB` | number | The track's gain in dB: the new value, not a change to the old one. |
 | `muted` | boolean | True to mute. |
 | `name` | string | A new name. |
+| `pan` | number | −1 (left) to 1 (right), 0 the centre. Stereo documents only. |
+| `output` | string | The id of the bus the track goes to, or "master" for the output. |
+
+### `add_bus`
+
+Adds a bus to the mixer: tracks routed to it (set_track output) are summed, given the bus's gain and pan, and passed on to the output or to another bus. The answer's `bus` is its number in `GET …/mixer`, where its id is.
+
+| Param | Type | Description |
+|---|---|---|
+| `name` | string | **Required.** What the bus is called. |
+| `output` | string | The id of the bus this one feeds. Default: the output. |
+
+### `set_bus`
+
+Changes one bus: its name, gain, pan, mute, or where it goes. A route that would send a bus back into itself is refused (reason routing_loop).
+
+| Param | Type | Description |
+|---|---|---|
+| `bus` | string | **Required.** Bus id (GET …/mixer shows it). |
+| `name` | string | A new name. |
+| `gainDB` | number | The bus's gain in dB: the new value. |
+| `pan` | number | −1 (left) to 1 (right), 0 the centre. Stereo documents only. |
+| `muted` | boolean | True to mute everything that goes through the bus. |
+| `output` | string | The id of the bus this one feeds, or "master" for the output. |
+
+### `remove_bus`
+
+Takes a bus away. Refused while tracks or buses are routed to it (reason in_use), unless `reroute` says where they go instead.
+
+| Param | Type | Description |
+|---|---|---|
+| `bus` | string | **Required.** Bus id. |
+| `reroute` | string | Where what was routed to the bus goes: a bus id, or "master". |
 
 ### `set_group`
 

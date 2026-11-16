@@ -37,6 +37,7 @@
 | ⌘] / ⌘[ | Gain +1 dB / −1 dB |
 | ⌥⌘L | Measure Loudness |
 | ⌥⌘M | Add Marker |
+| ⌥⌘X | Mixer… |
 | ⌥⇧⌘P | Plugins… |
 | B / L / P | In the spectrogram: box, lasso, brush |
 

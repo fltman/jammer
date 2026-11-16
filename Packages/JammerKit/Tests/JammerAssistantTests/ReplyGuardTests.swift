@@ -130,6 +130,19 @@ struct ReplyGuardTests {
         #expect(try await both.answer(goal: "put a marker called A here", context: Self.context, history: [], actions: AssistantCatalog.actions).steps.count == 2)
     }
 
+    @Test("A value named after what it is, not after the parameter, is still the missing required value")
+    func strayArgument() {
+        let actions = AssistantCatalog.actions
+        let bus = PlanParser.typed(op: "add_bus", args: [("bus", "Music")], why: "", actions: actions)
+        #expect(bus?.params["name"] == .string("Music"))
+        // Two unknown names, or nothing missing: nothing is guessed.
+        #expect(PlanParser.typed(op: "add_bus", args: [("bus", "Music"), ("title", "Other")], why: "", actions: actions)?.params["name"] == nil)
+        let named = PlanParser.typed(op: "add_bus", args: [("name", "Speech"), ("colour", "red")], why: "", actions: actions)
+        #expect(named?.params["name"] == .string("Speech") && named?.params.count == 1)
+        // A number where a number is wanted, through the same checks as if it had the right name.
+        #expect(PlanParser.typed(op: "gain", args: [("amount", "-3")], why: "", actions: actions)?.params["db"] == .number(-3))
+    }
+
     @Test("The reply follows the language of the request")
     func language() async throws {
         let swedish = "Jag kan inte skriva en dikt om havet eftersom du inte specificerade något att göra med ljudet."

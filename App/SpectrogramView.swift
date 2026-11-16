@@ -67,6 +67,7 @@ final class SpectrogramLayerView: NSView {
         for t in p.tracks.indices {
             var solo = p
             solo.tracks = [p.tracks[t]]
+            solo.withoutMixer()
             solo.tracks[0].isMuted = false
             let plan = PlanCompiler.compile(solo, pool: pool)
             let first = Frame(max(0, start - Double(size / 2)))

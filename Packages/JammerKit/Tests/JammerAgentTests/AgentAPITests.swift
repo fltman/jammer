@@ -470,6 +470,51 @@ struct SiblingTests {
         #expect(Operations.named("limit")?.tier == "advanced")
     }
 
+    @Test("The mixer through steps: a bus, a track routed and panned, refusals with their reasons, one undo value")
+    func mixerThroughSteps() throws {
+        let info = AudioFileInfo(container: .wav, sampleFormat: .float32, bigEndian: false, channels: 2, sampleRate: 48_000,
+                                 channelMask: nil, dataOffset: 0, frames: 48_000, chunks: [], bext: nil, ixml: nil, markers: [])
+        let a = SourceRef(name: "voice", path: "/dev/null", info: info)
+        var s = EditState(project: Project(source: a), pool: nil, media: nil)
+        let quiet: StepRunner.Measure = { _, _ in LoudnessResult(integrated: nil, range: nil, maxMomentary: nil, maxShortTerm: nil, samplePeak: 0, truePeak: 0, duration: 0) }
+        func run(_ op: String, _ params: [String: JSONValue]) -> StepResult { StepRunner.run([Step(op: op, params: params)], on: &s, measure: quiet)[0] }
+        let track = s.project.tracks[0].id.uuidString
+        #expect(run("add_bus", ["name": .string("Speech")]).info["bus"] == 1)
+        let speech = s.project.buses[0].id.uuidString
+        #expect(run("add_bus", ["name": .string("All"), "output": .string("master")]).status == .done)
+        let all = s.project.buses[1].id.uuidString
+        #expect(run("set_bus", ["bus": .string(speech), "gainDB": .number(-3), "pan": .number(0.25), "output": .string(all), "muted": .bool(true)]).status == .done)
+        #expect(s.project.buses[0].gainDB == -3 && s.project.buses[0].pan == 0.25 && s.project.buses[0].output == s.project.buses[1].id && s.project.buses[0].isMuted)
+        #expect(run("set_track", ["track": .string(track), "pan": .number(-0.5), "output": .string(speech)]).status == .done)
+        #expect(s.project.tracks[0].pan == -0.5 && s.project.tracks[0].output == s.project.buses[0].id && s.project.usesMixer)
+        // Refusals, each with its reason, and nothing changed by any of them.
+        let before = s.project
+        for (op, params, reason): (String, [String: JSONValue], String) in [
+            ("set_bus", ["bus": .string(all), "output": .string(speech)], "routing_loop"),
+            ("set_bus", ["bus": .string(UUID().uuidString), "gainDB": .number(0)], "not_found"),
+            ("set_bus", ["bus": .string(speech), "output": .string("somewhere")], "not_found"),
+            ("remove_bus", ["bus": .string(speech)], "in_use"),
+            ("remove_bus", ["bus": .string(all)], "in_use"),
+            ("set_track", ["track": .string(track), "output": .string(UUID().uuidString)], "not_found"),
+            ("add_bus", ["name": .string("  ")], "bad_request"),
+        ] {
+            let r = run(op, params)
+            #expect(r.status == .failed && r.reason == reason, "\(op) \(params): \(r.reason ?? "-") \(r.error ?? "")")
+        }
+        #expect(s.project == before)
+        // Out of range never reaches the model (the schema's ranges).
+        for bad: (String, [String: JSONValue]) in [("set_bus", ["bus": .string(speech), "gainDB": .number(99)]), ("set_bus", ["bus": .string(speech), "pan": .number(3)]),
+                                                   ("set_track", ["track": .string(track), "pan": .number(-2)])] {
+            #expect(throws: (any Error).self) { try StepRunner.validate(Step(op: bad.0, params: bad.1)) }
+        }
+        // Back to nothing: the track to the output, the buses away. The project is the plain one again.
+        #expect(run("set_track", ["track": .string(track), "pan": .number(0), "output": .string("master")]).status == .done)
+        #expect(run("remove_bus", ["bus": .string(speech), "reroute": .string("master")]).status == .done)
+        #expect(run("remove_bus", ["bus": .string(all)]).status == .done)
+        #expect(!s.project.usesMixer && s.project.buses.isEmpty)
+        for op in ["add_bus", "set_bus", "remove_bus"] { #expect(Operations.named(op)?.tier == "advanced") }
+    }
+
     @Test("duck through steps: lowers one track under the other, says how, refuses in words, and is a core operation")
     func duckThroughSteps() throws {
         let n = 48_000 * 6

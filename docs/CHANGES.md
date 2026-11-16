@@ -4,6 +4,8 @@ Not a list of commits: what behaves differently from before, for a user, an agen
 
 ## 2026-11-16
 
+- **The mixer's first part**: buses, pan and routing (`docs/MIXER.md`). A project that uses them is saved as project format 2, which a Jämmer from before refuses with "saved by a newer Jämmer"; a project that doesn't is format 1 and byte for byte what it was. `GET …/tracks` has `pan` and `output` on each track.
+
 - **Importing a file at another sample rate than the document's now converts with r8brain** (the same converter that exports use), where it used the system's converter. Measured on the same file through both: the same length, and the same audio within −145 dB for a signal under 18 kHz (`ResamplerTests.importAgrees`). Projects made before this point at files that were already converted when they were imported; those files are not touched, so an old project plays exactly as it did. A build without r8brain falls back to the system's converter.
 - **Still on the system's converter**, and so not the same converter yet: drift correction (`correct_drift`, which stretches by a few parts per million to a rate that isn't a standard one), noise reduction and stem separation (which convert to their model's rate and back; the models were measured with that converter), and the 16 kHz copies made for transcription and speaker analysis (never heard). They change when those parts are next worked on.
 - **Files handed to Flimmer at Flimmer's sample rate** are converted with r8brain too, like an export (`ResamplerTests.flimmerHandOver`: the file is the converter's output rounded to 24 bits).

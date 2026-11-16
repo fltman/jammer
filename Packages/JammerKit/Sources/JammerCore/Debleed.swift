@@ -175,6 +175,7 @@ extension Project {
         func mono(_ t: Int) -> [Float] {
             var solo = self
             solo.tracks = [tracks[t]]
+            solo.withoutMixer()
             solo.tracks[0].gainDB = 0
             solo.tracks[0].isMuted = false
             let raw = PlanCompiler.compile(solo, pool: pool).render(from: 0, frames: Int(length))
@@ -199,6 +200,7 @@ extension Project {
             // Render the track as heard (stereo), process per channel.
             var solo = self
             solo.tracks = [tracks[t]]
+            solo.withoutMixer()
             solo.tracks[0].gainDB = 0
             solo.tracks[0].isMuted = false
             let raw = PlanCompiler.compile(solo, pool: pool).render(from: 0, frames: Int(length))

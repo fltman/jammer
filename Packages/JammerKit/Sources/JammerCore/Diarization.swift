@@ -134,6 +134,7 @@ public enum Diarization {
     static func levelsDB(_ project: Project, track t: Int, pool: SourcePool) -> [Float] {
         var solo = project
         solo.tracks = [project.tracks[t]]
+        solo.withoutMixer()
         solo.tracks[0].gainDB = 0
         solo.tracks[0].isMuted = false
         let plan = PlanCompiler.compile(solo, pool: pool)
@@ -204,6 +205,7 @@ public enum Diarization {
     static func mono16k(_ project: Project, track t: Int, pool: SourcePool) throws -> [Float] {
         var solo = project
         solo.tracks = [project.tracks[t]]
+        solo.withoutMixer()
         solo.tracks[0].gainDB = 0
         solo.tracks[0].isMuted = false
         let plan = PlanCompiler.compile(solo, pool: pool)

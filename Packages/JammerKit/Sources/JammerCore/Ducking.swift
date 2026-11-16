@@ -202,6 +202,7 @@ extension Project {
             let first = Int(base.tracks[t].clips.map(\.start).min()!), end = Int(base.tracks[t].end)
             var solo = base
             solo.tracks = [base.tracks[t]]
+            solo.withoutMixer()
             solo.tracks[0].gainDB = 0
             solo.tracks[0].isMuted = false
             solo.tracks[0].inserts = []

@@ -269,6 +269,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 i.representedObject = model
                 return i
             }),
+            item("Mixer…", #selector(EditorWindowController.showMixer(_:)), "x", [.command, .option]),
             item("Plugins…", #selector(EditorWindowController.showPlugins(_:)), "p", [.command, .option, .shift]),
         ]))
         main.addItem(submenu("Transport", [

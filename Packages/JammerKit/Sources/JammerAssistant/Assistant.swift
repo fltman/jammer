@@ -54,6 +54,7 @@ public enum AssistantCatalog {
     /// here always waits.
     public static let spokenAs: [String: [String]] = {
         var w: [String: [String]] = [
+            "set_track": ["pan", "left", "right", "vänster", "höger", "centre", "center", "mitten", "route", "send it to", "skicka", "bus", "buss", "mute", "tysta", "rename", "döp", "volym", "volume", "level", "nivå", " db", "gain", "track", "spår"],
             "gain": ["volym", "volume", "level", "nivå", " db", "louder", "quieter", "högre", "lägre", "tystare", "starkare", "svagare", "sänk", "höj", "lower", "raise", "gain", "boost", "turn up", "turn down", "loud", "quiet", "soft"],
             "normalize": ["normal", "lufs", "loudness", "ljudstyrk", "peak", "topp"],
             "fade_in": ["fade", "tona"], "fade_out": ["fade", "tona"],
@@ -94,7 +95,8 @@ public enum AssistantCatalog {
     ]
 
     /// Plugin steps need track and insert ids and weren't in the measured action set.
-    public static let stepsNotForAssistant: Set<String> = ["add_insert", "set_insert", "remove_insert", "spectral_edit", "set_track", "set_group"]
+    /// (`set_bus` and `remove_bus` need a bus id, which the assistant isn't told; it can add a bus by name.)
+    public static let stepsNotForAssistant: Set<String> = ["add_insert", "set_insert", "remove_insert", "spectral_edit", "set_track", "set_group", "set_bus", "remove_bus"]
 
     /// Own actions: every step (but the above), the useful endpoints, and the macros.
     public static var actions: [AssistantAction] {
@@ -124,6 +126,7 @@ public enum AssistantCatalog {
         "rename_speaker": ["rename", "döp", "byt namn", "kalla", "call speaker", "name speaker"],
         "spectral_attenuate": ["frequenc", "frekvens", " hz", "khz", "band", "spectral", "spektral"],
         "limit": ["limit", "ceiling", "begräns", "tak ", "taket", "true peak", "dbtp", "peaks under", "toppar under", "topparna under"],
+        "add_bus": ["bus", "buss", "submix", "undergrupp"],
     ]
 
     /// What the on-device model is given for this request: everything but the actions in
@@ -362,6 +365,14 @@ public enum PlanParser {
     public static func typed(op: String, args: [(String, String)], why: String, actions: [AssistantAction],
                              context: AssistantContext? = nil) -> PlannedStep? {
         guard let action = actions.first(where: { $0.name == op }) else { return nil }
+        // A model sometimes names a value after what it is instead of after the parameter ("bus": "Music"
+        // for add_bus's `name`). When exactly one required value is missing and exactly one value was given
+        // under a name the action doesn't have, that value is the missing one.
+        let known = Set(action.params.map(\.name))
+        let missing = action.params.filter { p in p.required && !args.contains { $0.0 == p.name && !$0.1.trimmingCharacters(in: .whitespaces).isEmpty } }
+        let strays = args.filter { !known.contains($0.0) && !$0.1.trimmingCharacters(in: .whitespaces).isEmpty }
+        var args = args
+        if missing.count == 1, strays.count == 1, let i = args.firstIndex(where: { $0.0 == strays[0].0 }) { args[i].0 = missing[0].name }
         var params: [String: JSONValue] = [:]
         for (name, raw) in args {
             let value = raw.trimmingCharacters(in: .whitespaces)
@@ -427,7 +438,10 @@ public enum PlanParser {
         let actionWords = [" up ", " down ", "upp", " ner ", "klipp", "cut", "trim", "tona", "fade", "volym", "volume", "tystare", "quieter", "högre", "louder", "gain", "db", "lufs", "normalis", "normaliz",
                            "eko", "echo", "brum", "hum", "buzz", "klick", "click", "knast", "crackl", "brus", "noise", "hiss", "överstyr", "clip", "distort",
                            "tystnad", "paus", "pause", "silenc", "ehm", "öh", "filler", "fyllnad", "transkri", "transcri", "markör", "marker", "kopier", "copy",
-                           "klistra", "paste", "markera", "select", "mät", "measure", "loud", "högt", "tempo", "bpm", "radera", "delete", "ta bort", "remove"]
+                           "klistra", "paste", "markera", "select", "mät", "measure", "loud", "högt", "tempo", "bpm", "radera", "delete", "ta bort", "remove",
+                           // The mixer and the mastering steps (2026-11-16): without these a short request about them was
+                           // answered "What should I change?" before the model was asked.
+                           "bus", "buss", "submix", "pan", "mixer", "limit", "begräns", "ceiling", "duck"]
         let hasAction = actionWords.contains { text.contains($0) }
         let hasNumber = t.contains { Double($0) != nil }
         if !hasAction, !hasNumber, t.count <= 5 {

@@ -103,6 +103,18 @@ struct Track {
     float gain = 1.0f;
     bool mute = false;
     std::shared_ptr<Chain> chain;
+    /// Where the track goes: a bus (its index), or -1 for the output. With pan: the gain of the left
+    /// and of the right channel (1 and 1 at the centre).
+    int32_t bus = -1;
+    float panL = 1.0f, panR = 1.0f;
+};
+
+/// A bus: the sum of what is routed to it, with a gain and pan of its own, on to another bus or the output.
+struct Bus {
+    float gain = 1.0f;
+    bool mute = false;
+    float panL = 1.0f, panR = 1.0f;
+    int32_t output = -1;
 };
 
 struct Plan {
@@ -110,6 +122,12 @@ struct Plan {
     double sampleRate;
     std::vector<std::shared_ptr<Source>> sources;
     std::vector<Track> tracks;
+    std::vector<Bus> buses;
+    /// Buses in the order they are summed: every bus before the one it feeds. Made by finalize.
+    std::vector<int32_t> busOrder;
+    /// True when anything is routed to a bus or panned. False is the path every plan took before
+    /// there was a mixer, and still takes: the same code, the same bits.
+    bool routed = false;
     std::vector<Clip> clips; // sorted by start once finalized
     int64_t length = 0;
     bool finalized = false;
@@ -127,6 +145,8 @@ private:
     int32_t channels_;
     std::vector<float> scratch_;
     std::vector<float> track_;
+    std::vector<std::vector<float>> bus_;
+    void renderRouted(const Plan &plan, int64_t start, int64_t frames, float *out);
     void mixClip(const Plan &plan, const Clip &c, float trackGain, int64_t start, int64_t frames, float *out);
 };
 
