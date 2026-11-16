@@ -32,6 +32,10 @@ struct AgentSplashView: View {
                     .fixedSize(horizontal: false, vertical: true)
                 if let prompt = server.agentPrompt {
                     HStack(alignment: .top, spacing: 8) {
+                        // The name is on the group around the text, never on the selectable text itself:
+                        // selectable text with a label of its own sends SwiftUI into endless recursion as
+                        // soon as an assistive technology reads it (found in Glimmer and Flimmer, 2026-11-16).
+                        Group {
                         Text(verbatim: prompt)
                             .font(.system(.callout, design: .monospaced))
                             .lineLimit(nil)
@@ -41,9 +45,9 @@ struct AgentSplashView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .background(Color.white.opacity(0.05), in: .rect(cornerRadius: 8))
                             .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.neonColor.opacity(0.55)))
-                            .accessibilityElement(children: .ignore)
-                            .accessibilityLabel("Text for your agent")
-                            .accessibilityValue(Text(verbatim: prompt))
+                        }
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(Text(verbatim: "Text for your agent: \(prompt)"))
                         Button {
                             NSPasteboard.general.clearContents()
                             NSPasteboard.general.setString(prompt, forType: .string)

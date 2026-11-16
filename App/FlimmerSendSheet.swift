@@ -96,7 +96,6 @@ struct FlimmerSendSheet: View {
             .pickerStyle(.radioGroup)
             .labelsHidden()
             .disabled(model.stage != .choose)
-            .accessibilityLabel("What to send")
             Text("Nothing is overwritten in Flimmer: originals are muted and kept, and one undo there takes everything back.")
                 .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             switch model.stage {

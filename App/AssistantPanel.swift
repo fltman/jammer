@@ -375,12 +375,18 @@ struct AssistantView: View {
                                 .font(.callout).foregroundStyle(.secondary)
                         }
                         ForEach(model.messages) { m in
-                            Text(m.text)
-                                .font(m.role == .note ? .caption : .callout)
-                                .foregroundStyle(m.role == .note ? Color.secondary : m.role == .user ? Color.white : Theme.neonColor)
-                                .frame(maxWidth: .infinity, alignment: m.role == .user ? .trailing : .leading)
-                                .textSelection(.enabled)
-                                .id(m.id)
+                            // Who said it is on the group, not on the selectable text (see AgentSplashView).
+                            Group {
+                                Text(m.text)
+                                    .font(m.role == .note ? .caption : .callout)
+                                    .foregroundStyle(m.role == .note ? Color.secondary : m.role == .user ? Color.white : Theme.neonColor)
+                                    .frame(maxWidth: .infinity, alignment: m.role == .user ? .trailing : .leading)
+                                    .textSelection(.enabled)
+                            }
+                            // One string, "who: text": on macOS 27 a text element shows its value and loses its label.
+                            .accessibilityElement(children: .ignore)
+                            .accessibilityLabel(Text(verbatim: "\(m.role == .user ? "You" : m.role == .assistant ? "Assistant" : "Note"): \(m.text)"))
+                            .id(m.id)
                         }
                         if let plan = model.pending {
                             let impact = model.pendingImpact

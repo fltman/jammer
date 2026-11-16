@@ -624,6 +624,43 @@ struct InsertStepTests {
     }
 }
 
+@Suite("Rules the app's source has to keep")
+struct SourceRuleTests {
+    static let app = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        .deletingLastPathComponent().deletingLastPathComponent().appending(path: "App")
+
+    /// Selectable text (`.textSelection(.enabled)`) with an accessibility label, value or hint of its own on
+    /// the same view crashes the app with endless recursion in SwiftUI as soon as VoiceOver, or any
+    /// assistive technology, reads it. The name goes on a group around the text.
+    static func offences(in source: String) -> [Int] {
+        var out: [Int] = [], chain: [(Int, String)] = []
+        func close() {
+            if chain.contains(where: { $0.1.hasPrefix(".textSelection(.enabled)") }),
+               let bad = chain.first(where: { $0.1.hasPrefix(".accessibilityLabel") || $0.1.hasPrefix(".accessibilityValue") || $0.1.hasPrefix(".accessibilityHint") }) { out.append(bad.0) }
+            chain = []
+        }
+        for (i, line) in source.split(separator: "\n", omittingEmptySubsequences: false).enumerated() {
+            let t = line.trimmingCharacters(in: .whitespaces)
+            if t.hasPrefix(".") { chain.append((i + 1, t)) } else { close() }
+        }
+        close()
+        return out
+    }
+
+    @Test("Selectable text never has an accessibility label of its own")
+    func selectableTextHasNoLabel() throws {
+        // The rule finds the pattern, and passes the repair.
+        #expect(Self.offences(in: "Text(x)\n    .font(.body)\n    .textSelection(.enabled)\n    .padding(4)\n    .accessibilityLabel(\"Text\")\nButton {}") == [5])
+        #expect(Self.offences(in: "Group {\n    Text(x)\n        .textSelection(.enabled)\n}\n.accessibilityElement(children: .contain)\n.accessibilityLabel(\"Text\")").isEmpty)
+        let files = try FileManager.default.contentsOfDirectory(at: Self.app, includingPropertiesForKeys: nil).filter { $0.pathExtension == "swift" }
+        #expect(files.count > 20)
+        for f in files {
+            let bad = Self.offences(in: try String(contentsOf: f, encoding: .utf8))
+            #expect(bad.isEmpty, "\(f.lastPathComponent): selectable text with its own accessibility label at line \(bad)")
+        }
+    }
+}
+
 @Suite("Operation tiers")
 struct TierTests {
     @Test("10–15 core operations, all of them real; every operation has a tier")
