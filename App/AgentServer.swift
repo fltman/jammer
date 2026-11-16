@@ -518,7 +518,8 @@ enum AgentRouter {
     static func seconds(_ s: EditorSession, _ f: Frame) -> Double { (s.project.seconds(f) * 1_000_000).rounded() / 1_000_000 }
 
     static func summary(_ s: EditorSession) -> [String: Any] {
-        ["id": s.agentID, "name": s.name, "duration": seconds(s, s.project.length), "frames": s.project.length,
+        s.checkLink()
+        return ["id": s.agentID, "name": s.name, "duration": seconds(s, s.project.length), "frames": s.project.length,
          "sampleRate": s.project.sampleRate, "channels": s.project.channels, "tracks": s.project.tracks.count,
          "edited": s.document?.isDocumentEdited ?? false, "playing": s.isPlaying,
          "linkedFile": s.linkedFile.map { ["name": $0.fileName, "format": $0.format.rawValue, "requester": $0.requester, "available": true] as [String: Any] } as Any?

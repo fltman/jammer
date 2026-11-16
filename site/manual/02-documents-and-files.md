@@ -61,6 +61,8 @@ If you close the window or quit with changes you haven't saved back, Jämmer ask
 
 A linked document stays linked if Jämmer is restarted, or quits unexpectedly, with the window still open: it comes back with the same title, and ⌘S still saves back. If the file can't be used any more (it was deleted, made read-only, or replaced by another kind of file), the title says **can't be saved back** and ⌘S tells you why, with **Save a Jämmer Copy…** to keep your edit; put the file back where it was and ⌘S works again. A file that was only moved or renamed is followed.
 
+While the document is open, Jämmer keeps an eye on the clip's file. If the file goes away (the clip was deleted in Flimmer, a disk was unplugged) the title changes to **can't be saved back** within a couple of seconds and ⌘S explains why and offers **Save a Jämmer Copy…**; your edit stays in the window. If the file comes back, the title says **⌘S saves back** again. If Flimmer sends the same clip again while it is open here with changes, the window you already have comes forward with your changes in it, instead of a second one opening.
+
 This works for 16- and 24-bit and 32-bit float WAV, 16- and 24-bit AIFF and FLAC, mono or stereo. Other files from Flimmer open as ordinary new projects.
 
 ## A project from someone else

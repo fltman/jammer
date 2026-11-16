@@ -85,6 +85,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
     // File › Save and Duplicate come here first (the window controller is ahead of the
     // document in the responder chain): linked documents save back instead.
     @objc(saveDocument:) func saveOrSaveBack(_ sender: Any?) {
+        // The file as it is this moment: one that was removed a second ago gets the explanation, not a failed write.
+        session.checkLink()
         if session.linkedFile != nil { session.saveBack() }
         else if session.lostLink != nil, let window { session.saveBackOrExplain(in: window) }
         else { session.document?.save(sender) }

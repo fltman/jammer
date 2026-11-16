@@ -31,6 +31,24 @@ enum LinkedEditing {
     /// Opens `url` linked when a sibling asked and Jämmer can write the file back exactly;
     /// returns false to open it the ordinary way.
     static func open(_ url: URL, requester: String) -> Bool {
+        // The same file handed over again (SIBLINGS.md §6, point 6): the window that is already open for it
+        // comes forward, with the work in it. "The same" is the path: a sibling may delete and write its
+        // copy again on every hand-over, so it is a new file on disk each time.
+        let path = url.resolvingSymlinksInPath().standardizedFileURL.path
+        let open = NSDocumentController.shared.documents.compactMap { $0 as? JammerDocument }.filter { d in
+            guard let r = d.session?.linkRecord else { return false }
+            return URL(fileURLWithPath: r.path).resolvingSymlinksInPath().standardizedFileURL.path == path
+        }
+        if let edited = open.first(where: { $0.isDocumentEdited }) ?? (open.count > 1 ? open.first : nil) {
+            edited.session?.checkLink()
+            edited.windowControllers.first?.window?.makeKeyAndOrderFront(nil)
+            NSApp.activate()
+            if edited.isDocumentEdited { edited.session?.status = "\(url.lastPathComponent) is already open here, with your changes. ⌘S saves them back to \(requester)." }
+            return true
+        }
+        // Open without changes: what the sibling sent now may differ from what was opened then, so the
+        // document is opened afresh from the file as it is, in place of the old window.
+        for d in open { d.session?.stopWatchingLink(); d.close() }
         guard let link = LinkedFile(url: url, requester: requester) else {
             NSLog("Jammer: %@ can't be linked (format, bit depth or channels)", url.lastPathComponent)
             return false

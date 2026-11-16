@@ -127,6 +127,7 @@ final class EditorSession {
                 linkRecord = l.record
                 lostLink = nil
             }
+            watchLink()
             // The link is saved with the window, so a restart (or a crash) doesn't make this an ordinary document.
             document?.invalidateRestorableState()
             (window?.windowController as? EditorWindowController)?.showLink()
@@ -140,9 +141,45 @@ final class EditorSession {
     private(set) var lostLink: (name: String, requester: String, why: String)?
     var wasLinked: Bool { linkedFile != nil || lostLink != nil }
 
+    /// The sibling's file can go away, come back or be replaced while the document is open (the sibling
+    /// deletes its clip, a disk is unplugged). The title, the menu, ⌘S and `linkedFile.available` in the
+    /// agent API have to say what is true now, not what was true when the document opened, so the file is
+    /// looked at once a second while there is a link, and again right before every save and listing.
+    @ObservationIgnored private var linkWatch: Timer?
+    private func watchLink() {
+        guard linkRecord != nil, linkWatch == nil else { return }
+        linkWatch = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                // A document that has been closed is not watched any more.
+                guard let self else { return }
+                if self.document == nil { self.stopWatchingLink() } else { self.checkLink() }
+            }
+        }
+    }
+    func stopWatchingLink() { linkWatch?.invalidate(); linkWatch = nil }
+
+    /// Looks at the linked file now and takes the consequences if its state changed.
+    func checkLink() {
+        guard let record = linkRecord else { return }
+        switch LinkedFile.restore(record) {
+        case .linked(let link):
+            guard linkedFile == nil else { return }
+            linkedFile = link
+            status = "\(link.fileName) is back: ⌘S saves it back to \(link.requester) again."
+        case .lost(let name, let requester, let why):
+            guard lostLink?.why != why || linkedFile != nil else { return }
+            linkedFile = nil
+            lostLink = (name, requester, why)
+            status = "\(name) can't be saved back to \(requester): \(why)"
+            (window?.windowController as? EditorWindowController)?.showLink()
+            document?.invalidateRestorableState()
+        }
+    }
+
     /// After a restart: the link again, or the fact that it is lost.
     func restoreLink(_ record: LinkedFile.Record) {
         linkRecord = record
+        watchLink()
         switch LinkedFile.restore(record) {
         case .linked(let link):
             linkedFile = link
