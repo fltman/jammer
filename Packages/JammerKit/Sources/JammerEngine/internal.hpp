@@ -128,10 +128,16 @@ struct Send {
 /// amplitude inside a piece: so a point lands on its own frame, the level never steps, and what a frame
 /// is multiplied by depends only on where it is on the timeline, not on where a render started or how
 /// it was cut into blocks.
+///
+/// Three kinds of value, all straight lines between points: a level in dB (a fader's automation), an
+/// amplitude from 0 to 1 (an automated mute, which the compiler writes as short ramps so that it never
+/// clicks), and a pan from −1 to 1 (which becomes the two channels' gains by the same law as a fixed pan).
 struct Curve {
+    enum Kind : int32_t { kDecibel = 0, kAmplitude = 1, kPan = 2 };
     static constexpr int64_t kPiece = 64;
+    Kind kind = kDecibel;
     std::vector<int64_t> frames;
-    std::vector<float> db;
+    std::vector<float> db;   // the values, whatever the kind
     bool empty() const { return frames.empty(); }
     double dbAt(int64_t t) const;
     /// `n` interleaved frames of `in`, of which the first is timeline frame `at`, times the curve, to `out`
@@ -144,6 +150,9 @@ struct Track {
     bool mute = false;
     /// Automation added to the fader, after the track's plugins; empty: none, and nothing is different.
     Curve curve;
+    /// An automated mute (amplitude) and an automated pan, which then takes the fixed pan's place.
+    Curve muteCurve, panCurve;
+    bool automated() const { return !curve.empty() || !muteCurve.empty() || !panCurve.empty(); }
     std::shared_ptr<Chain> chain;
     std::vector<Send> sends;
     /// Where the track goes: a bus (its index), or -1 for the output. With pan: the gain of the left
@@ -156,7 +165,8 @@ struct Track {
 struct Bus {
     float gain = 1.0f;
     bool mute = false;
-    Curve curve;
+    Curve curve, muteCurve, panCurve;
+    bool automated() const { return !curve.empty() || !muteCurve.empty() || !panCurve.empty(); }
     float panL = 1.0f, panR = 1.0f;
     int32_t output = -1;
     std::vector<Send> sends;

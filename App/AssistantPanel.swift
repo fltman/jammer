@@ -83,7 +83,6 @@ final class AssistantModel {
     var ollamaAsked = false
     /// The one local model that has been through Jämmer's own evaluation (docs/ASSISTANT.md).
     static let evaluatedLocally = ["qwen3:8b"]
-    static var showHidden: Bool { UserDefaults.standard.bool(forKey: "assistant.showHiddenProviders") }
 
     var provider: TextProvider? { TextProvider.offered().first { $0.id == source } }
     var model: String { chosen[source] ?? "" }

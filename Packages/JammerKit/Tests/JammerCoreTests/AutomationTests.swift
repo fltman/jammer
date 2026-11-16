@@ -279,8 +279,12 @@ struct AutomationTests {
         refused("outside the range given") { try p.setAutomation(strip: t, points: Self.points([(0.3, 0)], p), range: p.frames(0)...p.frames(0.2)) }
         refused("two points") { try p.setAutomation(strip: t, points: Self.points([(0.1, 0), (0.1, -3)], p)) }
         refused("no track or bus") { try p.setAutomation(strip: UUID(), points: []) }
-        refused("isn't built yet") { try p.setAutomation(strip: t, param: .pan, points: []) }
-        refused("isn't built yet") { try p.setAutomation(strip: t, param: .mute, points: []) }
+        refused("isn't built yet") { try p.setAutomation(strip: t, param: .send, points: []) }
+        refused("a pan is −1 (left) to 1 (right)") { try p.setAutomation(strip: t, param: .pan, points: [AutomationPoint(frame: 0, value: 2)]) }
+        refused("a mute is 1 (muted) or 0 (heard)") { try p.setAutomation(strip: t, param: .mute, points: [AutomationPoint(frame: 0, value: 0.5)]) }
+        refused("holds each value") { try p.setAutomation(strip: t, param: .mute, points: [AutomationPoint(frame: 0, value: 1)], shape: .linear) }
+        refused("not a pan or a mute") { try p.setAutomation(strip: Master.id, param: .pan, points: [AutomationPoint(frame: 0, value: 0)]) }
+        refused("not a pan or a mute") { try p.setAutomation(strip: Master.id, param: .mute, points: [AutomationPoint(frame: 0, value: 1)]) }
         refused("\(Automation.maxPoints) points") {
             try p.setAutomation(strip: t, points: (0...Automation.maxPoints).map { AutomationPoint(frame: Frame($0), value: 0) })
         }
@@ -397,7 +401,7 @@ struct AutomationSafetyTests {
             good,
             AutomationLane(strip: UUID(), points: [AutomationPoint(frame: 0, value: -6)]),                       // a strip that isn't there
             AutomationLane(strip: a, points: [AutomationPoint(frame: 5, value: -60)]),                           // a twin of the first
-            AutomationLane(strip: b, param: .pan, points: [AutomationPoint(frame: 0, value: 1)]),                // not built
+            AutomationLane(strip: b, param: .send, to: UUID(), points: [AutomationPoint(frame: 0, value: 1)]),   // not built
             AutomationLane(strip: b, points: [AutomationPoint(frame: 900, value: .nan), AutomationPoint(frame: -4, value: 0)]),   // nothing usable
             AutomationLane(strip: c, points: [AutomationPoint(frame: 800, value: 400), AutomationPoint(frame: 100, value: -3),    // out of order, out of range,
                                               AutomationPoint(frame: 100, value: -9), AutomationPoint(frame: .max, value: 0),     // doubled, beyond the horizon,
@@ -417,9 +421,190 @@ struct AutomationSafetyTests {
         many.automation = [AutomationLane(strip: a, points: (0..<(Automation.maxPoints + 500)).map { AutomationPoint(frame: Frame($0), value: 0) })]
         _ = try ProjectSafety.check(&many)
         #expect(many.automation[0].points.count == Automation.maxPoints)
+        // Mute and pan: a mute's values become 1 or 0 and it holds; a pan is brought into range; the master has neither.
+        var mp = MixerTests.document().0
+        let own = mp.tracks[0].id
+        mp.automation = [
+            AutomationLane(strip: own, param: .mute, shape: .linear, points: [AutomationPoint(frame: 0, value: 0.7), AutomationPoint(frame: 50, value: -3)]),
+            AutomationLane(strip: own, param: .pan, points: [AutomationPoint(frame: 0, value: -7)]),
+            AutomationLane(strip: Master.id, param: .pan, points: [AutomationPoint(frame: 0, value: 0.5)]),
+            AutomationLane(strip: Master.id, param: .mute, points: [AutomationPoint(frame: 0, value: 1)]),
+        ]
+        _ = try ProjectSafety.check(&mp)
+        #expect(mp.automation.count == 2)
+        #expect(mp.automation[0].shape == .hold && mp.automation[0].points.map(\.value) == [1, 0])
+        #expect(mp.automation[1].points == [AutomationPoint(frame: 0, value: -1)])
+        // A pan lane in a mono project is left out.
+        var mono = MixerTests.document(channels: 1).0
+        mono.automation = [AutomationLane(strip: mono.tracks[0].id, param: .pan, points: [AutomationPoint(frame: 0, value: 0.5)])]
+        _ = try ProjectSafety.check(&mono)
+        #expect(mono.automation.isEmpty)
         // A project without lanes is not touched by any of this.
         var none = MixerTests.document().0
         let was = none
         #expect(try ProjectSafety.check(&none).isEmpty && none == was)
+    }
+}
+
+/// Automation, step 2: an automated mute and an automated pan.
+@Suite("Mixer: automation of mute and pan")
+struct AutomationMutePanTests {
+    static let n = MixerGraphTests.n
+    static func plan(_ build: (OpaquePointer, Int32) -> Void) -> [Float] {
+        let s = AutomationTests.steady()
+        defer { jm_source_release(s) }
+        let plan = jm_plan_create(2, 48_000)
+        let t = MixerGraphTests.track(plan, s)
+        build(plan, t)
+        jm_plan_finalize(plan)
+        defer { jm_plan_release(plan) }
+        return MixerGraphTests.render(plan)
+    }
+
+    @Test("A mute point closes the sound over 5 ms beginning at the point, without a jump, and opens it the same way")
+    func muteHasNoClick() throws {
+        var (p, pool) = AutomationTests.oneTrack()
+        let t = p.tracks[0].id
+        // A steady source, so that what each sample was multiplied by can be read.
+        let info = p.sources[0].info
+        let src = SourceRef(name: "steady", path: "/dev/null", info: info)
+        pool.register(src.id, memory: [Float](repeating: 0.25, count: Int(info.frames) * 2), channels: 2)
+        p.sources = [src]
+        p.tracks[0].clips = [Clip(sourceID: src.id, start: 0, length: info.frames)]
+        let on: Frame = 5_000, off: Frame = 12_000, ramp = 240   // 5 ms at 48 kHz
+        try p.setAutomation(strip: t, param: .mute, points: [AutomationPoint(frame: 0, value: 0), AutomationPoint(frame: on, value: 1), AutomationPoint(frame: off, value: 0)])
+        #expect(p.lane(strip: t, param: .mute)?.shape == .hold)
+        let y = MixerTests.render(p, pool)
+        func g(_ i: Int) -> Float { y[i * 2] / 0.25 }
+        // Heard up to the point; closing from it; silent 5 ms later; silent until the next point; open 5 ms after that.
+        #expect(g(Int(on) - 1) == 1 && g(Int(on)) == 1 && g(Int(on) + 1) < 1)
+        #expect(abs(g(Int(on) + ramp / 2) - 0.5) < 0.01)
+        #expect(g(Int(on) + ramp) == 0 && g(Int(off) - 1) == 0 && g(Int(off)) == 0)
+        #expect(g(Int(off) + ramp) == 1 && g(Int(info.frames) - 1) == 1)
+        // No jump anywhere: from one sample to the next the gain never moves more than the ramp's own step.
+        var biggest: Float = 0
+        for i in 1..<Int(info.frames) { biggest = max(biggest, abs(g(i) - g(i - 1))) }
+        #expect(biggest <= 1 / Float(ramp) + 1e-5, "\(biggest)")
+        print(String(format: "AUTOMATION mute: the biggest step between two samples is %.5f of full level (a ramp of %d frames; a mute without one steps 1.0)", biggest, ramp))
+        // What an agent reads at a time.
+        #expect(p.level(of: t, at: on - 1)?.muted == false && p.level(of: t, at: on)?.muted == true && p.level(of: t, at: off)?.muted == false)
+        // The button mutes whatever the lane says; and with the lane switched off it is the button alone.
+        var q = p
+        q.tracks[0].isMuted = true
+        #expect(MixerTests.render(q, pool).allSatisfy { $0 == 0 })
+        try p.setAutomation(strip: t, param: .mute, points: p.lane(strip: t, param: .mute)!.points, enabled: false)
+        #expect(MixerTests.render(p, pool).allSatisfy { $0 == 0.25 })
+    }
+
+    @Test("Two mute points closer together than the ramp: the second starts from where the first had got to, still without a jump; a lane that begins muted is silent from the start")
+    func muteCloseTogether() throws {
+        var (p, _) = AutomationTests.oneTrack()
+        let t = p.tracks[0].id
+        try p.setAutomation(strip: t, param: .mute, points: [AutomationPoint(frame: 0, value: 0), AutomationPoint(frame: 1_000, value: 1), AutomationPoint(frame: 1_060, value: 0)])
+        let c = try #require(p.muteCurve(of: t))
+        // Down from 1 000; at 1 060 it has come a quarter of the way (60 of 240 frames), and turns up from there.
+        #expect(c.frames == [0, 1_000, 1_060, 1_300] && c.values[0] == 1 && c.values[1] == 1 && abs(c.values[2] - 0.75) < 1e-6 && c.values[3] == 1)
+        #expect(zip(c.frames, c.frames.dropFirst()).allSatisfy { $0 < $1 })
+        // Two points that say the same thing are one state.
+        try p.setAutomation(strip: t, param: .mute, points: [AutomationPoint(frame: 0, value: 1), AutomationPoint(frame: 500, value: 1), AutomationPoint(frame: 900, value: 0)])
+        let d = try #require(p.muteCurve(of: t))
+        #expect(d.frames == [0, 900, 1_140] && d.values == [0, 0, 1])
+    }
+
+    @Test("An automated mute silences a send before the fader too, as the mute button does")
+    func muteAndSends() {
+        func render(pre: Bool) -> [Float] {
+            Self.plan { plan, t in
+                let dry = jm_plan_add_bus(plan, 1, true, 1, 1), wet = jm_plan_add_bus(plan, 1, false, 1, 1)
+                jm_plan_set_track_route(plan, t, dry, 1, 1)
+                jm_plan_add_track_send(plan, t, wet, 1, pre)
+                let frames: [Int64] = [0, 1_000, 1_240], values: [Float] = [1, 1, 0]
+                jm_plan_set_curve(plan, 0, t, 1, frames, values, 3)
+            }
+        }
+        for pre in [true, false] {
+            let y = render(pre: pre)
+            #expect(y[999 * 2] == 0.25 && y[1_240 * 2] == 0 && y[(Self.n - 1) * 2] == 0, "pre \(pre)")
+        }
+    }
+
+    @Test("An automated pan is the fixed pan's law at every point, moves without steps, and takes the slider's place")
+    func pan() throws {
+        // Constant: exactly what the fixed pan gives.
+        for p in [-1.0, -0.5, 0, 0.3, 1] {
+            let fixed = Mixer.panGains(p)
+            let y = Self.plan { plan, t in
+                let frames: [Int64] = [0], values: [Float] = [Float(p)]
+                jm_plan_set_curve(plan, 0, t, 2, frames, values, 1)
+            }
+            #expect(y[100] == 0.25 * fixed.left && y[101] == 0.125 * fixed.right, "pan \(p)")
+        }
+        // From hard left to hard right over 8 000 frames: at each end one side is exactly silent, in the middle both are whole.
+        let pts: [(Int64, Float)] = [(2_000, -1), (10_000, 1)]
+        let y = Self.plan { plan, t in jm_plan_set_curve(plan, 0, t, 2, pts.map(\.0), pts.map(\.1), 2) }
+        #expect(y[1_999 * 2] == 0.25 && y[1_999 * 2 + 1] == 0 && y[10_000 * 2] == 0 && y[10_000 * 2 + 1] == 0.125)
+        // (The middle falls inside a piece, so it is the law to within what a piece strays, measured below.)
+        #expect(abs(y[6_000 * 2] - 0.25) < 1e-4 && abs(y[6_000 * 2 + 1] - 0.125) < 1e-4)
+        var worst = 0.0, biggest: Float = 0
+        for i in 2_000..<10_000 {
+            let pan = -1 + 2 * Double(i - 2_000) / 8_000, want = Mixer.panGains(pan)
+            worst = max(worst, abs(Double(y[i * 2] / 0.25) - Double(want.left)), abs(Double(y[i * 2 + 1] / 0.125) - Double(want.right)))
+            biggest = max(biggest, abs(y[i * 2] - y[(i - 1) * 2]) / 0.25, abs(y[i * 2 + 1] - y[(i - 1) * 2 + 1]) / 0.125)
+        }
+        print(String(format: "AUTOMATION pan: off the pan law by at most %.6f of full level; the biggest step between two samples %.6f", worst, biggest))
+        #expect(worst < 0.0005 && biggest < 0.001)
+        // In a project: the lane takes the slider's place, and the slider is back when the lane is cleared or switched off.
+        var (p, pool) = AutomationTests.oneTrack()
+        let t = p.tracks[0].id
+        try p.setTrackRoute(t, pan: -1)
+        let left = MixerTests.render(p, pool)
+        try p.setAutomation(strip: t, param: .pan, points: [AutomationPoint(frame: 0, value: 1)])
+        let right = MixerTests.render(p, pool)
+        #expect(left.enumerated().allSatisfy { $0.offset % 2 == 0 || $0.element == 0 } && right.enumerated().allSatisfy { $0.offset % 2 == 1 || $0.element == 0 })
+        try p.setAutomation(strip: t, param: .pan, points: p.lane(strip: t, param: .pan)!.points, enabled: false)
+        #expect(MixerTests.render(p, pool) == left)
+        // Only a pan lane, nothing else of the mixer: heard all the same.
+        var (q, qpool) = AutomationTests.oneTrack()
+        try q.setAutomation(strip: q.tracks[0].id, param: .pan, points: [AutomationPoint(frame: 0, value: -1)])
+        #expect(!q.usesMixer && MixerTests.render(q, qpool).enumerated().allSatisfy { $0.offset % 2 == 0 || $0.element == 0 })
+        // A mono document has no pan.
+        var (m, _) = MixerTests.document(channels: 1)
+        do { try m.setAutomation(strip: m.tracks[0].id, param: .pan, points: [AutomationPoint(frame: 0, value: 0.5)]); Issue.record("not refused") } catch { #expect(error.localizedDescription.contains("mono")) }
+    }
+
+    @Test("Mute and pan land where they were drawn behind a plugin with latency, and give the same samples in any blocks and after a seek")
+    func placeAndBlocks() {
+        func build(_ plan: OpaquePointer, _ t: Int32, latency: Int) {
+            if latency > 0 { let c = MixerGraphTests.chain([DelayPlugin(latency: latency)]); jm_plan_set_chain(plan, t, c); jm_chain_release(c) }
+            let mf: [Int64] = [0, 3_000, 3_240, 9_000, 9_240], mv: [Float] = [1, 1, 0, 0, 1]
+            jm_plan_set_curve(plan, 0, t, 1, mf, mv, 5)
+            let pf: [Int64] = [1_000, 15_000], pv: [Float] = [-0.8, 0.9]
+            jm_plan_set_curve(plan, 0, t, 2, pf, pv, 2)
+            let gf: [Int64] = [500, 18_000], gv: [Float] = [0, -9]
+            jm_plan_set_curve(plan, 0, t, 0, gf, gv, 2)
+        }
+        let want = Self.plan { build($0, $1, latency: 0) }
+        for latency in [1, 100, 777] { #expect(Self.plan { build($0, $1, latency: latency) } == want, "latency \(latency)") }
+        let s = AutomationTests.steady()
+        defer { jm_source_release(s) }
+        func make() -> OpaquePointer {
+            let plan = jm_plan_create(2, 48_000)
+            build(plan, MixerGraphTests.track(plan, s), latency: 100)
+            jm_plan_finalize(plan)
+            return plan
+        }
+        for block in [1, 63, 512, 4_099] {
+            let b = make()
+            var got: [Float] = []
+            var at = 0
+            while at < Self.n { let k = min(block, Self.n - at); got += MixerGraphTests.render(b, from: at, frames: k); at += k }
+            jm_plan_release(b)
+            #expect(got == want, "blocks of \(block)")
+        }
+        let c = make()
+        for (from, frames) in [(3_100, 500), (0, 100), (9_100, 2_000)] {
+            #expect(MixerGraphTests.render(c, from: from, frames: frames) == Array(want[(from * 2)..<((from + frames) * 2)]), "seek to \(from)")
+        }
+        jm_plan_release(c)
     }
 }

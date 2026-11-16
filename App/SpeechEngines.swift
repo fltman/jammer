@@ -49,15 +49,13 @@ enum SpeechEngines {
     enum Choice: String, CaseIterable {
         case auto, apple, parakeet, whisper
         /// OpenAI's file transcription: paid, the audio leaves the Mac, and the transcript has no word
-        /// times. Hidden (PROVIDERS.md, rule 3) until it has been tried with a real, paid request; "auto"
-        /// never chooses it.
+        /// times ("text only"). Shown in every build (PROVIDERS.md, rule 3, as rewritten 2026-11-16), with
+        /// what is true said where it is chosen: built from the documentation, not tried with a real
+        /// request. "auto" never chooses it; on this Mac is the default.
         case openai
 
         /// What a user or an agent may ask for now.
-        @MainActor static var offered: [Choice] {
-            let hidden = AssistantModel.showHidden
-            return allCases.filter { $0 != .openai || hidden }
-        }
+        @MainActor static var offered: [Choice] { allCases }
         var paid: Bool { self == .openai }
     }
 
@@ -95,7 +93,6 @@ enum SpeechEngines {
         let whereToInstall = "Install it under Jämmer › Settings › Models."
         switch choice {
         case .openai:
-            guard AssistantModel.showHidden else { throw Unavailable(reason: "bad_request", message: "engine must be one of \(Choice.offered.map(\.rawValue).joined(separator: ", ")).") }
             guard let key = openAIKey, !key.isEmpty else { throw Unavailable(reason: "missing_key", message: "There is no OpenAI key. Add it in the assistant's settings.") }
             let model = model ?? openAIModel
             guard !model.isEmpty else { throw Unavailable(reason: "model_missing", message: "No OpenAI transcription model is chosen. Pass \"model\" with one of the provider's transcription models.") }

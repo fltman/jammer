@@ -50,18 +50,22 @@ public enum ProjectSafety {
             var seenLanes = Set<String>()
             let horizon = Self.horizon(p.sampleRate)
             for lane in p.automation.prefix(4_096) {
-                guard strips.contains(lane.strip), lane.param == .gain, lane.to == nil, lane.shape == .linear,
+                guard strips.contains(lane.strip), lane.param != .send, lane.to == nil,
+                      lane.param == .gain || lane.strip != Master.id, lane.param != .pan || p.channels == 2,
                       seenLanes.insert("\(lane.strip)|\(lane.param.rawValue)").inserted else { left += 1; continue }
                 var l = lane
+                // A mute holds, a level and a pan go in straight lines: a file that says otherwise is put right.
+                l.shape = lane.param == .mute ? .hold : .linear
+                let allowed = Automation.range(of: lane.param)
                 var at = Set<Frame>()
                 l.points = lane.points.prefix(Automation.maxPoints * 4)
                     .filter { $0.value.isFinite && $0.frame >= 0 && $0.frame <= horizon }
                     .sorted { $0.frame < $1.frame }
                     .filter { at.insert($0.frame).inserted }
                     .prefix(Automation.maxPoints)
-                    .map { AutomationPoint(frame: $0.frame, value: min(Automation.gainRange.upperBound, max(Automation.gainRange.lowerBound, $0.value))) }
+                    .map { AutomationPoint(frame: $0.frame, value: lane.param == .mute ? ($0.value >= 0.5 ? 1 : 0) : min(allowed.upperBound, max(allowed.lowerBound, $0.value))) }
                 if l.points.isEmpty { left += 1; continue }
-                if l.points != lane.points { mended += 1 }
+                if l.points != lane.points || l.shape != lane.shape { mended += 1 }
                 kept.append(l)
             }
             left += max(0, p.automation.count - 4_096)

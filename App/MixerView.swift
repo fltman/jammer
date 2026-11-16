@@ -282,10 +282,20 @@ private struct MixerStrip: View {
     static func levelText(_ db: Double) -> String { String(format: "%+.1f dB", db).replacingOccurrences(of: "-", with: "−") }
     /// What a strip's lanes are, in words: the slider beside it is then not the whole level.
     static func automationText(_ lanes: [AutomationLane]) -> String? {
-        guard let lane = lanes.first(where: { $0.param == .gain }) else { return nil }
-        let n = lane.points.count, values = lane.points.map(\.value)
-        let span = values.min() == values.max() ? levelText(values[0]) : "\(levelText(values.min()!)) to \(levelText(values.max()!))"
-        return "Automation: \(n) point\(n == 1 ? "" : "s") on the level, \(span), added to the fader" + (lane.enabled ? "" : " (switched off)")
+        let parts = lanes.compactMap { lane -> String? in
+            let n = lane.points.count, values = lane.points.map(\.value)
+            guard n > 0 else { return nil }
+            let points = "\(n) point\(n == 1 ? "" : "s")", off = lane.enabled ? "" : " (switched off)"
+            switch lane.param {
+            case .gain:
+                let span = values.min() == values.max() ? levelText(values[0]) : "\(levelText(values.min()!)) to \(levelText(values.max()!))"
+                return "\(points) on the level, \(span), added to the fader" + off
+            case .pan: return "\(points) on the pan, in the slider's place" + off
+            case .mute: return "\(points) on the mute" + off
+            case .send: return nil
+            }
+        }
+        return parts.isEmpty ? nil : "Automation: " + parts.joined(separator: "; ")
     }
     static func panText(_ p: Double) -> String { p == 0 ? "Centre" : "\(Int((abs(p) * 100).rounded())) % \(p < 0 ? "left" : "right")" }
 

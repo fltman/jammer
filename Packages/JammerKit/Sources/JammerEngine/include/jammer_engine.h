@@ -183,6 +183,12 @@ void jm_plan_set_master(jm_plan *_Nonnull plan, float gain, jm_chain *_Nullable 
 /// the fader doesn't have it. A curve whose frames don't rise or whose values aren't numbers is not used
 /// at all. Without a curve nothing is different from a plan that never had one. Before finalize.
 void jm_plan_set_gain_curve(jm_plan *_Nonnull plan, int32_t kind, int32_t index, const int64_t *_Nonnull frames, const float *_Nonnull db, int32_t count);
+/// The same for the other things a strip's automation moves. `what`: 0 the level in dB (as above), 1 a
+/// mute as an amplitude from 0 to 1 (straight lines: the caller writes a mute as short ramps, so it never
+/// clicks; it silences sends before the fader too, as the mute button does), 2 the pan from −1 to 1 (by
+/// the law of a fixed pan; set the strip's fixed pan to the centre when giving one, since this takes its
+/// place; stereo plans only). The master has a level only.
+void jm_plan_set_curve(jm_plan *_Nonnull plan, int32_t kind, int32_t index, int32_t what, const int64_t *_Nonnull frames, const float *_Nonnull values, int32_t count);
 int64_t jm_plan_master_latency(const jm_plan *_Nonnull plan);
 
 // MARK: Engine

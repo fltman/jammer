@@ -496,12 +496,13 @@ enum AgentRouter {
                 guard let strip = name == "master" ? Master.id : UUID(uuidString: name), let at = Double(r.query["at"] ?? ""), at.isFinite, at >= 0 else {
                     throw APIError.badRequest("Add ?strip=<track or bus id, or master>&at=<seconds>.")
                 }
-                guard (r.query["param"] ?? "gain") == "gain" else { throw APIError.badRequest("\"param\" is gain; nothing else is automated yet.") }
+                guard let param = AutomationLane.Param(rawValue: r.query["param"] ?? "gain"), param != .send else { throw APIError.badRequest("\"param\" is gain, pan or mute.") }
                 guard let level = p.level(of: strip, at: p.frames(at)) else { throw APIError(404, "not_found", "There is no track or bus with id \(name).") }
                 func r2(_ v: Double) -> Double { (v * 100).rounded() / 100 }
-                return .json(["automation": ["strip": name, "param": "gain", "at": at, "value": level.automationDB.map { r2($0) as Any } ?? NSNull(),
+                let value = param == .gain ? level.automationDB : p.automated(param, of: strip, at: p.frames(at))
+                return .json(["automation": ["strip": name, "param": param.rawValue, "at": at, "value": value.map { r2($0) as Any } ?? NSNull(),
                                              "faderDB": r2(level.faderDB), "levelDB": r2(level.totalDB), "muted": level.muted,
-                                             "note": "value is the lane's (null: no lane, or it is switched off); faderDB is the fader with its VCA group; levelDB is both together."] as [String: Any]])
+                                             "note": "value is the lane's (null: no lane, or it is switched off): dB for gain, −1 to 1 for pan, 1 or 0 for mute. faderDB is the fader with its VCA group; levelDB is that and the gain lane together; muted is true when the button, the group or the mute lane silences the strip at that time."] as [String: Any]])
             case ["tracks"]:
                 try only("GET", "POST")
                 if r.method == "GET" { return .json(["tracks": session.project.tracks.map { trackJSON(session, $0) }]) }

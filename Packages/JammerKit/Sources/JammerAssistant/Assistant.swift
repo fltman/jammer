@@ -116,7 +116,14 @@ public enum AssistantCatalog {
         return Operations.all.filter { !stepsNotForAssistant.contains($0.name) }.map { AssistantAction(name: $0.name, description: $0.description, params: $0.params, kind: .step,
                                                     destructive: destructiveNames.contains($0.name)) }
             + Operations.endpoints.filter { endpointNames.contains($0.name) }.map {
-                AssistantAction(name: $0.name, description: $0.description, params: $0.params, kind: .endpoint,
+                // The assistant transcribes on this Mac: sending audio to a paid service is the user's own
+                // choice in the transcript panel, with its sheet, never something a plan does.
+                AssistantAction(name: $0.name, description: $0.description,
+                                params: $0.params.filter { !["model", "allowPaid"].contains($0.name) }.map { p in
+                                    var p = p
+                                    p.options = p.options?.filter { $0 != "openai" }
+                                    return p
+                                }, kind: .endpoint,
                                 destructive: destructiveNames.contains($0.name))
             }
             + macros

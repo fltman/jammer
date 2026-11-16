@@ -66,9 +66,13 @@ final class TranscriptPanel: NSView, NSTextViewDelegate {
         engine.lastItem?.representedObject = SpeechEngines.Choice.auto.rawValue
         engine.addItem(withTitle: "OpenAI (your key, paid)")
         engine.lastItem?.representedObject = SpeechEngines.Choice.openai.rawValue
+        // Said where it is chosen: what this choice means, before the sheet says it in full.
+        engine.lastItem?.toolTip = "The audio is uploaded to OpenAI and transcribed there, for a price. The text comes back without the time of each word: you can read, search and correct it, but not edit the audio with it. Built from OpenAI's documentation, not tried with a real request."
+        engine.toolTip = "Where the document is transcribed. On this Mac nothing leaves it."
         engine.controlSize = .small
         engine.setAccessibilityLabel("Transcription engine")
-        engine.isHidden = !SpeechEngines.Choice.offered.contains(.openai)
+        engine.target = self
+        engine.action = #selector(engineChanged(_:))
         let header = NSStackView(views: [title, NSView(), progress, engine, language, transcribeButton])
         header.orientation = .horizontal
         header.edgeInsets = NSEdgeInsets(top: 6, left: 14, bottom: 6, right: 14)
@@ -141,7 +145,10 @@ final class TranscriptPanel: NSView, NSTextViewDelegate {
             } else if let job, job.status == .failed {
                 empty.stringValue = job.error?.message ?? "Transcription failed."
             } else {
-                empty.stringValue = "No transcript yet. Choose the language and click Transcribe. Everything runs on this Mac."
+                // True for the choice that is made: on this Mac nothing leaves it; at OpenAI the audio does.
+                let away = engine.selectedItem?.representedObject as? String == SpeechEngines.Choice.openai.rawValue
+                empty.stringValue = away ? "No transcript yet. Choose the language and click Transcribe. With OpenAI chosen, the audio is uploaded there; Jämmer asks first."
+                                         : "No transcript yet. Choose the language and click Transcribe. Transcribed on this Mac, nothing leaves it."
             }
         } else {
             empty.isHidden = true
@@ -259,10 +266,13 @@ final class TranscriptPanel: NSView, NSTextViewDelegate {
         session.perform("delete_words", ["words": .array(ids), "bridge": .number(0.3)])
     }
 
+    /// The line under an empty transcript says where it will be transcribed.
+    @objc func engineChanged(_ sender: Any?) { refresh() }
+
     @objc func transcribe(_ sender: Any?) {
         let code = language.selectedItem?.representedObject as? String ?? "sv-SE"
         UserDefaults.standard.set(code, forKey: "transcript.language")
-        if !engine.isHidden, engine.selectedItem?.representedObject as? String == SpeechEngines.Choice.openai.rawValue {
+        if engine.selectedItem?.representedObject as? String == SpeechEngines.Choice.openai.rawValue {
             Task { await transcribeAtOpenAI(Locale(identifier: code)) }
             return
         }
@@ -315,6 +325,8 @@ final class TranscriptPanel: NSView, NSTextViewDelegate {
         The transcript comes back as text without the time of each word. You can read, search and correct it; you can't delete words or filler words from the audio with it.
 
         Jämmer hasn't been able to read OpenAI's terms for what it does with uploaded audio. Read them at OpenAI before sending anything that isn't yours to share.
+
+        This route is built from OpenAI's documentation and has not been tried with a real request. If OpenAI answers with an error, Jämmer shows it as it came.
         """
         alert.accessoryView = pick
         alert.addButton(withTitle: "Send")

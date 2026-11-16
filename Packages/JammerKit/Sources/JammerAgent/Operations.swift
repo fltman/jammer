@@ -139,16 +139,16 @@ public enum Operations {
     @TaskLocal public static var automationForThisTask: Bool?
     public static var automationOn: Bool { automationForThisTask ?? automation }
     static let automationSteps: [OperationSpec] = [
-        .init("set_automation", "Write Automation", "Writes automation for a level: points on the timeline that the level follows, in a straight line in dB from one to the next (before the first point the level is the first point's, after the last the last's). It is added to the fader, which stays where it is: 0 dB is no change. `points` replace the whole lane; with `start` and `end` they replace only the points inside that range and nothing outside it is touched. A point lands on its own sample, whatever plugins the strip has. Edits that close up or open the whole timeline (delete, paste, removed pauses) move the points with the sound; lining up or stretching one track doesn't, and the answer then carries a warning. Refused with the name of the field: a point after the document's end or outside `start`…`end`, a value outside −96 to 24, two points at one time. info has `points`, how many the lane now has.",
+        .init("set_automation", "Write Automation", "Writes automation: points on the timeline that a strip's level, pan or mute follows (before the first point the value is the first point's, after the last the last's). `gain`: a straight line in dB from point to point, added to the fader, which stays where it is (0 dB is no change). `pan`: a straight line from point to point, −1 left to 1 right, in the place of the fixed pan while the lane is there (stereo documents). `mute`: 1 muted, 0 heard, each held until the next point; the sound closes and opens over 5 ms beginning at the point, so it never clicks, and sends before the fader are silenced too, as by the mute button. The master has a gain lane only. `points` replace the whole lane; with `start` and `end` they replace only the points inside that range and nothing outside it is touched. A point lands on its own sample, whatever plugins the strip has. Edits that close up or open the whole timeline (delete, paste, removed pauses) move the points with the sound; lining up or stretching one track doesn't, and the answer then carries a warning. Refused with the name of the field: a point after the document's end or outside `start`…`end`, a value outside what the lane takes (−96 to 24 dB, −1 to 1, 0 or 1), two points at one time. info has `points`, how many the lane now has.",
               params: [.init("strip", .string, "The id of the track or bus, or \"master\".", required: true),
-                       .init("param", .string, "What the lane moves. Default gain.", options: ["gain"]),
-                       .init("points", .pairs, "The points: [[seconds, dB], …]. An empty list with `start` and `end` takes the points in that range away.", required: true, range: -96...24),
+                       .init("param", .string, "What the lane moves. Default gain.", options: ["gain", "pan", "mute"]),
+                       .init("points", .pairs, "The points: [[seconds, value], …]; the value is dB for gain, −1 to 1 for pan, 1 or 0 for mute. An empty list with `start` and `end` takes the points in that range away.", required: true, range: -96...24),
                        .init("start", .seconds, "Start of the range to replace, in seconds. With `end`."),
                        .init("end", .seconds, "End of the range to replace, in seconds. With `start`."),
                        .init("enabled", .boolean, "False keeps the lane but stops it being heard; true brings it back.")]),
         .init("clear_automation", "Clear Automation", "Takes the points of one lane away: all of them, or with `start` and `end` those inside that range. One strip and one lane at a time; nothing clears a whole project. info has `removed`.",
               params: [.init("strip", .string, "The id of the track or bus, or \"master\".", required: true),
-                       .init("param", .string, "Which lane.", required: true, options: ["gain"]),
+                       .init("param", .string, "Which lane.", required: true, options: ["gain", "pan", "mute"]),
                        .init("start", .seconds, "Start of the range to clear, in seconds. With `end`."),
                        .init("end", .seconds, "End of the range to clear, in seconds. With `start`.")]),
     ]
@@ -411,9 +411,11 @@ public enum Operations {
         .init("unfreeze", "Unfreeze", "Thaws a frozen track or bus: it is worked out live again, from exactly what it was. One undo step.",
               params: [.init("strip", .string, "The id of the track or bus.", required: true)],
               call: ("POST", "/api/v1/documents/{id}/unfreeze")),
-        .init("transcribe", "Transcribe", "Transcribes the document on this Mac; words get ids and times. Answers with a job; the transcript lands as one undo step.",
+        .init("transcribe", "Transcribe", "Transcribes the document on this Mac; words get ids and times. Answers with a job; the transcript lands as one undo step. With `engine` openai it is transcribed at OpenAI instead, without word times (see `engine`).",
               params: [.init("language", .string, "BCP 47, e.g. sv-SE or en-US. Default: the Mac's language."),
-                       .init("engine", .string, "Recogniser. auto: KB-Whisper for Swedish when installed, else Parakeet (25 European languages) when installed, else Apple. A model that isn't installed fails with reason model_missing; the user installs models in Jämmer's Settings.", options: ["auto", "apple", "parakeet", "whisper"]),
+                       .init("engine", .string, "Recogniser. auto: KB-Whisper for Swedish when installed, else Parakeet (25 European languages) when installed, else Apple. A model that isn't installed fails with reason model_missing; the user installs models in Jämmer's Settings. openai: the audio (the whole of each file the document plays from) is uploaded to OpenAI and transcribed there with the user's own key, for OpenAI's price; it needs `allowPaid` true (else 402), a key (else missing_key) and `model` (else model_missing); the transcript is text only (`textOnly`: words have no times, and delete_words and remove_fillers answer text_only). auto never chooses it. Built from OpenAI's documentation and not tried with a real request.", options: ["auto", "apple", "parakeet", "whisper", "openai"]),
+                       .init("model", .string, "For engine openai: one of the transcription models OpenAI lists for the key."),
+                       .init("allowPaid", .boolean, "Must be true for engine openai: the request costs money."),
                        .init("replace", .boolean, "Transcribe again even where there is a transcript.")],
               call: ("POST", "/api/v1/documents/{id}/transcribe"), startsJob: true),
         .init("get_transcript", "Read Transcript", "The words as they play now, with ids, times and confidence.",
@@ -678,7 +680,14 @@ public enum StepRunner {
             guard a <= b else { throw StepFailure("\(step.op): \"start\" is after \"end\".") }
             guard b <= end + 1e-9 else { throw StepFailure("\(step.op): \"end\" is at \(b.plain) s, after the document's end (\(end.plain) s).") }
         }
+        let param = AutomationLane.Param(rawValue: p["param"]?.string ?? "gain") ?? .gain
+        if name == "master", param != .gain { throw StepFailure("\(step.op): \"param\" is gain for the master; it has no pan or mute to automate.") }
+        if param == .pan, project.channels != 2 { throw StepFailure("\(step.op): \"param\" can't be pan in a mono document.", reason: "needs_stereo") }
+        let allowed = Automation.range(of: param)
         for (i, pair) in (p["points"]?.pairs ?? []).enumerated() {
+            guard allowed.contains(pair.1), param != .mute || pair.1 == 0 || pair.1 == 1 else {
+                throw StepFailure("\(step.op): points[\(i)] has the value \(pair.1.plain); " + (param == .gain ? "a gain is −96 to 24 dB." : param == .pan ? "a pan is −1 (left) to 1 (right)." : "a mute is 1 (muted) or 0 (heard)."))
+            }
             guard pair.0 <= end + 1e-9 else { throw StepFailure("\(step.op): points[\(i)] is at \(pair.0.plain) s, after the document's end (\(end.plain) s).") }
             if let a = p["start"]?.double, let b = p["end"]?.double, pair.0 < a - 1e-9 || pair.0 > b + 1e-9 {
                 throw StepFailure("\(step.op): points[\(i)] is at \(pair.0.plain) s, outside \"start\"…\"end\" (\(a.plain) to \(b.plain) s).")
@@ -1019,9 +1028,10 @@ public enum StepRunner {
             do { try check(step, against: project) }
             let strip = p["strip"]?.string == "master" ? Master.id : UUID(uuidString: p["strip"]?.string ?? "") ?? UUID()
             let range: ClosedRange<Frame>? = frames("start").flatMap { a in frames("end").map { a...max(a, $0) } }
+            let param = AutomationLane.Param(rawValue: p["param"]?.string ?? "gain") ?? .gain
             do {
                 if step.op == "clear_automation" {
-                    return ["removed": Double(try s.project.clearAutomation(strip: strip, param: .gain, range: range))]
+                    return ["removed": Double(try s.project.clearAutomation(strip: strip, param: param, range: range))]
                 }
                 var enabled: Bool?
                 if let v = p["enabled"], case .bool(let b) = v { enabled = b }
@@ -1029,12 +1039,12 @@ public enum StepRunner {
                 guard !points.isEmpty || range != nil || enabled != nil else { throw StepFailure("set_automation: no points were given. To take a lane away, use clear_automation.") }
                 if points.isEmpty, range == nil, let enabled {
                     // Only switching the lane on or off.
-                    guard let lane = s.project.lane(strip: strip, param: .gain) else { throw StepFailure("set_automation: there is no gain lane on that strip to switch \(enabled ? "on" : "off").", reason: "not_found") }
-                    try s.project.setAutomation(strip: strip, points: lane.points, enabled: enabled)
+                    guard let lane = s.project.lane(strip: strip, param: param) else { throw StepFailure("set_automation: there is no \(param.rawValue) lane on that strip to switch \(enabled ? "on" : "off").", reason: "not_found") }
+                    try s.project.setAutomation(strip: strip, param: param, points: lane.points, enabled: enabled)
                 } else {
-                    try s.project.setAutomation(strip: strip, points: points, range: range, enabled: enabled)
+                    try s.project.setAutomation(strip: strip, param: param, points: points, range: range, enabled: enabled)
                 }
-                return ["points": Double(s.project.lane(strip: strip, param: .gain)?.points.count ?? 0)]
+                return ["points": Double(s.project.lane(strip: strip, param: param)?.points.count ?? 0)]
             } catch let e as Automation.Failure { throw StepFailure("\(step.op): " + (e.errorDescription ?? ""), reason: e.reason) }
         case "set_master":
             var limiter: MasterLimiter?? = nil

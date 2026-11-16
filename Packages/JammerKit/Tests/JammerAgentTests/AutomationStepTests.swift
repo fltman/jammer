@@ -64,6 +64,15 @@ struct AutomationStepTests {
             // An empty list with a range takes that range's points away.
             r = Self.run(&s, "set_automation", ["strip": strip, "points": .array([]), "start": .number(2), "end": .number(4)])
             #expect(r.status == .done && r.info["points"] == 2)
+            // A pan lane and a mute lane beside the gain lane, each its own; clearing one leaves the others.
+            r = Self.run(&s, "set_automation", ["strip": strip, "param": .string("pan"), "points": Self.pairs([(0, -1), (5, 1)])])
+            #expect(r.status == .done && r.info["points"] == 2)
+            r = Self.run(&s, "set_automation", ["strip": strip, "param": .string("mute"), "points": Self.pairs([(1, 1), (2, 0)])])
+            #expect(r.status == .done && s.project.lanes(of: t).count == 3 && s.project.lane(strip: t, param: .mute)?.shape == .hold)
+            r = Self.run(&s, "clear_automation", ["strip": strip, "param": .string("pan")])
+            #expect(r.info["removed"] == 2 && s.project.lanes(of: t).map(\.param.rawValue).sorted() == ["gain", "mute"])
+            r = Self.run(&s, "clear_automation", ["strip": strip, "param": .string("mute")])
+            #expect(r.info["removed"] == 2)
             // Clearing: one lane of one strip; the master's is still there.
             r = Self.run(&s, "clear_automation", ["strip": strip, "param": .string("gain")])
             #expect(r.status == .done && r.info["removed"] == 2 && s.project.lane(strip: t, param: .gain) == nil)
@@ -92,7 +101,12 @@ struct AutomationStepTests {
             #expect(said(["strip": strip, "points": Self.pairs([(1, 0)]), "start": .number(1)]).contains("go together"))
             #expect(said(["strip": strip, "points": Self.pairs([(1, 0)]), "start": .number(1), "end": .number(12)]).contains("\"end\" is at 12 s"))
             #expect(said(["strip": .string(UUID().uuidString), "points": Self.pairs([(1, 0)])]).contains("\"strip\""))
-            #expect(said(["strip": strip, "param": .string("pan"), "points": Self.pairs([(1, 0)])]).contains("\"param\" must be one of gain"))
+            #expect(said(["strip": strip, "param": .string("send"), "points": Self.pairs([(1, 0)])]).contains("\"param\" must be one of gain, pan, mute"))
+            #expect(said(["strip": strip, "param": .string("pan"), "points": Self.pairs([(1, 1.5)])]).contains("points[0] has the value 1.5; a pan is −1 (left) to 1 (right)"))
+            #expect(said(["strip": strip, "param": .string("mute"), "points": Self.pairs([(1, 0.5)])]).contains("points[0] has the value 0.5; a mute is 1 (muted) or 0 (heard)"))
+            #expect(said(["strip": .string("master"), "param": .string("mute"), "points": Self.pairs([(1, 1)])]).contains("\"param\" is gain for the master"))
+            #expect(said(["strip": strip, "param": .string("pan"), "points": Self.pairs([(1, -1), (2, 1)])]) == "")
+            #expect(said(["strip": strip, "param": .string("mute"), "points": Self.pairs([(1, 1), (2, 0)])]) == "")
             #expect(said(["strip": strip, "points": Self.pairs([(1, 0)])]) == "")
             // Two points at one time: refused when it runs, nothing changed.
             var t = s

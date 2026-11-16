@@ -17,20 +17,33 @@ double Curve::dbAt(int64_t t) const {
 }
 
 void Curve::apply(const float *in, float *out, int64_t at, int64_t n, int32_t channels) const {
-    auto gain = [](double d) { return d == 0.0 ? 1.0f : float(std::pow(10.0, d / 20.0)); };
+    // What a value is as a gain on the left and on the right. A pan uses the law of a fixed pan
+    // (Mixer.panGains): the side it moves away from falls as a cosine, the other stays.
+    struct LR { float l, r; };
+    const Kind k = kind;
+    auto gains = [k](double v) -> LR {
+        if (k == kDecibel) { const float g = v == 0.0 ? 1.0f : float(std::pow(10.0, v / 20.0)); return {g, g}; }
+        if (k == kAmplitude) { const float g = float(std::min(1.0, std::max(0.0, v))); return {g, g}; }
+        const double p = std::min(1.0, std::max(-1.0, v));
+        if (p == 0.0) return {1.0f, 1.0f};
+        const float fall = std::fabs(p) == 1.0 ? 0.0f : float(std::cos(std::fabs(p) * 3.14159265358979323846 / 2.0));
+        return p < 0 ? LR{1.0f, fall} : LR{fall, 1.0f};
+    };
+    // How much of the line one piece may span before a straight piece in amplitude strays from it:
+    // half a dB of level, a fiftieth of the way across for a pan. An amplitude line is straight already.
+    const double most = k == kDecibel ? 0.5 : k == kPan ? 0.02 : 1e30;
     int64_t pos = 0;
     while (pos < n) {
         const int64_t t0 = at + pos;
         // The stretch between two points that t0 is in (or before the first, or after the last), and how
-        // steep the line is there. Where it is steep the pieces are shorter, so that a straight piece in
-        // amplitude never spans more than half a dB of the line: a power of two, at most kPiece.
+        // steep the line is there. Where it is steep the pieces are shorter: a power of two, at most kPiece.
         const auto next = std::upper_bound(frames.begin(), frames.end(), t0);
         const bool inside = next != frames.begin() && next != frames.end();
         int64_t piece = kPiece;
         if (inside) {
-            const size_t k = size_t(next - frames.begin());
-            const double perFrame = std::fabs(double(db[k]) - double(db[k - 1])) / double(frames[k] - frames[k - 1]);
-            while (piece > 1 && perFrame * double(piece) > 0.5) piece /= 2;
+            const size_t i = size_t(next - frames.begin());
+            const double perFrame = std::fabs(double(db[i]) - double(db[i - 1])) / double(frames[i] - frames[i - 1]);
+            while (piece > 1 && perFrame * double(piece) > most) piece /= 2;
         }
         // The piece t0 is in: from a multiple of `piece` on the timeline (or the point before, if later) to
         // the next multiple (or the next point, if sooner). Its two ends, and so every value in it, depend
@@ -40,17 +53,19 @@ void Curve::apply(const float *in, float *out, int64_t at, int64_t n, int32_t ch
         if (next != frames.begin()) a = std::max(a, *(next - 1));
         if (next != frames.end()) b = std::min(b, *next);
         const int64_t end = std::min(at + n, b), len = end - t0;
-        const float ga = gain(dbAt(a)), gb = gain(dbAt(b));
+        const LR ga = gains(dbAt(a)), gb = gains(dbAt(b));
         const float *x = in + pos * channels;
         float *y = out + pos * channels;
-        if (ga == gb) {
-            if (ga == 1.0f) { if (x != y) std::memcpy(y, x, size_t(len * channels) * sizeof(float)); }
-            else for (int64_t i = 0; i < len * channels; ++i) y[i] = x[i] * ga;
+        if (ga.l == gb.l && ga.r == gb.r && (ga.l == ga.r || channels != 2)) {
+            if (ga.l == 1.0f) { if (x != y) std::memcpy(y, x, size_t(len * channels) * sizeof(float)); }
+            else for (int64_t i = 0; i < len * channels; ++i) y[i] = x[i] * ga.l;
         } else {
-            const float step = (gb - ga) / float(b - a);
+            const float stepL = (gb.l - ga.l) / float(b - a), stepR = (gb.r - ga.r) / float(b - a);
             for (int64_t i = 0; i < len; ++i) {
-                const float g = ga + step * float(t0 - a + i);
-                for (int32_t c = 0; c < channels; ++c) y[i * channels + c] = x[i * channels + c] * g;
+                const float u = float(t0 - a + i);
+                const float gl = ga.l + stepL * u, gr = ga.r + stepR * u;
+                if (channels == 2) { y[i * 2] = x[i * 2] * gl; y[i * 2 + 1] = x[i * 2 + 1] * gr; }
+                else for (int32_t c = 0; c < channels; ++c) y[i * channels + c] = x[i * channels + c] * gl;
             }
         }
         pos += len;
@@ -229,7 +244,7 @@ void Graph::produce(const Plan &plan, Renderer &renderer) {
             if (c.start >= end) break;
             if (c.end() <= cursor_) continue;
             const Track &track = plan.tracks[size_t(c.track)];
-            if (track.mute || track.chain || !track.curve.empty()) continue;
+            if (track.mute || track.chain || track.automated()) continue;
             renderer.mixClip(plan, c, track.gain, cursor_, q, direct_.data());
         }
         if (total == 0) {
@@ -251,7 +266,7 @@ void Graph::produce(const Plan &plan, Renderer &renderer) {
             const size_t t = size_t(n);
             const Track &track = plan.tracks[t];
             // (In a plain plan the tracks without plugins are in the sum already.)
-            if (plain_ && !track.chain && track.curve.empty()) continue;
+            if (plain_ && !track.chain && !track.automated()) continue;
             if (track.mute) {
                 // A muted strip sends silence, so that its delay lines empty in step with the others.
                 std::fill(strip_.begin(), strip_.end(), 0.0f);
@@ -263,10 +278,13 @@ void Graph::produce(const Plan &plan, Renderer &renderer) {
             }
             // The fader's automation: read at the strip's own place on the timeline, which is the graph's
             // time less how late the strip is where it leaves. A send before the fader doesn't have it.
+            // An automated mute silences the strip as its mute button does: sends before the fader too.
             const float *post = strip_.data();
-            if (!track.curve.empty() && !track.mute) {
-                track.curve.apply(strip_.data(), faded_.data(), cursor_ - nodeOut_[t], q, channels_);
-                post = faded_.data();
+            if (!track.mute) {
+                const int64_t at = cursor_ - nodeOut_[t];
+                if (!track.muteCurve.empty()) track.muteCurve.apply(strip_.data(), strip_.data(), at, q, channels_);
+                if (!track.curve.empty()) { track.curve.apply(post, faded_.data(), at, q, channels_); post = faded_.data(); }
+                if (!track.panCurve.empty()) { track.panCurve.apply(post, faded_.data(), at, q, channels_); post = faded_.data(); }
             }
             for (Edge &e : trackEdges_[t]) {
                 if (e.main || e.keyNode >= 0) send(e, post, track.gain * track.panL, track.gain * track.panR, q);
@@ -282,9 +300,11 @@ void Graph::produce(const Plan &plan, Renderer &renderer) {
             // Into a copy: an edge may add to a bus later in the order, never to this one.
             std::memcpy(strip_.data(), sum, samples * sizeof(float));
             const float *post = strip_.data();
-            if (!bus.curve.empty() && !bus.mute) {
-                bus.curve.apply(strip_.data(), faded_.data(), cursor_ - nodeOut_[size_t(n)], q, channels_);
-                post = faded_.data();
+            if (!bus.mute) {
+                const int64_t at = cursor_ - nodeOut_[size_t(n)];
+                if (!bus.muteCurve.empty()) bus.muteCurve.apply(strip_.data(), strip_.data(), at, q, channels_);
+                if (!bus.curve.empty()) { bus.curve.apply(post, faded_.data(), at, q, channels_); post = faded_.data(); }
+                if (!bus.panCurve.empty()) { bus.panCurve.apply(post, faded_.data(), at, q, channels_); post = faded_.data(); }
             }
             for (Edge &e : busEdges_[b]) {
                 if (e.main || e.keyNode >= 0) send(e, post, bus.gain * bus.panL, bus.gain * bus.panR, q);

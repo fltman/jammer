@@ -178,7 +178,8 @@ public enum PlanCompiler {
         let routed = project.usesMixer
         if routed {
             for b in project.buses {
-                let pan = project.channels == 2 ? Mixer.panGains(b.pan) : (1, 1)
+                // (A pan lane takes the fixed pan's place.)
+                let pan = project.channels == 2 && project.panCurve(of: b.id) == nil ? Mixer.panGains(b.pan) : (1, 1)
                 let fader = project.heard(gainDB: b.gainDB, muted: b.isMuted, vca: b.vca)
                 let index = jm_plan_add_bus(plan, Float(dbToGain(fader.gainDB)), fader.muted, pan.0, pan.1)
                 busIndex[b.id] = index
@@ -196,7 +197,7 @@ public enum PlanCompiler {
             let track = jm_plan_add_track(plan, Float(dbToGain(fader.gainDB)), fader.muted)
             trackIndex[t.id] = track
             if routed {
-                let pan = project.channels == 2 ? Mixer.panGains(t.pan) : (1, 1)
+                let pan = project.channels == 2 && project.panCurve(of: t.id) == nil ? Mixer.panGains(t.pan) : (1, 1)
                 jm_plan_set_track_route(plan, track, t.output.flatMap { busIndex[$0] } ?? -1, pan.0, pan.1)
                 for s in t.sends { if let to = busIndex[s.to] { jm_plan_add_track_send(plan, track, to, Float(dbToGain(s.gainDB)), s.pre) } }
             }
@@ -231,8 +232,10 @@ public enum PlanCompiler {
         // Automation of levels: each strip's enabled gain lane, as points on the timeline. Nothing is set
         // for a strip without one, and the plan is then what it always was.
         func curve(_ strip: UUID, kind: Int32, index: Int32) {
-            guard let c = project.gainCurve(of: strip) else { return }
-            jm_plan_set_gain_curve(plan, kind, index, c.frames, c.db, Int32(c.frames.count))
+            if let c = project.gainCurve(of: strip) { jm_plan_set_gain_curve(plan, kind, index, c.frames, c.db, Int32(c.frames.count)) }
+            guard kind != 2 else { return }
+            if let c = project.muteCurve(of: strip) { jm_plan_set_curve(plan, kind, index, 1, c.frames, c.values, Int32(c.frames.count)) }
+            if let c = project.panCurve(of: strip) { jm_plan_set_curve(plan, kind, index, 2, c.frames, c.values, Int32(c.frames.count)) }
         }
         for t in project.tracks { if let i = trackIndex[t.id] { curve(t.id, kind: 0, index: i) } }
         for b in project.buses { if let i = busIndex[b.id] { curve(b.id, kind: 1, index: i) } }

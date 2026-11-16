@@ -11,6 +11,16 @@ Every track is transcribed. A track of music gets "words" too (the recogniser he
 
 Swedish works through Apple's dictation recognition, which downloads its language files the first time (a few hundred MB, managed by macOS). English, German, French, Spanish, Italian, Portuguese and many more languages are supported as well; if a language isn't available on your Mac, Jämmer says so. You can keep editing while it transcribes.
 
+## At OpenAI instead (text only)
+
+The menu beside the language says where the document is transcribed. **On this Mac** is the default, and nothing leaves the Mac. **OpenAI (your key, paid)** uploads the audio to OpenAI and has it transcribed there:
+
+- It is the audio that is sent: the whole of each file the document plays from, not only the parts on the timeline. Before anything goes, a sheet says how much that is, lets you choose one of the models OpenAI lists for your key, and waits for **Send**.
+- OpenAI charges your account by its own price list. Jämmer can't read that list and doesn't guess the cost.
+- The text comes back **without the time of each word**. You can read it, search it and correct a word. You can't delete words or filler words from the audio with it, and clicking a word doesn't go to it; Jämmer says so when you try. For editing by text, transcribe on this Mac.
+- Your OpenAI key is entered in the assistant's settings (the gear), under OpenAI, and is kept in your Keychain.
+- This route is built from OpenAI's documentation and **has not yet been tried with a real request**. If OpenAI answers with an error, Jämmer shows it as it came. Jämmer hasn't been able to read OpenAI's terms for uploaded audio; read them there before sending anything that isn't yours to share.
+
 ## Edit by text
 
 The transcript always reads what plays now. It's not a copy: cut something on the waveform and it disappears from the text; undo and it comes back.

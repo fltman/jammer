@@ -17,8 +17,8 @@ public struct AutomationPoint: Codable, Hashable, Sendable {
 /// strip without lanes is played exactly as it was before there was automation. Between points the value
 /// goes in a straight line in dB; before the first point it is the first point's, after the last the last's.
 public struct AutomationLane: Codable, Hashable, Sendable {
-    /// What a lane moves. Only `gain` is built so far (docs/MIXER.md, "Automation"); the others are
-    /// named here so that a project that has them is known for what it is.
+    /// What a lane moves. `gain`, `pan` and `mute` are built (docs/MIXER.md, "Automation"); a send's
+    /// level is named here so that a project that has one is known for what it is.
     public enum Param: String, Codable, Sendable, CaseIterable { case gain, pan, mute, send }
     public enum Shape: String, Codable, Sendable { case linear, hold }
 
@@ -59,11 +59,30 @@ public enum Automation {
     public static let maxLanesPerStrip = 64
     /// What a gain lane may add to the fader, in dB.
     public static let gainRange = Mixer.gainRange
+    /// How long an automated mute takes to close or open, in seconds: long enough that it never clicks,
+    /// short enough to be a mute. It begins at the point. (The mute button has no ramp: it changes the
+    /// whole plan between two blocks. A point in the middle of a sound needs one.)
+    public static let muteRamp = 0.005
+    /// The values a lane of each kind may have.
+    public static func range(of param: AutomationLane.Param) -> ClosedRange<Double> {
+        switch param {
+        case .gain, .send: gainRange
+        case .pan: Mixer.panRange
+        case .mute: 0...1
+        }
+    }
+    static func unit(of param: AutomationLane.Param) -> String {
+        switch param {
+        case .gain, .send: "a gain is \(Int(gainRange.lowerBound)) to \(Int(gainRange.upperBound)) dB"
+        case .pan: "a pan is −1 (left) to 1 (right)"
+        case .mute: "a mute is 1 (muted) or 0 (heard)"
+        }
+    }
     /// The longest timeline a point may be on: 24 hours at 192 kHz.
     public static let maxFrame: Frame = 24 * 3600 * 192_000
 
     public enum Failure: Error, LocalizedError, Equatable {
-        case noStrip(String), notBuilt(String), badValue(String), tooMany
+        case noStrip(String), notBuilt(String), badValue(String), tooMany, mono, noPan
 
         public var reason: String {
             switch self {
@@ -71,12 +90,16 @@ public enum Automation {
             case .notBuilt: "not_available"
             case .badValue: "bad_request"
             case .tooMany: "too_many"
+            case .mono: "needs_stereo"
+            case .noPan: "bad_request"
             }
         }
         public var errorDescription: String? {
             switch self {
             case .noStrip(let id): "there is no track or bus with id \(id) (the master is \"master\")."
-            case .notBuilt(let what): "automation of \(what) isn't built yet; only gain is."
+            case .notBuilt(let what): "automation of \(what) isn't built yet; gain, pan and mute are."
+            case .mono: "a mono document has no pan to automate."
+            case .noPan: "the master has a level to automate, not a pan or a mute."
             case .badValue(let m): m
             case .tooMany: "a lane can have \(Automation.maxPoints) points at most."
             }
@@ -104,6 +127,40 @@ extension Project {
         guard let l = lane(strip: strip, param: .gain), l.enabled, l.shape == .linear else { return nil }
         return (l.points.map(\.frame), l.points.map { Float($0.value) })
     }
+    /// The enabled pan lane's points, in a stereo document.
+    func panCurve(of strip: UUID) -> (frames: [Int64], values: [Float])? {
+        guard channels == 2, let l = lane(strip: strip, param: .pan), l.enabled else { return nil }
+        return (l.points.map(\.frame), l.points.map { Float($0.value) })
+    }
+    /// The enabled mute lane as the amplitude the engine follows: 1 while heard, 0 while muted, and at
+    /// every change a straight ramp of `Automation.muteRamp` beginning at the point, so that a mute in
+    /// the middle of a sound doesn't click. A change that comes before the ramp of the one before has
+    /// ended starts from where that ramp had got to.
+    func muteCurve(of strip: UUID) -> (frames: [Int64], values: [Float])? {
+        guard let l = lane(strip: strip, param: .mute), l.enabled, let first = l.points.first else { return nil }
+        let ramp = max(1, Frame((Automation.muteRamp * sampleRate).rounded()))
+        var frames: [Int64] = [], values: [Float] = []
+        var level: Double = first.value >= 0.5 ? 0 : 1   // before the first point: the first point's state
+        func add(_ f: Frame, _ v: Double) {
+            if let last = frames.last, f <= last { values[values.count - 1] = Float(v); return }
+            frames.append(f); values.append(Float(v))
+        }
+        add(first.frame, level)
+        for (i, p) in l.points.enumerated().dropFirst() {
+            let target: Double = p.value >= 0.5 ? 0 : 1
+            guard target != (l.points[i - 1].value >= 0.5 ? 0 : 1) else { continue }
+            // Where the ramp before this one had got to when this point comes.
+            if let lastFrame = frames.last, p.frame < lastFrame, frames.count >= 2 {
+                let a = frames[frames.count - 2], va = Double(values[values.count - 2]), vb = Double(values[values.count - 1])
+                level = va + (vb - va) * Double(p.frame - a) / Double(lastFrame - a)
+                frames.removeLast(); values.removeLast()
+            }
+            add(p.frame, level)
+            add(p.frame + ramp, target)
+            level = target
+        }
+        return (frames, values)
+    }
 
     /// Writes a lane. `points` replace the whole lane, or with `range` only the points inside it (its ends
     /// included); points outside the range are never touched. A lane left without points is gone.
@@ -112,15 +169,21 @@ extension Project {
     public mutating func setAutomation(strip: UUID, param: AutomationLane.Param = .gain, to: UUID? = nil, points new: [AutomationPoint],
                                        range: ClosedRange<Frame>? = nil, shape: AutomationLane.Shape? = nil, enabled: Bool? = nil) throws {
         guard strip == Master.id || tracks.contains(where: { $0.id == strip }) || bus(strip) != nil else { throw Automation.Failure.noStrip(strip.uuidString) }
-        guard param == .gain, to == nil else { throw Automation.Failure.notBuilt(param == .gain ? "a send" : param.rawValue) }
-        if let shape, shape != .linear { throw Automation.Failure.notBuilt("the hold shape") }
+        guard param != .send, to == nil else { throw Automation.Failure.notBuilt("a send") }
+        if strip == Master.id, param != .gain { throw Automation.Failure.noPan }
+        if param == .pan, channels != 2 { throw Automation.Failure.mono }
+        // A mute holds its value until the next point; a level and a pan go in a straight line.
+        if let shape, shape != (param == .mute ? .hold : .linear) {
+            throw Automation.Failure.badValue(param == .mute ? "a mute lane holds each value until the next point (shape hold)." : "a \(param.rawValue) lane goes in a straight line between points (shape linear).")
+        }
+        let allowed = Automation.range(of: param)
         let end = length
         for (i, p) in new.enumerated() {
             guard p.frame >= 0, p.frame <= end else {
                 throw Automation.Failure.badValue("points[\(i)] is at \(seconds(p.frame)) s, outside the document (0 to \(seconds(end)) s).")
             }
-            guard p.value.isFinite, Automation.gainRange.contains(p.value) else {
-                throw Automation.Failure.badValue("points[\(i)] has the value \(p.value); a gain is \(Int(Automation.gainRange.lowerBound)) to \(Int(Automation.gainRange.upperBound)) dB.")
+            guard p.value.isFinite, allowed.contains(p.value), param != .mute || p.value == 0 || p.value == 1 else {
+                throw Automation.Failure.badValue("points[\(i)] has the value \(p.value); \(Automation.unit(of: param)).")
             }
             if let r = range, !r.contains(p.frame) {
                 throw Automation.Failure.badValue("points[\(i)] is at \(seconds(p.frame)) s, outside the range given (\(seconds(r.lowerBound)) to \(seconds(r.upperBound)) s).")
@@ -130,7 +193,7 @@ extension Project {
         for (a, b) in zip(sorted, sorted.dropFirst()) where a.frame == b.frame {
             throw Automation.Failure.badValue("two points are at \(seconds(a.frame)) s; a lane has one value at a time.")
         }
-        var lane = lane(strip: strip, param: param, to: to) ?? AutomationLane(strip: strip, param: param, to: to, points: [])
+        var lane = lane(strip: strip, param: param, to: to) ?? AutomationLane(strip: strip, param: param, to: to, shape: param == .mute ? .hold : .linear, points: [])
         if let range { lane.points = (lane.points.filter { !range.contains($0.frame) } + sorted).sorted { $0.frame < $1.frame } }
         else { lane.points = sorted }
         if let shape { lane.shape = shape }
@@ -154,6 +217,11 @@ extension Project {
 
     /// A strip's whole level at a frame, in dB: its fader, its VCA group and its gain lane together.
     /// nil for a strip that isn't there.
+    /// A lane's value at a frame when the lane is there and switched on.
+    public func automated(_ param: AutomationLane.Param, of strip: UUID, at frame: Frame) -> Double? {
+        lane(strip: strip, param: param).flatMap { $0.enabled ? $0.value(at: frame) : nil }
+    }
+
     public func level(of strip: UUID, at frame: Frame) -> (faderDB: Double, automationDB: Double?, totalDB: Double, muted: Bool)? {
         let fader: (gainDB: Double, muted: Bool)
         if let t = tracks.first(where: { $0.id == strip }) { fader = heard(gainDB: t.gainDB, muted: t.isMuted, vca: t.vca) }
@@ -161,7 +229,9 @@ extension Project {
         else if strip == Master.id { fader = (master.gainDB, false) }
         else { return nil }
         let lane = lane(strip: strip, param: .gain).flatMap { $0.enabled ? $0.value(at: frame) : nil }
-        return (fader.gainDB, lane, fader.gainDB + (lane ?? 0), fader.muted)
+        // Muted by the button, by the group, or by the mute lane at that time.
+        let muted = fader.muted || (automated(.mute, of: strip, at: frame) ?? 0) >= 0.5
+        return (fader.gainDB, lane, fader.gainDB + (lane ?? 0), muted)
     }
 }
 
