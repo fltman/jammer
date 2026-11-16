@@ -267,6 +267,50 @@ final class JobRegistry {
         return job
     }
 
+    /// Freezes a track or a bus: rendered as it sounds in the mix, through plugins of the render's own,
+    /// into a file in the media folder; the strip then plays from it. One undo step.
+    func startFreeze(_ session: EditorSession, strip: UUID) -> Job {
+        var job = Job(kind: "freeze", documentID: session.agentID)
+        jobs[job.id] = job
+        let project = session.project, pool = session.pool, id = job.id, safe = EditorSession.pluginSafeMode, media = MediaStore.folder
+        let name = project.strip(strip)?.name ?? "the strip"
+        tasks[id] = Task { [weak self, weak session] in
+            job.status = .running
+            self?.update(job)
+            let result = await Task.detached(priority: .userInitiated) { () -> Result<Project, Error> in
+                Result {
+                    try project.freezing(strip, media: media) { context, range, write in
+                        let plan = PlanCompiler.mixBlocking(context, pool: pool, outOfProcess: safe)
+                        try plan.render(range) { try write($0) }
+                    }
+                }
+            }.value
+            guard self?.jobs[id]?.status != .cancelled else { return }
+            switch result {
+            case .success(let frozen):
+                guard session?.project == project else {
+                    job.status = .failed
+                    job.error = ("document_changed", "The document changed while freezing; nothing was applied. Run it again.")
+                    self?.finish(job)
+                    return
+                }
+                session?.commit(frozen, action: "Freeze \(name)")
+                session?.status = "\(name) is frozen: it plays from a file and its plugins rest. Its level, pan, mute and sends still work."
+                job.status = .done
+                job.progress = 1
+                if let f = frozen.frozen(strip) {
+                    job.result = ["strip": .string(strip.uuidString), "seconds": .number((frozen.seconds(f.length) * 1_000).rounded() / 1_000)]
+                }
+            case .failure(let e):
+                job.status = .failed
+                job.error = ((e as? FreezeError)?.reason ?? "freeze_failed", e.localizedDescription)
+                session?.status = e.localizedDescription
+            }
+            self?.finish(job)
+        }
+        return job
+    }
+
     func startTranscription(_ session: EditorSession, locale: Locale, replace: Bool, engine choice: SpeechEngines.Choice = .auto, model: String? = nil) -> Job {
         var job = Job(kind: "transcribe", documentID: session.agentID)
         jobs[job.id] = job

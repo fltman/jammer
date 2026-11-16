@@ -60,6 +60,17 @@ Tick **Solo** on a strip to hear only that one; tick several to hear those. Solo
 
 Solo is a way of listening, not a change to the document: it isn't saved, **Undo** doesn't touch it, and exports, loudness measurements and everything else that works on the sound are exactly what they are without it. While it is on, the window's title says "Solo: …" and the mixer says so in orange, so a mix with tracks missing is never a puzzle. A track that is muted stays muted when soloed.
 
+## Freezing
+
+When a session has more plugins than the Mac plays, tick **Frozen** on a strip. Jämmer renders that track or bus through its plugins into a file and plays the file instead; the plugins rest.
+
+- It sounds the same. In a trial with plugins on a track and on a bus, the export with both frozen was the same file, byte for byte, as the export with both live.
+- The strip's **level, pan, mute, sends and where it goes** come after the file and work as before.
+- What the file was made from can't be changed while the strip is frozen: a frozen track's clips and plugins; for a frozen bus also everything that feeds it. An edit that would change it is refused and says which strip is frozen. Untick **Frozen**, make the change, and freeze again.
+- Unticking it brings the strip back exactly as it was. Freezing and unfreezing are one **Undo** each.
+- A frozen bus takes the tracks that only feed it out of the work as well.
+- The file is kept with the project's other audio. A track's file is as long as the track (two seconds more when it has plugins, for what rings on), a bus's as long as the document.
+
 ## The master
 
 Everything goes through the master last. At the bottom of the mixer it has a level, and a **Limiter** box.
@@ -86,6 +97,6 @@ An agent sees the mixer with `GET /api/v1/documents/{id}/mixer` and changes it w
 
 An export through the master's limiter answers what the file measured in the `X-Jammer-Master-Limiter` header, or fails with `ceiling_not_met`.
 
-An agent solos with `POST …/solo` (`{"strips": [ids]}`, `[]` to end it); the answer says that it affects listening only.
+An agent freezes with `POST …/freeze` and thaws with `POST …/unfreeze` (`{"strip": id}`); a step that would change a frozen strip's sound fails with reason `frozen`. An agent solos with `POST …/solo` (`{"strips": [ids]}`, `[]` to end it); the answer says that it affects listening only.
 
-Not there yet: sidechain keys and freezing.
+Not there yet: sidechain keys (a plugin on one track listening to another).

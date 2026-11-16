@@ -825,6 +825,34 @@ struct InsertStepTests {
         }
     }
 
+    @Test("A frozen track: steps that would change what it was frozen from fail with reason frozen and change nothing; its fader and other tracks are free")
+    func frozen() throws {
+        let info = AudioFileInfo(container: .wav, sampleFormat: .float32, bigEndian: false, channels: 2, sampleRate: 48_000,
+                                 channelMask: nil, dataOffset: 0, frames: 96_000, chunks: [], bext: nil, ixml: nil, markers: [])
+        var p = Project(source: SourceRef(name: "voice", path: "/dev/null", info: info))
+        _ = p.addTrack(source: SourceRef(name: "music", path: "/dev/null", info: info), name: "Music")
+        let file = SourceRef(name: "voice (frozen)", path: "/dev/null", info: info)
+        p.sources.append(file)
+        p.tracks[0].frozen = Frozen(sourceID: file.id, start: 0, length: 96_000, madeFrom: try #require(p.content(of: p.tracks[0].id)))
+        var s = EditState(project: p)
+        let measure: StepRunner.Measure = { _, _ in LoudnessResult(integrated: nil, range: nil, maxMomentary: nil, maxShortTerm: nil, samplePeak: 0, truePeak: 0, duration: 0) }
+        func run(_ op: String, _ params: [String: JSONValue]) -> StepResult { StepRunner.run([Step(op: op, params: params)], on: &s, measure: measure)[0] }
+        let voice = p.tracks[0].id.uuidString, music = p.tracks[1].id.uuidString
+        for (op, params): (String, [String: JSONValue]) in [
+            ("delete", ["start": .number(0.5), "end": .number(1)]),                      // cuts through every track
+            ("add_insert", ["track": .string(voice), "plugin": .string("AULowpass")]),
+            ("fade_in", ["start": .number(0), "end": .number(0.2)]),
+        ] {
+            let r = run(op, params)
+            #expect(r.status == .failed && r.reason == "frozen" && (r.error ?? "").contains("Unfreeze it first"), "\(op): \(r.reason ?? "-") \(r.error ?? "")")
+            #expect(s.project == p, "\(op) changed something")
+        }
+        // After the file: the frozen track's level, mute and name. And another track's plugins.
+        #expect(run("set_track", ["track": .string(voice), "gainDB": .number(-6), "muted": .bool(true)]).status == .done && s.project.tracks[0].gainDB == -6)
+        #expect(run("add_insert", ["track": .string(music), "plugin": .string("AULowpass")]).status == .done)
+        #expect(s.project.tracks[0].frozen == p.tracks[0].frozen)
+    }
+
     @Test("The same steps put a plugin on a bus, by the bus's id; the track's plugins are not touched")
     func onBus() throws {
         var p = Project(sampleRate: 48_000, channels: 2)

@@ -428,6 +428,22 @@ enum AgentRouter {
                 guard let id = UUID(uuidString: t[1]), session.history?.node(id) != nil else { throw APIError.notFound("No step \(t[1]) in the history.") }
                 try session.jump(to: id)
                 return .json(["current": id.uuidString, "document": detail(session)])
+            case ["freeze"], ["unfreeze"]:
+                try only("POST")
+                let body = try json(r)
+                guard let id = (body["strip"] as? String).flatMap(UUID.init(uuidString:)), let strip = session.project.strip(id), id != Master.id else {
+                    throw APIError.notFound("No track or bus with id \(body["strip"] as? String ?? ""). GET …/mixer lists them.")
+                }
+                if p.last == "unfreeze" {
+                    do { session.commit(try session.project.unfreezing(id), action: "Unfreeze \(strip.name)") }
+                    catch let e as FreezeError { throw APIError.unprocessable(e.reason, e.localizedDescription) }
+                    return .json(["mixer": mixerJSON(session.project, plan: session.plan, session: session)])
+                }
+                // Checked before the job starts: already frozen, nothing to freeze, room on the disk for the file.
+                if session.project.frozen(id) != nil { throw APIError.unprocessable("already_frozen", FreezeError.alreadyFrozen(strip.name).localizedDescription) }
+                guard let range = session.project.freezeRange(for: id), !range.isEmpty else { throw APIError.unprocessable("nothing_to_freeze", FreezeError.nothing(strip.name).localizedDescription) }
+                try UploadStore.checkSpace(for: Int64(range.count) * Int64(session.project.channels) * 4, at: MediaStore.folder)
+                return .json(["job": JobRegistry.shared.startFreeze(session, strip: id).json], status: 202)
             case ["separate"]:
                 try only("POST")
                 let body = try json(r)
@@ -630,19 +646,23 @@ enum AgentRouter {
             let h = p.heard(gainDB: gainDB, muted: muted, vca: vca)
             return ["gainDB": (h.gainDB * 100).rounded() / 100, "muted": h.muted]
         }
+        // A frozen strip: where its file starts and how long it is. Its plugins are idle (`latencySamples` 0).
+        func frozen(_ f: Frozen?) -> Any {
+            f.map { ["start": (p.seconds($0.start) * 1_000).rounded() / 1_000, "seconds": (p.seconds($0.length) * 1_000).rounded() / 1_000] as [String: Any] } ?? NSNull()
+        }
         let vcas = p.vcas.map { v -> [String: Any] in
             ["id": v.id.uuidString, "name": v.name, "gainDB": v.gainDB, "muted": v.isMuted,
              "members": ["tracks": p.tracks.filter { $0.vca == v.id }.map(\.id.uuidString), "buses": p.buses.filter { $0.vca == v.id }.map(\.id.uuidString)]]
         }
         let tracks = p.tracks.map { t -> [String: Any] in
             ["id": t.id.uuidString, "name": t.name, "gainDB": t.gainDB, "pan": t.pan, "muted": t.isMuted, "output": to(t.output), "sends": sends(t.sends),
-             "vca": t.vca?.uuidString ?? NSNull(), "heard": heard(t.gainDB, t.isMuted, t.vca),
-             "latencySamples": own(t.inserts), "compensationSamples": plan.compensation(bus: false, index: p.tracks.firstIndex { $0.id == t.id } ?? 0)]
+             "vca": t.vca?.uuidString ?? NSNull(), "heard": heard(t.gainDB, t.isMuted, t.vca), "frozen": frozen(t.frozen),
+             "latencySamples": t.frozen == nil ? own(t.inserts) : 0, "compensationSamples": plan.compensation(bus: false, index: p.tracks.firstIndex { $0.id == t.id } ?? 0)]
         }
         let buses = p.buses.map { b -> [String: Any] in
             ["id": b.id.uuidString, "name": b.name, "gainDB": b.gainDB, "pan": b.pan, "muted": b.isMuted, "output": to(b.output), "sends": sends(b.sends),
-             "vca": b.vca?.uuidString ?? NSNull(), "heard": heard(b.gainDB, b.isMuted, b.vca),
-             "inserts": plugins(b.inserts), "latencySamples": own(b.inserts), "compensationSamples": plan.compensation(bus: true, index: p.buses.firstIndex { $0.id == b.id } ?? 0),
+             "vca": b.vca?.uuidString ?? NSNull(), "heard": heard(b.gainDB, b.isMuted, b.vca), "frozen": frozen(b.frozen),
+             "inserts": plugins(b.inserts), "latencySamples": b.frozen == nil ? own(b.inserts) : 0, "compensationSamples": plan.compensation(bus: true, index: p.buses.firstIndex { $0.id == b.id } ?? 0),
              "inputs": ["tracks": p.tracks.filter { $0.output == b.id }.map(\.id.uuidString), "buses": p.buses.filter { $0.output == b.id }.map(\.id.uuidString)]]
         }
         // The master: what its plugins and its limiter add is in `latencySamples`, and in the total.

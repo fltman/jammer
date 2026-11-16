@@ -33,6 +33,8 @@ public struct Bus: Codable, Hashable, Sendable, Identifiable {
     public var inserts: [Insert] = []
     /// The VCA group whose level and mute are added to the bus's own; nil: none.
     public var vca: UUID?
+    /// Set while the bus is frozen: played from a file of what it summed, through its plugins.
+    public var frozen: Frozen?
 
     public init(id: UUID = UUID(), name: String, gainDB: Double = 0, pan: Double = 0, isMuted: Bool = false, output: UUID? = nil, sends: [Send] = []) {
         self.id = id
@@ -44,7 +46,7 @@ public struct Bus: Codable, Hashable, Sendable, Identifiable {
         self.sends = sends
     }
 
-    private enum CodingKeys: String, CodingKey { case id, name, gainDB, pan, isMuted, output, sends, inserts, vca }
+    private enum CodingKeys: String, CodingKey { case id, name, gainDB, pan, isMuted, output, sends, inserts, vca, frozen }
     public func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(id, forKey: .id)
@@ -56,11 +58,13 @@ public struct Bus: Codable, Hashable, Sendable, Identifiable {
         if !sends.isEmpty { try c.encode(sends, forKey: .sends) }
         if !inserts.isEmpty { try c.encode(inserts, forKey: .inserts) }
         try c.encodeIfPresent(vca, forKey: .vca)
+        try c.encodeIfPresent(frozen, forKey: .frozen)
     }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(UUID.self, forKey: .id)
         vca = try c.decodeIfPresent(UUID.self, forKey: .vca)
+        frozen = try c.decodeIfPresent(Frozen.self, forKey: .frozen)
         name = try c.decode(String.self, forKey: .name)
         gainDB = try c.decodeIfPresent(Double.self, forKey: .gainDB) ?? 0
         pan = try c.decodeIfPresent(Double.self, forKey: .pan) ?? 0
@@ -206,7 +210,7 @@ extension Project {
     /// Jämmer from before the mixer refuses to open instead of playing every track straight out.
     public var usesMixer: Bool {
         !buses.isEmpty || !vcas.isEmpty || !master.isDefault
-            || tracks.contains { $0.pan != 0 || $0.output != nil || !$0.sends.isEmpty || $0.vca != nil || $0.inserts.contains { $0.key != nil } }
+            || tracks.contains { $0.pan != 0 || $0.output != nil || !$0.sends.isEmpty || $0.vca != nil || $0.frozen != nil || $0.inserts.contains { $0.key != nil } }
     }
 
     /// Whether the signal of `from` (a track or a bus) reaches `to`: through outputs, sends, and the keys
@@ -387,7 +391,8 @@ extension Project {
         buses = []
         master = Master()
         vcas = []
-        for t in tracks.indices { tracks[t].pan = 0; tracks[t].output = nil; tracks[t].sends = []; tracks[t].vca = nil }
+        // (…and not from a frozen file either: the track's own sound, before its plugins, is what is wanted.)
+        for t in tracks.indices { tracks[t].pan = 0; tracks[t].output = nil; tracks[t].sends = []; tracks[t].vca = nil; tracks[t].frozen = nil }
     }
 
     /// Whether sending `bus` to `output`, by its output or by a send, would make a loop: whether

@@ -149,6 +149,8 @@ public struct Track: Codable, Hashable, Sendable, Identifiable {
     public var sends: [Send] = []
     /// The VCA group whose level and mute are added to the track's own; nil: none.
     public var vca: UUID?
+    /// Set while the track is frozen: played from a file made through its plugins (see `Frozen`).
+    public var frozen: Frozen?
 
     public init(id: UUID = UUID(), name: String, clips: [Clip] = [], gainDB: Double = 0, isMuted: Bool = false, inserts: [Insert] = []) {
         self.id = id
@@ -159,7 +161,7 @@ public struct Track: Codable, Hashable, Sendable, Identifiable {
         self.inserts = inserts
     }
 
-    private enum CodingKeys: String, CodingKey { case id, name, clips, gainDB, isMuted, inserts, group, origin, ducked, pan, output, sends, vca }
+    private enum CodingKeys: String, CodingKey { case id, name, clips, gainDB, isMuted, inserts, group, origin, ducked, pan, output, sends, vca, frozen }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -176,6 +178,7 @@ public struct Track: Codable, Hashable, Sendable, Identifiable {
         output = try c.decodeIfPresent(UUID.self, forKey: .output)
         sends = try c.decodeIfPresent([Send].self, forKey: .sends) ?? []
         vca = try c.decodeIfPresent(UUID.self, forKey: .vca)
+        frozen = try c.decodeIfPresent(Frozen.self, forKey: .frozen)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -184,6 +187,7 @@ public struct Track: Codable, Hashable, Sendable, Identifiable {
         try c.encode(name, forKey: .name)
         try c.encode(clips, forKey: .clips)
         try c.encodeIfPresent(vca, forKey: .vca)
+        try c.encodeIfPresent(frozen, forKey: .frozen)
         try c.encode(gainDB, forKey: .gainDB)
         try c.encode(isMuted, forKey: .isMuted)
         if !inserts.isEmpty { try c.encode(inserts, forKey: .inserts) }
@@ -552,7 +556,9 @@ public struct Project: Codable, Equatable, Sendable {
     public mutating func pruneSources() {
         // What a track played before it was ducked is kept for as long as it plays the ducked file.
         for t in tracks.indices where tracks[t].ducked != nil && tracks[t].clips != [tracks[t].ducked!.bounce] { tracks[t].ducked = nil }
-        let used = Set(tracks.flatMap { $0.clips.map(\.sourceID) + ($0.ducked?.clips.map(\.sourceID) ?? []) })
+        // A frozen strip's file is kept for as long as the strip is frozen.
+        let used = Set(tracks.flatMap { $0.clips.map(\.sourceID) + ($0.ducked?.clips.map(\.sourceID) ?? []) + [$0.frozen?.sourceID].compactMap { $0 } }
+                       + buses.compactMap { $0.frozen?.sourceID })
         sources.removeAll { !used.contains($0.id) }
         transcripts.removeAll { !used.contains($0.sourceID) }
         speakerTurns.removeAll { !used.contains($0.sourceID) }

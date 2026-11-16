@@ -168,6 +168,8 @@ public enum PlanCompiler {
     /// `masterMargin`: how far under its ceiling the master's limiter aims (dB); an export that measured
     /// its file over the ceiling renders again with more.
     public static func compile(_ project: Project, pool: SourcePool, inserts: ChainProvider? = nil, masterMargin: Double = Mixer.masterMargins[0]) -> RenderPlan {
+        // A frozen strip is played from its file (see `Project.played`); everything below sees that project.
+        let project = project.played()
         let plan = jm_plan_create(Int32(project.channels), project.sampleRate)
         var indices: [UUID: Int32] = [:]
         var trackIndex: [UUID: Int32] = [:]

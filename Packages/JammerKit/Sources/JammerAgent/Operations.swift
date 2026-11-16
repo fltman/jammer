@@ -379,6 +379,12 @@ public enum Operations {
     }
     public static var endpoints: [OperationSpec] { fixedEndpoints + (InsertUnits.external != nil ? [scanEndpoint] : []) }
     static var fixedEndpoints: [OperationSpec] { [
+        .init("freeze", "Freeze", "Renders a track or a bus through its plugins into a file and plays it from that file, with the plugins idle: for a session with more plugins than the Mac plays. Its fader, pan, mute, sends and route come after the file and stay live. A step that would change what it was frozen from (its clips, its plugins; for a bus anything that feeds it; a track its plugins listen to) then fails with reason `frozen`; unfreeze first. Answers with a job; the freeze is one undo step.",
+              params: [.init("strip", .string, "The id of the track or bus.", required: true)],
+              call: ("POST", "/api/v1/documents/{id}/freeze"), startsJob: true),
+        .init("unfreeze", "Unfreeze", "Thaws a frozen track or bus: it is worked out live again, from exactly what it was. One undo step.",
+              params: [.init("strip", .string, "The id of the track or bus.", required: true)],
+              call: ("POST", "/api/v1/documents/{id}/unfreeze")),
         .init("transcribe", "Transcribe", "Transcribes the document on this Mac; words get ids and times. Answers with a job; the transcript lands as one undo step.",
               params: [.init("language", .string, "BCP 47, e.g. sv-SE or en-US. Default: the Mac's language."),
                        .init("engine", .string, "Recogniser. auto: KB-Whisper for Swedish when installed, else Parakeet (25 European languages) when installed, else Apple. A model that isn't installed fails with reason model_missing; the user installs models in Jämmer's Settings.", options: ["auto", "apple", "parakeet", "whisper"]),
@@ -577,7 +583,13 @@ public enum StepRunner {
             }
             do {
                 state.made = [:]
+                let before = state.project
                 let info = try apply(step, to: &state, measure: measure)
+                // A frozen strip is a file of what it was: nothing may change what that file was made from.
+                if let name = before.frozenViolation(in: state.project) {
+                    state.project = before
+                    throw StepFailure("\(step.op): " + (FreezeError.frozen(name).errorDescription ?? ""), reason: "frozen")
+                }
                 results.append(StepResult(op: step.op, status: .done, info: info, ids: state.made))
                 state.made = [:]
             } catch {

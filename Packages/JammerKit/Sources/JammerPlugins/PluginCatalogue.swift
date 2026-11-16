@@ -19,6 +19,8 @@ public struct PluginCatalogue: Codable, Sendable, Equatable {
         public var scanFailure: String?
         public var scanDetail: String?
         public var failedScans: Int?
+        /// Scans passed over since the bundle last ran out of time (see `scansBetweenRetries`).
+        public var scansSkipped: Int?
 
         public init(bundle: String, format: PluginFormat, modified: Date, plugins: [ScannedPlugin], failure: String? = nil, detail: String? = nil) {
             self.bundle = bundle
@@ -41,6 +43,11 @@ public struct PluginCatalogue: Codable, Sendable, Equatable {
 
     /// A verdict about the plugin itself replaces a good one only when it has come this many scans running.
     public static let scansBeforeAVerdictSticks = 2
+    /// A bundle that has run out of time this many scans running is then tried only at every
+    /// `scansBetweenRetries`-th scan (or when a scan is forced, which is what the user's "scan again"
+    /// does), so a plugin that hangs doesn't cost its time limit at every start.
+    public static let timeoutsBeforeBackingOff = 2
+    public static let scansBetweenRetries = 5
 
     public var entries: [Entry] = []
     /// Plugin ids ("clap:…", "vst3:…") switched off after a crash while they were in use.
@@ -96,6 +103,11 @@ public struct PluginCatalogue: Codable, Sendable, Equatable {
             if !force, let old = known[url.path], old.modified == modified, old.format == format,
                !(old.failure.map(ProbeOutcome.retried.contains) ?? false), old.scanFailure == nil {
                 next.append(old)
+            } else if !force, var old = known[url.path], old.modified == modified, old.format == format, (old.failure ?? old.scanFailure) == "timed_out",
+                      (old.failedScans ?? 0) >= Self.timeoutsBeforeBackingOff, (old.scansSkipped ?? 0) < Self.scansBetweenRetries - 1 {
+                // It has hung twice or more: passed over this time.
+                old.scansSkipped = (old.scansSkipped ?? 0) + 1
+                next.append(old)
             } else {
                 probed += 1
                 let outcome = scanner.probe(url, format: format)
@@ -115,10 +127,14 @@ public struct PluginCatalogue: Codable, Sendable, Equatable {
                             kept.scanFailure = reason
                             kept.scanDetail = outcome.detail
                             kept.failedScans = failures
+                            kept.scansSkipped = nil
                             next.append(kept)
                         }
                     } else {
-                        next.append(Entry(bundle: url.path, format: format, modified: modified, plugins: [], failure: reason, detail: outcome.detail))
+                        var entry = Entry(bundle: url.path, format: format, modified: modified, plugins: [], failure: reason, detail: outcome.detail)
+                        // How many scans running the same bundle has given the same answer.
+                        if let old = known[url.path], old.modified == modified, old.failure == reason { entry.failedScans = (old.failedScans ?? 1) + 1 } else { entry.failedScans = 1 }
+                        next.append(entry)
                     }
                 }
             }

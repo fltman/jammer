@@ -239,6 +239,12 @@ final class EditorSession {
     func commit(_ newProject: Project, action: String) {
         let old = project
         guard newProject != old else { return }
+        // A frozen strip is a file of what it was: a change to what it was made from is not taken.
+        if let name = old.frozenViolation(in: newProject) {
+            status = "\(name) is frozen. Unfreeze it (Audio › Mixer…) before changing what it was frozen from."
+            NSSound.beep()
+            return
+        }
         PluginStateTrust.noteMade(from: old, to: newProject)
         replace(with: newProject)
         // The history tree records the change; undo and redo move along it (a change after

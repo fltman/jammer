@@ -326,7 +326,14 @@ struct ScannerTests {
         let file = dir.appending(path: "store/plugins.json")
         try c.save(file)
         var again = PluginCatalogue.load(file)
-        #expect(again == c && again.scan(with: scanner, folders: [.clap: [clap]]) == 1 && again == c)
+        #expect(again.scan(with: scanner, folders: [.clap: [clap]]) == 1 && again.plugins == c.plugins && again.failed == c.failed)
+        // …but not for ever: after two scans running out of time it is passed over, and tried again at
+        // the fifth scan after that, or when a scan is forced (the user's "scan again").
+        var patient = again, loads: [Int] = []
+        for _ in 0..<5 { loads.append(patient.scan(with: PluginScanner(probe: TestPlugins.probe, timeout: 1), folders: [.clap: [clap]])) }
+        #expect(loads == [0, 0, 0, 0, 1], "\(loads)")
+        #expect(patient.failed.contains { $0.name == "Stuck" && $0.reason == "timed_out" } && patient.plugins == c.plugins)
+        #expect(patient.scan(with: PluginScanner(probe: TestPlugins.probe, timeout: 1), folders: [.clap: [clap]], force: true) == 3)
         // A bundle that changed is loaded again; one that is gone is dropped; force loads everything.
         try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSinceNow: 60)], ofItemAtPath: good.path)
         try FileManager.default.removeItem(at: clap.appending(path: "Stuck.clap"))

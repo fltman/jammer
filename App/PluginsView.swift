@@ -91,7 +91,8 @@ struct PluginsSheet: View {
                     HStack {
                         Text(f.reason == "blocked" ? "\(f.name) is switched off: it failed while it was in use."
                              : f.kept ? "\(f.name) is still listed from an earlier scan; the last scan of it didn't succeed (\(f.reason == "timed_out" ? "it didn't answer in time" : f.reason == "scan_failed" ? "the scanner got no answer" : f.reason)). It will be tried again."
-                             : ["timed_out", "scan_failed"].contains(f.reason) ? "\(f.name) couldn't be scanned (\(f.reason == "timed_out" ? "it didn't answer in time" : "the scanner got no answer")). It will be tried again at the next scan."
+                             : ["timed_out", "scan_failed"].contains(f.reason) ? (f.reason == "timed_out" ? "\(f.name) didn't answer in time when it was scanned. A plugin that keeps doing that is tried again only now and then, so it doesn't hold up every start; Scan for CLAP Plugins tries it at once."
+                                                                                : "\(f.name) couldn't be scanned (the scanner got no answer). It will be tried again at the next scan.")
                              : "\(f.name) couldn't be used (\(f.reason)).")
                             .font(.callout).foregroundStyle(.orange)
                         Spacer()

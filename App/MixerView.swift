@@ -26,6 +26,7 @@ struct MixerSheet: View {
                         MixerStrip(name: t.name, kind: "track", gainDB: t.gainDB, pan: t.pan, muted: t.isMuted, output: t.output, stereo: stereo,
                                    group: t.vca.flatMap { project.vca($0) },
                                    soloed: session.solo.contains(t.id), solo: { toggleSolo(t.id, $0) },
+                                   frozen: t.frozen != nil, freeze: { toggleFreeze(t.id, t.name, $0) },
                                    destinations: project.buses.map { ($0.id, $0.name) },
                                    sends: t.sends, sendTargets: project.buses.map { ($0.id, $0.name) },
                                    change: { session.perform("set_track", ["track": .string(t.id.uuidString)].merging($0) { $1 }) },
@@ -37,6 +38,7 @@ struct MixerSheet: View {
                         MixerStrip(name: b.name, kind: "bus", gainDB: b.gainDB, pan: b.pan, muted: b.isMuted, output: b.output, stereo: stereo,
                                    group: b.vca.flatMap { project.vca($0) },
                                    soloed: session.solo.contains(b.id), solo: { toggleSolo(b.id, $0) },
+                                   frozen: b.frozen != nil, freeze: { toggleFreeze(b.id, b.name, $0) },
                                    // A bus can go to any bus that doesn't lead back to it.
                                    destinations: project.buses.filter { $0.id != b.id && !leadsBack(from: $0.id, to: b.id) }.map { ($0.id, $0.name) },
                                    sends: b.sends, sendTargets: project.buses.filter { $0.id != b.id && !leadsBack(from: $0.id, to: b.id) }.map { ($0.id, $0.name) },
@@ -90,7 +92,7 @@ struct MixerSheet: View {
         }
         .padding(20)
         // Wide enough for a whole strip: a row that doesn't fit pushes the sheet's content out of its left edge.
-        .frame(width: 1070)
+        .frame(width: 1160)
     }
 
     /// The height the strips need: three headings, a row per strip, and a line where a section is empty.
@@ -98,7 +100,18 @@ struct MixerSheet: View {
         let rows = project.tracks.count + project.buses.count + project.vcas.count
         // A strip in a group has a line under it saying what is heard.
         let grouped = project.tracks.filter { $0.vca != nil }.count + project.buses.filter { $0.vca != nil }.count
+            + project.tracks.filter { $0.frozen != nil }.count + project.buses.filter { $0.frozen != nil }.count
         return CGFloat(3 * 34 + rows * 34 + grouped * 16 + (project.buses.isEmpty ? 24 : 0) + (project.vcas.isEmpty ? 44 : 0) + 8)
+    }
+
+    /// Freezing is a job (it renders the strip); thawing is at once. Each is one undo step.
+    private func toggleFreeze(_ id: UUID, _ name: String, _ on: Bool) {
+        if on {
+            session.status = "Freezing \(name)…"
+            _ = JobRegistry.shared.startFreeze(session, strip: id)
+        } else if let thawed = try? session.project.unfreezing(id) {
+            session.commit(thawed, action: "Unfreeze \(name)")
+        }
     }
 
     private func toggleSolo(_ id: UUID, _ on: Bool) {
@@ -243,6 +256,8 @@ private struct MixerStrip: View {
     let group: VCA?
     let soloed: Bool
     let solo: (Bool) -> Void
+    let frozen: Bool
+    let freeze: (Bool) -> Void
     let destinations: [(UUID, String)]
     let sends: [Send]
     let sendTargets: [(UUID, String)]
@@ -267,6 +282,13 @@ private struct MixerStrip: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             controls
+            if frozen {
+                Text(kind == "bus" ? "Frozen: plays from a file, its plugins rest. Unfreeze it to change its plugins or anything that feeds it."
+                                   : "Frozen: plays from a file, its plugins rest. Unfreeze it to change its clips or plugins.")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .lineLimit(1).padding(.leading, 160).frame(height: 16)
+                    .accessibilityIdentifier("mixer.strip.frozen.note")
+            }
             if let group {
                 Text(Self.heardText(own: gainDB, muted: muted, group: group))
                     .font(.caption).foregroundStyle(group.isMuted ? Color.orange : Color.secondary)
@@ -295,6 +317,12 @@ private struct MixerStrip: View {
                 .accessibilityLabel("Solo \(name)")
                 .accessibilityIdentifier("mixer.strip.solo")
                 .help("Hear only this strip (and any others that are soloed). Listening only: exports are not affected.")
+            Toggle("Frozen", isOn: Binding(get: { frozen }, set: { freeze($0) }))
+                .toggleStyle(.checkbox)
+                .fixedSize()
+                .accessibilityLabel("Freeze \(name)")
+                .accessibilityIdentifier("mixer.strip.frozen")
+                .help("Play this strip from a file made through its plugins, and let the plugins rest. Its level, pan, mute and sends still work.")
             Slider(value: $level, in: -60...12, onEditingChanged: { editing in
                 dragging = editing
                 if !editing, level != gainDB { change(["gainDB": .number((level * 10).rounded() / 10)]) }

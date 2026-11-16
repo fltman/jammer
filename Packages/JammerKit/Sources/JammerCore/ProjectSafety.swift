@@ -130,6 +130,13 @@ public enum ProjectSafety {
                 break
             }
             if keysGone > 0 { notes.append("\(keysGone) plugin\(keysGone == 1 ? "" : "s") listened to a track or bus that isn't there, or to one that it feeds; \(keysGone == 1 ? "it plays" : "they play") without that key.") }
+            // Frozen strips: a freeze whose file isn't among the sources, or that isn't of what the strip is
+            // now (a file edited by hand), is taken away, so the strip plays live rather than something stale.
+            var thawed = 0
+            let sourceIDs = Set(p.sources.map(\.id))
+            for t in p.tracks.indices { if let f = p.tracks[t].frozen, !sourceIDs.contains(f.sourceID) || f.length <= 0 || p.content(of: p.tracks[t].id) != f.madeFrom { p.tracks[t].frozen = nil; thawed += 1 } }
+            for b in p.buses.indices { if let f = p.buses[b].frozen, !sourceIDs.contains(f.sourceID) || f.length <= 0 || p.content(of: p.buses[b].id) != f.madeFrom { p.buses[b].frozen = nil; thawed += 1 } }
+            if thawed > 0 { notes.append("\(thawed) frozen track\(thawed == 1 ? "" : "s") or bus\(thawed == 1 ? "" : "es") didn't match \(thawed == 1 ? "its" : "their") frozen file and \(thawed == 1 ? "plays" : "play") live instead.") }
             var cut = 0
             for t in p.tracks.indices where p.tracks[t].inserts.count > 64 { cut += p.tracks[t].inserts.count - 64; p.tracks[t].inserts = Array(p.tracks[t].inserts.prefix(64)) }
             for b in p.buses.indices where p.buses[b].inserts.count > 64 { cut += p.buses[b].inserts.count - 64; p.buses[b].inserts = Array(p.buses[b].inserts.prefix(64)) }
