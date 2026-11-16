@@ -89,6 +89,8 @@ public enum ReplyGuard {
         if !plan.steps.isEmpty, plan.steps.allSatisfy({ s in AssistantCatalog.viewOnly[s.op].map { words in !words.contains { text.contains($0) } } ?? false }) {
             out.steps = []
         }
+        // A step of that kind that was left out for a missing value is not worth a line to the user either.
+        out.dropped.removeAll { d in AssistantCatalog.viewOnly.keys.contains { d == $0 || d.hasPrefix($0 + " ") } }
         if !out.steps.isEmpty, out.steps.allSatisfy({ measuring.contains($0.op) }) {
             out.reply = ""
             return out

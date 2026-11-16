@@ -33,7 +33,7 @@ Phase 3, part 1. What is built is said here with the numbers it was measured to;
 
 **Known limits.** At the edges of a range the gain can step (the audio outside is not touched, so the gain can't ramp there); for the whole document there is no edge. A track's plugins come after the limiter and are not in its figures (`beforePlugins` in the answer). The last ~16 frames of a file are read by the meter as sample peak only; the limiter does see them.
 
-**In the app** (2026-11-16): the sheet read through the accessibility API (ceiling field named, no unnamed controls); a ceiling of 5 refused with "The ceiling has to be a number from −20 to 0 dBTP"; the limiter run from the menu and offered back as "Undo Limit". The before and after figures were not read in the app in that pass.
+**In the app** (2026-11-16), on an 8 s test mix with a true peak of +1.58 dBTP: the sheet read through the accessibility API (ceiling field named, no unnamed controls); Limit with −1 gave −1.05 dBTP, "at most 2.6 dB taken off, over 3.6 s" in the status bar, one new clip on the track, and Edit › Undo Limit brought +1.58 back; a ceiling typed as "-3,5" gave −3.55; a ceiling of 5 was refused with "The ceiling has to be a number from −20 to 0 dBTP. Nothing was changed".
 
 ## Not built yet
 

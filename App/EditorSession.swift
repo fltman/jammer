@@ -389,7 +389,7 @@ final class EditorSession {
                     : failed.error
                 NSSound.beep()
             } else if op == "limit", let info = r.first?.info, let after = info["truePeakAfter"], let cut = info["reductionMaxDB"], let secs = info["limitedSeconds"] {
-                status = String(format: "Limited: true peak now %.1f dBTP, at most %.1f dB taken off, over %.1f s.", after, cut, secs)
+                status = String(format: "Limited: true peak now %.2f dBTP, at most %.1f dB taken off, over %.1f s.", after, cut, secs)
                     + (info["beforePlugins"] == 1 ? " The tracks' plugins come after it." : "")
             } else if let info = r.first?.info, let after = info["integratedAfter"], let target = info["target"] {
                 status = info["limitedByPeak"] == 1
