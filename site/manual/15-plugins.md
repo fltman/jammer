@@ -6,7 +6,7 @@ A track can run through Audio Unit effects (AUv2 and AUv3) after its clips and b
 
 ## Add one
 
-**Audio › Plugins…** (⌥⇧⌘P). Pick the track, then **Add Plugin** and the effect, grouped by manufacturer. Each plugin in the list has:
+**Audio › Plugins…** (⌥⇧⌘P). Pick the track (or a bus, when the document has any; see [the mixer](20-mixer.md)), then **Add Plugin** and the effect, grouped by manufacturer. Each plugin in the list has:
 
 - a switch to turn it **on or off** (off is bypass: the track sounds exactly as without it),
 - **Edit…**, which opens the plugin's own window (or sliders for its parameters when it has no window),
@@ -18,7 +18,7 @@ Plugins run in the order listed. Each one is one undo step, and so is a change m
 
 - **Playback.** Jämmer renders a third of a second ahead, so a change in a plugin's window is heard a moment later.
 - **Exports and loudness.** Exports, **Measure Loudness**, **Normalize** and the loudness presets all hear the plugins, so "compress, then normalise to −16 LUFS" works as you'd expect.
-- **Timing.** Each plugin's latency (for example a limiter's look-ahead) is compensated, so a track with plugins stays in time with the others.
+- **Timing.** Each plugin's latency (for example a limiter's look-ahead) is compensated, so a track with plugins stays in time with the others. The same goes for plugins on a bus.
 - **Not** the repairs, echo, spectral attenuation or drift correction: these work on the recorded audio before the plugins, and the plugins then process their result.
 
 The original files are never touched; taking a plugin off brings the track back exactly.

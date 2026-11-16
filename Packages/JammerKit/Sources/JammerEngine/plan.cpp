@@ -97,6 +97,8 @@ void Renderer::renderRouted(const Plan &plan, int64_t start, int64_t frames, flo
 }
 
 void Renderer::render(const Plan &plan, int64_t start, int64_t frames, float *out) {
+    // With plugins on a bus the mixer keeps state (the units, the delay lines that line the paths up).
+    if (plan.graph) { plan.graph->process(plan, *this, start, frames, out); return; }
     if (plan.routed) { renderRouted(plan, start, frames, out); return; }
     std::memset(out, 0, size_t(frames * channels_) * sizeof(float));
     const int64_t end = start + frames;
@@ -208,6 +210,21 @@ void jm_plan_add_bus_send(jm_plan *plan, int32_t bus, int32_t to, float gain, bo
     p.buses[size_t(bus)].sends.push_back(Send{to, gain, pre});
 }
 
+void jm_plan_set_bus_chain(jm_plan *plan, int32_t bus, jm_chain *chain) {
+    Plan &p = *plan->ptr;
+    if (p.finalized || bus < 0 || size_t(bus) >= p.buses.size()) return;
+    p.buses[size_t(bus)].chain = chain->ptr;
+}
+
+int64_t jm_plan_total_latency(const jm_plan *plan) { return plan->ptr->graph ? plan->ptr->graph->total : 0; }
+
+int64_t jm_plan_compensation(const jm_plan *plan, bool bus, int32_t index) {
+    const Plan &p = *plan->ptr;
+    if (!p.graph || index < 0) return 0;
+    const auto &v = bus ? p.graph->busDelay : p.graph->trackDelay;
+    return size_t(index) < v.size() ? v[size_t(index)] : 0;
+}
+
 void jm_plan_set_chain(jm_plan *plan, int32_t track, jm_chain *chain) {
     Plan &p = *plan->ptr;
     if (p.finalized || track < 0 || size_t(track) >= p.tracks.size()) return;
@@ -252,6 +269,8 @@ void jm_plan_finalize(jm_plan *plan) {
         }
     }
     p.busOrder.assign(placed.rbegin(), placed.rend());
+    for (const Bus &b : p.buses)
+        if (b.chain) { p.graph = std::make_shared<Graph>(p); break; }
     p.finalized = true;
 }
 

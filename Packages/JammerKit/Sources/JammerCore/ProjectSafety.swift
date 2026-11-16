@@ -94,6 +94,11 @@ public enum ProjectSafety {
                 if p.tracks[t].pan != old { fixed += 1 }
                 if let o = p.tracks[t].output, !seen.contains(o) { p.tracks[t].output = nil; lost += 1 }
             }
+            // Plugins: sixty-four on a strip is more than anyone puts there; a file with more is cut to that and says so.
+            var cut = 0
+            for t in p.tracks.indices where p.tracks[t].inserts.count > 64 { cut += p.tracks[t].inserts.count - 64; p.tracks[t].inserts = Array(p.tracks[t].inserts.prefix(64)) }
+            for b in p.buses.indices where p.buses[b].inserts.count > 64 { cut += p.buses[b].inserts.count - 64; p.buses[b].inserts = Array(p.buses[b].inserts.prefix(64)) }
+            if cut > 0 { notes.append("\(cut) plugin\(cut == 1 ? "" : "s") beyond the 64 a track or bus can have \(cut == 1 ? "was" : "were") left out.") }
             if lost > 0 { notes.append("\(lost) route\(lost == 1 ? "" : "s") or send\(lost == 1 ? "" : "s") in the mixer led to a bus that isn't there, or round in a circle; a route now goes to the output and a send is gone.") }
             if fixed > 0 { notes.append("\(fixed) level\(fixed == 1 ? "" : "s") or pan\(fixed == 1 ? "" : "s") in the mixer \(fixed == 1 ? "was" : "were") outside what is possible and \(fixed == 1 ? "was" : "were") put inside.") }
         }

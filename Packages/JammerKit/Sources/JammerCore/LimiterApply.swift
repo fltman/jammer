@@ -41,7 +41,8 @@ extension Project {
         var report = LimitReport()
         report.tracks = targets.count
         report.ceilingDB = settings.ceilingDB
-        report.beforePlugins = targets.contains { !tracks[$0].inserts.isEmpty }
+        // The plugins, on the tracks and on the buses, come after what the limiter makes.
+        report.beforePlugins = targets.contains { !tracks[$0].inserts.isEmpty } || buses.contains { !$0.inserts.isEmpty }
 
         var before = Limiter.PeakMeter(channels: ch, sampleRate: sampleRate)
         var done = 0

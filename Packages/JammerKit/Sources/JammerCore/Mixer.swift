@@ -28,6 +28,9 @@ public struct Bus: Codable, Hashable, Sendable, Identifiable {
     /// The bus this one feeds; nil: the output.
     public var output: UUID?
     public var sends: [Send] = []
+    /// Plugins on the bus, in order, after its sum and before its fader. What they add in latency is
+    /// made up for across the mixer (every other path is delayed to match), so the mix stays in time.
+    public var inserts: [Insert] = []
 
     public init(id: UUID = UUID(), name: String, gainDB: Double = 0, pan: Double = 0, isMuted: Bool = false, output: UUID? = nil, sends: [Send] = []) {
         self.id = id
@@ -39,7 +42,18 @@ public struct Bus: Codable, Hashable, Sendable, Identifiable {
         self.sends = sends
     }
 
-    private enum CodingKeys: String, CodingKey { case id, name, gainDB, pan, isMuted, output, sends }
+    private enum CodingKeys: String, CodingKey { case id, name, gainDB, pan, isMuted, output, sends, inserts }
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(name, forKey: .name)
+        try c.encode(gainDB, forKey: .gainDB)
+        try c.encode(pan, forKey: .pan)
+        try c.encode(isMuted, forKey: .isMuted)
+        try c.encodeIfPresent(output, forKey: .output)
+        if !sends.isEmpty { try c.encode(sends, forKey: .sends) }
+        if !inserts.isEmpty { try c.encode(inserts, forKey: .inserts) }
+    }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(UUID.self, forKey: .id)
@@ -49,6 +63,7 @@ public struct Bus: Codable, Hashable, Sendable, Identifiable {
         isMuted = try c.decodeIfPresent(Bool.self, forKey: .isMuted) ?? false
         output = try c.decodeIfPresent(UUID.self, forKey: .output)
         sends = try c.decodeIfPresent([Send].self, forKey: .sends) ?? []
+        inserts = try c.decodeIfPresent([Insert].self, forKey: .inserts) ?? []
     }
 }
 
@@ -106,6 +121,21 @@ extension Project {
     public var usesMixer: Bool { !buses.isEmpty || tracks.contains { $0.pan != 0 || $0.output != nil || !$0.sends.isEmpty } }
 
     public func bus(_ id: UUID) -> Bus? { buses.first { $0.id == id } }
+
+    /// A track or a bus by its id, as the thing plugins sit on: its name and its plugins.
+    public func strip(_ id: UUID) -> (name: String, inserts: [Insert], isBus: Bool)? {
+        if let t = tracks.first(where: { $0.id == id }) { return (t.name, t.inserts, false) }
+        if let b = bus(id) { return (b.name, b.inserts, true) }
+        return nil
+    }
+    /// Replaces the plugins of the track or bus with that id.
+    public mutating func setInserts(_ inserts: [Insert], on id: UUID) {
+        if let t = tracks.firstIndex(where: { $0.id == id }) { tracks[t].inserts = inserts }
+        else if let b = buses.firstIndex(where: { $0.id == id }) { buses[b].inserts = inserts }
+    }
+
+    /// Every plugin in the project: on the tracks and on the buses.
+    public var allInserts: [Insert] { tracks.flatMap(\.inserts) + buses.flatMap(\.inserts) }
 
     /// Takes the mixer out of a copy that is made to render one track by itself (for a bounce, an
     /// analysis, a waveform): what is wanted there is the track's own sound, before its pan and its bus.

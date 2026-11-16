@@ -4,6 +4,8 @@ Not a list of commits: what behaves differently from before, for a user, an agen
 
 ## 2026-11-16
 
+- **Plugins on buses, with delay compensation across the mixer** (`docs/MIXER.md`, step 3). `add_insert`, `set_insert` and `remove_insert` take a bus's id as `track`; `GET …/buses/{busId}/inserts/{insert}`; `GET …/mixer` has `inserts` on buses, `latencySamples` and `compensationSamples` on every strip and `totalLatencySamples`. A project without plugins on a bus renders as before, bit for bit. `limit` answers `beforePlugins` also when the plugins are on a bus.
+
 - **The mixer's first part**: buses, pan and routing (`docs/MIXER.md`). A project that uses them is saved as project format 2, which a Jämmer from before refuses with "saved by a newer Jämmer"; a project that doesn't is format 1 and byte for byte what it was. `GET …/tracks` has `pan` and `output` on each track.
 
 - **Importing a file at another sample rate than the document's now converts with r8brain** (the same converter that exports use), where it used the system's converter. Measured on the same file through both: the same length, and the same audio within −145 dB for a signal under 18 kHz (`ResamplerTests.importAgrees`). Projects made before this point at files that were already converted when they were imported; those files are not touched, so an old project plays exactly as it did. A build without r8brain falls back to the system's converter.

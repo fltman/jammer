@@ -205,6 +205,14 @@ struct MixerTests {
         do { _ = try ProjectPackage.decodeChecked(try ProjectPackage.encode(p)); Issue.record("opened") } catch {
             #expect(error.localizedDescription.contains("65 buses") && error.localizedDescription.contains("at most 64"), "\(error.localizedDescription)")
         }
+        // Seventy plugins on a bus and on a track: cut to 64 each, and said.
+        var many = Self.document().0
+        many.buses = [Bus(name: "Full")]
+        many.buses[0].inserts = (0..<70).map { Insert(plugin: PluginID("aufx/lpas/appl")!, name: "p\($0)") }
+        many.tracks[0].inserts = many.buses[0].inserts.map { Insert(plugin: $0.plugin, name: $0.name) }
+        let (cut, said) = try ProjectPackage.decodeChecked(try ProjectPackage.encode(many))
+        #expect(cut.buses[0].inserts.count == 64 && cut.tracks[0].inserts.count == 64 && cut.buses[0].inserts.last?.name == "p63")
+        #expect(said.contains { $0.contains("12 plugins beyond the 64") }, "\(said)")
         // A pan in a mono project means nothing and is dropped.
         var mono = Self.document(channels: 1).0
         mono.tracks[0].pan = 0.5

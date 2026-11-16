@@ -83,6 +83,11 @@ struct Chain {
     ~Chain();
     /// Writes `n` processed frames of `track` from `start` to `out` (interleaved, overwritten).
     void process(const Plan &plan, int32_t track, Renderer &renderer, int64_t start, int64_t n, float *out);
+    /// For a chain on a bus: one quantum of interleaved audio through the units, in place. What comes
+    /// out is as late as the units make it (`latency` frames); the mixer graph lines the paths up.
+    void stream(float *interleaved);
+    /// Starts the units afresh (a seek).
+    void restart();
 
 private:
     std::mutex mutex_;
@@ -97,6 +102,8 @@ private:
     AudioBufferList *list_ = nullptr;
     void reset(int64_t start);
     void produce(const Plan &plan, int32_t track, Renderer &renderer);
+    /// Runs the units over the quantum in `a_` (planar), leaving the result in `a_`.
+    void runUnits();
 };
 
 /// A copy of a strip's signal sent to a bus: before the strip's fader and pan (`pre`), or after them.
@@ -124,6 +131,49 @@ struct Bus {
     float panL = 1.0f, panR = 1.0f;
     int32_t output = -1;
     std::vector<Send> sends;
+    /// Plugins on the bus, after the sum and before the fader.
+    std::shared_ptr<Chain> chain;
+};
+
+/// The mixer with plugins on buses. A plugin on a bus makes what leaves the bus late by its latency,
+/// so wherever signals meet (a bus's input, the output) every path is delayed to the longest one, and
+/// the whole mix comes out late by the longest path through it: `total`. The graph runs that far ahead
+/// of what it is asked for, so the caller gets the mix on the sample. It keeps its place between calls
+/// (the units, the delay lines) and starts again, with a run-in, when asked for another place.
+class Graph {
+public:
+    struct Edge {
+        int32_t to;        // a bus, or -1 for the output
+        float gain;        // the send's or the strip's gain
+        bool pre;          // before the strip's fader and pan
+        bool main;         // the strip's own way out (its fader and pan apply) rather than a send
+        int64_t delay = 0; // frames added so this path lines up with the longest into `to`
+        std::vector<float> line;
+        size_t at = 0;
+        Edge(int32_t to, float gain, bool pre, bool main) : to(to), gain(gain), pre(pre), main(main) {}
+    };
+    explicit Graph(const Plan &plan);
+    void process(const Plan &plan, Renderer &renderer, int64_t start, int64_t n, float *out);
+    int64_t total = 0;                      // the longest path, in frames
+    std::vector<int64_t> busLatency;        // each bus's own chain
+    std::vector<int64_t> trackDelay;        // added to each track's own way out
+    std::vector<int64_t> busDelay;          // added to each bus's own way out
+
+private:
+    static constexpr int64_t kQuantum = Chain::kQuantum;
+    std::mutex mutex_;
+    int32_t channels_;
+    int64_t preroll_ = 0;
+    std::vector<std::vector<Edge>> trackEdges_, busEdges_;
+    bool primed_ = false;
+    int64_t readPos_ = 0, cursor_ = 0, discard_ = 0;
+    std::vector<float> fifo_;
+    size_t fifoHead_ = 0;
+    std::vector<float> strip_, mix_;
+    std::vector<std::vector<float>> bus_;
+    void reset(const Plan &plan, int64_t start);
+    void produce(const Plan &plan, Renderer &renderer);
+    void send(Edge &e, const float *in, float gainL, float gainR, int64_t n);
 };
 
 struct Plan {
@@ -137,6 +187,8 @@ struct Plan {
     /// True when anything is routed to a bus or panned. False is the path every plan took before
     /// there was a mixer, and still takes: the same code, the same bits.
     bool routed = false;
+    /// Made by finalize when a bus has plugins; otherwise the mixer needs no state and has none.
+    std::shared_ptr<Graph> graph;
     std::vector<Clip> clips; // sorted by start once finalized
     int64_t length = 0;
     bool finalized = false;
@@ -156,6 +208,7 @@ private:
     std::vector<float> track_;
     std::vector<std::vector<float>> bus_;
     void renderRouted(const Plan &plan, int64_t start, int64_t frames, float *out);
+    friend class Graph;
     void mixClip(const Plan &plan, const Clip &c, float trackGain, int64_t start, int64_t frames, float *out);
 };
 

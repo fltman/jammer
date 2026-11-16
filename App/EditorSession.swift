@@ -79,7 +79,7 @@ final class EditorSession {
     /// changed settings), then plays through them.
     func syncInserts() {
         let p = project
-        guard p.tracks.contains(where: { !$0.inserts.isEmpty }) || !inserts.isEmpty else { return }
+        guard !p.allInserts.isEmpty || !inserts.isEmpty else { return }
         let host = inserts
         Task { @MainActor in
             guard await host.sync(p), host === self.inserts else { return }
@@ -212,13 +212,14 @@ final class EditorSession {
 
     /// A plugin's own window changed its settings: store them as one undo step.
     func commitPluginState(track: UUID, insert: UUID, state: Data?) {
-        guard let t = project.tracks.firstIndex(where: { $0.id == track }),
-              let i = project.tracks[t].inserts.firstIndex(where: { $0.id == insert }),
-              !Self.sameState(project.tracks[t].inserts[i].state, state) else { return }
+        // `track` is the id of the strip the plugin is on: a track or a bus.
+        guard var list = project.strip(track)?.inserts, let i = list.firstIndex(where: { $0.id == insert }),
+              !Self.sameState(list[i].state, state) else { return }
         var p = project
-        p.tracks[t].inserts[i].state = state
+        list[i].state = state
+        p.setInserts(list, on: track)
         inserts.markApplied(insert, state: state)
-        commit(p, action: "Change \(p.tracks[t].inserts[i].name)")
+        commit(p, action: "Change \(list[i].name)")
     }
 
     var undoManager: UndoManager? { document?.undoManager }
@@ -427,7 +428,7 @@ final class EditorSession {
                 NSSound.beep()
             } else if op == "limit", let info = r.first?.info, let after = info["truePeakAfter"], let cut = info["reductionMaxDB"], let secs = info["limitedSeconds"] {
                 status = String(format: "Limited: true peak now %.2f dBTP, at most %.1f dB taken off, over %.1f s.", after, cut, secs)
-                    + (info["beforePlugins"] == 1 ? " The tracks' plugins come after it." : "")
+                    + (info["beforePlugins"] == 1 ? " The plugins on the tracks and buses come after it." : "")
             } else if let info = r.first?.info, let after = info["integratedAfter"], let target = info["target"] {
                 status = info["limited"] == 1
                     ? String(format: "%@: %.1f LUFS. The limiter took at most %.1f dB off the peaks, over %.1f s.", title, after, info["reductionMaxDB"] ?? 0, info["limitedSeconds"] ?? 0)

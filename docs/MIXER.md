@@ -21,7 +21,15 @@ Phase 3, part 2. The sketch as the coordinator approved it on 2026-11-16, with t
 
 **The assistant and buses.** The document's description to the model lists the buses by name, and `set_bus` and `remove_bus` take a name, which is turned into the id. `set_send` is not offered to the assistant yet.
 
-Not built: delay compensation across buses, the master strip and its limiter, VCAs, sidechain keys, freeze, solo, plugins on buses.
+**Step 3, 2026-11-16: plugins on buses, and delay compensation.** `Bus.inserts`; `add_insert`, `set_insert` and `remove_insert` take a bus's id where they took a track's; the Plugins sheet chooses a track or a bus. In the engine a bus with plugins makes the plan build a `Graph` (`graph.cpp`): each bus's chain runs as a stream (what leaves is late by its latency), every path into a bus or the output is delayed to the longest one arriving there, and the graph runs ahead by the longest path through the mixer, so the mix comes out on the sample. A seek starts it afresh with a run-in. Without a plugin on any bus there is no graph and the render path is step 2's, bit for bit.
+
+- Tested (`MixerGraphTests`, with a stand-in plugin that is a pure delay): through a bus with 0, 1, 100, 512, 777 and 4 096 frames of latency the mix is the plain mix bit for bit; nested buses (100 + 37) with a send to a third (64): an impulse arrives on its frame by both ways, and the reported delays are 137 for the track that goes straight out and 73 for the side bus; the same samples in blocks of 1, 333, 512 and 4 097 and from any place asked, back and forth; a plugin that fails lets the bus through as late as it would have been; a muted bus is silent and the rest in time. Switching the compensation off once made three of them fail.
+- Tested with a real plugin (`InsertTests.busLatency`): Apple's peak limiter (look-ahead, not limiting at that level) on a bus, a second track straight out as witness: best lag 0, residue under −40 dB, the same in 512-frame blocks.
+- Reported: `GET …/mixer` has `latencySamples` and `compensationSamples` on every track and bus, `inserts` on buses, `totalLatencySamples` for the document.
+- Plugin settings on a bus go through the same trust check as on a track before they are loaded; a file with more than 64 plugins on a strip is cut to 64 and says so.
+- A plugin that has a latency and doesn't report it can't be compensated. The manual says so.
+
+Not built: the master strip and its limiter, VCAs, sidechain keys, freeze, solo.
 
 ## What the render path costs today (measured 2026-11-16)
 
@@ -38,6 +46,21 @@ Not built: delay compensation across buses, the master strip and its limiter, VC
 The arithmetic a mixer adds, with the vector routines the engine would use: 64 tracks through a 4 096-frame delay line each, summed into 8 buses with 2 sends per track, the buses summed to a master: **0.106 ms per block, 1.0 % of its time.**
 
 So the mixer itself is cheap. What sets the limit is what it carries: plugins (measured for the plugin pipes in `docs/STRESS.md`) and disk. These are not promises; the mixer is measured again, with plugins on tracks and buses, before the manual says a number.
+
+### With plugins, on tracks and buses (measured 2026-11-16)
+
+`JAMMER_MIXER_BASELINE=1 swift test --filter MixerBaselineTests/withPlugins`: Apple's low-pass and peak limiter, in process, 512-frame blocks, one core, two runs. The Mac was busy with other sessions (load average 12 to 22), so single blocks were late at places that moved from run to run and were gone in the other run; **the medians hold, the worst figures say nothing about Jämmer and are left out.** The first block after a seek carries the run-in of every chain.
+
+| Tracks × plugins | Buses × plugins | Units | A block takes, median (two runs) | share of its 10.7 ms | First block after a seek |
+|---|---|---|---|---|---|
+| 8 × 1 | 2 × 2 | 12 | 0.31 / 0.71 ms | 3–7 % | 9–19 ms |
+| 16 × 2 | 4 × 2 | 40 | 0.71 / 1.15 ms | 7–11 % | 22–28 ms |
+| 32 × 2 | 8 × 2 | 80 | 1.50 / 2.69 ms | 14–25 % | 45–66 ms |
+| 64 × 2 | 8 × 2 | 144 | 2.97 / 5.61 ms | 28–52 % | 102–269 ms |
+| 64 × 0 | 8 × 2 | 16 | 0.39 / 0.39 ms | 4 % | 5–8 ms |
+| 64 × 2 | none | 128 | 3.09 / 3.39 ms | 29–32 % | 24–174 ms |
+
+What it says: the graph and its delay lines cost next to nothing (the fifth row); the plugins are the cost, about 0.02 ms per light Apple unit per block. A third-party plugin can cost a hundred times that. **Not measured: the worst block on a quiet machine, and playback itself with these loads (drop-outs heard or counted).** Until both are, the manual gives no number of tracks or plugins.
 
 Where it runs: in the render worker and the offline renderer, like insert chains today, never in the device callback. The worker renders ahead of the playhead, which is also what hides delay compensation from the listener.
 

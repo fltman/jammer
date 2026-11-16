@@ -35,6 +35,56 @@ struct MixerBaselineTests {
         }
     }
 
+    /// The mixer carrying real plugins, on tracks and on buses (Apple's low-pass and peak limiter, in
+    /// process): what a 512-frame block costs once it runs, and what the first block after a seek costs,
+    /// which has the run-in of every chain and of the graph in it.
+    @Test func withPlugins() async throws {
+        let rate = 48_000.0, seconds = 10, n = Int(rate) * 20
+        let info = AudioFileInfo(container: .wav, sampleFormat: .float32, bigEndian: false, channels: 2, sampleRate: rate,
+                                 channelMask: nil, dataOffset: 0, frames: Int64(n), chunks: [], bext: nil, ixml: nil, markers: [])
+        let lowpass = PluginID("aufx/lpas/appl")!, limiter = PluginID("aufx/lmtr/appl")!
+        for (tracks, buses, perTrack, perBus) in [(8, 2, 1, 2), (16, 4, 2, 2), (32, 8, 2, 2), (64, 8, 2, 2), (64, 8, 0, 2), (64, 0, 2, 0)] {
+            let pool = SourcePool()
+            var made: Project?
+            for t in 0..<tracks {
+                let src = SourceRef(name: "s\(t)", path: "/dev/null", info: info)
+                pool.register(src.id, memory: (0..<(n * 2)).map { Float(0.01 * sin(Double($0 + t * 977) * 0.01)) }, channels: 2)
+                if made == nil { made = Project(source: src) } else { _ = made!.addTrack(source: src, name: "t\(t)") }
+            }
+            var p = made!
+            for b in 0..<buses {
+                let bus = try p.addBus(name: "bus \(b)")
+                p.buses[b].inserts = (0..<perBus).map { Insert(plugin: $0 % 2 == 0 ? limiter : lowpass, name: "p") }
+                _ = bus
+            }
+            for t in 0..<tracks {
+                p.tracks[t].inserts = (0..<perTrack).map { Insert(plugin: $0 % 2 == 0 ? lowpass : limiter, name: "p") }
+                if buses > 0 {
+                    try p.setTrackRoute(p.tracks[t].id, output: .some(p.buses[t % buses].id))
+                    // Every fourth track also sends to the next bus.
+                    if t % 4 == 0, buses > 1 { try p.setSend(from: p.tracks[t].id, to: p.buses[(t + 1) % buses].id, gainDB: -6) }
+                }
+            }
+            let host = await InsertHost.make(for: p)
+            #expect(p.allInserts.allSatisfy { host.instance($0.id) != nil })
+            let plan = PlanCompiler.compile(p, pool: pool, inserts: host)
+            var times: [Double] = [], first = 0.0
+            let blocks = seconds * Int(rate) / 512
+            for b in 0..<blocks {
+                let t0 = DispatchTime.now().uptimeNanoseconds
+                _ = plan.render(from: Frame(b * 512), frames: 512)
+                let dt = Double(DispatchTime.now().uptimeNanoseconds - t0) / 1e9
+                if b == 0 { first = dt } else { times.append(dt) }
+            }
+            let block = 512 / rate
+            let sorted = times.sorted(), late = times.indices.filter { times[$0] > block }
+            func pct(_ q: Double) -> Double { sorted[min(sorted.count - 1, Int(Double(sorted.count) * q))] * 1000 }
+            print(String(format: "MIXER PLUGINS %2d tracks × %d plugins, %d buses × %d plugins (%3d units, mixer latency %lld frames): block mean %.3f ms, median %.3f, 99 %% under %.3f, 99.9 %% under %.3f, worst %.3f ms; %d of %d blocks over their 10.7 ms (at %@); first block after a seek %.1f ms",
+                         tracks, perTrack, buses, perBus, p.allInserts.count, plan.totalLatency, times.reduce(0, +) / Double(times.count) * 1000, pct(0.5), pct(0.99), pct(0.999), sorted.last! * 1000,
+                         late.count, times.count, late.prefix(6).map { String($0 + 1) }.joined(separator: ",") as NSString, first * 1000))
+        }
+    }
+
     /// What the mixer adds per block on top of rendering the tracks: sums into buses, sends, gains, and
     /// delay lines for compensation. Done here with the same vector routines the engine would use.
     @Test func busArithmetic() {

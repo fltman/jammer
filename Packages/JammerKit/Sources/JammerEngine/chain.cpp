@@ -69,6 +69,31 @@ void Chain::produce(const Plan &plan, int32_t track, Renderer &renderer) {
     renderer.renderTrack(plan, track, inCursor_, q, interleaved_.data());
     for (int64_t i = 0; i < q; ++i)
         for (int32_t c = 0; c < channels; ++c) a_[size_t(c * q + i)] = interleaved_[size_t(i * channels + c)];
+    runUnits();
+    inCursor_ += q;
+    const int64_t skip = std::min(discard_, q);
+    discard_ -= skip;
+    for (int64_t i = skip; i < q; ++i)
+        for (int32_t c = 0; c < channels; ++c) fifo_.push_back(a_[size_t(c * q + i)]);
+}
+
+void Chain::stream(float *interleaved) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    const int64_t q = kQuantum;
+    for (int64_t i = 0; i < q; ++i)
+        for (int32_t c = 0; c < channels; ++c) a_[size_t(c * q + i)] = interleaved[size_t(i * channels + c)];
+    runUnits();
+    for (int64_t i = 0; i < q; ++i)
+        for (int32_t c = 0; c < channels; ++c) interleaved[size_t(i * channels + c)] = a_[size_t(c * q + i)];
+}
+
+void Chain::restart() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    reset(0);
+}
+
+void Chain::runUnits() {
+    const int64_t q = kQuantum;
     AudioTimeStamp ts{};
     ts.mSampleTime = sampleTime_;
     ts.mFlags = kAudioTimeStampSampleTimeValid;
@@ -116,11 +141,6 @@ void Chain::produce(const Plan &plan, int32_t track, Renderer &renderer) {
         }
     }
     sampleTime_ += double(q);
-    inCursor_ += q;
-    const int64_t skip = std::min(discard_, q);
-    discard_ -= skip;
-    for (int64_t i = skip; i < q; ++i)
-        for (int32_t c = 0; c < channels; ++c) fifo_.push_back(a_[size_t(c * q + i)]);
 }
 
 void Chain::process(const Plan &plan, int32_t track, Renderer &renderer, int64_t start, int64_t n, float *out) {

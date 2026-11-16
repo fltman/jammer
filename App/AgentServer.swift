@@ -449,12 +449,12 @@ enum AgentRouter {
                 return try speakers(session, r)
             case ["mixer"]:
                 try only("GET")
-                return .json(["mixer": mixerJSON(session.project)])
+                return .json(["mixer": mixerJSON(session.project, plan: session.plan, session: session)])
             case ["tracks"]:
                 try only("GET", "POST")
                 if r.method == "GET" { return .json(["tracks": session.project.tracks.map { trackJSON(session, $0) }]) }
                 return try await addTrack(session, r)
-            case let t where t.count == 4 && t[0] == "tracks" && t[2] == "inserts":
+            case let t where t.count == 4 && (t[0] == "tracks" || t[0] == "buses") && t[2] == "inserts":
                 try only("GET")
                 return try await insertDetail(session, track: t[1], insert: t[3])
             case let t where t.count == 3 && t[0] == "tracks" && t[2] == "drift":
@@ -555,17 +555,23 @@ enum AgentRouter {
 
     /// The mixer as it is: every track and bus with its level, pan, mute and where it goes ("master" for
     /// the output), and for each bus what comes into it.
-    static func mixerJSON(_ p: Project) -> [String: Any] {
+    static func mixerJSON(_ p: Project, plan: RenderPlan, session: EditorSession) -> [String: Any] {
         func to(_ id: UUID?) -> String { id?.uuidString ?? "master" }
+        // Latency, in samples: a strip's own plugins, and the delay the mixer adds to its way out so that
+        // it lines up with the longest path it meets. The mix itself comes out on the sample.
+        func own(_ inserts: [Insert]) -> Int64 { inserts.filter { !$0.bypass }.reduce(0) { $0 + (session.inserts.instance($1.id)?.latency ?? 0) } }
+        func plugins(_ inserts: [Insert]) -> [[String: Any]] { inserts.map { ["id": $0.id.uuidString, "name": $0.name, "plugin": $0.plugin.description, "bypass": $0.bypass] } }
         func sends(_ s: [Send]) -> [[String: Any]] { s.map { ["to": $0.to.uuidString, "gainDB": $0.gainDB, "pre": $0.pre] } }
         let tracks = p.tracks.map { t -> [String: Any] in
-            ["id": t.id.uuidString, "name": t.name, "gainDB": t.gainDB, "pan": t.pan, "muted": t.isMuted, "output": to(t.output), "sends": sends(t.sends)]
+            ["id": t.id.uuidString, "name": t.name, "gainDB": t.gainDB, "pan": t.pan, "muted": t.isMuted, "output": to(t.output), "sends": sends(t.sends),
+             "latencySamples": own(t.inserts), "compensationSamples": plan.compensation(bus: false, index: p.tracks.firstIndex { $0.id == t.id } ?? 0)]
         }
         let buses = p.buses.map { b -> [String: Any] in
             ["id": b.id.uuidString, "name": b.name, "gainDB": b.gainDB, "pan": b.pan, "muted": b.isMuted, "output": to(b.output), "sends": sends(b.sends),
+             "inserts": plugins(b.inserts), "latencySamples": own(b.inserts), "compensationSamples": plan.compensation(bus: true, index: p.buses.firstIndex { $0.id == b.id } ?? 0),
              "inputs": ["tracks": p.tracks.filter { $0.output == b.id }.map(\.id.uuidString), "buses": p.buses.filter { $0.output == b.id }.map(\.id.uuidString)]]
         }
-        return ["tracks": tracks, "buses": buses, "usesMixer": p.usesMixer, "panAvailable": p.channels == 2,
+        return ["tracks": tracks, "buses": buses, "usesMixer": p.usesMixer, "panAvailable": p.channels == 2, "totalLatencySamples": plan.totalLatency,
                 "limits": ["buses": Mixer.maxBuses, "sendsPerStrip": Mixer.maxSends, "gainDB": [Mixer.gainRange.lowerBound, Mixer.gainRange.upperBound], "pan": [-1, 1]]]
     }
 
@@ -588,11 +594,12 @@ enum AgentRouter {
     /// One insert with its parameters, read from the playing unit (or a unit of its own
     /// while that one is still starting).
     private static func insertDetail(_ session: EditorSession, track: String, insert: String) async throws -> Response {
-        guard let t = session.project.tracks.first(where: { $0.id.uuidString == track.uppercased() }) else {
-            throw APIError.notFound("No track with id \(track).")
+        // The id of a track, or of a bus.
+        guard let t = UUID(uuidString: track).flatMap({ session.project.strip($0) }) else {
+            throw APIError.notFound("No track or bus with id \(track).")
         }
         guard let i = t.inserts.first(where: { $0.id.uuidString == insert.uppercased() }) else {
-            throw APIError.notFound("The track has no insert with id \(insert).")
+            throw APIError.notFound("\(t.name) has no insert with id \(insert).")
         }
         let unit: any InsertUnit
         if let live = session.inserts.instance(i.id) {

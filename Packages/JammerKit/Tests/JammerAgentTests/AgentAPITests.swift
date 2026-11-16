@@ -724,6 +724,30 @@ struct InsertStepTests {
         r = StepRunner.run([Step(op: "remove_insert", params: ["track": .string(track), "insert": .string(id)])], on: &s, measure: measure)
         #expect(r[0].reason == "not_found")
     }
+
+    @Test("The same steps put a plugin on a bus, by the bus's id; the track's plugins are not touched")
+    func onBus() throws {
+        var p = Project(sampleRate: 48_000, channels: 2)
+        p.tracks = [Track(name: "A")]
+        let bus = try p.addBus(name: "Speech")
+        var s = EditState(project: p)
+        let measure: StepRunner.Measure = { _, _ in LoudnessResult(integrated: nil, range: nil, maxMomentary: nil, maxShortTerm: nil, samplePeak: 0, truePeak: 0, duration: 0) }
+        func run(_ op: String, _ params: [String: JSONValue]) -> StepResult { StepRunner.run([Step(op: op, params: params)], on: &s, measure: measure)[0] }
+        var r = run("add_insert", ["track": .string(bus.id.uuidString), "plugin": .string("AUPeakLimiter")])
+        #expect(r.status == .done && (r.info["latencyMs"] ?? 0) > 0, "\(r.error ?? "")")
+        let id = try #require(r.ids["insert"])
+        #expect(s.project.buses[0].inserts.map(\.name) == ["AUPeakLimiter"] && s.project.tracks[0].inserts.isEmpty && s.project.hasActiveInserts)
+        r = run("add_insert", ["track": .string(bus.id.uuidString), "plugin": .string("AULowpass"), "position": .number(0)])
+        #expect(s.project.buses[0].inserts.map(\.name) == ["AULowpass", "AUPeakLimiter"])
+        #expect(run("set_insert", ["track": .string(bus.id.uuidString), "insert": .string(id), "bypass": .bool(true)]).status == .done && s.project.buses[0].inserts[1].bypass)
+        #expect(run("set_insert", ["track": .string(bus.id.uuidString), "insert": .string("AULowpass"), "parameter": .string("global.0"), "value": .number(900)]).status == .done)
+        #expect(s.project.buses[0].inserts[0].state != nil)
+        // The plugin is on the bus, not on the track, and an id that is neither is refused.
+        #expect(run("remove_insert", ["track": .string(s.project.tracks[0].id.uuidString), "insert": .string(id)]).reason == "not_found")
+        #expect(run("add_insert", ["track": .string(UUID().uuidString), "plugin": .string("AULowpass")]).reason == "not_found")
+        #expect(run("remove_insert", ["track": .string(bus.id.uuidString), "insert": .string(id)]).status == .done)
+        #expect(s.project.buses[0].inserts.map(\.name) == ["AULowpass"])
+    }
 }
 
 @Suite("Tests reach only this Mac")

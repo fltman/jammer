@@ -97,6 +97,10 @@ void jm_plan_set_track_route(jm_plan *_Nonnull plan, int32_t track, int32_t bus,
 void jm_plan_add_track_send(jm_plan *_Nonnull plan, int32_t track, int32_t bus, float gain, bool pre);
 /// The same from one bus to another. A send that would close a loop is cut at finalize.
 void jm_plan_add_bus_send(jm_plan *_Nonnull plan, int32_t bus, int32_t to, float gain, bool pre);
+/// After finalize: the longest path through the mixer, in frames (0 without plugins on buses), and the
+/// delay added to a track's or a bus's own way out so that it lines up with the longest path it meets.
+int64_t jm_plan_total_latency(const jm_plan *_Nonnull plan);
+int64_t jm_plan_compensation(const jm_plan *_Nonnull plan, bool bus, int32_t index);
 /// Sorts and freezes the plan. Must be called before rendering or publishing.
 void jm_plan_finalize(jm_plan *_Nonnull plan);
 void jm_plan_release(jm_plan *_Nullable plan);
@@ -149,6 +153,10 @@ int64_t jm_chain_latency(const jm_chain *_Nonnull chain);
 OSStatus jm_chain_status(const jm_chain *_Nonnull chain);
 /// Runs `track` through `chain` (retained) before its gain. Before finalize.
 void jm_plan_set_chain(jm_plan *_Nonnull plan, int32_t track, jm_chain *_Nonnull chain);
+/// Runs a bus through `chain` (retained) after its sum and before its fader. A chain on a bus makes what
+/// leaves the bus late by the chain's latency; the plan then delays every other path to the longest where
+/// signals meet, and renders that far ahead, so the mix still comes out on the sample. Before finalize.
+void jm_plan_set_bus_chain(jm_plan *_Nonnull plan, int32_t bus, jm_chain *_Nonnull chain);
 
 // MARK: Engine
 

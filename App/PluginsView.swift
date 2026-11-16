@@ -17,22 +17,32 @@ struct PluginsSheet: View {
     @State private var scanning = false
     @State private var safeMode = EditorSession.pluginSafeMode
 
-    private var track: Track? {
-        session.project.tracks.first { $0.id == trackID } ?? session.project.tracks.first
+    /// What plugins sit on: a track or a bus.
+    struct Strip: Identifiable {
+        let id: UUID
+        let name: String
+        let inserts: [Insert]
+        let isBus: Bool
     }
+    private var strips: [Strip] {
+        session.project.tracks.map { Strip(id: $0.id, name: $0.name, inserts: $0.inserts, isBus: false) }
+            + session.project.buses.map { Strip(id: $0.id, name: $0.name, inserts: $0.inserts, isBus: true) }
+    }
+    private var track: Strip? { strips.first { $0.id == trackID } ?? strips.first }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Plugins").font(.title2.bold())
-            if session.project.tracks.count > 1 {
-                Picker("Track", selection: Binding(get: { track?.id }, set: { trackID = $0 })) {
-                    ForEach(session.project.tracks) { Text($0.name).tag(Optional($0.id)) }
+            if strips.count > 1 {
+                Picker(session.project.buses.isEmpty ? "Track" : "Track or bus", selection: Binding(get: { track?.id }, set: { trackID = $0 })) {
+                    ForEach(strips) { Text($0.isBus ? "\($0.name) (bus)" : $0.name).tag(Optional($0.id)) }
                 }
             }
             if let track {
                 List {
                     if track.inserts.isEmpty {
-                        Text("No plugins on \(track.name). Add one below; it runs after the clips and before the track's gain.")
+                        Text(track.isBus ? "No plugins on the bus \(track.name). Add one below; it runs on everything that goes through the bus, before the bus's level. What it adds in delay is made up for across the mixer."
+                                         : "No plugins on \(track.name). Add one below; it runs after the clips and before the track's gain.")
                             .foregroundStyle(.secondary)
                     }
                     ForEach(track.inserts) { insert in row(track, insert) }
@@ -106,7 +116,7 @@ struct PluginsSheet: View {
         }
     }
 
-    private func row(_ track: Track, _ insert: Insert) -> some View {
+    private func row(_ track: Strip, _ insert: Insert) -> some View {
         HStack(spacing: 10) {
             Toggle(isOn: Binding(get: { !insert.bypass }, set: { on in
                 session.perform("set_insert", ["track": .string(track.id.uuidString), "insert": .string(insert.id.uuidString), "bypass": .bool(!on)])
@@ -145,7 +155,7 @@ enum PluginWindows {
             return
         }
         guard let unit = session.inserts.instance(insert),
-              let t = session.project.tracks.first(where: { $0.id == track }),
+              let t = session.project.strip(track),
               let i = t.inserts.first(where: { $0.id == insert }) else { return }
         let c = PluginWindowController(session: session, track: track, insert: insert, unit: unit, title: "\(i.name) — \(t.name)")
         open[insert] = c

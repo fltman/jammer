@@ -75,6 +75,53 @@ struct InsertTests {
         #expect(db(a, b) < -40, "residual \(db(a, b)) dB")
     }
 
+    /// A real plugin with look-ahead (Apple's limiter, not limiting at this level) on a BUS: the bus is
+    /// then late by the plugin's latency, and the mixer delays the other paths so that everything still
+    /// meets on the sample. A second track that goes straight out is the witness.
+    @Test("A plugin's latency on a bus is compensated across the mixer: the mix lines up with the plain mix")
+    func busLatency() async throws {
+        let dir = TempDir()
+        var (p, pool) = try project(dir)
+        // The same file on a second track, later on the timeline, straight to the output.
+        let again = p.sources[0]
+        p.tracks.append(Track(name: "B", clips: [Clip(sourceID: again.id, sourceStart: 0, start: Frame(sr / 2), length: again.info.frames - Frame(sr))]))
+        let plain = PlanCompiler.compile(p, pool: pool).render(from: 0, frames: Int(p.length))
+        let bus = try p.addBus(name: "Speech")
+        try p.setTrackRoute(p.tracks[0].id, output: .some(bus.id))
+        // Through the bus without a plugin: the plain mix, bit for bit.
+        #expect(PlanCompiler.compile(p, pool: pool).render(from: 0, frames: Int(p.length)) == plain)
+        p.buses[0].inserts = [Insert(plugin: Self.limiter, name: "AUPeakLimiter")]
+        #expect(p.hasActiveInserts && p.allInserts.count == 1)
+        let host = await InsertHost.make(for: p)
+        let unit = try #require(host.instance(p.buses[0].inserts[0].id))
+        #expect(unit.latency > 0)
+        let plan = PlanCompiler.compile(p, pool: pool, inserts: host)
+        #expect(plan.totalLatency == unit.latency && plan.compensation(bus: false, index: 1) == unit.latency && plan.compensation(bus: false, index: 0) == 0)
+        let wet = plan.render(from: 0, frames: Int(p.length))
+        var best = (lag: 0, c: -Double.infinity)
+        for lag in -64...64 {
+            var c = 0.0
+            for i in stride(from: Int(sr), to: Int(sr) * 2, by: 1) { c += Double(wet[(i + lag) * 2]) * Double(plain[i * 2]) }
+            if c > best.c { best = (lag, c) }
+        }
+        #expect(best.lag == 0, "latency \(unit.latency) frames, best lag \(best.lag)")
+        let a = Array(wet[Int(sr) * 2..<Int(sr) * 4]), b = Array(plain[Int(sr) * 2..<Int(sr) * 4])
+        #expect(db(a, b) < -40, "residual \(db(a, b)) dB")
+        // Saved and opened again, the bus still has its plugin; without one the key isn't written.
+        let back = try JSONDecoder().decode(Project.self, from: try JSONEncoder().encode(p))
+        #expect(back.buses[0].inserts.map(\.name) == ["AUPeakLimiter"])
+        var bare = p
+        bare.buses[0].inserts = []
+        #expect(!String(decoding: try JSONEncoder().encode(bare.buses), as: UTF8.self).contains("inserts"))
+        // The same in blocks, as playback asks.
+        let host2 = await InsertHost.make(for: p)
+        let plan2 = PlanCompiler.compile(p, pool: pool, inserts: host2)
+        var blocks: [Float] = []
+        var at = 0
+        while at < Int(p.length) { let k = min(512, Int(p.length) - at); blocks += plan2.render(from: Frame(at), frames: k); at += k }
+        #expect(db(blocks, wet) < -100, "blocks against one piece: \(db(blocks, wet)) dB")
+    }
+
     @Test("Seeking pre-rolls, and the block size doesn't change the output")
     func seekAndBlocks() async throws {
         let dir = TempDir()

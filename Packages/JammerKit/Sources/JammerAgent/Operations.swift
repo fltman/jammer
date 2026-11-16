@@ -239,19 +239,19 @@ public enum Operations {
               params: [.init("speaker", .string, "The speaker's id as a string (\"0\", \"1\", …) or current name.", required: true),
                        .init("name", .string, "The new name.", required: true)]),
         .init("add_insert", "Add Plugin", "Puts an effect (an Audio Unit or a CLAP plugin) on a track, last in its chain unless position says otherwise; its latency is compensated. Plugins are third-party code; a CLAP plugin runs in a helper process of its own. GET /api/v1/plugins lists what's installed. info has latencyMs; ids has the new insert's id.",
-              params: [.init("track", .string, "Track id.", required: true),
+              params: [.init("track", .string, "The id of the track, or of the bus, the plugin goes on.", required: true),
                        .init("plugin", .string, "Plugin id from GET /api/v1/plugins (e.g. aufx/lmtr/appl) or its exact name.", required: true),
                        .init("position", .number, "Place in the chain, 0 first. Default: last.", range: 0...64),
                        .init("preset", .string, "A factory preset, by name.")]),
         .init("set_insert", "Change Plugin", "Changes a plugin on a track: bypass, a factory preset, or one parameter by identifier (GET …/tracks/{track}/inserts/{insert} lists them with their ranges). A value outside the range fails with reason out_of_range; nothing is clipped. Send several steps to change several parameters at once.",
-              params: [.init("track", .string, "Track id.", required: true),
+              params: [.init("track", .string, "The id of the track or bus the plugin is on.", required: true),
                        .init("insert", .string, "Insert id (or its name when that's unique on the track).", required: true),
                        .init("bypass", .boolean, "True to bypass, false to switch back on."),
                        .init("preset", .string, "A factory preset, by name."),
                        .init("parameter", .string, "Parameter identifier, e.g. global.0, or its exact name."),
                        .init("value", .number, "The parameter's new value, in its unit.")]),
-        .init("remove_insert", "Remove Plugin", "Takes a plugin off a track.",
-              params: [.init("track", .string, "Track id.", required: true),
+        .init("remove_insert", "Remove Plugin", "Takes a plugin off a track or a bus.",
+              params: [.init("track", .string, "The id of the track or bus the plugin is on.", required: true),
                        .init("insert", .string, "Insert id (or its name when that's unique on the track).", required: true)]),
         .init("loudness_preset", "Loudness Preset", "Brings the range (the whole document without a range or selection) to a delivery target in one step. Without `limit`, it is one gain that stops where the true peak would pass the ceiling; info.limitedByPeak is then 1 and integratedAfter shows what was reached. With `limit`, the limiter holds the peaks at the ceiling so the target is reached, and the answer says what that took.",
               params: [.init("preset", .string, "The target.", required: true, options: LoudnessPreset.allCases.map(\.rawValue)), start, end,
@@ -1030,9 +1030,14 @@ extension StepRunner {
     static func applyInsert(_ step: Step, to s: inout EditState) throws -> [String: Double] {
         let p = step.params
         let project = s.project
-        guard let id = UUID(uuidString: p["track"]?.string ?? ""), let t = project.tracks.firstIndex(where: { $0.id == id }) else {
-            throw StepFailure("\(step.op): no track with id \(p["track"]?.string ?? "").", reason: "not_found")
+        // `track` is the id of a track, or of a bus: plugins sit on either.
+        let id = UUID(uuidString: p["track"]?.string ?? "")
+        let t = id.flatMap { id in project.tracks.firstIndex { $0.id == id } }, b = id.flatMap { id in project.buses.firstIndex { $0.id == id } }
+        guard t != nil || b != nil else {
+            throw StepFailure("\(step.op): no track or bus with id \(p["track"]?.string ?? "").", reason: "not_found")
         }
+        let current = t.map { project.tracks[$0].inserts } ?? project.buses[b!].inserts
+        func put(_ list: [Insert], _ s: inout EditState) { if let t { s.project.tracks[t].inserts = list } else if let b { s.project.buses[b].inserts = list } }
         func failure(_ e: Error) -> StepFailure {
             if let e = e as? PluginError { return StepFailure("\(step.op): \(e.localizedDescription)", reason: e.reason) }
             return StepFailure("\(step.op): \(e.localizedDescription)", reason: "plugin_failed")
@@ -1040,7 +1045,7 @@ extension StepRunner {
         func latencyMs(_ i: any InsertUnit) -> Double { (Double(i.latency) / project.sampleRate * 100_000).rounded() / 100 }
         func insertIndex() throws -> Int {
             let key = p["insert"]?.string ?? ""
-            let inserts = project.tracks[t].inserts
+            let inserts = current
             if let u = UUID(uuidString: key), let i = inserts.firstIndex(where: { $0.id == u }) { return i }
             let named = inserts.indices.filter { inserts[$0].name.caseInsensitiveCompare(key) == .orderedSame }
             if named.count == 1 { return named[0] }
@@ -1061,14 +1066,16 @@ extension StepRunner {
                     try unit.loadPreset(preset)
                     insert.state = unit.captureState()
                 }
-                let at = min(project.tracks[t].inserts.count, p["position"]?.double.map { Int($0) } ?? .max)
-                s.project.tracks[t].inserts.insert(insert, at: at)
+                let at = min(current.count, p["position"]?.double.map { Int($0) } ?? .max)
+                var list = current
+                list.insert(insert, at: at)
+                put(list, &s)
                 s.made["insert"] = insert.id.uuidString
                 return ["latencyMs": latencyMs(unit), "position": Double(at)]
             } catch let f as StepFailure { throw f } catch { throw failure(error) }
         case "set_insert":
             let i = try insertIndex()
-            var insert = project.tracks[t].inserts[i]
+            var insert = current[i]
             if let b = p["bypass"], case .bool(let v) = b { insert.bypass = v }
             if p["value"] != nil, p["parameter"] == nil { throw StepFailure("set_insert: value needs parameter.") }
             if p["parameter"] != nil, p["value"] == nil { throw StepFailure("set_insert: parameter needs value.") }
@@ -1082,11 +1089,15 @@ extension StepRunner {
                     info["latencyMs"] = latencyMs(unit)
                 } catch { throw failure(error) }
             }
-            s.project.tracks[t].inserts[i] = insert
+            var list = current
+            list[i] = insert
+            put(list, &s)
             return info
         default:
             let i = try insertIndex()
-            s.project.tracks[t].inserts.remove(at: i)
+            var list = current
+            list.remove(at: i)
+            put(list, &s)
             return [:]
         }
     }

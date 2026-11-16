@@ -49,15 +49,17 @@ enum PluginStateTrust {
     /// A change made in this Jämmer: the settings in `new` that `old` didn't have came out of a
     /// plugin running here (there is no way to hand a plugin's settings in from outside in an edit).
     static func noteMade(from old: Project, to new: Project) {
-        let before = Set(old.tracks.flatMap(\.inserts).compactMap(\.state))
-        allow(new.tracks.flatMap(\.inserts).filter { $0.state.map { !before.contains($0) } ?? false })
+        let before = Set(old.allInserts.compactMap(\.state))
+        allow(new.allInserts.filter { $0.state.map { !before.contains($0) } ?? false })
     }
 }
 
 extension EditorSession {
     /// The plugins of this document whose saved settings haven't been allowed.
     var insertsWithUnknownSettings: [(track: String, insert: Insert)] {
-        project.tracks.flatMap { t in t.inserts.filter { i in i.state.map { !PluginStateTrust.isKnown(i.plugin, $0) } ?? false }.map { (t.name, $0) } }
+        // Plugins on buses bring settings like any other, and are asked about like any other.
+        let strips = project.tracks.map { ($0.name, $0.inserts) } + project.buses.map { ($0.name, $0.inserts) }
+        return strips.flatMap { name, inserts in inserts.filter { i in i.state.map { !PluginStateTrust.isKnown(i.plugin, $0) } ?? false }.map { (name, $0) } }
     }
 
     /// Asks once, when a project that came from somewhere else brings settings for plugins.

@@ -139,6 +139,12 @@ public final class RenderPlan: @unchecked Sendable {
     }
 
     /// Renders a range in blocks, handing each to `body` (offline export, analysis).
+    /// The longest path through the mixer, in frames: what the plugins on the buses add, and what every
+    /// other path is delayed to match. 0 without plugins on buses. The mix itself comes out on the sample.
+    public var totalLatency: Int64 { jm_plan_total_latency(pointer) }
+    /// The delay added to a track's (or a bus's) own way out so that it lines up with the longest path it meets.
+    public func compensation(bus: Bool, index: Int) -> Int64 { jm_plan_compensation(pointer, bus, Int32(index)) }
+
     public func render(_ range: Range<Frame>, blockFrames: Int = 65_536, _ body: (UnsafeBufferPointer<Float>) throws -> Void) rethrows {
         var buffer = [Float](repeating: 0, count: blockFrames * channels)
         var at = range.lowerBound
@@ -164,7 +170,9 @@ public enum PlanCompiler {
         if routed {
             for b in project.buses {
                 let pan = project.channels == 2 ? Mixer.panGains(b.pan) : (1, 1)
-                busIndex[b.id] = jm_plan_add_bus(plan, Float(dbToGain(b.gainDB)), b.isMuted, pan.0, pan.1)
+                let index = jm_plan_add_bus(plan, Float(dbToGain(b.gainDB)), b.isMuted, pan.0, pan.1)
+                busIndex[b.id] = index
+                if let inserts, b.inserts.contains(where: { !$0.bypass }) { inserts.attachChain(for: b, to: plan, index: index) }
             }
             for b in project.buses {
                 guard let from = busIndex[b.id] else { continue }

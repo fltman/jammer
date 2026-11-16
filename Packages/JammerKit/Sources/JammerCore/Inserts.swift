@@ -439,6 +439,15 @@ public protocol ChainProvider: AnyObject {
     /// Sets the track's chain on plan track `index`, if it has one. Returns its latency.
     @discardableResult
     func attachChain(for track: Track, to plan: OpaquePointer, index: Int32) -> Int64?
+    /// The same for a bus's plugins on plan bus `index`.
+    @discardableResult
+    func attachChain(for bus: Bus, to plan: OpaquePointer, index: Int32) -> Int64?
+}
+
+public extension ChainProvider {
+    /// A provider that knows nothing of buses puts no plugins on them.
+    @discardableResult
+    func attachChain(for bus: Bus, to plan: OpaquePointer, index: Int32) -> Int64? { nil }
 }
 
 /// The running instances for a project's inserts and the chains built from them. One
@@ -477,7 +486,7 @@ public final class InsertHost: ChainProvider, @unchecked Sendable {
     /// `make(for:)` on this thread (background only).
     public static func makeBlocking(for project: Project, outOfProcess: Bool = false) -> InsertHost {
         let host = InsertHost(channels: project.channels, sampleRate: project.sampleRate, outOfProcess: outOfProcess)
-        for insert in project.tracks.flatMap(\.inserts) where !insert.bypass {
+        for insert in project.allInserts where !insert.bypass {
             do {
                 let i = try InsertUnits.makeBlocking(insert.plugin, channels: project.channels, sampleRate: project.sampleRate,
                                                      state: insert.state, outOfProcess: outOfProcess)
@@ -494,7 +503,7 @@ public final class InsertHost: ChainProvider, @unchecked Sendable {
     @discardableResult
     public func sync(_ project: Project) async -> Bool {
         var changed = false
-        let wanted = project.tracks.flatMap(\.inserts)
+        let wanted = project.allInserts
         let ids = Set(wanted.map(\.id))
         lock.withLock {
             let before = entries.count + failed.count
@@ -554,7 +563,7 @@ public final class InsertHost: ChainProvider, @unchecked Sendable {
 
     /// True when every insert in `project` is running or has failed (nothing is pending).
     public func isReady(for project: Project) -> Bool {
-        lock.withLock { project.tracks.flatMap(\.inserts).allSatisfy { entries[$0.id] != nil || failed[$0.id] != nil } }
+        lock.withLock { project.allInserts.allSatisfy { entries[$0.id] != nil || failed[$0.id] != nil } }
     }
 
     /// Notes settings the unit already has (it changed them itself, e.g. in its window),
@@ -566,14 +575,25 @@ public final class InsertHost: ChainProvider, @unchecked Sendable {
     @discardableResult
     public func attachChain(for track: Track, to plan: OpaquePointer, index: Int32) -> Int64? {
         lock.withLock {
-            guard let chain = chainLocked(for: track) else { return nil }
+            guard let chain = chainLocked(for: track.id, inserts: track.inserts) else { return nil }
             jm_plan_set_chain(plan, index, chain)
             return jm_chain_latency(chain)
         }
     }
 
-    private func chainLocked(for track: Track) -> OpaquePointer? {
+    @discardableResult
+    public func attachChain(for bus: Bus, to plan: OpaquePointer, index: Int32) -> Int64? {
+        lock.withLock {
+            guard let chain = chainLocked(for: bus.id, inserts: bus.inserts) else { return nil }
+            jm_plan_set_bus_chain(plan, index, chain)
+            return jm_chain_latency(chain)
+        }
+    }
+
+    /// The chain of a strip (a track or a bus, by its id).
+    private func chainLocked(for strip: UUID, inserts: [Insert]) -> OpaquePointer? {
         do {
+            let track = (id: strip, inserts: inserts)
             let active = track.inserts.filter { !$0.bypass }.compactMap { i in entries[i.id].map { (i.id, $0.instance) } }
             guard !active.isEmpty else {
                 if let old = chains.removeValue(forKey: track.id) { jm_chain_release(old.chain) }
@@ -615,5 +635,5 @@ extension PlanCompiler {
 
 extension Project {
     /// Any track has an insert that isn't bypassed.
-    public var hasActiveInserts: Bool { tracks.contains { $0.inserts.contains { !$0.bypass } } }
+    public var hasActiveInserts: Bool { allInserts.contains { !$0.bypass } }
 }
