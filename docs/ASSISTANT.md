@@ -53,6 +53,21 @@ qwen3:8b in Ollama, same day, same code: 18/18 on the standard set, 19/24 and 20
 
 A rule from this: the three sets are run (`scripts/eval-assistant.sh`) whenever an action is added or an action's description changes, not only when the assistant's own code does.
 
+## Which set is unseen
+
+| Set | Written | Status |
+|---|---|---|
+| Standard (18 requests) | 2026-11-15, 4 added 2026-11-16 | Regression set: the model's instructions and the clean-up rules were shaped on it |
+| Hold-out 1 (24) | 2026-11-15 | Regression set since the changes it led to |
+| Hold-out 2 (23) | 2026-11-15 | Regression set since 2026-11-16 (two pause rules came from it) |
+| Hold-out 3 (29) | 2026-11-16, written without looking at any model's answers | **Unseen.** Run once as a baseline; nothing has been changed because of it |
+
+Hold-out 3, baseline 2026-11-16, on-device: 18/29 (task 14/22, multi 1/2, clarify 2/2, refuse 1/2, answer 0/1), no figure of the model's own, 0 plans that would have changed the document without a yes. It has the four newer actions that the on-device model only gets when the request names them (`duck` and `detect_tempo` right; `level_speakers` and `loudness_preset` wrong), and a six-step request.
+
+**The answer limit and a long plan.** The six-step request ("fade in…, lower the volume by 3 dB, add a marker…, add a marker…, fade out… and normalize to −16 LUFS") comes back whole: six steps in 359 tokens, the same with the limit at 700 and at 3 000 (a six-step plan written by hand in the model's form is 217 tokens). So the limit doesn't cut real plans. Two of the six steps are lost for another reason: the model left out `db` for the level change and wrote `target = "level=-16"` for the normalization, so Jämmer shows four steps and says "Left out: gain (gain needs "db"); normalize (normalize needs "level")". With several tasks in one sentence the on-device model is still the weaker choice.
+
+When a change is made because of something set 3 showed, it becomes a regression set and a new one is written first.
+
 ## A change nobody asked for waits for a yes
 
 A plan that removes or replaces audio has always been shown first. From 2026-11-16 so is any step that changes the document when the request doesn't name its action (`AssistantPlan.unasked`, `AssistantCatalog.spokenAs`: the Swedish and English words for each action). "Write a poem about the sea" answered with `set_tempo` is shown with a note that it wasn't asked for, and nothing is done until Run. Measurements, and moving the playhead or the selection, change nothing and run as before. An action without words in the table always waits. The standard set has three requests that ask for nothing Jämmer does (a poem, a joke, the time), and counts plans that would have changed the document without a yes: 0 for every planner measured.

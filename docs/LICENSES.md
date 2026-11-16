@@ -72,3 +72,21 @@ When any CC-BY-4.0 model is installed, About › Acknowledgements lists: NVIDIA 
 | Component | Licence (to verify) | Plan |
 |---|---|---|
 | Sparkle | MIT | Updates |
+
+## Phase 3: read before use (2026-11-16), nothing of this is in the app yet
+
+Read at the source by a research pass on 2026-11-16; each entry is finished (version, notice text in the bundle) when the code comes in. "Not verified" is said where it applies.
+
+| Item | Licence, as read | Verdict | To record or decide when used |
+|---|---|---|---|
+| r8brain-free-src 7.7 (Aleksey Vaneev), github.com/avaneev/r8brain-free-src | MIT. The free library, not the commercial r8brain PRO. Default FFT is Ooura's (free use with a reference to the package); PFFFT (FFTPACK/UCAR BSD-style) and Intel IPP are optional back-ends | OK, build from source with the Ooura back-end; not IPP | MIT notice, Ooura notice, and the credit the author asks for: "Sample rate converter designed by Aleksey Vaneev of Voxengo" |
+| ARA 2: ARA_API and ARA_Library (Celemony) | Apache-2.0. "ARA Audio Random Access" is Celemony's mark; no logo rules found | OK with conditions | Apache text and Celemony's notice; a tagged ARA release; plain words ("supports ARA 2 plug-ins"), no logo; JUCE_ARA not used; ARA through VST 3 needs the VST 3 SDK reviewed first |
+| AAF SDK (AMWA) | AAF SDK Public Source License 2.0: custom, with a duty to deliver modifications within 60 days, an indemnity, naming rules, and no licence to Microsoft's structured-storage rights | Not used | The plan stays: an own reader |
+| Own AAF reader | The container (MS-CFB) is under Microsoft's Open Specification Promise. AMWA's Implementer's Agreement 2.0 (signed on paper, no fee) gives a reciprocal patent licence; it isn't a condition for implementing | OK with conditions; **a decision for Anders: sign the Implementer's Agreement or not** | Written from the specifications with no SDK or LibAAF code; "imports AAF", never "AAF compliant", no logo; AMWA's trademark line |
+| LibAAF (agfline) | GPL-2.0-or-later | **Not used**, and no code read from it | |
+| OpenTimelineIO C++ core (ASWF) | Apache-2.0 with a NOTICE (Pixar); Imath BSD-3-Clause, rapidjson MIT (its `bin/jsonchecker` excluded), minizip-ng zlib. The core reads `.otio`, `.otioz`, `.otiod` only | OK with conditions, or an own reader of the JSON | Apache text, the NOTICE, the three dependency notices |
+| DAWproject (Bitwig) | MIT, covering the schema and the Java reference library | OK; an own implementation of the XML-in-ZIP format | MIT notice if the XSD is bundled |
+| DDP 2.0 (DCA) | Proprietary specification, given only after a signed agreement (free, no royalty); "DDP" is DCA's registered mark; the agreement requires a notice and DCA's logo and says nothing about source code | **A decision for Anders before anything is built**: sign and ask DCA in writing about MIT source, or leave DDP out | The agreement's notice if signed |
+| CMX3600 EDL | No licence found for the format (SMPTE 258M is the paid specification text) | OK, own parser and writer | Descriptive use of the name |
+| Dither | TPDF and noise shaping from the published AES papers (Lipshitz, Vanderkooy, Wannamaker 1991; Wannamaker 1992): no licence found; the papers were not read (paywalled). UV22, POW-r and MBIT+ are others' products | OK | Cite the paper for any curve used; none of the product names, none of their coefficients |
+| True peak (ITU-R BS.1770-5) | A free-to-read Recommendation under ITU's patent policy; ITU's patent database was not searched | OK | No ITU text or emblem reproduced |

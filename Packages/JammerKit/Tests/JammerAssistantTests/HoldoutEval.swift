@@ -21,7 +21,8 @@ struct HoldoutEval {
 
     @Test("Hold-out set, on-device (JAMMER_HOLDOUT=1 or 2)")
     func run() async throws {
-        let set = ProcessInfo.processInfo.environment["JAMMER_HOLDOUT"] == "2" ? HoldoutSet2.cases : HoldoutSet1.cases
+        let which = ProcessInfo.processInfo.environment["JAMMER_HOLDOUT"]
+        let set = which == "3" ? HoldoutSet3.cases : which == "2" ? HoldoutSet2.cases : HoldoutSet1.cases
         let info = AudioFileInfo(container: .wav, sampleFormat: .float32, bigEndian: false, channels: 2, sampleRate: 48_000,
                                  channelMask: nil, dataOffset: 0, frames: 48_000 * 60, chunks: [], bext: nil, ixml: nil, markers: [])
         var p = Project(source: SourceRef(name: "Anna", path: "/dev/null", info: info))
@@ -31,7 +32,7 @@ struct HoldoutEval {
         let tracks = p.tracks.map(\.id.uuidString)
         let context = AssistantContext(project: p, selection: nil, playhead: 0)
         let actions = AssistantCatalog.actions
-        var right = 0, valuesRight = 0, valuesTotal = 0, invented = 0, wrongLanguage = 0
+        var right = 0, valuesRight = 0, valuesTotal = 0, invented = 0, wrongLanguage = 0, unaskedRuns = 0
         var byKind: [String: (Int, Int)] = [:]
         var rows: [String] = []
         for c in set {
@@ -41,6 +42,9 @@ struct HoldoutEval {
             let got = plan.steps.map(\.op)
             let ok = failure == nil && got == c.ops
             let faults = ReplyGuard.faults(plan, goal: c.goal, context: context)
+            if !plan.steps.allSatisfy({ AssistantCatalog.changesNothing.contains($0.op) }), !plan.needsConfirmation(goal: c.goal, actions: actions), !c.ops.contains(where: { op in plan.steps.contains { $0.op == op } }) {
+                unaskedRuns += 1; print("CHANGED WITHOUT ASKING: \(c.goal) → \(got)")
+            }
             if faults.inventedFigure { invented += 1; print("FIGURE OF ITS OWN: \(c.goal) → \(plan.reply)") }
             if faults.wrongLanguage { wrongLanguage += 1; print("OTHER LANGUAGE: \(c.goal) → \(plan.reply)") }
             var notes: [String] = []
@@ -59,7 +63,7 @@ struct HoldoutEval {
             rows.append("| \(c.kind) | \(c.goal) | \(c.ops.isEmpty ? "(no steps)" : c.ops.joined(separator: ", ")) | \(planned) | \(ok ? (notes.isEmpty ? "✓" : "ops ✓, " + notes.joined(separator: " ")) : "✗") |")
         }
         let kinds = ["task", "multi", "clarify", "refuse", "answer"].compactMap { k in byKind[k].map { "\(k) \($0.0)/\($0.1)" } }.joined(separator: ", ")
-        let summary = "Right actions: \(right)/\(set.count) (\(kinds)). Right values: \(valuesRight)/\(valuesTotal). Replies with a figure of the model's own (struck before showing): \(invented). Replies in another language than the request (replaced): \(wrongLanguage)."
+        let summary = "Right actions: \(right)/\(set.count) (\(kinds)). Right values: \(valuesRight)/\(valuesTotal). Replies with a figure of the model's own (struck before showing): \(invented). Replies in another language than the request (replaced): \(wrongLanguage). Plans with none of the expected actions that would have changed the document without a yes: \(unaskedRuns)."
         let table = "| Kind | Request | Expected | Planned | Result |\n|---|---|---|---|---|\n" + rows.joined(separator: "\n") + "\n\n" + summary + "\n"
         print(table)
         if let path = ProcessInfo.processInfo.environment["JAMMER_EVAL_REPORT"] { try table.write(toFile: path, atomically: true, encoding: .utf8) }
