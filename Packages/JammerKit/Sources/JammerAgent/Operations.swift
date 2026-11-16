@@ -88,12 +88,14 @@ public struct OperationSpec: Sendable, Identifiable {
         // Settings that depend on a sort are published per sort on the property that carries the sort
         // (SIBLINGS.md §3): a closed schema each, with ranges and defaults. An extension key, not oneOf,
         // which tool-calling services reject; it is not part of what a model is given as a tool.
-        if params.contains(where: { $0.name == "kind" }), params.contains(where: { $0.name == "humFrequency" }), var kind = props["kind"] as? [String: Any] {
-            kind["x-byType"] = Operations.restoreByType
-            props["kind"] = kind
-        }
         // Accepted on everything and used for nothing: where a model says why it makes the call.
         props[AgentAPI.rationale] = ["type": "string", "description": "Optional: why you are making this call. Accepted and ignored."]
+        // The table sits on the schema whose properties depend on the sort (here: this one, the settings
+        // are beside `kind`), and `x-byTypeKey` names the property that chooses.
+        if params.contains(where: { $0.name == "kind" }), params.contains(where: { $0.name == "humFrequency" }) {
+            return ["type": "object", "properties": props, "required": allParams.filter(\.required).map(\.name), "additionalProperties": false,
+                    "x-byTypeKey": "kind", "x-byType": Operations.restoreByType]
+        }
         return ["type": "object", "properties": props, "required": allParams.filter(\.required).map(\.name), "additionalProperties": false]
     }
 
@@ -347,12 +349,13 @@ public enum Operations {
     /// Work that has an endpoint of its own (jobs, analysis, listening), described the same
     /// way so agents and assistants see one list. Not valid in `steps`.
     /// Computed: the kinds depend on what the app registered (reverb reduction can be left out of a build).
-    /// What each repair takes besides where and on which tracks: `amount` for all of them, and the one
-    /// or two that belong to that repair alone (the parser refuses them with any other kind).
+    /// The settings that belong to one repair alone (the parser refuses them with any other kind). A
+    /// repair that has none is there with an empty, closed schema. What every repair takes (`amount`,
+    /// the range, the tracks) is in the ordinary schema.
     static var restoreByType: [String: Any] {
         var out: [String: Any] = [:]
         for kind in Restoration.availableKinds {
-            var props: [String: Any] = ["amount": ["type": "number", "minimum": 0, "maximum": 1, "default": Double(kind.defaultAmount)] as [String: Any]]
+            var props: [String: Any] = [:]
             if kind == .dehum { props["humFrequency"] = ["type": "number", "minimum": 20, "maximum": 400, "description": "Without it 50 or 60 Hz is found."] as [String: Any] }
             if kind == .declick { props["sensitivity"] = ["type": "number", "minimum": 0.1, "maximum": 10, "default": 1] as [String: Any] }
             out[kind.rawValue] = ["type": "object", "properties": props, "additionalProperties": false] as [String: Any]

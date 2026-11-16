@@ -68,14 +68,23 @@ struct UnknownParameterTests {
     func byType() throws {
         for name in ["restore", "restore_preview"] {
             let spec = try #require(Operations.endpoints.first { $0.name == name })
-            let kind = try #require((spec.schema["properties"] as? [String: Any])?["kind"] as? [String: Any])
-            let table = try #require(kind["x-byType"] as? [String: [String: Any]])
+            // The table is on the schema whose properties depend on the sort, with the chooser named beside it.
+            let schema = spec.schema
+            #expect(schema["x-byTypeKey"] as? String == "kind")
+            let all = try #require(schema["properties"] as? [String: Any])
+            #expect(all["kind"] != nil && (all["kind"] as? [String: Any])?["x-byType"] == nil)
+            let table = try #require(schema["x-byType"] as? [String: [String: Any]])
             #expect(Set(table.keys) == Set(Restoration.availableKinds.map(\.rawValue)))
-            for (k, schema) in table {
-                #expect(schema["additionalProperties"] as? Bool == false, "\(k)")
-                let props = try #require(schema["properties"] as? [String: [String: Any]])
-                #expect(props["amount"]?["maximum"] as? Int == 1)
-                #expect((props["humFrequency"] != nil) == (k == "dehum") && (props["sensitivity"] != nil) == (k == "declick"), "\(k)")
+            for (k, sort) in table {
+                #expect(sort["additionalProperties"] as? Bool == false && sort["type"] as? String == "object", "\(k)")
+                let props = try #require(sort["properties"] as? [String: [String: Any]])
+                // Only what depends on the sort; each of those is also an ordinary property of the operation.
+                #expect(Set(props.keys) == (k == "dehum" ? ["humFrequency"] : k == "declick" ? ["sensitivity"] : []), "\(k): \(props.keys)")
+                for name in props.keys { #expect(all[name] != nil && props[name]?["minimum"] != nil && props[name]?["maximum"] != nil) }
+            }
+            // No other operation has a table, and none has one without its key.
+            for other in Operations.all + Operations.endpoints where !["restore", "restore_preview"].contains(other.name) {
+                #expect(other.schema["x-byType"] == nil && other.schema["x-byTypeKey"] == nil, "\(other.name)")
             }
         }
         // And the parser holds to it: a setting of another kind is refused.

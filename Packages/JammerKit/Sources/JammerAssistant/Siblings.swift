@@ -53,8 +53,21 @@ public enum SiblingDirectory {
         ops.compactMap { op in
             guard let name = op["name"] as? String, op["paid"] as? Bool != true else { return nil }
             let schema = op["params"] as? [String: Any] ?? [:]
-            let props = schema["properties"] as? [String: [String: Any]] ?? [:]
+            var props = schema["properties"] as? [String: [String: Any]] ?? [:]
             let required = Set(schema["required"] as? [String] ?? [])
+            // Settings per sort: the table is on this schema, and `x-byTypeKey` names the property that
+            // chooses. Their names are parameters like the others, each valid with its own sort only.
+            let table = schema["x-byType"] as? [String: [String: Any]] ?? [:]
+            let chooser = schema["x-byTypeKey"] as? String
+            var perSort: [String: Set<String>] = [:]
+            var unread = Set<String>()
+            for (sort, s) in table {
+                let own = s["properties"] as? [String: [String: Any]] ?? [:]
+                perSort[sort] = Set(own.keys)
+                for (k, v) in own {
+                    if chooser != nil, props[chooser!] != nil { if props[k] == nil { props[k] = v } } else if props[k] == nil { unread.insert(k) }
+                }
+            }
             let params = props.keys.sorted().compactMap { key -> OperationSpec.Param? in
                 let p = props[key]!
                 // The document id is filled in by Jämmer (the sibling's frontmost document).
@@ -72,8 +85,11 @@ public enum SiblingDirectory {
                 return param
             }
             let call = op["call"] as? [String: String]
-            return AssistantAction(name: name, description: op["description"] as? String ?? "", params: params,
-                                   kind: .sibling(slug: slug, method: call?["method"], path: call?["path"]), destructive: true)
+            var action = AssistantAction(name: name, description: op["description"] as? String ?? "", params: params,
+                                         kind: .sibling(slug: slug, method: call?["method"], path: call?["path"]), destructive: true)
+            if let chooser, props[chooser] != nil, !perSort.isEmpty { action.byType = .init(key: chooser, names: perSort) }
+            action.uncheckable = unread
+            return action
         }
     }
 

@@ -71,6 +71,34 @@ struct SiblingToolTests {
         #expect(checked.dropped.count == 2 && checked.dropped[0].contains("has no parameter \"colour\"") && checked.dropped[1].contains("has no parameter \"bitDepth\""), "\(checked.dropped)")
     }
 
+    @Test("A sibling's settings per sort: read by x-byTypeKey, each name only with its own sort; a table without the key isn't guessed at")
+    func byType() {
+        let ops: [[String: Any]] = [
+            ["name": "add_adjustment", "description": "Adjusts.", "paid": false,
+             "params": ["type": "object", "additionalProperties": false, "required": ["type"], "x-byTypeKey": "type",
+                        "properties": ["type": ["type": "string", "enum": ["levels", "hue"]], "opacity": ["type": "number"]],
+                        "x-byType": ["levels": ["type": "object", "additionalProperties": false, "properties": ["black": ["type": "number", "minimum": 0, "maximum": 1]]],
+                                     "hue": ["type": "object", "additionalProperties": false, "properties": ["degrees": ["type": "number"]]]]] as [String: Any]],
+            ["name": "apply_filter", "description": "Filters.", "paid": false,
+             "params": ["type": "object", "additionalProperties": false, "properties": ["type": ["type": "string"]],
+                        "x-byType": ["blur": ["type": "object", "additionalProperties": false, "properties": ["radius": ["type": "number"]]]]] as [String: Any]],
+        ]
+        let actions = SiblingDirectory.actions(from: ops, slug: "glimmer")
+        #expect(actions[0].params.map(\.name).sorted() == ["black", "degrees", "opacity", "type"] && actions[0].byType?.key == "type")
+        #expect(actions[1].params.map(\.name) == ["type"] && actions[1].byType == nil && actions[1].uncheckable == ["radius"])
+        let plan = AssistantPlan(reply: "", steps: [
+            PlannedStep(op: "add_adjustment", params: ["type": .string("levels"), "black": .number(0.1), "opacity": .number(0.5)]),
+            PlannedStep(op: "add_adjustment", params: ["type": .string("hue"), "black": .number(0.1)]),
+            PlannedStep(op: "add_adjustment", params: ["type": .string("levels"), "gamma": .number(2)]),
+            PlannedStep(op: "apply_filter", params: ["type": .string("blur"), "radius": .number(3)]),
+            PlannedStep(op: "apply_filter", params: ["type": .string("blur")]),
+        ])
+        let checked = PlanParser.validate(plan, actions: actions)
+        #expect(checked.steps.map(\.op) == ["add_adjustment", "apply_filter"] && checked.steps[0].params["black"] == .number(0.1))
+        #expect(checked.dropped.count == 3 && checked.dropped[0].contains("doesn't go with type hue") && checked.dropped[1].contains("has no parameter \"gamma\"")
+                && checked.dropped[2].contains("can't be checked"), "\(checked.dropped)")
+    }
+
     @Test("Calls go to the frontmost document: endpoints by call, steps through /steps")
     func calls() async throws {
         let s = session

@@ -21,6 +21,16 @@ public struct AssistantAction: Sendable {
     public var params: [OperationSpec.Param]
     public var kind: Kind
     public var destructive: Bool
+    /// Settings that belong to one sort only (a sibling's `x-byType`, SIBLINGS.md §3): the parameter
+    /// that chooses the sort, and for each of its values the names that go with it.
+    public struct ByType: Sendable, Equatable {
+        public var key: String
+        public var names: [String: Set<String>]
+    }
+    public var byType: ByType?
+    /// Names from an `x-byType` table that had no `x-byTypeKey`: which sort they go with can't be read,
+    /// so they can't be checked, and Jämmer doesn't send them on a guess.
+    public var uncheckable: Set<String> = []
 
     /// The first sentence of the description, for the compact catalogue.
     var short: String {
@@ -594,6 +604,15 @@ public enum PlanParser {
                 do { try StepRunner.validate(Step(op: s.op, params: s.params)) } catch { out.dropped.append("\(s.op) (\(error.localizedDescription))"); continue }
             } else if let missing = a.params.first(where: { $0.required && s.params[$0.name] == nil }) {
                 out.dropped.append("\(s.op) (needs \(missing.name))")
+                continue
+            } else if let unread = s.params.keys.sorted().first(where: { a.uncheckable.contains($0) }) {
+                out.dropped.append("\(s.op) (\"\(unread)\" depends on a sort that its schema doesn't name, so it can't be checked and wasn't sent)")
+                continue
+            } else if let table = a.byType, let misplaced = s.params.keys.sorted().first(where: { name in
+                table.names.values.contains { $0.contains(name) } && !(s.params[table.key]?.string.flatMap { table.names[$0] }?.contains(name) ?? false)
+            }) {
+                let sort = s.params[table.key]?.string
+                out.dropped.append("\(s.op) (\"\(misplaced)\" doesn't go with \(sort.map { "\(table.key) \($0)" } ?? "no \(table.key)"))")
                 continue
             } else if let strange = s.params.keys.sorted().first(where: { name in name != AgentAPI.rationale && !a.params.contains { $0.name == name } }) {
                 // An endpoint of ours, or a sibling's operation: its schema is closed. A name it doesn't
