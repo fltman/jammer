@@ -18,4 +18,15 @@ for feature, pairs in json.load(open(os.path.join(root, "Config/site-features.js
         new = text.replace(other, want, 1)
         if check: stale.append(p["file"])
         else: open(path, "w").write(new)
+# The package manifest carries the switches it acts on as text (see the comment there): Xcode only
+# evaluates a manifest again when its text changes.
+manifest = os.path.join(root, "Packages/JammerKit/Package.swift")
+text = open(manifest).read()
+m = re.search(r'^let releaseFeatures: Set<String> = \[(.*?)\] // generated: (.*)$', text, re.M)
+if not m: sys.exit("apply-features: the generated releaseFeatures line isn't in Package.swift.")
+names = [n.strip().replace("JAMMER_", "") for n in m.group(2).split(",")]
+want = ", ".join('"%s"' % n for n in names if flags.get(n) == "YES")
+if m.group(1) != want:
+    if check: stale.append("Packages/JammerKit/Package.swift")
+    else: open(manifest, "w").write(text[:m.start(1)] + want + text[m.end(1):])
 if stale: sys.exit("The manual is out of step with Config/Features.xcconfig: run scripts/export-agents-guide.sh (" + ", ".join(sorted(set(stale))) + ")")

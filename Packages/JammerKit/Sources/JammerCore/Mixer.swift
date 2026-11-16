@@ -3,6 +3,21 @@ import Foundation
 /// A bus: tracks (and other buses) routed to it are summed, given the bus's gain and pan, and passed on
 /// to another bus or to the output. A project without buses, with every track unpanned and going to the
 /// output, is played by exactly the code that played it before there was a mixer.
+/// A copy of a strip's signal sent to a bus (a reverb, a headphone mix, a parallel compressor).
+public struct Send: Codable, Hashable, Sendable {
+    /// The bus it goes to.
+    public var to: UUID
+    public var gainDB: Double
+    /// Before the strip's fader and pan (it then doesn't follow the fader); default after them.
+    public var pre: Bool
+
+    public init(to: UUID, gainDB: Double = 0, pre: Bool = false) {
+        self.to = to
+        self.gainDB = gainDB
+        self.pre = pre
+    }
+}
+
 public struct Bus: Codable, Hashable, Sendable, Identifiable {
     public var id: UUID
     public var name: String
@@ -12,19 +27,34 @@ public struct Bus: Codable, Hashable, Sendable, Identifiable {
     public var isMuted: Bool
     /// The bus this one feeds; nil: the output.
     public var output: UUID?
+    public var sends: [Send] = []
 
-    public init(id: UUID = UUID(), name: String, gainDB: Double = 0, pan: Double = 0, isMuted: Bool = false, output: UUID? = nil) {
+    public init(id: UUID = UUID(), name: String, gainDB: Double = 0, pan: Double = 0, isMuted: Bool = false, output: UUID? = nil, sends: [Send] = []) {
         self.id = id
         self.name = name
         self.gainDB = gainDB
         self.pan = pan
         self.isMuted = isMuted
         self.output = output
+        self.sends = sends
+    }
+
+    private enum CodingKeys: String, CodingKey { case id, name, gainDB, pan, isMuted, output, sends }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        name = try c.decode(String.self, forKey: .name)
+        gainDB = try c.decodeIfPresent(Double.self, forKey: .gainDB) ?? 0
+        pan = try c.decodeIfPresent(Double.self, forKey: .pan) ?? 0
+        isMuted = try c.decodeIfPresent(Bool.self, forKey: .isMuted) ?? false
+        output = try c.decodeIfPresent(UUID.self, forKey: .output)
+        sends = try c.decodeIfPresent([Send].self, forKey: .sends) ?? []
     }
 }
 
 public enum Mixer {
     public static let maxBuses = 64
+    public static let maxSends = 16
     public static let gainRange = -96.0...24.0
     public static let panRange = -1.0...1.0
 
@@ -40,7 +70,7 @@ public enum Mixer {
     }
 
     public enum Failure: Error, LocalizedError, Equatable {
-        case noBus(String), loop(String), tooMany, inUse(String, Int), mono, badValue(String)
+        case noBus(String), loop(String), tooMany, inUse(String, Int), mono, badValue(String), noStrip(String), noSend(String, String), tooManySends(String)
 
         public var reason: String {
             switch self {
@@ -49,6 +79,8 @@ public enum Mixer {
             case .tooMany: "too_many"
             case .inUse: "in_use"
             case .mono: "needs_stereo"
+            case .noStrip, .noSend: "not_found"
+            case .tooManySends: "too_many"
             case .badValue: "bad_request"
             }
         }
@@ -59,6 +91,9 @@ public enum Mixer {
             case .tooMany: "a document can have \(Mixer.maxBuses) buses at most."
             case .inUse(let name, let n): "\(n) strip\(n == 1 ? " is" : "s are") routed to \(name). Say where they should go instead with reroute (a bus id, or \"master\"), or route them elsewhere first."
             case .mono: "pan needs a stereo document; this one is mono."
+            case .noStrip(let id): "there is no track or bus with id \(id)."
+            case .noSend(let from, let to): "\(from) has no send to \(to)."
+            case .tooManySends(let name): "\(name) already has \(Mixer.maxSends) sends, which is the most a strip can have."
             case .badValue(let m): m
             }
         }
@@ -68,7 +103,7 @@ public enum Mixer {
 extension Project {
     /// True when the project uses anything of the mixer. Such a project is saved as format 2, which a
     /// Jämmer from before the mixer refuses to open instead of playing every track straight out.
-    public var usesMixer: Bool { !buses.isEmpty || tracks.contains { $0.pan != 0 || $0.output != nil } }
+    public var usesMixer: Bool { !buses.isEmpty || tracks.contains { $0.pan != 0 || $0.output != nil || !$0.sends.isEmpty } }
 
     public func bus(_ id: UUID) -> Bus? { buses.first { $0.id == id } }
 
@@ -77,19 +112,47 @@ extension Project {
     /// The pan and the bus still apply afterwards, to whatever the track then plays.
     public mutating func withoutMixer() {
         buses = []
-        for t in tracks.indices { tracks[t].pan = 0; tracks[t].output = nil }
+        for t in tracks.indices { tracks[t].pan = 0; tracks[t].output = nil; tracks[t].sends = [] }
     }
 
-    /// Whether routing `bus` to `output` would make a loop (`output` reaches `bus` again).
+    /// Whether sending `bus` to `output`, by its output or by a send, would make a loop: whether
+    /// `output` reaches `bus` again through the outputs and sends of the buses on the way.
     func loops(bus: UUID, into output: UUID?) -> Bool {
-        var at = output
-        var steps = 0
-        while let id = at, steps <= buses.count {
+        guard let start = output else { return false }
+        var seen = Set<UUID>(), queue = [start]
+        while let id = queue.popLast() {
             if id == bus { return true }
-            at = self.bus(id)?.output
-            steps += 1
+            guard seen.insert(id).inserted, let b = self.bus(id) else { continue }
+            if let o = b.output { queue.append(o) }
+            queue.append(contentsOf: b.sends.map(\.to))
         }
-        return steps > buses.count
+        return false
+    }
+
+    /// Sets, changes or removes the send from a track or a bus to a bus. One send per pair.
+    public mutating func setSend(from: UUID, to: UUID, gainDB: Double? = nil, pre: Bool? = nil, remove: Bool = false) throws {
+        guard let target = bus(to) else { throw Mixer.Failure.noBus(to.uuidString) }
+        if let g = gainDB, !Mixer.gainRange.contains(g) { throw Mixer.Failure.badValue("gainDB must be −96 to 24.") }
+        func change(_ sends: inout [Send], name: String) throws {
+            if remove {
+                guard sends.contains(where: { $0.to == to }) else { throw Mixer.Failure.noSend(name, target.name) }
+                sends.removeAll { $0.to == to }
+            } else if let i = sends.firstIndex(where: { $0.to == to }) {
+                if let gainDB { sends[i].gainDB = gainDB }
+                if let pre { sends[i].pre = pre }
+            } else {
+                guard sends.count < Mixer.maxSends else { throw Mixer.Failure.tooManySends(name) }
+                sends.append(Send(to: to, gainDB: gainDB ?? 0, pre: pre ?? false))
+            }
+        }
+        if let t = tracks.firstIndex(where: { $0.id == from }) {
+            try change(&tracks[t].sends, name: tracks[t].name)
+        } else if let b = buses.firstIndex(where: { $0.id == from }) {
+            guard remove || (from != to && !loops(bus: from, into: to)) else { throw Mixer.Failure.loop(buses[b].name) }
+            try change(&buses[b].sends, name: buses[b].name)
+        } else {
+            throw Mixer.Failure.noStrip(from.uuidString)
+        }
     }
 
     @discardableResult
@@ -144,6 +207,9 @@ extension Project {
             for t in tracks.indices where tracks[t].output == id { tracks[t].output = reroute }
             for o in buses.indices where buses[o].output == id { buses[o].output = reroute }
         }
+        // Sends to a bus that is gone go with it.
+        for t in tracks.indices { tracks[t].sends.removeAll { $0.to == id } }
+        for o in buses.indices { buses[o].sends.removeAll { $0.to == id } }
         buses.removeAll { $0.id == id }
     }
 

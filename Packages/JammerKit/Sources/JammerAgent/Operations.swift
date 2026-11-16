@@ -218,6 +218,12 @@ public enum Operations {
                        .init("pan", .number, "−1 (left) to 1 (right), 0 the centre. Stereo documents only.", range: -1...1),
                        .init("muted", .boolean, "True to mute everything that goes through the bus."),
                        .init("output", .string, "The id of the bus this one feeds, or \"master\" for the output.")]),
+        .init("set_send", "Set Send", "Sends a copy of a track or a bus to a bus, at a level of its own: for a shared reverb, a parallel compressor, a headphone mix. One send per pair; giving it again changes it, and `remove` takes it away. After the fader by default (the copy follows the strip's level and pan); with `pre` it is taken before them. A send that would lead a bus back into itself is refused (reason routing_loop).",
+              params: [.init("from", .string, "The id of the track or bus the copy is taken from.", required: true),
+                       .init("to", .string, "The id of the bus it goes to.", required: true),
+                       .init("gainDB", .number, "The send's level in dB. Default 0 for a new send.", range: -96...24),
+                       .init("pre", .boolean, "True: before the fader and pan. Default false."),
+                       .init("remove", .boolean, "True takes the send away.")]),
         .init("remove_bus", "Remove Bus", "Takes a bus away. Refused while tracks or buses are routed to it (reason in_use), unless `reroute` says where they go instead.",
               params: [.init("bus", .string, "Bus id.", required: true),
                        .init("reroute", .string, "Where what was routed to the bus goes: a bus id, or \"master\".")]),
@@ -794,6 +800,15 @@ public enum StepRunner {
             if let m = p["muted"], case .bool(let v) = m { muted = v }
             do { try s.project.setBus(id, name: p["name"]?.string, gainDB: p["gainDB"]?.double, pan: p["pan"]?.double, muted: muted, output: try route(p["output"], "set_bus")) }
             catch let e as Mixer.Failure { throw StepFailure("set_bus: " + (e.errorDescription ?? ""), reason: e.reason) }
+        case "set_send":
+            guard let from = UUID(uuidString: p["from"]?.string ?? ""), let to = UUID(uuidString: p["to"]?.string ?? "") else {
+                throw StepFailure("set_send: from is a track or bus id and to is a bus id.", reason: "not_found")
+            }
+            var pre: Bool?, remove = false
+            if let v = p["pre"], case .bool(let b) = v { pre = b }
+            if let v = p["remove"], case .bool(let b) = v { remove = b }
+            do { try s.project.setSend(from: from, to: to, gainDB: p["gainDB"]?.double, pre: pre, remove: remove) }
+            catch let e as Mixer.Failure { throw StepFailure("set_send: " + (e.errorDescription ?? ""), reason: e.reason) }
         case "remove_bus":
             guard let id = UUID(uuidString: p["bus"]?.string ?? "") else { throw StepFailure("remove_bus: no such bus.", reason: "not_found") }
             do { try s.project.removeBus(id, reroute: try route(p["reroute"], "remove_bus")) }

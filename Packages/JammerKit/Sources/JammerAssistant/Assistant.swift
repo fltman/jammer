@@ -95,8 +95,8 @@ public enum AssistantCatalog {
     ]
 
     /// Plugin steps need track and insert ids and weren't in the measured action set.
-    /// (`set_bus` and `remove_bus` need a bus id, which the assistant isn't told; it can add a bus by name.)
-    public static let stepsNotForAssistant: Set<String> = ["add_insert", "set_insert", "remove_insert", "spectral_edit", "set_track", "set_group", "set_bus", "remove_bus"]
+    /// (Buses are named to the model by name, and `set_bus` and `remove_bus` take the name. Sends are not offered yet.)
+    public static let stepsNotForAssistant: Set<String> = ["add_insert", "set_insert", "remove_insert", "spectral_edit", "set_track", "set_group", "set_send"]
 
     /// Own actions: every step (but the above), the useful endpoints, and the macros.
     public static var actions: [AssistantAction] {
@@ -127,6 +127,8 @@ public enum AssistantCatalog {
         "spectral_attenuate": ["frequenc", "frekvens", " hz", "khz", "band", "spectral", "spektral"],
         "limit": ["limit", "ceiling", "begräns", "tak ", "taket", "true peak", "dbtp", "peaks under", "toppar under", "topparna under"],
         "add_bus": ["bus", "buss", "submix", "undergrupp"],
+        "set_bus": ["bus", "buss", "submix"],
+        "remove_bus": ["bus", "buss", "submix"],
     ]
 
     /// What the on-device model is given for this request: everything but the actions in
@@ -158,6 +160,20 @@ public struct AssistantContext: Sendable {
     public var selection: (Double, Double)?
     public var playhead: Double
     public var tracks: [(id: String, name: String)]
+    /// The mixer's buses, so that a request can name one ("turn the Music bus down").
+    public var buses: [(id: String, name: String)] = []
+    /// A bus by its name (or its id); "master" and "output" stay words for the output.
+    public func busID(_ ref: String) -> String? {
+        let r = ref.trimmingCharacters(in: .whitespaces)
+        if ["master", "output", "the output", "utgången", "ut"].contains(r.lowercased()) { return "master" }
+        // "the Music bus", "bussen Music" and "Music" are the same bus.
+        func plain(_ s: String) -> String {
+            let dropped: Set<String> = ["the", "bus", "bussen", "buss", "submix"]
+            return s.lowercased().split(separator: " ").filter { !dropped.contains(String($0)) }.joined(separator: " ")
+        }
+        let hits = buses.filter { $0.id == r || $0.name.caseInsensitiveCompare(r) == .orderedSame || plain($0.name) == plain(r) }
+        return hits.count == 1 ? hits[0].id : nil
+    }
     /// "Speaker 2" / "talare 2" / track 2 → its id.
     public func trackID(_ ref: String) -> String? {
         if let n = Int(ref.filter(\.isNumber)), (1...tracks.count).contains(n), ref.count <= 12 { return tracks[n - 1].id }
@@ -173,6 +189,7 @@ public struct AssistantContext: Sendable {
         self.selection = selection.map { (project.seconds($0.lowerBound), project.seconds($0.upperBound)) }
         self.playhead = project.seconds(playhead)
         tracks = project.tracks.map { ($0.id.uuidString, $0.name) }
+        buses = project.buses.map { ($0.id.uuidString, $0.name) }
         transcriptLanguage = project.transcripts.first?.language
         let text = project.transcriptText()
         transcriptExcerpt = text.isEmpty ? nil : String(text.prefix(600))
@@ -184,6 +201,7 @@ public struct AssistantContext: Sendable {
         var lines = ["- length: \(t(duration)) s", "- playhead: \(t(playhead)) s"]
         lines.append("- selection: " + (selection.map { "\(t($0.0))–\(t($0.1)) s" } ?? "none"))
         lines.append("- tracks (speakers), by number: " + tracks.enumerated().map { "\($0.offset + 1) = \($0.element.name)" }.joined(separator: ", "))
+        if !buses.isEmpty { lines.append("- buses, by name: " + buses.map(\.name).joined(separator: ", ")) }
         if let lang = transcriptLanguage {
             lines.append("- transcript (\(lang)), \(fillerCount) filler words: \(transcriptExcerpt ?? "")")
         }
@@ -372,7 +390,21 @@ public enum PlanParser {
         let missing = action.params.filter { p in p.required && !args.contains { $0.0 == p.name && !$0.1.trimmingCharacters(in: .whitespaces).isEmpty } }
         let strays = args.filter { !known.contains($0.0) && !$0.1.trimmingCharacters(in: .whitespaces).isEmpty }
         var args = args
-        if missing.count == 1, strays.count == 1, let i = args.firstIndex(where: { $0.0 == strays[0].0 }) { args[i].0 = missing[0].name }
+        // Kept narrow: never for an action that removes or replaces audio (there the right name is asked
+        // for, and the step is left out without it), and only when the value is of the kind that is missing.
+        func fits(_ value: String, _ kind: OperationSpec.Param.Kind) -> Bool {
+            let v = value.trimmingCharacters(in: .whitespaces)
+            switch kind {
+            case .number, .seconds:
+                return Double(v.replacingOccurrences(of: ",", with: ".").replacingOccurrences(of: "−", with: "-")) != nil
+                    || (kind == .seconds && v.contains(":") && v.split(separator: ":").allSatisfy { Double($0) != nil })
+            case .boolean: return ["true", "false", "yes", "no", "ja", "nej", "0", "1"].contains(v.lowercased())
+            case .numbers: return !v.isEmpty && v.split(separator: ",").allSatisfy { Double($0.trimmingCharacters(in: .whitespaces)) != nil }
+            case .string, .list: return true
+            }
+        }
+        if !action.destructive, missing.count == 1, strays.count == 1, fits(strays[0].1, missing[0].kind),
+           let i = args.firstIndex(where: { $0.0 == strays[0].0 }) { args[i].0 = missing[0].name }
         var params: [String: JSONValue] = [:]
         for (name, raw) in args {
             let value = raw.trimmingCharacters(in: .whitespaces)
@@ -409,10 +441,21 @@ public enum PlanParser {
                     guard let match = options.first(where: { $0 == key }) ?? optionAliases[key].flatMap({ a in options.first { $0 == a } }) else { continue }
                     v = match
                 }
+                // A bus is named by its name; the step wants its id.
+                if ["bus", "output", "reroute"].contains(name), ["set_bus", "remove_bus", "add_bus"].contains(op), let context {
+                    guard let id = context.busID(v) else { continue }
+                    v = id
+                }
                 params[name] = .string(v)
             }
         }
         for (k, v) in AssistantCatalog.defaults[op] ?? [:] where params[k] == nil { params[k] = v }
+        // "set the Music bus to −6 dB" often comes with the bus's name under `name`, which for set_bus means
+        // "rename to". When no bus is given and `name` is the name of a bus that exists, that bus is the one meant.
+        if ["set_bus", "remove_bus"].contains(op), params["bus"] == nil, let context, case .string(let n)? = params["name"], let id = context.busID(n), id != "master" {
+            params["bus"] = .string(id)
+            params["name"] = nil
+        }
         return PlannedStep(op: op, params: params, why: why)
     }
 

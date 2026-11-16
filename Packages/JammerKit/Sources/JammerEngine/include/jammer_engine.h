@@ -92,6 +92,11 @@ void jm_plan_set_bus_output(jm_plan *_Nonnull plan, int32_t bus, int32_t output)
 /// Routes a track to a bus (-1: the output) with a pan. A plan where nothing is routed or panned
 /// renders exactly as it did before buses existed.
 void jm_plan_set_track_route(jm_plan *_Nonnull plan, int32_t track, int32_t bus, float pan_l, float pan_r);
+/// Sends a copy of a track to a bus, with a gain: before the track's fader and pan (`pre`), or after
+/// them. A muted track sends nothing.
+void jm_plan_add_track_send(jm_plan *_Nonnull plan, int32_t track, int32_t bus, float gain, bool pre);
+/// The same from one bus to another. A send that would close a loop is cut at finalize.
+void jm_plan_add_bus_send(jm_plan *_Nonnull plan, int32_t bus, int32_t to, float gain, bool pre);
 /// Sorts and freezes the plan. Must be called before rendering or publishing.
 void jm_plan_finalize(jm_plan *_Nonnull plan);
 void jm_plan_release(jm_plan *_Nullable plan);

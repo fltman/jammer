@@ -1,9 +1,10 @@
 import Foundation
 
 /// Hold-out set 4, written 2026-11-16 without looking at any model's answers, when the mixer's first
-/// actions came in. Small on purpose: the assistant can add a bus by name and nothing more of the mixer
-/// yet (changing or removing one needs its id, which the assistant isn't told). Unseen until a change
-/// is made because of it.
+/// actions came in. A regression set since its first run the same day (two changes came from it). The
+/// last three requests were added, again without looking at answers, when buses got names the assistant
+/// is told: this set's document has one bus, called Music (the other sets' documents have none, so their
+/// requests are put to the model exactly as before).
 enum HoldoutSet4 {
     static let cases: [HoldoutCase] = [
         HoldoutCase(goal: "create a bus called Music", ops: ["add_bus"], params: ["add_bus": ["name": "Music"]]),
@@ -15,5 +16,9 @@ enum HoldoutSet4 {
         HoldoutCase(goal: "ta bort bussen Musik", ops: [], kind: "refuse"),
         // The word "bus" in a request that isn't about the mixer.
         HoldoutCase(goal: "remove the noise from the bus passing by at 20 seconds", ops: ["restore"], params: ["restore": ["kind": "denoise"]]),
+        // A bus by its name.
+        HoldoutCase(goal: "set the Music bus to -6 dB", ops: ["set_bus"], params: ["set_bus": ["bus": "{music}", "gainDB": "-6"]]),
+        HoldoutCase(goal: "tysta bussen Music", ops: ["set_bus"], params: ["set_bus": ["bus": "{music}", "muted": "true"]]),
+        HoldoutCase(goal: "remove the Music bus", ops: ["remove_bus"], params: ["remove_bus": ["bus": "{music}"]]),
     ]
 }

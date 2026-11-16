@@ -1,6 +1,6 @@
 # Mixer
 
-![The Mixer sheet: two tracks and a bus, each with a mute box, a level slider, a pan slider and where it goes](../screens/mixer.webp)
+![The Mixer sheet: two tracks and two buses, each with a mute box, a level slider, a pan slider, where it goes, and its sends](../screens/mixer.webp)
 
 **Audio › Mixer…** (⌥⌘X) shows every track as a strip: mute, level, pan, and where it goes. Use it to set the balance between tracks, to place a track to the left or the right, and to gather tracks on a bus.
 
@@ -22,6 +22,20 @@ A bus can itself go to another bus. Jämmer won't let buses be sent round in a c
 
 A document can have up to 64 buses.
 
+## Sends
+
+A send is a copy of a track (or of a bus) that goes to a bus as well, at a level of its own: a little of every voice to a bus with a reverb on it, or a copy of the drums to a bus that is squashed hard and mixed in underneath.
+
+On a strip, open **Sends**, choose the bus, and pick a level. The same menu changes the level, takes the copy **before the fader**, or removes the send.
+
+- **After the fader** (the usual way) the copy follows the strip: turn the track down, or pan it, and what it sends goes with it.
+- **Before the fader** the copy keeps its own level whatever the fader does, and isn't panned. That is the one for a headphone mix that shouldn't change when you change the main mix.
+- A muted strip sends nothing.
+- A strip can have 16 sends. A bus can't be sent, directly or through other buses, back into itself; the buses that would do that aren't offered.
+- Taking a bus away takes the sends to it away as well.
+
+Until buses can hold plugins (that is next), a send to a bus only adds the copy to the bus's sum; the use for it comes with the plugins.
+
 ## What stays the same
 
 - A document without buses, with every pan in the centre, plays and exports exactly as it did before there was a mixer, sample for sample.
@@ -34,6 +48,6 @@ A project that uses the mixer (a bus, a pan, a track sent to a bus) is saved in 
 
 ## Agents
 
-An agent sees the mixer with `GET /api/v1/documents/{id}/mixer` and changes it with the steps `add_bus`, `set_bus`, `remove_bus` and `set_track` (`pan`, `output`); see [the guide](../agents.md#operations). The assistant can add a bus by name; for the rest, use the sheet.
+An agent sees the mixer with `GET /api/v1/documents/{id}/mixer` and changes it with the steps `add_bus`, `set_bus`, `remove_bus`, `set_send` and `set_track` (`pan`, `output`); see [the guide](../agents.md#operations). The assistant can add a bus, and change or remove one you name ("set the Music bus to −6 dB"); for pan, routing and sends, use the sheet.
 
-Not there yet: sends, plugins on a bus, a master strip, solo, and delay compensation across buses. They come in that order.
+Not there yet: plugins on a bus, a master strip, solo, and delay compensation across buses.

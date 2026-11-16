@@ -14,7 +14,7 @@ struct HoldoutEval {
             return want == "<0" ? d < 0 : want == "<1" ? d < 1 : d > 0
         }
         let options = want.split(separator: "|").map { w -> String in
-            switch w { case "{track1}": tracks[0]; case "{track2}": tracks[1]; default: String(w) }
+            switch w { case "{track1}": tracks[0]; case "{track2}": tracks[1]; case "{music}": tracks.count > 2 ? tracks[2] : "-"; default: String(w) }
         }
         return options.contains { $0.caseInsensitiveCompare(text) == .orderedSame || (Double($0) != nil && Double($0) == Double(text)) }
     }
@@ -29,10 +29,12 @@ struct HoldoutEval {
         let b = SourceRef(name: "Erik", path: "/dev/null", info: info)
         p.sources.append(b)
         p.tracks.append(Track(name: "Erik", clips: [Clip(sourceID: b.id, start: 0, length: 48_000 * 60)]))
-        let tracks = p.tracks.map(\.id.uuidString)
+        var tracks = p.tracks.map(\.id.uuidString)
+        // Set 4 is about the mixer: its document has a bus the requests can name.
+        if which == "4" { tracks.append(try p.addBus(name: "Music").id.uuidString) }
         let context = AssistantContext(project: p, selection: nil, playhead: 0)
         let actions = AssistantCatalog.actions
-        var right = 0, valuesRight = 0, valuesTotal = 0, invented = 0, wrongLanguage = 0, unaskedRuns = 0
+        var right = 0, rightForUser = 0, valuesRight = 0, valuesTotal = 0, invented = 0, wrongLanguage = 0, unaskedRuns = 0
         var byKind: [String: (Int, Int)] = [:]
         var rows: [String] = []
         for c in set {
@@ -56,15 +58,20 @@ struct HoldoutEval {
                 }
             }
             if ok { right += 1 }
+            // As the user gets it: after the checks the app makes on every plan (ReplyGuard). This is the
+            // app's behaviour; the plan as the model made it says how much the checks carry.
+            let shownPlan = ReplyGuard.checked(plan, goal: c.goal, context: context)
+            let forUser = failure == nil && shownPlan.steps.map(\.op) == c.ops
+            if forUser { rightForUser += 1 }
             let k = byKind[c.kind] ?? (0, 0)
             byKind[c.kind] = (k.0 + (ok ? 1 : 0), k.1 + 1)
             let shown = plan.steps.map { s in s.op + (s.params.isEmpty ? "" : "(" + s.params.sorted { $0.key < $1.key }.map { "\($0.key)=\(AssistantEval.text($0.value))" }.joined(separator: ", ") + ")") }.joined(separator: "; ")
             let planned = (failure.map { "error: \($0)" } ?? (shown.isEmpty ? "(no steps) “\(plan.reply.prefix(70))”" : shown))
                 + (plan.dropped.isEmpty ? "" : " [left out: \(plan.dropped.joined(separator: "; "))]")
-            rows.append("| \(c.kind) | \(c.goal) | \(c.ops.isEmpty ? "(no steps)" : c.ops.joined(separator: ", ")) | \(planned) | \(ok ? (notes.isEmpty ? "✓" : "ops ✓, " + notes.joined(separator: " ")) : "✗") |")
+            rows.append("| \(c.kind) | \(c.goal) | \(c.ops.isEmpty ? "(no steps)" : c.ops.joined(separator: ", ")) | \(planned) | \(forUser && !ok ? "for the user ✓; " : "")\(ok ? (notes.isEmpty ? "✓" : "ops ✓, " + notes.joined(separator: " ")) : "✗") |")
         }
         let kinds = ["task", "multi", "clarify", "refuse", "answer"].compactMap { k in byKind[k].map { "\(k) \($0.0)/\($0.1)" } }.joined(separator: ", ")
-        let summary = "Right actions: \(right)/\(set.count) (\(kinds)). Right values: \(valuesRight)/\(valuesTotal). Replies with a figure of the model's own (struck before showing): \(invented). Replies in another language than the request (replaced): \(wrongLanguage). Plans with none of the expected actions that would have changed the document without a yes: \(unaskedRuns)."
+        let summary = "As the user gets it: \(rightForUser)/\(set.count). The model's own plan, right actions: \(right)/\(set.count) (\(kinds)). Right values: \(valuesRight)/\(valuesTotal). Replies with a figure of the model's own (struck before showing): \(invented). Replies in another language than the request (replaced): \(wrongLanguage). Plans with none of the expected actions that would have changed the document without a yes: \(unaskedRuns)."
         let table = "| Kind | Request | Expected | Planned | Result |\n|---|---|---|---|---|\n" + rows.joined(separator: "\n") + "\n\n" + summary + "\n"
         print(table)
         if let path = ProcessInfo.processInfo.environment["JAMMER_EVAL_REPORT"] { try table.write(toFile: path, atomically: true, encoding: .utf8) }

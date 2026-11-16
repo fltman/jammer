@@ -17,11 +17,12 @@ struct SayingPlanner: AssistantPlanner {
 
 @Suite("What a model wrote, before it is shown")
 struct ReplyGuardTests {
-    static var context: AssistantContext {
+    static var project: Project {
         let info = AudioFileInfo(container: .wav, sampleFormat: .float32, bigEndian: false, channels: 2, sampleRate: 48_000,
                                  channelMask: nil, dataOffset: 0, frames: 48_000 * 60, chunks: [], bext: nil, ixml: nil, markers: [])
-        return AssistantContext(project: Project(source: SourceRef(name: "Anna", path: "/dev/null", info: info)), selection: nil, playhead: 0)
+        return Project(source: SourceRef(name: "Anna", path: "/dev/null", info: info))
     }
+    static var context: AssistantContext { AssistantContext(project: project, selection: nil, playhead: 0) }
     func shown(_ reply: String, steps: [PlannedStep] = [], goal: String) async throws -> String {
         try await SayingPlanner(reply: reply, steps: steps).answer(goal: goal, context: Self.context, history: [], actions: AssistantCatalog.actions).reply
     }
@@ -141,6 +142,40 @@ struct ReplyGuardTests {
         #expect(named?.params["name"] == .string("Speech") && named?.params.count == 1)
         // A number where a number is wanted, through the same checks as if it had the right name.
         #expect(PlanParser.typed(op: "gain", args: [("amount", "-3")], why: "", actions: actions)?.params["db"] == .number(-3))
+        // Not a number where a number is wanted: nothing is filled in.
+        #expect(PlanParser.typed(op: "gain", args: [("amount", "a bit")], why: "", actions: actions)?.params["db"] == nil)
+        // Never for an action that removes or replaces audio: there the right name is asked for.
+        for op in ["echo", "limit", "delete", "restore"] where actions.first(where: { $0.name == op })?.destructive == true {
+            // (Some of these have a default for their required value; what matters is that the stray 1.7 isn't it.)
+            let step = PlanParser.typed(op: op, args: [("something", "1.7")], why: "", actions: actions)
+            #expect(step?.params.values.contains(.number(1.7)) != true, "\(op): \(String(describing: step?.params))")
+        }
+    }
+
+    @Test("A bus is named by its name; the step gets its id, and a name that isn't a bus fills in nothing")
+    func busByName() throws {
+        var project = ReplyGuardTests.project
+        let music = try project.addBus(name: "Music"), speech = try project.addBus(name: "Speech bus")
+        let c = AssistantContext(project: project, selection: nil, playhead: 0)
+        #expect(c.rendered.contains("- buses, by name: Music, Speech bus"))
+        #expect(!AssistantContext(project: ReplyGuardTests.project, selection: nil, playhead: 0).rendered.contains("buses"))
+        let actions = AssistantCatalog.actions
+        func step(_ op: String, _ args: [(String, String)]) -> PlannedStep? { PlanParser.typed(op: op, args: args, why: "", actions: actions, context: c) }
+        #expect(step("set_bus", [("bus", "Music"), ("gainDB", "-6")])?.params == ["bus": .string(music.id.uuidString), "gainDB": .number(-6)])
+        #expect(step("set_bus", [("bus", "the music bus"), ("muted", "true")])?.params["bus"] == .string(music.id.uuidString))
+        #expect(step("set_bus", [("bus", "speech"), ("output", "Music")])?.params == ["bus": .string(speech.id.uuidString), "output": .string(music.id.uuidString)])
+        #expect(step("remove_bus", [("bus", "Speech bus"), ("reroute", "master")])?.params == ["bus": .string(speech.id.uuidString), "reroute": .string("master")])
+        // The bus's name given as `name`, with no bus: it is the bus meant, not a new name for nothing.
+        #expect(step("set_bus", [("name", "Music"), ("gainDB", "-6")])?.params == ["bus": .string(music.id.uuidString), "gainDB": .number(-6)])
+        // With a bus given, `name` is the new name, as the step says.
+        #expect(step("set_bus", [("bus", "Music"), ("name", "Songs")])?.params == ["bus": .string(music.id.uuidString), "name": .string("Songs")])
+        // No such bus: the step has no bus, and is left out when checked.
+        let none = step("set_bus", [("bus", "Drums"), ("gainDB", "-6")])
+        #expect(none?.params["bus"] == nil)
+        #expect(PlanParser.validate(AssistantPlan(reply: "", steps: [none!]), actions: actions).steps.isEmpty)
+        // A change to a bus the request names runs; one it doesn't name waits.
+        let plan = AssistantPlan(reply: "", steps: [step("set_bus", [("bus", "Music"), ("gainDB", "-6")])!])
+        #expect(!plan.needsConfirmation(goal: "set the Music bus to -6 dB", actions: actions) && plan.needsConfirmation(goal: "write a poem about the sea", actions: actions))
     }
 
     @Test("The reply follows the language of the request")

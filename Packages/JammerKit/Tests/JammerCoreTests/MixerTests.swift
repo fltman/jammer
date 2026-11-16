@@ -235,4 +235,106 @@ struct MixerTests {
         meter.process(Self.render(limited, pool))
         #expect(meter.peakDB <= -3.0 && report.truePeakAfterDB <= -3.0 && limited.buses == loud.buses, "\(meter.peakDB)")
     }
+
+    @Test("Sends: a copy after the fader follows it, a copy before it doesn't; a muted strip sends nothing; bus to bus")
+    func sends() throws {
+        var (p, pool) = Self.document()
+        p.tracks = [p.tracks[0]]
+        let dry = Self.render(p, pool)
+        let fx = try p.addBus(name: "FX")
+        let track = p.tracks[0].id
+        // After the fader at 0 dB: the track is heard once on its own way and once through the bus.
+        try p.setSend(from: track, to: fx.id)
+        #expect(p.usesMixer && zip(Self.render(p, pool), dry).allSatisfy { abs($0 - $1 * 2) < 1e-7 })
+        // The send 6 dB down, and the track 20 dB down: a send after the fader goes down with it.
+        try p.setSend(from: track, to: fx.id, gainDB: -6)
+        p.tracks[0].gainDB = -20
+        let g = Float(pow(10, -20.0 / 20) * (1 + pow(10, -6.0 / 20)))
+        #expect(zip(Self.render(p, pool), dry).allSatisfy { abs($0 - $1 * g) < 1e-7 })
+        // Before the fader: the copy keeps its level whatever the fader does, and isn't panned.
+        try p.setSend(from: track, to: fx.id, gainDB: 0, pre: true)
+        try p.setTrackRoute(track, pan: -1)
+        let pre = Self.render(p, pool)
+        for i in stride(from: 0, to: pre.count, by: 2) {
+            #expect(abs(pre[i] - dry[i] * (Float(pow(10, -20.0 / 20)) + 1)) < 1e-7 && abs(pre[i + 1] - dry[i + 1]) < 1e-7)
+        }
+        // Muted, the strip sends nothing either.
+        p.tracks[0].isMuted = true
+        #expect(Self.render(p, pool).allSatisfy { $0 == 0 })
+        p.tracks[0].isMuted = false
+        // A bus sends on to another bus; one send per pair, changed in place and removed.
+        let room = try p.addBus(name: "Room")
+        try p.setSend(from: fx.id, to: room.id, gainDB: -3)
+        try p.setSend(from: fx.id, to: room.id, gainDB: -9)
+        #expect(p.bus(fx.id)?.sends == [Send(to: room.id, gainDB: -9)])
+        let both = Self.render(p, pool)
+        #expect(both.allSatisfy { $0.isFinite })
+        try p.setSend(from: fx.id, to: room.id, remove: true)
+        #expect(p.bus(fx.id)?.sends.isEmpty == true)
+        // The same in blocks.
+        let plan = PlanCompiler.compile(p, pool: pool)
+        var blocks: [Float] = []
+        var at = 0
+        while at < Self.n { let k = min(480, Self.n - at); blocks += plan.render(from: Frame(at), frames: k); at += k }
+        #expect(blocks == Self.render(p, pool))
+    }
+
+    @Test("Sends refused in words: round in a circle, to nothing, from nothing, a seventeenth, one that isn't there")
+    func sendRefusals() throws {
+        var (p, _) = Self.document()
+        let a = try p.addBus(name: "A"), b = try p.addBus(name: "B"), c = try p.addBus(name: "C")
+        try p.setBus(a.id, output: .some(b.id))
+        try p.setSend(from: b.id, to: c.id)
+        let before = p
+        // C back to A by a send closes A → B → C → A; so does C's output; so does a bus to itself.
+        #expect(throws: Mixer.Failure.loop("C")) { try p.setSend(from: c.id, to: a.id) }
+        #expect(throws: Mixer.Failure.loop("C")) { try p.setBus(c.id, output: .some(a.id)) }
+        #expect(throws: Mixer.Failure.loop("A")) { try p.setSend(from: a.id, to: a.id) }
+        #expect(throws: Mixer.Failure.self) { try p.setSend(from: p.tracks[0].id, to: UUID()) }
+        #expect(throws: Mixer.Failure.self) { try p.setSend(from: UUID(), to: a.id) }
+        #expect(throws: Mixer.Failure.self) { try p.setSend(from: p.tracks[0].id, to: a.id, gainDB: 60) }
+        #expect(throws: Mixer.Failure.noSend("s0", "A")) { try p.setSend(from: p.tracks[0].id, to: a.id, remove: true) }
+        #expect(p == before)
+        // Sixteen sends on a strip, not seventeen.
+        var many = Self.document().0
+        let buses = try (0..<17).map { try many.addBus(name: "b\($0)") }
+        for b in buses.prefix(16) { try many.setSend(from: many.tracks[0].id, to: b.id) }
+        let first = many.tracks[0].id, last = buses[16].id
+        #expect(throws: Mixer.Failure.tooManySends("s0")) { try many.setSend(from: first, to: last) }
+        // A bus taken away takes the sends to it along, and the project is whole.
+        try p.removeBus(c.id)
+        #expect(p.bus(b.id)?.sends.isEmpty == true)
+        // In a file: sends to nowhere, twins, a loop by send, an absurd level, too many.
+        var hostile = Self.document().0
+        let x = Bus(name: "X"), y = Bus(name: "Y")
+        hostile.buses = [Bus(id: x.id, name: "X", sends: [Send(to: y.id), Send(to: y.id, gainDB: -3), Send(to: UUID()), Send(to: x.id)]),
+                         Bus(id: y.id, name: "Y", sends: [Send(to: x.id, gainDB: 1e300)])]
+        hostile.tracks[0].sends = (0..<40).map { _ in Send(to: x.id) } + [Send(to: UUID())]
+        let (opened, notes) = try ProjectPackage.decodeChecked(try ProjectPackage.encode(hostile))
+        #expect(opened.tracks[0].sends == [Send(to: x.id)])
+        #expect(opened.buses.allSatisfy { bus in bus.sends.allSatisfy { opened.bus($0.to) != nil && !opened.loops(bus: bus.id, into: $0.to) && Mixer.gainRange.contains($0.gainDB) } })
+        #expect(opened.buses.reduce(0) { $0 + $1.sends.count } == 1 && notes.contains { $0.contains("send") }, "\(opened.buses.map(\.sends)) \(notes)")
+    }
+
+    @Test("The engine cuts a loop made of sends, too")
+    func engineSendLoop() {
+        let plan = jm_plan_create(2, 48_000)
+        let a = jm_plan_add_bus(plan, 1, false, 1, 1), b = jm_plan_add_bus(plan, 1, false, 1, 1), c = jm_plan_add_bus(plan, 1, false, 1, 1)
+        jm_plan_set_bus_output(plan, a, b)
+        jm_plan_add_bus_send(plan, b, c, 1, false)
+        jm_plan_add_bus_send(plan, c, a, 1, true)       // c → a closes a → b → c → a
+        jm_plan_add_bus_send(plan, a, a, 1, false)      // to itself: not taken
+        let s = [Float](repeating: 0.125, count: 200)
+        let src = s.withUnsafeBufferPointer { jm_source_create_memory($0.baseAddress!, 100, 2) }
+        let t = jm_plan_add_track(plan, 1, false)
+        jm_plan_add_clip(plan, t, jm_plan_add_source(plan, src), 0, 0, 100, 1, 0, 0, JM_FADE_LINEAR)
+        jm_plan_set_track_route(plan, t, a, 1, 1)
+        jm_plan_finalize(plan)
+        var out = [Float](repeating: 9, count: 200)
+        #expect(jm_render(plan, 0, 100, &out))
+        // a → b → output, and b also sends to c → output: heard twice, never more, and it ends.
+        #expect(out.allSatisfy { $0 == 0.25 })
+        jm_plan_release(plan)
+        jm_source_release(src)
+    }
 }

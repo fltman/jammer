@@ -58,10 +58,35 @@ public enum ProjectSafety {
                 if p.buses[i].gainDB != b.gainDB || p.buses[i].pan != b.pan { fixed += 1 }
                 if let o = b.output, !seen.contains(o) || o == b.id { p.buses[i].output = nil; lost += 1 }
             }
+            // Sends: to a bus that is there, one per bus, a level that is a level, sixteen at most on a strip.
+            func tidy(_ sends: [Send], own: UUID?) -> [Send] {
+                var to = Set<UUID>(), out: [Send] = []
+                for var s in sends where seen.contains(s.to) && s.to != own && to.insert(s.to).inserted && out.count < Mixer.maxSends {
+                    s.gainDB = level(s.gainDB)
+                    out.append(s)
+                }
+                return out
+            }
             for i in p.buses.indices {
-                guard let o = p.buses[i].output, p.loops(bus: p.buses[i].id, into: o) else { continue }
-                p.buses[i].output = nil
-                lost += 1
+                let kept = tidy(p.buses[i].sends, own: p.buses[i].id)
+                lost += p.buses[i].sends.count - kept.count
+                p.buses[i].sends = kept
+            }
+            for i in p.buses.indices {
+                if let o = p.buses[i].output, p.loops(bus: p.buses[i].id, into: o) {
+                    p.buses[i].output = nil
+                    lost += 1
+                }
+                // A send that leads back to its own bus is taken away, one at a time, so the rest stay.
+                for s in p.buses[i].sends where p.loops(bus: p.buses[i].id, into: s.to) {
+                    p.buses[i].sends.removeAll { $0.to == s.to }
+                    lost += 1
+                }
+            }
+            for t in p.tracks.indices {
+                let kept = tidy(p.tracks[t].sends, own: nil)
+                lost += p.tracks[t].sends.count - kept.count
+                p.tracks[t].sends = kept
             }
             for t in p.tracks.indices {
                 let old = p.tracks[t].pan
@@ -69,7 +94,7 @@ public enum ProjectSafety {
                 if p.tracks[t].pan != old { fixed += 1 }
                 if let o = p.tracks[t].output, !seen.contains(o) { p.tracks[t].output = nil; lost += 1 }
             }
-            if lost > 0 { notes.append("\(lost) route\(lost == 1 ? "" : "s") in the mixer led to a bus that isn't there, or round in a circle, and now go\(lost == 1 ? "es" : "") to the output.") }
+            if lost > 0 { notes.append("\(lost) route\(lost == 1 ? "" : "s") or send\(lost == 1 ? "" : "s") in the mixer led to a bus that isn't there, or round in a circle; a route now goes to the output and a send is gone.") }
             if fixed > 0 { notes.append("\(fixed) level\(fixed == 1 ? "" : "s") or pan\(fixed == 1 ? "" : "s") in the mixer \(fixed == 1 ? "was" : "were") outside what is possible and \(fixed == 1 ? "was" : "were") put inside.") }
         }
         // Sources whose description of their own audio makes no sense can't be played.

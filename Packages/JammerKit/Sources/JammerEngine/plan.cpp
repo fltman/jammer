@@ -76,12 +76,23 @@ void Renderer::renderRouted(const Plan &plan, int64_t start, int64_t frames, flo
         else renderTrack(plan, int32_t(t), start, frames, track_.data());
         float *to = track.bus >= 0 && size_t(track.bus) < bus_.size() ? bus_[size_t(track.bus)].data() : out;
         addStrip(track_.data(), to, frames, channels_, track.gain, track.panL, track.panR);
+        // Sends: the strip's own signal before the fader, or what the fader and pan make of it.
+        for (const Send &s : track.sends) {
+            if (s.bus < 0 || size_t(s.bus) >= bus_.size()) continue;
+            if (s.pre) addStrip(track_.data(), bus_[size_t(s.bus)].data(), frames, channels_, s.gain, 1.0f, 1.0f);
+            else addStrip(track_.data(), bus_[size_t(s.bus)].data(), frames, channels_, track.gain * s.gain, track.panL, track.panR);
+        }
     }
     for (int32_t b : plan.busOrder) {
         const Bus &bus = plan.buses[size_t(b)];
         if (bus.mute) continue;
         float *to = bus.output >= 0 && size_t(bus.output) < bus_.size() ? bus_[size_t(bus.output)].data() : out;
         addStrip(bus_[size_t(b)].data(), to, frames, channels_, bus.gain, bus.panL, bus.panR);
+        for (const Send &s : bus.sends) {
+            if (s.bus < 0 || size_t(s.bus) >= bus_.size() || s.bus == b) continue;
+            if (s.pre) addStrip(bus_[size_t(b)].data(), bus_[size_t(s.bus)].data(), frames, channels_, s.gain, 1.0f, 1.0f);
+            else addStrip(bus_[size_t(b)].data(), bus_[size_t(s.bus)].data(), frames, channels_, bus.gain * s.gain, bus.panL, bus.panR);
+        }
     }
 }
 
@@ -137,7 +148,10 @@ int32_t jm_plan_add_source(jm_plan *plan, jm_source *source) {
 }
 
 int32_t jm_plan_add_track(jm_plan *plan, float gain, bool mute) {
-    plan->ptr->tracks.push_back(Track{gain, mute, nullptr});
+    Track t;
+    t.gain = gain;
+    t.mute = mute;
+    plan->ptr->tracks.push_back(std::move(t));
     return int32_t(plan->ptr->tracks.size() - 1);
 }
 
@@ -155,7 +169,12 @@ void jm_plan_add_clip(jm_plan *plan, int32_t track, int32_t source, int64_t sour
 int32_t jm_plan_add_bus(jm_plan *plan, float gain, bool mute, float pan_l, float pan_r) {
     Plan &p = *plan->ptr;
     if (p.finalized) return -1;
-    p.buses.push_back(Bus{gain, mute, pan_l, pan_r, -1});
+    Bus b;
+    b.gain = gain;
+    b.mute = mute;
+    b.panL = pan_l;
+    b.panR = pan_r;
+    p.buses.push_back(std::move(b));
     p.routed = true;
     return int32_t(p.buses.size() - 1);
 }
@@ -176,6 +195,19 @@ void jm_plan_set_track_route(jm_plan *plan, int32_t track, int32_t bus, float pa
     p.routed = true;
 }
 
+void jm_plan_add_track_send(jm_plan *plan, int32_t track, int32_t bus, float gain, bool pre) {
+    Plan &p = *plan->ptr;
+    if (p.finalized || track < 0 || size_t(track) >= p.tracks.size() || bus < 0 || size_t(bus) >= p.buses.size()) return;
+    p.tracks[size_t(track)].sends.push_back(Send{bus, gain, pre});
+    p.routed = true;
+}
+
+void jm_plan_add_bus_send(jm_plan *plan, int32_t bus, int32_t to, float gain, bool pre) {
+    Plan &p = *plan->ptr;
+    if (p.finalized || bus < 0 || size_t(bus) >= p.buses.size() || to < 0 || size_t(to) >= p.buses.size() || to == bus) return;
+    p.buses[size_t(bus)].sends.push_back(Send{to, gain, pre});
+}
+
 void jm_plan_set_chain(jm_plan *plan, int32_t track, jm_chain *chain) {
     Plan &p = *plan->ptr;
     if (p.finalized || track < 0 || size_t(track) >= p.tracks.size()) return;
@@ -188,24 +220,38 @@ void jm_plan_finalize(jm_plan *plan) {
     std::stable_sort(p.clips.begin(), p.clips.end(), [](const Clip &a, const Clip &b) { return a.start < b.start; });
     p.length = 0;
     for (const Clip &c : p.clips) p.length = std::max(p.length, c.end());
-    // The buses, each before the one it feeds. A bus caught in a loop (the document model refuses
-    // those; this is the engine not trusting it) goes straight to the output instead.
+    // The buses, each before every bus it feeds, through its output or a send. A bus caught in a loop
+    // (the document model refuses those; this is the engine not trusting it) loses the route that closes it.
+    const size_t nb = p.buses.size();
     p.busOrder.clear();
-    std::vector<int> state(p.buses.size(), 0); // 0 not seen, 1 being placed, 2 placed
-    std::vector<int32_t> reversed;
-    for (size_t first = 0; first < p.buses.size(); ++first) {
-        std::vector<int32_t> path;
-        int32_t b = int32_t(first);
-        while (b >= 0 && state[size_t(b)] == 0) {
-            state[size_t(b)] = 1;
-            path.push_back(b);
-            b = p.buses[size_t(b)].output;
+    std::vector<int> state(nb, 0); // 0 not seen, 1 on the path, 2 placed
+    std::vector<int32_t> placed;   // every bus after all the buses it feeds
+    struct Frame { int32_t bus; size_t next; };
+    for (size_t first = 0; first < nb; ++first) {
+        if (state[first] != 0) continue;
+        std::vector<Frame> stack{{int32_t(first), 0}};
+        state[first] = 1;
+        while (!stack.empty()) {
+            Frame &f = stack.back();
+            Bus &bus = p.buses[size_t(f.bus)];
+            // Edge 0 is the output, the rest are the sends.
+            if (f.next > bus.sends.size()) {
+                state[size_t(f.bus)] = 2;
+                placed.push_back(f.bus);
+                stack.pop_back();
+                continue;
+            }
+            const size_t edge = f.next++;
+            int32_t &to = edge == 0 ? bus.output : bus.sends[edge - 1].bus;
+            if (to < 0 || size_t(to) >= nb) continue;
+            if (state[size_t(to)] == 1) { to = -1; continue; }   // would close a loop: cut
+            if (state[size_t(to)] == 0) {
+                state[size_t(to)] = 1;
+                stack.push_back({to, 0});
+            }
         }
-        if (b >= 0 && state[size_t(b)] == 1) p.buses[size_t(path.back())].output = -1; // closes a loop: cut it here
-        for (auto it = path.rbegin(); it != path.rend(); ++it) { state[size_t(*it)] = 2; reversed.push_back(*it); }
     }
-    // `reversed` has every bus after the one it feeds; the sum runs the other way.
-    p.busOrder.assign(reversed.rbegin(), reversed.rend());
+    p.busOrder.assign(placed.rbegin(), placed.rend());
     p.finalized = true;
 }
 

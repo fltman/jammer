@@ -145,6 +145,8 @@ public struct Track: Codable, Hashable, Sendable, Identifiable {
     public var pan: Double = 0
     /// The bus the track goes to; nil: the output.
     public var output: UUID?
+    /// Copies of the track sent to buses.
+    public var sends: [Send] = []
 
     public init(id: UUID = UUID(), name: String, clips: [Clip] = [], gainDB: Double = 0, isMuted: Bool = false, inserts: [Insert] = []) {
         self.id = id
@@ -155,7 +157,7 @@ public struct Track: Codable, Hashable, Sendable, Identifiable {
         self.inserts = inserts
     }
 
-    private enum CodingKeys: String, CodingKey { case id, name, clips, gainDB, isMuted, inserts, group, origin, ducked, pan, output }
+    private enum CodingKeys: String, CodingKey { case id, name, clips, gainDB, isMuted, inserts, group, origin, ducked, pan, output, sends }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -170,6 +172,7 @@ public struct Track: Codable, Hashable, Sendable, Identifiable {
         ducked = try c.decodeIfPresent(DuckOrigin.self, forKey: .ducked)
         pan = try c.decodeIfPresent(Double.self, forKey: .pan) ?? 0
         output = try c.decodeIfPresent(UUID.self, forKey: .output)
+        sends = try c.decodeIfPresent([Send].self, forKey: .sends) ?? []
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -186,6 +189,7 @@ public struct Track: Codable, Hashable, Sendable, Identifiable {
         // Written only when used, so a project that doesn't use the mixer is the file it always was.
         if pan != 0 { try c.encode(pan, forKey: .pan) }
         try c.encodeIfPresent(output, forKey: .output)
+        if !sends.isEmpty { try c.encode(sends, forKey: .sends) }
     }
 
     public var end: Frame { clips.map(\.end).max() ?? 0 }

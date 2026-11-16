@@ -25,7 +25,9 @@ struct MixerSheet: View {
                     ForEach(project.tracks) { t in
                         MixerStrip(name: t.name, kind: "track", gainDB: t.gainDB, pan: t.pan, muted: t.isMuted, output: t.output, stereo: stereo,
                                    destinations: project.buses.map { ($0.id, $0.name) },
-                                   change: { session.perform("set_track", ["track": .string(t.id.uuidString)].merging($0) { $1 }) }, remove: nil)
+                                   sends: t.sends, sendTargets: project.buses.map { ($0.id, $0.name) },
+                                   change: { session.perform("set_track", ["track": .string(t.id.uuidString)].merging($0) { $1 }) },
+                                   send: { session.perform("set_send", ["from": .string(t.id.uuidString)].merging($0) { $1 }) }, remove: nil)
                     }
                     Text("Buses").font(.headline).padding(.top, 8)
                     if project.buses.isEmpty { Text("No buses yet.").foregroundStyle(.secondary) }
@@ -33,7 +35,9 @@ struct MixerSheet: View {
                         MixerStrip(name: b.name, kind: "bus", gainDB: b.gainDB, pan: b.pan, muted: b.isMuted, output: b.output, stereo: stereo,
                                    // A bus can go to any bus that doesn't lead back to it.
                                    destinations: project.buses.filter { $0.id != b.id && !leadsBack(from: $0.id, to: b.id) }.map { ($0.id, $0.name) },
+                                   sends: b.sends, sendTargets: project.buses.filter { $0.id != b.id && !leadsBack(from: $0.id, to: b.id) }.map { ($0.id, $0.name) },
                                    change: { session.perform("set_bus", ["bus": .string(b.id.uuidString)].merging($0) { $1 }) },
+                                   send: { session.perform("set_send", ["from": .string(b.id.uuidString)].merging($0) { $1 }) },
                                    remove: { session.perform("remove_bus", ["bus": .string(b.id.uuidString), "reroute": .string(b.output?.uuidString ?? "master")]) })
                     }
                 }
@@ -53,7 +57,7 @@ struct MixerSheet: View {
         }
         .padding(20)
         // Wide enough for a whole strip: a row that doesn't fit pushes the sheet's content out of its left edge.
-        .frame(width: 900)
+        .frame(width: 1000)
     }
 
     private func add() {
@@ -63,14 +67,14 @@ struct MixerSheet: View {
         newBus = ""
     }
 
-    /// Whether `from` reaches `to` through the buses it feeds.
+    /// Whether `from` reaches `to` through the buses it feeds, by output or by send.
     private func leadsBack(from: UUID, to: UUID) -> Bool {
-        var at: UUID? = from
-        var steps = 0
-        while let id = at, steps <= project.buses.count {
+        var seen = Set<UUID>(), queue = [from]
+        while let id = queue.popLast() {
             if id == to { return true }
-            at = project.bus(id)?.output
-            steps += 1
+            guard seen.insert(id).inserted, let b = project.bus(id) else { continue }
+            if let o = b.output { queue.append(o) }
+            queue.append(contentsOf: b.sends.map(\.to))
         }
         return false
     }
@@ -86,7 +90,10 @@ private struct MixerStrip: View {
     let output: UUID?
     let stereo: Bool
     let destinations: [(UUID, String)]
+    let sends: [Send]
+    let sendTargets: [(UUID, String)]
     let change: ([String: JSONValue]) -> Void
+    let send: ([String: JSONValue]) -> Void
     let remove: (() -> Void)?
     @State private var level = 0.0
     @State private var position = 0.0
@@ -127,6 +134,23 @@ private struct MixerStrip: View {
             }
             .labelsHidden()
             .frame(width: 150)
+            // Sends: a copy of the strip to a bus, each with a level and whether it is taken before the fader.
+            Menu(sends.isEmpty ? "Sends" : "Sends (\(sends.count))") {
+                if sendTargets.isEmpty { Text("Add a bus to send to") }
+                ForEach(sendTargets, id: \.0) { target in
+                    let now = sends.first { $0.to == target.0 }
+                    Menu(now.map { "\(target.1): \(Self.levelText($0.gainDB))\($0.pre ? ", before the fader" : "")" } ?? target.1) {
+                        ForEach([0.0, -6, -12, -18, -24], id: \.self) { db in
+                            Button("\(now?.gainDB == db ? "✓ " : "")\(Self.levelText(db))") { send(["to": .string(target.0.uuidString), "gainDB": .number(db)]) }
+                        }
+                        Divider()
+                        Button("\(now?.pre == true ? "✓ " : "")Before the fader") { send(["to": .string(target.0.uuidString), "pre": .bool(!(now?.pre ?? false))]) }
+                        if now != nil { Button("Remove This Send") { send(["to": .string(target.0.uuidString), "remove": .bool(true)]) } }
+                    }
+                }
+            }
+            .fixedSize()
+            .accessibilityLabel("Sends of \(name)")
             // The same width on every row, with or without the button, so the columns line up.
             Group {
                 if let remove {

@@ -14,8 +14,14 @@ let hasFluidAudio = FileManager.default.fileExists(atPath: Context.packageDirect
 
 // Reverb reduction (WPE) can be left out of a release: Config/Features.xcconfig decides, for
 // this package and for the app alike. Debug builds (and so the tests) always compile it.
-let features = (try? String(contentsOfFile: Context.packageDirectory + "/../../Config/Features.xcconfig", encoding: .utf8)) ?? ""
-let releaseHasDereverb = features.split(separator: "\n").contains { $0.replacingOccurrences(of: " ", with: "") == "JAMMER_DEREVERB=YES" }
+//
+// The switch stands here as text, written from Config/Features.xcconfig by scripts/apply-features.py
+// (run by scripts/export-agents-guide.sh; the package tests fail when the two disagree). It used to be
+// read from that file when the manifest was evaluated, and Xcode keeps an evaluated manifest until the
+// manifest's own text changes: a flip of the switch then didn't reach a Release build (found 2026-11-16,
+// by building Release both ways and looking in the binary).
+let releaseFeatures: Set<String> = ["DEREVERB"] // generated: JAMMER_DEREVERB
+let releaseHasDereverb = releaseFeatures.contains("DEREVERB")
 let dereverbSettings: [SwiftSetting] = [.define("JAMMER_DEREVERB", .when(configuration: .debug))]
     + (releaseHasDereverb ? [.define("JAMMER_DEREVERB", .when(configuration: .release))] : [])
 

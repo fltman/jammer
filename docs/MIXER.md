@@ -13,7 +13,15 @@ Phase 3, part 2. The sketch as the coordinator approved it on 2026-11-16, with t
 - In the app: a bus through the API took the music 12 dB down (−15.4 → −19.0 LUFS for the mix), a loop and an in-use removal were refused with `routing_loop` and `in_use`, the sheet read through the accessibility API with every control named, a Mute box ticked by hand landed in the model, and three undos brought the document back to one that doesn't use the mixer.
 - The assistant can add a bus by name (given to the on-device model only when the request says bus or submix); changing and removing one need an id it isn't told.
 
-Not built: sends, delay compensation across buses, the master strip and its limiter, VCAs, sidechain keys, freeze, solo, plugins on buses.
+**Step 2, 2026-11-16: sends.** `Send` on tracks and buses (`to`, `gainDB`, `pre`), the step `set_send`, sends in `GET …/mixer`, a Sends menu on every strip of the sheet. The engine orders the buses so that each comes before every bus it feeds, through its output or a send.
+
+- Tested (`MixerTests`): a send after the fader at 0 dB doubles the track to within 1e-7 and goes down with the fader; one before the fader keeps its level and isn't panned; a muted strip sends nothing; bus to bus; one send per pair, changed in place and removed; the same in blocks. Refused: a loop closed by a send or by an output, a bus to itself, a target or a source that isn't there, a level out of range, a 17th send, removing a send that isn't there. A bus taken away takes the sends to it along. In a file: sends to nowhere, twins, a loop by send, an absurd level and too many are tidied and said. The engine cuts a loop of sends by itself.
+- In the app: a send of the speech to a bus at 0 dB took the mix from −15.4 to −12.0 LUFS; at −12 dB before the fader, to −14.5; a loop by send answered `routing_loop`; the sheet's Sends menus read named, and the sheet was looked at as a picture.
+- A send to a bus only adds to its sum until buses hold plugins; the manual says so.
+
+**The assistant and buses.** The document's description to the model lists the buses by name, and `set_bus` and `remove_bus` take a name, which is turned into the id. `set_send` is not offered to the assistant yet.
+
+Not built: delay compensation across buses, the master strip and its limiter, VCAs, sidechain keys, freeze, solo, plugins on buses.
 
 ## What the render path costs today (measured 2026-11-16)
 

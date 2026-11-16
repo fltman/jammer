@@ -557,15 +557,16 @@ enum AgentRouter {
     /// the output), and for each bus what comes into it.
     static func mixerJSON(_ p: Project) -> [String: Any] {
         func to(_ id: UUID?) -> String { id?.uuidString ?? "master" }
+        func sends(_ s: [Send]) -> [[String: Any]] { s.map { ["to": $0.to.uuidString, "gainDB": $0.gainDB, "pre": $0.pre] } }
         let tracks = p.tracks.map { t -> [String: Any] in
-            ["id": t.id.uuidString, "name": t.name, "gainDB": t.gainDB, "pan": t.pan, "muted": t.isMuted, "output": to(t.output)]
+            ["id": t.id.uuidString, "name": t.name, "gainDB": t.gainDB, "pan": t.pan, "muted": t.isMuted, "output": to(t.output), "sends": sends(t.sends)]
         }
         let buses = p.buses.map { b -> [String: Any] in
-            ["id": b.id.uuidString, "name": b.name, "gainDB": b.gainDB, "pan": b.pan, "muted": b.isMuted, "output": to(b.output),
+            ["id": b.id.uuidString, "name": b.name, "gainDB": b.gainDB, "pan": b.pan, "muted": b.isMuted, "output": to(b.output), "sends": sends(b.sends),
              "inputs": ["tracks": p.tracks.filter { $0.output == b.id }.map(\.id.uuidString), "buses": p.buses.filter { $0.output == b.id }.map(\.id.uuidString)]]
         }
         return ["tracks": tracks, "buses": buses, "usesMixer": p.usesMixer, "panAvailable": p.channels == 2,
-                "limits": ["buses": Mixer.maxBuses, "gainDB": [Mixer.gainRange.lowerBound, Mixer.gainRange.upperBound], "pan": [-1, 1]]]
+                "limits": ["buses": Mixer.maxBuses, "sendsPerStrip": Mixer.maxSends, "gainDB": [Mixer.gainRange.lowerBound, Mixer.gainRange.upperBound], "pan": [-1, 1]]]
     }
 
     static func trackJSON(_ s: EditorSession, _ t: Track) -> [String: Any] {

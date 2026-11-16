@@ -68,7 +68,7 @@ struct AssistantEval {
         let context = AssistantContext(project: p, selection: nil, playhead: 0)
         let planner = Self.planner
         let actions = AssistantCatalog.actions
-        var opsRight = 0, paramsRight = 0, paramsTotal = 0, invented = 0, wrongLanguage = 0, unaskedRuns = 0
+        var opsRight = 0, opsRightForUser = 0, paramsRight = 0, paramsTotal = 0, invented = 0, wrongLanguage = 0, unaskedRuns = 0
         var rows: [String] = []
         var seconds = 0.0
         for c in Self.cases(track2: p.tracks[1].id.uuidString) {
@@ -83,6 +83,8 @@ struct AssistantEval {
             let got = plan.steps.map(\.op)
             let ok = got == c.ops
             if ok { opsRight += 1 }
+            // As the user gets it: after the checks the app makes on every plan (ReplyGuard).
+            if ReplyGuard.checked(plan, goal: c.goal, context: context).steps.map(\.op) == c.ops { opsRightForUser += 1 }
             // The reply as the model wrote it (the app shows it only after ReplyGuard).
             let faults = ReplyGuard.faults(plan, goal: c.goal, context: context)
             // Would the app have changed the document without asking? It must never: a change the request
@@ -105,7 +107,7 @@ struct AssistantEval {
             rows.append("| \(c.goal) | \(c.ops.joined(separator: ", ")) | \(shown.isEmpty ? "(none) " + plan.reply.prefix(60) : shown)\(plan.dropped.isEmpty ? "" : " [dropped: \(plan.dropped.joined(separator: ", "))]") | \(ok ? (paramNotes.isEmpty ? "✓" : "ops ✓, " + paramNotes.joined(separator: " ")) : "✗") |")
         }
         let n = Self.cases(track2: "").count
-        let summary = "Right actions in the right order: \(opsRight)/\(n). Right key values: \(paramsRight)/\(paramsTotal). Average \(String(format: "%.1f", seconds / Double(n))) s per request. Replies with a figure of the model's own (struck before showing): \(invented). Replies in another language than the request (replaced): \(wrongLanguage). Plans with none of the expected actions that would have changed the document without a yes: \(unaskedRuns)."
+        let summary = "As the user gets it: \(opsRightForUser)/\(n). The model's own plan, right actions in the right order: \(opsRight)/\(n). Right key values: \(paramsRight)/\(paramsTotal). Average \(String(format: "%.1f", seconds / Double(n))) s per request. Replies with a figure of the model's own (struck before showing): \(invented). Replies in another language than the request (replaced): \(wrongLanguage). Plans with none of the expected actions that would have changed the document without a yes: \(unaskedRuns)."
         let table = "| Request | Expected | Planned | Result |\n|---|---|---|---|\n" + rows.joined(separator: "\n") + "\n\n" + summary + "\n"
         print(table)
         if let path = ProcessInfo.processInfo.environment["JAMMER_EVAL_REPORT"] { try table.write(toFile: path, atomically: true, encoding: .utf8) }

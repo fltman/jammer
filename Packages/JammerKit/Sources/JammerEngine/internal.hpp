@@ -99,10 +99,18 @@ private:
     void produce(const Plan &plan, int32_t track, Renderer &renderer);
 };
 
+/// A copy of a strip's signal sent to a bus: before the strip's fader and pan (`pre`), or after them.
+struct Send {
+    int32_t bus;
+    float gain;
+    bool pre;
+};
+
 struct Track {
     float gain = 1.0f;
     bool mute = false;
     std::shared_ptr<Chain> chain;
+    std::vector<Send> sends;
     /// Where the track goes: a bus (its index), or -1 for the output. With pan: the gain of the left
     /// and of the right channel (1 and 1 at the centre).
     int32_t bus = -1;
@@ -115,6 +123,7 @@ struct Bus {
     bool mute = false;
     float panL = 1.0f, panR = 1.0f;
     int32_t output = -1;
+    std::vector<Send> sends;
 };
 
 struct Plan {
