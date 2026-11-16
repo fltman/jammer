@@ -188,6 +188,9 @@ void jm_plan_set_gain_curve(jm_plan *_Nonnull plan, int32_t kind, int32_t index,
 /// clicks; it silences sends before the fader too, as the mute button does), 2 the pan from −1 to 1 (by
 /// the law of a fixed pan; set the strip's fixed pan to the centre when giving one, since this takes its
 /// place; stereo plans only). The master has a level only.
+/// Automation of a send's level (dB, added to the send's own gain): the send from a track (or a bus, with
+/// `fromBus`) to bus `to`, which must have been added. On the timeline of the strip it is taken from.
+void jm_plan_set_send_curve(jm_plan *_Nonnull plan, bool fromBus, int32_t from, int32_t to, const int64_t *_Nonnull frames, const float *_Nonnull db, int32_t count);
 void jm_plan_set_curve(jm_plan *_Nonnull plan, int32_t kind, int32_t index, int32_t what, const int64_t *_Nonnull frames, const float *_Nonnull values, int32_t count);
 int64_t jm_plan_master_latency(const jm_plan *_Nonnull plan);
 

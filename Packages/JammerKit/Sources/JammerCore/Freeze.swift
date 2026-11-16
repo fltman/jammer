@@ -79,7 +79,8 @@ extension Project {
         // A strip's automation is part of what it sends on (after its fader), never of what it is before it.
         // (Nothing is added for a strip without lanes, so what was frozen before there was automation stays good.)
         func lanes(_ id: UUID) -> String {
-            let l = self.lanes(of: id).filter(\.enabled)
+            // (With the lanes of the VCA group the strip belongs to: they are added to its own.)
+            let l = (self.lanes(of: id) + (group(of: id).map { self.lanes(of: $0) } ?? [])).filter(\.enabled)
             return l.isEmpty ? "" : ",automation:\(encoded(l))"
         }
         func keys(_ inserts: [Insert], _ seen: inout Set<UUID>) -> String {

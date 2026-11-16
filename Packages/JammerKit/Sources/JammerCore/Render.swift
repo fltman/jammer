@@ -188,7 +188,11 @@ public enum PlanCompiler {
             for b in project.buses {
                 guard let from = busIndex[b.id] else { continue }
                 if let o = b.output, let to = busIndex[o] { jm_plan_set_bus_output(plan, from, to) }
-                for s in b.sends { if let to = busIndex[s.to] { jm_plan_add_bus_send(plan, from, to, Float(dbToGain(s.gainDB)), s.pre) } }
+                for s in b.sends {
+                    guard let to = busIndex[s.to] else { continue }
+                    jm_plan_add_bus_send(plan, from, to, Float(dbToGain(s.gainDB)), s.pre)
+                    if let c = project.sendCurve(from: b.id, to: s.to) { jm_plan_set_send_curve(plan, true, from, to, c.frames, c.db, Int32(c.frames.count)) }
+                }
             }
         }
         for t in project.tracks {
@@ -199,7 +203,11 @@ public enum PlanCompiler {
             if routed {
                 let pan = project.channels == 2 && project.panCurve(of: t.id) == nil ? Mixer.panGains(t.pan) : (1, 1)
                 jm_plan_set_track_route(plan, track, t.output.flatMap { busIndex[$0] } ?? -1, pan.0, pan.1)
-                for s in t.sends { if let to = busIndex[s.to] { jm_plan_add_track_send(plan, track, to, Float(dbToGain(s.gainDB)), s.pre) } }
+                for s in t.sends {
+                    guard let to = busIndex[s.to] else { continue }
+                    jm_plan_add_track_send(plan, track, to, Float(dbToGain(s.gainDB)), s.pre)
+                    if let c = project.sendCurve(from: t.id, to: s.to) { jm_plan_set_send_curve(plan, false, track, to, c.frames, c.db, Int32(c.frames.count)) }
+                }
             }
             if let inserts, t.inserts.contains(where: { !$0.bypass }) { inserts.attachChain(for: t, to: plan, index: track) }
             for c in t.clips {

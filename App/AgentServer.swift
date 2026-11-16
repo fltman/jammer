@@ -496,10 +496,12 @@ enum AgentRouter {
                 guard let strip = name == "master" ? Master.id : UUID(uuidString: name), let at = Double(r.query["at"] ?? ""), at.isFinite, at >= 0 else {
                     throw APIError.badRequest("Add ?strip=<track or bus id, or master>&at=<seconds>.")
                 }
-                guard let param = AutomationLane.Param(rawValue: r.query["param"] ?? "gain"), param != .send else { throw APIError.badRequest("\"param\" is gain, pan or mute.") }
+                guard let param = AutomationLane.Param(rawValue: r.query["param"] ?? "gain") else { throw APIError.badRequest("\"param\" is gain, pan, mute or send.") }
+                let to = r.query["to"].flatMap(UUID.init(uuidString:))
+                if param == .send, to == nil { throw APIError.badRequest("With param=send, add &to=<the id of the bus the send goes to>.") }
                 guard let level = p.level(of: strip, at: p.frames(at)) else { throw APIError(404, "not_found", "There is no track or bus with id \(name).") }
                 func r2(_ v: Double) -> Double { (v * 100).rounded() / 100 }
-                let value = param == .gain ? level.automationDB : p.automated(param, of: strip, at: p.frames(at))
+                let value = param == .gain ? level.automationDB : p.lane(strip: strip, param: param, to: param == .send ? to : nil).flatMap { $0.enabled ? $0.value(at: p.frames(at)) : nil }
                 return .json(["automation": ["strip": name, "param": param.rawValue, "at": at, "value": value.map { r2($0) as Any } ?? NSNull(),
                                              "faderDB": r2(level.faderDB), "levelDB": r2(level.totalDB), "muted": level.muted,
                                              "note": "value is the lane's (null: no lane, or it is switched off): dB for gain, −1 to 1 for pan, 1 or 0 for mute. faderDB is the fader with its VCA group; levelDB is that and the gain lane together; muted is true when the button, the group or the mute lane silences the strip at that time."] as [String: Any]])
@@ -686,12 +688,14 @@ enum AgentRouter {
         // Automation: every lane of a strip, with its points in seconds. [] for a strip without any.
         func lanes(_ strip: UUID) -> [[String: Any]] {
             p.lanes(of: strip).map { l in
-                ["param": l.param.rawValue, "shape": l.shape.rawValue, "enabled": l.enabled,
-                 "points": l.points.map { [(p.seconds($0.frame) * 100_000).rounded() / 100_000, $0.value] }]
+                var d: [String: Any] = ["param": l.param.rawValue, "shape": l.shape.rawValue, "enabled": l.enabled,
+                                        "points": l.points.map { [(p.seconds($0.frame) * 100_000).rounded() / 100_000, $0.value] }]
+                if let to = l.to { d["to"] = to.uuidString }
+                return d
             }
         }
         let vcas = p.vcas.map { v -> [String: Any] in
-            ["id": v.id.uuidString, "name": v.name, "gainDB": v.gainDB, "muted": v.isMuted,
+            ["id": v.id.uuidString, "name": v.name, "gainDB": v.gainDB, "muted": v.isMuted, "automation": lanes(v.id),
              "members": ["tracks": p.tracks.filter { $0.vca == v.id }.map(\.id.uuidString), "buses": p.buses.filter { $0.vca == v.id }.map(\.id.uuidString)]]
         }
         let tracks = p.tracks.map { t -> [String: Any] in

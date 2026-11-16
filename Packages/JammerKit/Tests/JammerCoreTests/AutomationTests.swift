@@ -278,13 +278,15 @@ struct AutomationTests {
         refused("points[0]") { try p.setAutomation(strip: t, points: [AutomationPoint(frame: 0, value: .nan)]) }
         refused("outside the range given") { try p.setAutomation(strip: t, points: Self.points([(0.3, 0)], p), range: p.frames(0)...p.frames(0.2)) }
         refused("two points") { try p.setAutomation(strip: t, points: Self.points([(0.1, 0), (0.1, -3)], p)) }
-        refused("no track or bus") { try p.setAutomation(strip: UUID(), points: []) }
-        refused("isn't built yet") { try p.setAutomation(strip: t, param: .send, points: []) }
+        refused("no track, bus or VCA group") { try p.setAutomation(strip: UUID(), points: []) }
+        refused("has no send") { try p.setAutomation(strip: t, param: .send, to: UUID(), points: [AutomationPoint(frame: 0, value: -6)]) }
+        refused("has no send") { try p.setAutomation(strip: t, param: .send, points: [AutomationPoint(frame: 0, value: -6)]) }
+        refused("goes with a send lane only") { try p.setAutomation(strip: t, param: .gain, to: UUID(), points: [AutomationPoint(frame: 0, value: -6)]) }
         refused("a pan is −1 (left) to 1 (right)") { try p.setAutomation(strip: t, param: .pan, points: [AutomationPoint(frame: 0, value: 2)]) }
         refused("a mute is 1 (muted) or 0 (heard)") { try p.setAutomation(strip: t, param: .mute, points: [AutomationPoint(frame: 0, value: 0.5)]) }
         refused("holds each value") { try p.setAutomation(strip: t, param: .mute, points: [AutomationPoint(frame: 0, value: 1)], shape: .linear) }
-        refused("not a pan or a mute") { try p.setAutomation(strip: Master.id, param: .pan, points: [AutomationPoint(frame: 0, value: 0)]) }
-        refused("not a pan or a mute") { try p.setAutomation(strip: Master.id, param: .mute, points: [AutomationPoint(frame: 0, value: 1)]) }
+        refused("not a pan, a mute or a send") { try p.setAutomation(strip: Master.id, param: .pan, points: [AutomationPoint(frame: 0, value: 0)]) }
+        refused("not a pan, a mute or a send") { try p.setAutomation(strip: Master.id, param: .mute, points: [AutomationPoint(frame: 0, value: 1)]) }
         refused("\(Automation.maxPoints) points") {
             try p.setAutomation(strip: t, points: (0...Automation.maxPoints).map { AutomationPoint(frame: Frame($0), value: 0) })
         }
@@ -401,7 +403,7 @@ struct AutomationSafetyTests {
             good,
             AutomationLane(strip: UUID(), points: [AutomationPoint(frame: 0, value: -6)]),                       // a strip that isn't there
             AutomationLane(strip: a, points: [AutomationPoint(frame: 5, value: -60)]),                           // a twin of the first
-            AutomationLane(strip: b, param: .send, to: UUID(), points: [AutomationPoint(frame: 0, value: 1)]),   // not built
+            AutomationLane(strip: b, param: .send, to: UUID(), points: [AutomationPoint(frame: 0, value: 1)]),   // a send that isn't there
             AutomationLane(strip: b, points: [AutomationPoint(frame: 900, value: .nan), AutomationPoint(frame: -4, value: 0)]),   // nothing usable
             AutomationLane(strip: c, points: [AutomationPoint(frame: 800, value: 400), AutomationPoint(frame: 100, value: -3),    // out of order, out of range,
                                               AutomationPoint(frame: 100, value: -9), AutomationPoint(frame: .max, value: 0),     // doubled, beyond the horizon,
@@ -606,5 +608,99 @@ struct AutomationMutePanTests {
             #expect(MixerGraphTests.render(c, from: from, frames: frames) == Array(want[(from * 2)..<((from + frames) * 2)]), "seek to \(from)")
         }
         jm_plan_release(c)
+    }
+}
+
+/// Automation, step 3: a send's level, and a VCA group's lanes.
+@Suite("Mixer: automation of sends and VCA groups")
+struct AutomationSendVCATests {
+    @Test("A send's lane moves the send and nothing else, on the strip's timeline; it goes when the send goes")
+    func sendLane() throws {
+        var (p, pool) = MixerTests.document()
+        let t = p.tracks[0].id
+        let wet = try p.addBus(name: "Wet")
+        try p.setSend(from: t, to: wet.id, gainDB: -6)
+        let before = MixerTests.render(p, pool)
+        // A lane of 0 dB: the same samples. A lane of −96: the send is as good as gone, the track itself untouched.
+        try p.setAutomation(strip: t, param: .send, to: wet.id, points: [AutomationPoint(frame: 0, value: 0)])
+        #expect(MixerTests.render(p, pool) == before)
+        try p.setAutomation(strip: t, param: .send, to: wet.id, points: [AutomationPoint(frame: 0, value: -96)])
+        var noSend = p
+        noSend.automation = []
+        try noSend.setSend(from: t, to: wet.id, remove: true)
+        let dry = MixerTests.render(noSend, pool), down = MixerTests.render(p, pool)
+        #expect(zip(down, dry).allSatisfy { abs($0 - $1) < 1e-5 })
+        // Constant −6 on the lane is the send at −12.
+        try p.setAutomation(strip: t, param: .send, to: wet.id, points: [AutomationPoint(frame: 0, value: -6)])
+        var byHand = p
+        byHand.automation = []
+        try byHand.setSend(from: t, to: wet.id, gainDB: -12)
+        #expect(zip(MixerTests.render(p, pool), MixerTests.render(byHand, pool)).allSatisfy { abs($0 - $1) < 1e-6 })
+        // A send before the fader has its own lane all the same, and doesn't follow the fader's.
+        try p.setSend(from: t, to: wet.id, pre: true)
+        try p.setAutomation(strip: t, points: [AutomationPoint(frame: 0, value: -20)])
+        var preByHand = byHand
+        try preByHand.setSend(from: t, to: wet.id, gainDB: -12, pre: true)
+        preByHand.tracks[0].gainDB = -20
+        #expect(zip(MixerTests.render(p, pool), MixerTests.render(preByHand, pool)).allSatisfy { abs($0 - $1) < 1e-6 })
+        // The lane is saved with its bus, and is gone (not saved, not heard) when the send is removed.
+        let json = String(decoding: try JSONEncoder().encode(p), as: UTF8.self)
+        #expect(try JSONDecoder().decode(Project.self, from: Data(json.utf8)) == p)
+        #expect(p.lane(strip: t, param: .send, to: wet.id) != nil)
+        try p.setSend(from: t, to: wet.id, remove: true)
+        #expect(p.lane(strip: t, param: .send, to: wet.id) == nil && p.lanes(of: t).count == 1)
+        // Freezing: a send's lane into a bus is part of what the bus is made from.
+        var (f, _) = MixerTests.document()
+        let bus = try f.addBus(name: "B")
+        try f.setSend(from: f.tracks[0].id, to: bus.id)
+        let was = f.content(of: bus.id)
+        try f.setAutomation(strip: f.tracks[0].id, param: .send, to: bus.id, points: [AutomationPoint(frame: 0, value: -3)])
+        #expect(f.content(of: bus.id) != was)
+    }
+
+    @Test("A VCA group's lanes are added to its members': the same samples as writing the summed values on each member by hand")
+    func vcaLanes() throws {
+        var (p, pool) = MixerTests.document()
+        let a = p.tracks[0].id, b = p.tracks[1].id, c = p.tracks[2].id
+        let group = try p.addVCA(name: "Voices")
+        try p.setMember(a, vca: group.id)
+        try p.setMember(b, vca: group.id)
+        func pts(_ list: [(Frame, Double)]) -> [AutomationPoint] { list.map { AutomationPoint(frame: $0.0, value: $0.1) } }
+        // The group goes down 12 dB between 2 000 and 10 000; member a has a lane of its own with other points; b has none; c is outside.
+        let groupLane = pts([(2_000, 0), (10_000, -12)]), own = pts([(1_000, -3), (6_000, 3), (15_000, -6)])
+        try p.setAutomation(strip: group.id, points: groupLane)
+        try p.setAutomation(strip: a, points: own)
+        // By hand: on every member, the sum of the two lines at the points of both.
+        var byHand = p
+        byHand.automation = []
+        let g = AutomationLane(strip: group.id, points: groupLane), o = AutomationLane(strip: a, points: own)
+        let frames: [Frame] = [1_000, 2_000, 6_000, 10_000, 15_000]
+        try byHand.setAutomation(strip: a, points: frames.map { AutomationPoint(frame: $0, value: g.value(at: $0)! + o.value(at: $0)!) })
+        try byHand.setAutomation(strip: b, points: groupLane)
+        #expect(MixerTests.render(p, pool) == MixerTests.render(byHand, pool))
+        // The level an agent reads has the group's lane in it; the outsider's doesn't.
+        #expect(p.level(of: a, at: 6_000)?.automationDB == 3 + -6 && p.level(of: b, at: 6_000)?.automationDB == -6 && p.level(of: c, at: 6_000)?.automationDB == nil)
+        // The group's mute lane mutes its members, with the ramp, and not the outsider.
+        try p.setAutomation(strip: group.id, param: .mute, points: pts([(0, 0), (12_000, 1)]))
+        var mutedByHand = byHand
+        for m in [a, b] { try mutedByHand.setAutomation(strip: m, param: .mute, points: pts([(0, 0), (12_000, 1)])) }
+        #expect(MixerTests.render(p, pool) == MixerTests.render(mutedByHand, pool))
+        #expect(p.level(of: a, at: 12_000)?.muted == true && p.level(of: c, at: 12_000)?.muted == false)
+        // A member muted by its own lane earlier and the group later: muted when either says so.
+        try p.setAutomation(strip: a, param: .mute, points: pts([(0, 0), (5_000, 1), (8_000, 0)]))
+        let curve = try #require(p.muteCurve(of: a))
+        #expect(curve.frames == [0, 5_000, 5_240, 8_000, 8_240, 12_000, 12_240] && curve.values == [1, 1, 0, 0, 1, 1, 0])
+        // A group has a level and a mute, nothing else; and freezing sees the group's lanes through its members.
+        do { try p.setAutomation(strip: group.id, param: .pan, points: pts([(0, 0)])); Issue.record("not refused") } catch { #expect(error.localizedDescription.contains("VCA group has a level and a mute")) }
+        var (f, _) = MixerTests.document()
+        let bus = try f.addBus(name: "B"), v = try f.addVCA(name: "V")
+        try f.setTrackRoute(f.tracks[0].id, output: .some(bus.id))
+        try f.setMember(f.tracks[0].id, vca: v.id)
+        let was = f.content(of: bus.id)
+        try f.setAutomation(strip: v.id, points: pts([(0, -3)]))
+        #expect(f.content(of: bus.id) != was)
+        // Removing the group takes its lanes out of the sound and out of the file.
+        try p.removeVCA(group.id)
+        #expect(p.lanes(of: group.id).isEmpty && p.liveLanes.allSatisfy { $0.strip != group.id })
     }
 }

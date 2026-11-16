@@ -139,16 +139,18 @@ public enum Operations {
     @TaskLocal public static var automationForThisTask: Bool?
     public static var automationOn: Bool { automationForThisTask ?? automation }
     static let automationSteps: [OperationSpec] = [
-        .init("set_automation", "Write Automation", "Writes automation: points on the timeline that a strip's level, pan or mute follows (before the first point the value is the first point's, after the last the last's). `gain`: a straight line in dB from point to point, added to the fader, which stays where it is (0 dB is no change). `pan`: a straight line from point to point, −1 left to 1 right, in the place of the fixed pan while the lane is there (stereo documents). `mute`: 1 muted, 0 heard, each held until the next point; the sound closes and opens over 5 ms beginning at the point, so it never clicks, and sends before the fader are silenced too, as by the mute button. The master has a gain lane only. `points` replace the whole lane; with `start` and `end` they replace only the points inside that range and nothing outside it is touched. A point lands on its own sample, whatever plugins the strip has. Edits that close up or open the whole timeline (delete, paste, removed pauses) move the points with the sound; lining up or stretching one track doesn't, and the answer then carries a warning. Refused with the name of the field: a point after the document's end or outside `start`…`end`, a value outside what the lane takes (−96 to 24 dB, −1 to 1, 0 or 1), two points at one time. info has `points`, how many the lane now has.",
-              params: [.init("strip", .string, "The id of the track or bus, or \"master\".", required: true),
-                       .init("param", .string, "What the lane moves. Default gain.", options: ["gain", "pan", "mute"]),
+        .init("set_automation", "Write Automation", "Writes automation: points on the timeline that a strip's level, pan or mute follows (before the first point the value is the first point's, after the last the last's). `gain`: a straight line in dB from point to point, added to the fader, which stays where it is (0 dB is no change). `pan`: a straight line from point to point, −1 left to 1 right, in the place of the fixed pan while the lane is there (stereo documents). `mute`: 1 muted, 0 heard, each held until the next point; the sound closes and opens over 5 ms beginning at the point, so it never clicks, and sends before the fader are silenced too, as by the mute button. `send` with `to` (a bus id): the level of the strip's send to that bus, in dB, added to the send's own level. `strip` may also be a VCA group's id: its gain and mute lanes are added to those of every track and bus in the group, as its fader is. The master has a gain lane only. `points` replace the whole lane; with `start` and `end` they replace only the points inside that range and nothing outside it is touched. A point lands on its own sample, whatever plugins the strip has. Edits that close up or open the whole timeline (delete, paste, removed pauses) move the points with the sound; lining up or stretching one track doesn't, and the answer then carries a warning. Refused with the name of the field: a point after the document's end or outside `start`…`end`, a value outside what the lane takes (−96 to 24 dB, −1 to 1, 0 or 1), two points at one time. info has `points`, how many the lane now has.",
+              params: [.init("strip", .string, "The id of the track, bus or VCA group, or \"master\".", required: true),
+                       .init("param", .string, "What the lane moves. Default gain.", options: ["gain", "pan", "mute", "send"]),
+                       .init("to", .string, "For param send: the id of the bus the send goes to. The send must be there (set_send)."),
                        .init("points", .pairs, "The points: [[seconds, value], …]; the value is dB for gain, −1 to 1 for pan, 1 or 0 for mute. An empty list with `start` and `end` takes the points in that range away.", required: true, range: -96...24),
                        .init("start", .seconds, "Start of the range to replace, in seconds. With `end`."),
                        .init("end", .seconds, "End of the range to replace, in seconds. With `start`."),
                        .init("enabled", .boolean, "False keeps the lane but stops it being heard; true brings it back.")]),
         .init("clear_automation", "Clear Automation", "Takes the points of one lane away: all of them, or with `start` and `end` those inside that range. One strip and one lane at a time; nothing clears a whole project. info has `removed`.",
-              params: [.init("strip", .string, "The id of the track or bus, or \"master\".", required: true),
-                       .init("param", .string, "Which lane.", required: true, options: ["gain", "pan", "mute"]),
+              params: [.init("strip", .string, "The id of the track, bus or VCA group, or \"master\".", required: true),
+                       .init("param", .string, "Which lane.", required: true, options: ["gain", "pan", "mute", "send"]),
+                       .init("to", .string, "For param send: the id of the bus the send goes to."),
                        .init("start", .seconds, "Start of the range to clear, in seconds. With `end`."),
                        .init("end", .seconds, "End of the range to clear, in seconds. With `start`.")]),
     ]
@@ -671,8 +673,8 @@ public enum StepRunner {
         guard ["set_automation", "clear_automation"].contains(step.op) else { return }
         let p = step.params
         let name = p["strip"]?.string ?? ""
-        guard name == "master" || UUID(uuidString: name).map({ id in project.tracks.contains { $0.id == id } || project.bus(id) != nil }) == true else {
-            throw StepFailure("\(step.op): \"strip\" is the id of a track or a bus, or \"master\"; there is none with id \(name).", reason: "not_found")
+        guard name == "master" || UUID(uuidString: name).map({ id in project.tracks.contains { $0.id == id } || project.bus(id) != nil || project.vca(id) != nil }) == true else {
+            throw StepFailure("\(step.op): \"strip\" is the id of a track, a bus or a VCA group, or \"master\"; there is none with id \(name).", reason: "not_found")
         }
         guard (p["start"] == nil) == (p["end"] == nil) else { throw StepFailure("\(step.op): \"start\" and \"end\" go together.") }
         let end = project.seconds(project.length)
@@ -681,7 +683,17 @@ public enum StepRunner {
             guard b <= end + 1e-9 else { throw StepFailure("\(step.op): \"end\" is at \(b.plain) s, after the document's end (\(end.plain) s).") }
         }
         let param = AutomationLane.Param(rawValue: p["param"]?.string ?? "gain") ?? .gain
-        if name == "master", param != .gain { throw StepFailure("\(step.op): \"param\" is gain for the master; it has no pan or mute to automate.") }
+        if name == "master", param != .gain { throw StepFailure("\(step.op): \"param\" is gain for the master; it has no pan, mute or send to automate.") }
+        let stripID = UUID(uuidString: name)
+        if let id = stripID, project.vca(id) != nil, param == .pan || param == .send { throw StepFailure("\(step.op): \"param\" is gain or mute for a VCA group; it has no pan or send.") }
+        if param == .send {
+            guard let to = p["to"]?.string else { throw StepFailure("\(step.op): \"to\" is needed with param send: the id of the bus the send goes to.") }
+            guard let toID = UUID(uuidString: to), let from = stripID, project.hasSend(from: from, to: toID) else {
+                throw StepFailure("\(step.op): \"to\": that strip has no send to \(to). Make the send first (set_send).", reason: "not_found")
+            }
+        } else if p["to"] != nil {
+            throw StepFailure("\(step.op): \"to\" goes with param send only.")
+        }
         if param == .pan, project.channels != 2 { throw StepFailure("\(step.op): \"param\" can't be pan in a mono document.", reason: "needs_stereo") }
         let allowed = Automation.range(of: param)
         for (i, pair) in (p["points"]?.pairs ?? []).enumerated() {
@@ -1029,9 +1041,10 @@ public enum StepRunner {
             let strip = p["strip"]?.string == "master" ? Master.id : UUID(uuidString: p["strip"]?.string ?? "") ?? UUID()
             let range: ClosedRange<Frame>? = frames("start").flatMap { a in frames("end").map { a...max(a, $0) } }
             let param = AutomationLane.Param(rawValue: p["param"]?.string ?? "gain") ?? .gain
+            let to = p["to"]?.string.flatMap(UUID.init(uuidString:))
             do {
                 if step.op == "clear_automation" {
-                    return ["removed": Double(try s.project.clearAutomation(strip: strip, param: param, range: range))]
+                    return ["removed": Double(try s.project.clearAutomation(strip: strip, param: param, to: to, range: range))]
                 }
                 var enabled: Bool?
                 if let v = p["enabled"], case .bool(let b) = v { enabled = b }
@@ -1039,12 +1052,12 @@ public enum StepRunner {
                 guard !points.isEmpty || range != nil || enabled != nil else { throw StepFailure("set_automation: no points were given. To take a lane away, use clear_automation.") }
                 if points.isEmpty, range == nil, let enabled {
                     // Only switching the lane on or off.
-                    guard let lane = s.project.lane(strip: strip, param: param) else { throw StepFailure("set_automation: there is no \(param.rawValue) lane on that strip to switch \(enabled ? "on" : "off").", reason: "not_found") }
-                    try s.project.setAutomation(strip: strip, param: param, points: lane.points, enabled: enabled)
+                    guard let lane = s.project.lane(strip: strip, param: param, to: to) else { throw StepFailure("set_automation: there is no \(param.rawValue) lane on that strip to switch \(enabled ? "on" : "off").", reason: "not_found") }
+                    try s.project.setAutomation(strip: strip, param: param, to: to, points: lane.points, enabled: enabled)
                 } else {
-                    try s.project.setAutomation(strip: strip, param: param, points: points, range: range, enabled: enabled)
+                    try s.project.setAutomation(strip: strip, param: param, to: to, points: points, range: range, enabled: enabled)
                 }
-                return ["points": Double(s.project.lane(strip: strip, param: param)?.points.count ?? 0)]
+                return ["points": Double(s.project.lane(strip: strip, param: param, to: to)?.points.count ?? 0)]
             } catch let e as Automation.Failure { throw StepFailure("\(step.op): " + (e.errorDescription ?? ""), reason: e.reason) }
         case "set_master":
             var limiter: MasterLimiter?? = nil

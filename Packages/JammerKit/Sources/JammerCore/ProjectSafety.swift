@@ -45,14 +45,18 @@ public enum ProjectSafety {
         // brought into range; points out of order are sorted, two at one frame become one, points outside
         // the timeline's horizon go, and a lane with more points than Jämmer writes is cut to that. Said.
         if !p.automation.isEmpty {
-            let strips = Set(p.tracks.map(\.id)).union(p.buses.map(\.id)).union([Master.id])
+            let groups = Set(p.vcas.map(\.id))
+            let strips = Set(p.tracks.map(\.id)).union(p.buses.map(\.id)).union([Master.id]).union(groups)
             var kept: [AutomationLane] = [], left = 0, mended = 0
             var seenLanes = Set<String>()
             let horizon = Self.horizon(p.sampleRate)
             for lane in p.automation.prefix(4_096) {
-                guard strips.contains(lane.strip), lane.param != .send, lane.to == nil,
+                // A send's lane needs its send; the master has a level only; a VCA group a level and a mute.
+                guard strips.contains(lane.strip),
+                      lane.param == .send ? (lane.to.map { p.hasSend(from: lane.strip, to: $0) } == true) : lane.to == nil,
                       lane.param == .gain || lane.strip != Master.id, lane.param != .pan || p.channels == 2,
-                      seenLanes.insert("\(lane.strip)|\(lane.param.rawValue)").inserted else { left += 1; continue }
+                      !groups.contains(lane.strip) || lane.param == .gain || lane.param == .mute,
+                      seenLanes.insert("\(lane.strip)|\(lane.param.rawValue)|\(lane.to?.uuidString ?? "")").inserted else { left += 1; continue }
                 var l = lane
                 // A mute holds, a level and a pan go in straight lines: a file that says otherwise is put right.
                 l.shape = lane.param == .mute ? .hold : .linear

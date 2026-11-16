@@ -17,12 +17,13 @@ public struct AutomationPoint: Codable, Hashable, Sendable {
 /// strip without lanes is played exactly as it was before there was automation. Between points the value
 /// goes in a straight line in dB; before the first point it is the first point's, after the last the last's.
 public struct AutomationLane: Codable, Hashable, Sendable {
-    /// What a lane moves. `gain`, `pan` and `mute` are built (docs/MIXER.md, "Automation"); a send's
-    /// level is named here so that a project that has one is known for what it is.
+    /// What a lane moves (docs/MIXER.md, "Automation"): a strip's level, pan or mute, or the level of one
+    /// of its sends (`to` then names the bus the send goes to). A VCA group has a level and a mute, and
+    /// its lanes are added to its members' when the plan is made, as its fader is.
     public enum Param: String, Codable, Sendable, CaseIterable { case gain, pan, mute, send }
     public enum Shape: String, Codable, Sendable { case linear, hold }
 
-    /// The track or bus, or `Master.id`.
+    /// The track, bus or VCA group, or `Master.id`.
     public var strip: UUID
     public var param: Param
     /// For a send's level: the bus the send goes to.
@@ -82,7 +83,7 @@ public enum Automation {
     public static let maxFrame: Frame = 24 * 3600 * 192_000
 
     public enum Failure: Error, LocalizedError, Equatable {
-        case noStrip(String), notBuilt(String), badValue(String), tooMany, mono, noPan
+        case noStrip(String), notBuilt(String), badValue(String), tooMany, mono, noPan, noSend(String), groupHasNoPan
 
         public var reason: String {
             switch self {
@@ -91,15 +92,18 @@ public enum Automation {
             case .badValue: "bad_request"
             case .tooMany: "too_many"
             case .mono: "needs_stereo"
-            case .noPan: "bad_request"
+            case .noPan, .groupHasNoPan: "bad_request"
+            case .noSend: "not_found"
             }
         }
         public var errorDescription: String? {
             switch self {
-            case .noStrip(let id): "there is no track or bus with id \(id) (the master is \"master\")."
+            case .noStrip(let id): "there is no track, bus or VCA group with id \(id) (the master is \"master\")."
             case .notBuilt(let what): "automation of \(what) isn't built yet; gain, pan and mute are."
             case .mono: "a mono document has no pan to automate."
-            case .noPan: "the master has a level to automate, not a pan or a mute."
+            case .noPan: "the master has a level to automate, not a pan, a mute or a send."
+            case .groupHasNoPan: "a VCA group has a level and a mute to automate, not a pan or a send."
+            case .noSend(let to): "that strip has no send to \(to); make the send first (set_send)."
             case .badValue(let m): m
             case .tooMany: "a lane can have \(Automation.maxPoints) points at most."
             }
@@ -111,10 +115,19 @@ extension Project {
     /// Whether anything in the project is automated. Such a project is saved as format 3.
     public var usesAutomation: Bool { !liveLanes.isEmpty }
 
-    /// The lanes of strips that exist, with points. (A lane whose strip was removed is not saved.)
+    /// The lanes of strips (and sends) that exist, with points. (A lane whose strip or send was removed is not saved.)
     public var liveLanes: [AutomationLane] {
-        automation.filter { l in !l.points.isEmpty && (l.strip == Master.id || tracks.contains { $0.id == l.strip } || bus(l.strip) != nil) }
+        automation.filter { l in
+            guard !l.points.isEmpty, canAutomate(l.strip) else { return false }
+            return l.param != .send || l.to.map { hasSend(from: l.strip, to: $0) } == true
+        }
     }
+    func canAutomate(_ strip: UUID) -> Bool { strip == Master.id || tracks.contains { $0.id == strip } || bus(strip) != nil || vca(strip) != nil }
+    public func hasSend(from strip: UUID, to: UUID) -> Bool {
+        (tracks.first { $0.id == strip }?.sends ?? bus(strip)?.sends ?? []).contains { $0.to == to }
+    }
+    /// The VCA group a track or bus belongs to, if any.
+    func group(of strip: UUID) -> UUID? { tracks.first { $0.id == strip }?.vca ?? bus(strip)?.vca }
 
     public func lanes(of strip: UUID) -> [AutomationLane] { liveLanes.filter { $0.strip == strip } }
 
@@ -122,10 +135,29 @@ extension Project {
         liveLanes.first { $0.strip == strip && $0.param == param && $0.to == to }
     }
 
-    /// What the engine is given for a strip's level: the enabled gain lane's points, or nil.
+    /// What the engine is given for a strip's level: the enabled gain lane's points, or nil. A strip in a
+    /// VCA group gets the group's lane added to its own: two straight lines in dB add to a straight line
+    /// between the points of both, so the sum is exact, and is what setting those values by hand on the
+    /// member would give.
     func gainCurve(of strip: UUID) -> (frames: [Int64], db: [Float])? {
-        guard let l = lane(strip: strip, param: .gain), l.enabled, l.shape == .linear else { return nil }
+        let own = lane(strip: strip, param: .gain).flatMap { $0.enabled ? $0 : nil }
+        let groups = group(of: strip).flatMap { lane(strip: $0, param: .gain) }.flatMap { $0.enabled ? $0 : nil }
+        guard own != nil || groups != nil else { return nil }
+        guard let a = own, let b = groups else {
+            let l = (own ?? groups)!
+            return (l.points.map(\.frame), l.points.map { Float($0.value) })
+        }
+        let frames = Array(Set(a.points.map(\.frame) + b.points.map(\.frame))).sorted()
+        return (frames, frames.map { Float((a.value(at: $0) ?? 0) + (b.value(at: $0) ?? 0)) })
+    }
+    /// A send's enabled level lane.
+    func sendCurve(from strip: UUID, to: UUID) -> (frames: [Int64], db: [Float])? {
+        guard let l = lane(strip: strip, param: .send, to: to), l.enabled else { return nil }
         return (l.points.map(\.frame), l.points.map { Float($0.value) })
+    }
+    /// Whether a strip is muted by automation at a frame: by its own mute lane or its VCA group's.
+    func mutedByLane(_ strip: UUID, at frame: Frame) -> Bool {
+        (automated(.mute, of: strip, at: frame) ?? 0) >= 0.5 || (group(of: strip).flatMap { automated(.mute, of: $0, at: frame) } ?? 0) >= 0.5
     }
     /// The enabled pan lane's points, in a stereo document.
     func panCurve(of strip: UUID) -> (frames: [Int64], values: [Float])? {
@@ -137,7 +169,15 @@ extension Project {
     /// the middle of a sound doesn't click. A change that comes before the ramp of the one before has
     /// ended starts from where that ramp had got to.
     func muteCurve(of strip: UUID) -> (frames: [Int64], values: [Float])? {
-        guard let l = lane(strip: strip, param: .mute), l.enabled, let first = l.points.first else { return nil }
+        // The strip's own mute lane and its VCA group's, as one: muted when either says so.
+        let lanes = ([strip] + [group(of: strip)].compactMap { $0 }).compactMap { lane(strip: $0, param: .mute) }.filter(\.enabled)
+        guard !lanes.isEmpty else { return nil }
+        let at = Array(Set(lanes.flatMap { $0.points.map(\.frame) })).sorted()
+        let merged = AutomationLane(strip: strip, param: .mute, shape: .hold, points: at.map { f in
+            AutomationPoint(frame: f, value: lanes.contains { ($0.value(at: f) ?? 0) >= 0.5 } ? 1 : 0)
+        })
+        let l = merged
+        guard let first = l.points.first else { return nil }
         let ramp = max(1, Frame((Automation.muteRamp * sampleRate).rounded()))
         var frames: [Int64] = [], values: [Float] = []
         var level: Double = first.value >= 0.5 ? 0 : 1   // before the first point: the first point's state
@@ -168,9 +208,14 @@ extension Project {
     /// document's end, a value outside the fader's range, two points at one frame, too many points.
     public mutating func setAutomation(strip: UUID, param: AutomationLane.Param = .gain, to: UUID? = nil, points new: [AutomationPoint],
                                        range: ClosedRange<Frame>? = nil, shape: AutomationLane.Shape? = nil, enabled: Bool? = nil) throws {
-        guard strip == Master.id || tracks.contains(where: { $0.id == strip }) || bus(strip) != nil else { throw Automation.Failure.noStrip(strip.uuidString) }
-        guard param != .send, to == nil else { throw Automation.Failure.notBuilt("a send") }
+        guard canAutomate(strip) else { throw Automation.Failure.noStrip(strip.uuidString) }
         if strip == Master.id, param != .gain { throw Automation.Failure.noPan }
+        if vca(strip) != nil, param == .pan || param == .send { throw Automation.Failure.groupHasNoPan }
+        if param == .send {
+            guard let to, hasSend(from: strip, to: to) else { throw Automation.Failure.noSend(to.flatMap { bus($0)?.name } ?? "that bus") }
+        } else if to != nil {
+            throw Automation.Failure.badValue("`to` names a send's bus and goes with a send lane only.")
+        }
         if param == .pan, channels != 2 { throw Automation.Failure.mono }
         // A mute holds its value until the next point; a level and a pan go in a straight line.
         if let shape, shape != (param == .mute ? .hold : .linear) {
@@ -206,7 +251,7 @@ extension Project {
     /// Takes a lane's points away: all of them, or those inside `range`. Answers how many went.
     @discardableResult
     public mutating func clearAutomation(strip: UUID, param: AutomationLane.Param, to: UUID? = nil, range: ClosedRange<Frame>? = nil) throws -> Int {
-        guard strip == Master.id || tracks.contains(where: { $0.id == strip }) || bus(strip) != nil else { throw Automation.Failure.noStrip(strip.uuidString) }
+        guard canAutomate(strip) else { throw Automation.Failure.noStrip(strip.uuidString) }
         guard let i = automation.firstIndex(where: { $0.strip == strip && $0.param == param && $0.to == to }) else { return 0 }
         let before = automation[i].points.count
         if let range { automation[i].points.removeAll { range.contains($0.frame) } } else { automation[i].points = [] }
@@ -227,10 +272,13 @@ extension Project {
         if let t = tracks.first(where: { $0.id == strip }) { fader = heard(gainDB: t.gainDB, muted: t.isMuted, vca: t.vca) }
         else if let b = bus(strip) { fader = heard(gainDB: b.gainDB, muted: b.isMuted, vca: b.vca) }
         else if strip == Master.id { fader = (master.gainDB, false) }
+        else if let v = vca(strip) { fader = (v.gainDB, v.isMuted) }
         else { return nil }
-        let lane = lane(strip: strip, param: .gain).flatMap { $0.enabled ? $0.value(at: frame) : nil }
-        // Muted by the button, by the group, or by the mute lane at that time.
-        let muted = fader.muted || (automated(.mute, of: strip, at: frame) ?? 0) >= 0.5
+        // The strip's own lane, and its VCA group's added to it.
+        let own = automated(.gain, of: strip, at: frame), groups = group(of: strip).flatMap { automated(.gain, of: $0, at: frame) }
+        let lane: Double? = own == nil && groups == nil ? nil : (own ?? 0) + (groups ?? 0)
+        // Muted by the button, by the group, or by a mute lane (the strip's or the group's) at that time.
+        let muted = fader.muted || mutedByLane(strip, at: frame)
         return (fader.gainDB, lane, fader.gainDB + (lane ?? 0), muted)
     }
 }

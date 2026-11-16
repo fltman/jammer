@@ -115,12 +115,6 @@ private:
 };
 
 /// A copy of a strip's signal sent to a bus: before the strip's fader and pan (`pre`), or after them.
-struct Send {
-    int32_t bus;
-    float gain;
-    bool pre;
-};
-
 /// Automation of a level: points on the timeline (frame, dB), a straight line in dB between them, the
 /// first value before the first point and the last after the last. Part of the immutable plan. It is
 /// applied in pieces of at most `kPiece` frames (fewer where the line is steep: never more than half a
@@ -143,6 +137,14 @@ struct Curve {
     /// `n` interleaved frames of `in`, of which the first is timeline frame `at`, times the curve, to `out`
     /// (which may be `in`).
     void apply(const float *in, float *out, int64_t at, int64_t n, int32_t channels) const;
+};
+
+struct Send {
+    int32_t bus;
+    float gain;
+    bool pre;
+    /// Automation added to the send's level (dB); empty: none.
+    Curve curve;
 };
 
 struct Track {
@@ -191,6 +193,8 @@ public:
         size_t at = 0;
         /// A key: the strip's signal after its fader, to unit `keyUnit` of node `keyNode`'s chain. -1: not a key.
         int32_t keyNode = -1, keyUnit = -1;
+        /// A send's own automation (in the plan, which outlives the graph's use of it), or null.
+        const Curve *curve = nullptr;
         Edge(int32_t to, float gain, bool pre, bool main) : to(to), gain(gain), pre(pre), main(main) {}
     };
     explicit Graph(const Plan &plan);
@@ -222,7 +226,7 @@ private:
     /// time is ahead of the timeline there, which is where the strip's automation is read.
     std::vector<int64_t> nodeOut_;
     int64_t masterChainLatency_ = 0;
-    std::vector<float> faded_;
+    std::vector<float> faded_, sent_;
     struct KeyBuffer {
         int32_t unit;
         std::vector<float> data;

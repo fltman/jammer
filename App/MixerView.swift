@@ -24,7 +24,7 @@ struct MixerSheet: View {
                     Text("Tracks").font(.headline)
                     ForEach(project.tracks) { t in
                         MixerStrip(name: t.name, kind: "track", gainDB: t.gainDB, pan: t.pan, muted: t.isMuted, output: t.output, stereo: stereo,
-                                   group: t.vca.flatMap { project.vca($0) },
+                                   group: t.vca.flatMap { project.vca($0) }, groupAutomated: t.vca.map { !project.lanes(of: $0).isEmpty } ?? false,
                                    soloed: session.solo.contains(t.id), solo: { toggleSolo(t.id, $0) },
                                    frozen: t.frozen != nil, freeze: { toggleFreeze(t.id, t.name, $0) },
                                    automation: MixerStrip.automationText(project.lanes(of: t.id)),
@@ -37,7 +37,7 @@ struct MixerSheet: View {
                     if project.buses.isEmpty { Text("No buses yet.").foregroundStyle(.secondary) }
                     ForEach(project.buses) { b in
                         MixerStrip(name: b.name, kind: "bus", gainDB: b.gainDB, pan: b.pan, muted: b.isMuted, output: b.output, stereo: stereo,
-                                   group: b.vca.flatMap { project.vca($0) },
+                                   group: b.vca.flatMap { project.vca($0) }, groupAutomated: b.vca.map { !project.lanes(of: $0).isEmpty } ?? false,
                                    soloed: session.solo.contains(b.id), solo: { toggleSolo(b.id, $0) },
                                    frozen: b.frozen != nil, freeze: { toggleFreeze(b.id, b.name, $0) },
                                    automation: MixerStrip.automationText(project.lanes(of: b.id)),
@@ -55,6 +55,13 @@ struct MixerSheet: View {
                                  strips: project.tracks.map { ($0.id, $0.name, $0.vca == v.id) } + project.buses.map { ($0.id, "\($0.name) (bus)", $0.vca == v.id) },
                                  change: { session.perform("set_vca", ["vca": .string(v.id.uuidString)].merging($0) { $1 }) },
                                  remove: { session.perform("remove_vca", ["vca": .string(v.id.uuidString)]) })
+                        // A group's lanes move every member: said here, where the group's level is.
+                        if let text = MixerStrip.automationText(project.lanes(of: v.id)) {
+                            Text(text + " (for every strip in the group)")
+                                .font(.caption).foregroundStyle(.orange)
+                                .lineLimit(1).padding(.leading, 160).frame(height: 16)
+                                .accessibilityIdentifier("mixer.vca.automation")
+                        }
                     }
                 }
                 .padding(.trailing, 6)
@@ -104,6 +111,7 @@ struct MixerSheet: View {
         let grouped = project.tracks.filter { $0.vca != nil }.count + project.buses.filter { $0.vca != nil }.count
             + project.tracks.filter { $0.frozen != nil }.count + project.buses.filter { $0.frozen != nil }.count
             + project.tracks.filter { !project.lanes(of: $0.id).isEmpty }.count + project.buses.filter { !project.lanes(of: $0.id).isEmpty }.count
+            + project.vcas.filter { !project.lanes(of: $0.id).isEmpty }.count
         return CGFloat(3 * 34 + rows * 34 + grouped * 16 + (project.buses.isEmpty ? 24 : 0) + (project.vcas.isEmpty ? 44 : 0) + 8)
     }
 
@@ -263,6 +271,8 @@ private struct MixerStrip: View {
     let stereo: Bool
     /// The VCA group the strip belongs to, if any.
     let group: VCA?
+    /// Whether that group has automation: the levels in the "heard" line are then not the whole story.
+    var groupAutomated = false
     let soloed: Bool
     let solo: (Bool) -> Void
     let frozen: Bool
@@ -292,7 +302,7 @@ private struct MixerStrip: View {
                 return "\(points) on the level, \(span), added to the fader" + off
             case .pan: return "\(points) on the pan, in the slider's place" + off
             case .mute: return "\(points) on the mute" + off
-            case .send: return nil
+            case .send: return "\(points) on a send" + off
             }
         }
         return parts.isEmpty ? nil : "Automation: " + parts.joined(separator: "; ")
@@ -324,7 +334,7 @@ private struct MixerStrip: View {
                     .accessibilityIdentifier("mixer.strip.automation")
             }
             if let group {
-                Text(Self.heardText(own: gainDB, muted: muted, group: group))
+                Text(Self.heardText(own: gainDB, muted: muted, group: group) + (groupAutomated ? ", and the group's automation on top" : ""))
                     .font(.caption).foregroundStyle(group.isMuted ? Color.orange : Color.secondary)
                     .lineLimit(1).padding(.leading, 160).frame(height: 16)
                     .accessibilityIdentifier("mixer.strip.heard")

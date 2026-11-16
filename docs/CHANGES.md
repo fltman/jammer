@@ -5,6 +5,7 @@ Not a list of commits: what behaves differently from before, for a user, an agen
 ## 2026-11-16
 
 - **Every built text provider is shown in every build** (OpenRouter, Berget, Grunden, OpenAI, Anthropic, xAI, Google), by name and without a mark in the list (PROVIDERS.md rule 3 as rewritten); each says "Built from the documentation, not tried with a real request." under its key field until it has answered one from Jämmer. The paid dialogue, the first-time notice and the provider's error word for word are as before. OpenAI's transcription is shown too, as "text only" (the audio is uploaded; no word times), with the same line in the sheet before anything is sent, in the manual and in the agent guide.
+- **Automation, third step (debug builds)**: a lane on a send's level, and lanes on a VCA group that are added to its members' (the same samples as writing the summed values on each member by hand).
 - **Automation, second step (debug builds)**: an automated mute that closes and opens over 5 ms so it never clicks, and an automated pan by the fixed pan's law, on tracks and buses.
 - **`scripts/check-entitlements.sh`**, in the pre-commit check: reads the signed app's entitlements and fails on a missing, an undecided or a forbidden one (proved on copies with each planted).
 - **Sidechain keys are in every build** (decided 2026-11-17): a plugin with a sidechain input gets a Key menu in the Plugins sheet, and `set_insert` takes `key`. The manual says what has been tried (one Audio Unit from another maker) and what hasn't (Safe Mode's refusal with an installed plugin).

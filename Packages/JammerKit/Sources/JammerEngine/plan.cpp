@@ -136,14 +136,14 @@ void jm_plan_set_track_route(jm_plan *plan, int32_t track, int32_t bus, float pa
 void jm_plan_add_track_send(jm_plan *plan, int32_t track, int32_t bus, float gain, bool pre) {
     Plan &p = *plan->ptr;
     if (p.finalized || track < 0 || size_t(track) >= p.tracks.size() || bus < 0 || size_t(bus) >= p.buses.size()) return;
-    p.tracks[size_t(track)].sends.push_back(Send{bus, gain, pre});
+    p.tracks[size_t(track)].sends.push_back(Send{bus, gain, pre, Curve{}});
     p.routed = true;
 }
 
 void jm_plan_add_bus_send(jm_plan *plan, int32_t bus, int32_t to, float gain, bool pre) {
     Plan &p = *plan->ptr;
     if (p.finalized || bus < 0 || size_t(bus) >= p.buses.size() || to < 0 || size_t(to) >= p.buses.size() || to == bus) return;
-    p.buses[size_t(bus)].sends.push_back(Send{to, gain, pre});
+    p.buses[size_t(bus)].sends.push_back(Send{to, gain, pre, Curve{}});
 }
 
 void jm_plan_set_bus_chain(jm_plan *plan, int32_t bus, jm_chain *chain) {
@@ -192,6 +192,27 @@ void jm_plan_set_curve(jm_plan *plan, int32_t kind, int32_t index, int32_t what,
         if ((i > 0 && frames[i] <= frames[i - 1]) || !std::isfinite(values[i])) { c->frames.clear(); c->db.clear(); return; }
         c->frames.push_back(frames[i]);
         c->db.push_back(values[i]);
+    }
+}
+
+void jm_plan_set_send_curve(jm_plan *plan, bool fromBus, int32_t from, int32_t to, const int64_t *frames, const float *db, int32_t count) {
+    Plan &p = *plan->ptr;
+    if (p.finalized || count <= 0 || !frames || !db || from < 0) return;
+    std::vector<Send> *sends = nullptr;
+    if (fromBus) { if (size_t(from) < p.buses.size()) sends = &p.buses[size_t(from)].sends; }
+    else if (size_t(from) < p.tracks.size()) sends = &p.tracks[size_t(from)].sends;
+    if (!sends) return;
+    for (Send &s : *sends) {
+        if (s.bus != to) continue;
+        s.curve.kind = Curve::kDecibel;
+        s.curve.frames.clear();
+        s.curve.db.clear();
+        for (int32_t i = 0; i < count; ++i) {
+            if ((i > 0 && frames[i] <= frames[i - 1]) || !std::isfinite(db[i])) { s.curve.frames.clear(); s.curve.db.clear(); return; }
+            s.curve.frames.push_back(frames[i]);
+            s.curve.db.push_back(db[i]);
+        }
+        return;
     }
 }
 

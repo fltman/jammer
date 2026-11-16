@@ -64,7 +64,7 @@ extension AgentAPI {
         .init("POST", doc + "/diarize", body: ["mode", "tracks"]),
         .init("GET", doc + "/speakers"),
         .init("GET", doc + "/mixer"),
-        .init("GET", doc + "/automation", query: ["strip", "param", "at"]),
+        .init("GET", doc + "/automation", query: ["strip", "param", "at", "to"]),
         .init("GET", doc + "/tracks"),
         .init("POST", doc + "/tracks", query: ["name", "at", "gainDB"], body: ["name", "audio", "upload"]),
         .init("GET", doc + "/tracks/{track}/inserts/{insert}"), .init("GET", doc + "/buses/{bus}/inserts/{insert}"),

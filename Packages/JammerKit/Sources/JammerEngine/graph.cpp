@@ -95,14 +95,20 @@ Graph::Graph(const Plan &plan) : channels_(plan.channels) {
         const Track &track = plan.tracks[t];
         trackEdges_[t].push_back(Edge(valid(track.bus), 1.0f, false, true));
         for (const Send &s : track.sends)
-            if (valid(s.bus) >= 0) trackEdges_[t].push_back(Edge(s.bus, s.gain, s.pre, false));
+            if (valid(s.bus) >= 0) {
+                trackEdges_[t].push_back(Edge(s.bus, s.gain, s.pre, false));
+                if (!s.curve.empty()) trackEdges_[t].back().curve = &s.curve;
+            }
     }
     busEdges_.resize(nb);
     for (size_t b = 0; b < nb; ++b) {
         const Bus &bus = plan.buses[b];
         busEdges_[b].push_back(Edge(valid(bus.output), 1.0f, false, true));
         for (const Send &s : bus.sends)
-            if (valid(s.bus) >= 0 && size_t(s.bus) != b) busEdges_[b].push_back(Edge(s.bus, s.gain, s.pre, false));
+            if (valid(s.bus) >= 0 && size_t(s.bus) != b) {
+                busEdges_[b].push_back(Edge(s.bus, s.gain, s.pre, false));
+                if (!s.curve.empty()) busEdges_[b].back().curve = &s.curve;
+            }
     }
     // Keys: an edge from the source strip, after its fader, to one unit of the listening strip's chain.
     keyBuffers_.resize(nt + nb);
@@ -166,6 +172,7 @@ Graph::Graph(const Plan &plan) : channels_(plan.channels) {
     }
     strip_.assign(size_t(kQuantum * channels_), 0.0f);
     faded_.assign(size_t(kQuantum * channels_), 0.0f);
+    sent_.assign(size_t(kQuantum * channels_), 0.0f);
     mix_.assign(size_t(kQuantum * channels_), 0.0f);
     bus_.assign(nb, std::vector<float>(size_t(kQuantum * channels_), 0.0f));
 }
@@ -287,9 +294,12 @@ void Graph::produce(const Plan &plan, Renderer &renderer) {
                 if (!track.panCurve.empty()) { track.panCurve.apply(post, faded_.data(), at, q, channels_); post = faded_.data(); }
             }
             for (Edge &e : trackEdges_[t]) {
-                if (e.main || e.keyNode >= 0) send(e, post, track.gain * track.panL, track.gain * track.panR, q);
-                else if (e.pre) send(e, strip_.data(), e.gain, e.gain, q);
-                else send(e, post, track.gain * e.gain * track.panL, track.gain * e.gain * track.panR, q);
+                if (e.main || e.keyNode >= 0) { send(e, post, track.gain * track.panL, track.gain * track.panR, q); continue; }
+                // A send with automation of its own: its level moves on the strip's timeline, like the fader's.
+                const float *from = e.pre ? strip_.data() : post;
+                if (e.curve) { e.curve->apply(from, sent_.data(), cursor_ - nodeOut_[t], q, channels_); from = sent_.data(); }
+                if (e.pre) send(e, from, e.gain, e.gain, q);
+                else send(e, from, track.gain * e.gain * track.panL, track.gain * e.gain * track.panR, q);
             }
         } else {
             const size_t b = size_t(n) - nt;
@@ -307,9 +317,11 @@ void Graph::produce(const Plan &plan, Renderer &renderer) {
                 if (!bus.panCurve.empty()) { bus.panCurve.apply(post, faded_.data(), at, q, channels_); post = faded_.data(); }
             }
             for (Edge &e : busEdges_[b]) {
-                if (e.main || e.keyNode >= 0) send(e, post, bus.gain * bus.panL, bus.gain * bus.panR, q);
-                else if (e.pre) send(e, strip_.data(), e.gain, e.gain, q);
-                else send(e, post, bus.gain * e.gain * bus.panL, bus.gain * e.gain * bus.panR, q);
+                if (e.main || e.keyNode >= 0) { send(e, post, bus.gain * bus.panL, bus.gain * bus.panR, q); continue; }
+                const float *from = e.pre ? strip_.data() : post;
+                if (e.curve) { e.curve->apply(from, sent_.data(), cursor_ - nodeOut_[size_t(n)], q, channels_); from = sent_.data(); }
+                if (e.pre) send(e, from, e.gain, e.gain, q);
+                else send(e, from, bus.gain * e.gain * bus.panL, bus.gain * e.gain * bus.panR, q);
             }
         }
     }
