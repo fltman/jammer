@@ -1,5 +1,6 @@
 import Foundation
 import JammerAgent
+import JammerCore
 
 /// The text model services the assistant can use with the user's own key. One list drives the
 /// settings, the key fields, the model pickers, the "key missing" messages and the manual

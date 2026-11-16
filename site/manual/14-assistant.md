@@ -12,6 +12,7 @@ Ask Jämmer in Swedish or English and it does the editing: "ta bort alla ehm och
 
 - The assistant turns your request into a plan of Jämmer's own commands: the same ones as the menus and the agent API, so it can only do what Jämmer can do.
 - A plan that removes or replaces audio (deleting, cutting, removing filler words or pauses, repairs, echo) is shown first, with **Run** and **Cancel**. Other plans, such as changing the level or measuring loudness, run straight away.
+- A plan is also shown first when it would change the document in a way your request didn't name: ask for a poem and get a plan that sets the tempo, and Jämmer says that you didn't ask for it and does nothing until you click **Run**. Measuring never needs a yes.
 - Under **What it does**, Jämmer says in numbers what the plan will do, worked out from the steps themselves rather than from the assistant's words: "Deletes 2.0 s of 3:12 at the end", "Removes 14 words (6.2 s)". If a plan would remove more than a fifth of the document, or deletes audio although you didn't ask to remove anything, it's outlined in orange with a warning, and Return cancels instead of running.
 - All the editing in a plan is **one undo step**. Transcribing and repairs run as their own steps in between (they take a moment; the status bar shows the progress).
 - Removing filler words needs a transcript; the assistant transcribes first if there isn't one.
@@ -33,3 +34,4 @@ Click the gear in the assistant's header.
 - Speakers are tracks: "talare 2" or "track 2" means the second track.
 - If a request is unclear, the assistant asks instead of guessing.
 - How well the on-device model picks the right commands was measured on a fixed set of requests; see the project's `docs/ASSISTANT.md`. It's good at single tasks; with several tasks in one sentence it sometimes does only one, so check the plan, or ask for one thing at a time.
+- Measured on the same requests on 16 November 2026: the on-device model planned 17 of 18 everyday requests right, and 21 of 24 and 17 of 23 on two harder sets. A local model in Ollama (qwen3:8b) planned 18 of 18, and 19 of 24 and 20 of 23: it follows more kinds of requests when they are worded unusually or hold several tasks, at the price of about 6 GB of memory while it is loaded and a few seconds more per request. Neither is right every time, which is why a plan that removes audio, or does something you didn't ask for, waits for your yes.

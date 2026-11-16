@@ -1,5 +1,6 @@
 import Foundation
 import JammerAgent
+import JammerCore
 
 /// Glimmer and Flimmer as tools for the assistant (SIBLINGS.md §1–3): found on their
 /// local ports, their operations become actions named `<slug>_<name>`, and calling one

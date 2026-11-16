@@ -5,12 +5,18 @@
 #   scripts/eval-assistant.sh                     the on-device model (Apple)
 #   scripts/eval-assistant.sh ollama:qwen3:8b     a model already installed in Ollama on this Mac
 #
-# Three sets: the standard 16 requests and two hold-out sets (24 and 23), Swedish and English.
+# Three sets: the standard 18 requests and two hold-out sets (24 and 23), Swedish and English.
 # The reports go to build/eval/<model>/; the last line of each is the score. Nothing is
 # downloaded and nothing is paid for: only models on this Mac can be evaluated this way.
 # For comparison, docs/ASSISTANT.md has the on-device model's and qwen3:8b's results.
 set -eu
 root="$(cd "$(dirname "$0")/.." && pwd)"
+# One model evaluation at a time on this Mac, across the three apps: two at once fill the memory and the
+# Mac's own model starts to fail. The series' lock is taken here unless the caller already holds it.
+lock="$root/../the-apps/tools/with-model-lock.sh"
+if [ -z "${JAMMER_MODEL_LOCKED:-}" ] && [ -x "$lock" ]; then
+  JAMMER_MODEL_LOCKED=1 exec "$lock" jammer --wait "${JAMMER_MODEL_WAIT:-3600}" -- "$0" "$@"
+fi
 model="${1:-}"
 case "$model" in
   "") name="on-device" ;;

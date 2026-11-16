@@ -45,7 +45,7 @@ public struct OnDevicePlanner: AssistantPlanner {
         let fitted = AssistantCatalog.forOnDevice(actions, goal: goal)
         do {
             return try await respond(goal: goal, context: context, history: history, actions: fitted)
-        } catch LanguageModelSession.GenerationError.exceededContextWindowSize {
+        } catch LanguageModelError.contextSizeExceeded {
             // The list and the answer together didn't fit. Once more with only the actions the request
             // names in so many words, and without the earlier turns; if it names none, the error stands.
             let words = Set(Project.tokens(goal).filter { $0.count >= 3 })
@@ -53,7 +53,7 @@ public struct OnDevicePlanner: AssistantPlanner {
             let tooLong = AssistantError.unavailable("The model on this Mac couldn't fit this request and its answer. Say it another way, or choose another model in the assistant's settings.")
             guard !named.isEmpty, named.count < fitted.count else { throw tooLong }
             do { return try await respond(goal: goal, context: context, history: [], actions: named) }
-            catch LanguageModelSession.GenerationError.exceededContextWindowSize { throw tooLong }
+            catch LanguageModelError.contextSizeExceeded { throw tooLong }
         }
     }
 
@@ -61,9 +61,15 @@ public struct OnDevicePlanner: AssistantPlanner {
         let session = LanguageModelSession(instructions: AssistantPrompt.instructions(actions))
         let response = try await session.respond(to: AssistantPrompt.prompt(goal: goal, context: context, history: history),
                                                  schema: try Self.schema(actions),
-                                                 options: GenerationOptions(samplingMode: .greedy))
+                                                 options: GenerationOptions(samplingMode: .greedy, maximumResponseTokens: Self.answerLimit))
         return PlanParser.augment(goal: goal, plan: try Self.decode(response.content, actions: actions, context: context))
     }
+
+    /// The most the model may write. A plan is short: ten steps with their values come to a few hundred
+    /// tokens. Without a limit the model now and then loses itself inside a text value and writes on until
+    /// the context (8 192 tokens) is full: "add an echo" did, with an input of 1 540 tokens (measured
+    /// 2026-11-16 with the system's own token counter). With the limit it closes the plan instead.
+    static let answerLimit = 700
 
     static func decode(_ content: GeneratedContent, actions: [AssistantAction], context: AssistantContext? = nil) throws -> AssistantPlan {
         struct Raw: Decodable {

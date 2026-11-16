@@ -69,6 +69,55 @@ struct ReplyGuardTests {
         }
     }
 
+    @Test("A change the request didn't ask for waits for a yes")
+    func unasked() {
+        let actions = AssistantCatalog.actions
+        func plan(_ ops: String...) -> AssistantPlan { AssistantPlan(reply: "", steps: ops.map { PlannedStep(op: $0) }) }
+        // The case from the evaluation: a poem answered with a measurement and a tempo change.
+        let poem = plan("measure_loudness", "set_tempo")
+        #expect(poem.unasked(goal: "write a poem about the sea", actions: actions).map(\.op) == ["set_tempo"])
+        #expect(poem.needsConfirmation(goal: "write a poem about the sea", actions: actions))
+        for goal in ["tell me a joke", "vad är klockan", "write a poem about the sea"] {
+            for op in ["gain", "normalize", "set_tempo", "add_marker", "transcribe", "fade_in", "rename_speaker", "duck"] {
+                #expect(plan(op).needsConfirmation(goal: goal, actions: actions), "\(op) for “\(goal)”")
+            }
+            // Measuring, and moving the playhead or the selection, changes nothing and needs no yes.
+            #expect(!plan("measure_loudness", "select_all", "set_playhead").needsConfirmation(goal: goal, actions: actions))
+        }
+        // Asked for in so many words: runs as before.
+        for (goal, op) in [("sänk volymen med 3 dB", "gain"), ("normalize to −16 LUFS", "normalize"), ("fade in the first two seconds", "fade_in"),
+                           ("lägg till en markör som heter Intro vid 5 sekunder", "add_marker"), ("transcribe this in Swedish", "transcribe"),
+                           ("set the tempo to 96", "set_tempo"), ("gör talarna lika högt", "level_speakers"), ("make it louder", "gain")] {
+            #expect(!plan(op).needsConfirmation(goal: goal, actions: actions), "\(op) for “\(goal)”")
+        }
+        // What removes or replaces audio waits as it always did, named or not.
+        #expect(plan("delete").needsConfirmation(goal: "delete from 2 to 4 seconds", actions: actions))
+        // Every action that changes the document has its words, or waits: none is forgotten into running.
+        let unnamed = actions.map(\.name).filter { !AssistantCatalog.changesNothing.contains($0) && AssistantCatalog.spokenAs[$0] == nil }
+        #expect(unnamed.allSatisfy { plan($0).needsConfirmation(goal: $0, actions: actions) })
+        print("ACTIONS WITHOUT WORDS (always wait): \(unnamed)")
+    }
+
+    @Test("delete_words with nothing but filler words is remove_fillers")
+    func fillersTheLongWay() {
+        let long = AssistantPlan(reply: "", steps: [PlannedStep(op: "delete_words", params: ["text": .string("eh, ehm, öh, um, uh"), "words": .array([.string("eh"), .string("ehm")])])])
+        #expect(PlanParser.augment(goal: "ta bort alla ehm", plan: long).steps.map(\.op) == ["remove_fillers"])
+        // Real words stay a deletion of those words.
+        let real = AssistantPlan(reply: "", steps: [PlannedStep(op: "delete_words", params: ["text": .string("ehm faktiskt")])])
+        #expect(PlanParser.augment(goal: "ta bort ehm faktiskt", plan: real).steps.map(\.op) == ["delete_words"])
+    }
+
+    @Test("Pauses: putting silence in adds nothing, and deleting everything becomes removing the pauses")
+    func pauses() {
+        let insert = AssistantPlan(reply: "", steps: [PlannedStep(op: "insert_silence", params: ["at": .number(30), "duration": .number(1)])])
+        #expect(PlanParser.augment(goal: "lägg in en sekund tystnad vid 30 sekunder", plan: insert).steps.map(\.op) == ["insert_silence"])
+        let all = AssistantPlan(reply: "", steps: [PlannedStep(op: "delete", params: ["start": .number(0), "end": .number(60)])])
+        #expect(PlanParser.augment(goal: "ta bort pauser som är längre än en och en halv sekund", plan: all).steps.map(\.op) == ["remove_silences"])
+        // A range the request names is deleted as asked.
+        let named = AssistantPlan(reply: "", steps: [PlannedStep(op: "delete", params: ["start": .number(0), "end": .number(12)])])
+        #expect(PlanParser.augment(goal: "delete the pause in the first 12 seconds", plan: named).steps.map(\.op) == ["delete"])
+    }
+
     @Test("The reply follows the language of the request")
     func language() async throws {
         let swedish = "Jag kan inte skriva en dikt om havet eftersom du inte specificerade något att göra med ljudet."

@@ -84,3 +84,7 @@ Multichannel up to 7.1.4, ADM BWF, Ambisonics, APAC/ASAF export, binaural monito
 ## Deliberately out of scope
 
 Clip launcher, large instrument libraries, generative session musicians, Windows, an own Dolby Atmos renderer without an agreement, models with non-commercial licences.
+
+## Waiting on a sibling
+
+- **Transcripts to Flimmer** (noted 2026-11-16, build when Flimmer's side exists): Flimmer gets a place for transcripts; the sketch is its `TRANSCRIPTS-SKETCH.md`, section 3. Jämmer hands one over with `PUT /api/v1/audio/{clipId}/transcript`, or as `transcript` on an entry in the sibling plan (Send to Flimmer). Times must be seconds in the file Flimmer has (`timeBase: "file"`), so document times are converted before sending, and `media.duration` has to match within 0.05 s. `source.local` is true only when the audio never left the Mac; a transcript without word times (OpenAI as text only) goes without `words`. A transcript corrected by hand in Flimmer is replaced only when the user said so here (`replaceEdited`). To be tried live together with Send to Flimmer.

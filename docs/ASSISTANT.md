@@ -27,23 +27,35 @@ The rule (`JammerAssistant/ReplyGuard.swift`), for every planner, through `Assis
 
 `ReplyGuardTests` feeds made-up replies through a stand-in planner. Both evaluation sets count, for the reply as the model wrote it, how many had a figure of the model's own and how many were in the wrong language; the standard set got the two requests from the app ("what is the loudness?", "write a poem about the sea"), so it is 16 requests from 2026-11-16.
 
-## The on-device model's action list (2026-11-16)
+## The on-device model, measured again (2026-11-16)
 
-Running the sets again on 2026-11-16 showed that the on-device model had got worse without anyone measuring it: 10/14 on the standard set, where it was 14/14 on 2026-11-15. The same build of the model scores 13/14 on the code from 2026-11-15, so the cause is ours: the action list had grown from 28 actions (3 848 characters of instructions) to 37 (5 375), and some requests no longer fitted the model's context ("The session's transcript exceeded the model's context size").
+Running the sets again on 2026-11-16 showed that the on-device model had got worse without anyone measuring it: 10/14 on the standard set, where it was 14/14 on 2026-11-15. Three things were wrong, found in this order.
 
-What was done: the on-device model is given the 28 actions it was measured with, and each of the nine newer ones (`align_tracks`, `correct_drift`, `debleed`, `detect_tempo`, `duck`, `level_speakers`, `loudness_preset`, `rename_speaker`, `spectral_attenuate`) only when the request names it in Swedish or English (`AssistantCatalog.onDeviceWhenNamed`). A test fails if the list grows without a decision. Models in Ollama and at providers get the whole list. When the context still overflows, the request is tried once more with only the actions it names; if that fails too, the user is told so in words.
+**The answer ran away.** "add an echo" ended in "The session's transcript exceeded the model's context size". The system's own token counter (`SystemLanguageModel.tokenCount`) says the context is 8 192 tokens and the whole input, with 28 actions, 1 540 (instructions 1 093, schema 393, request 54; with all 37 actions 1 967). So the list was never too big for the context: the model lost itself inside a text value (`"value": ")}, {"`) and wrote on until the context was full. The answer is now limited to 700 tokens (`OnDevicePlanner.answerLimit`); with the limit the model closes the plan, and the missing value gets its default. If the context is exceeded all the same, the request is tried once more with only the actions it names, and after that the user is told in words. (The first version of that retry caught an error type that macOS 27 no longer throws, `GenerationError`; it is `LanguageModelError.contextSizeExceeded` now.)
 
-Measured after the change, on-device, 2026-11-16 (the standard set now has 16 requests):
+**The list had grown.** From 28 actions to 37 since the first measurement. The same model scores 13/14 on the code from 2026-11-15. The on-device model is now given the 28 it was measured with, and each of the nine newer ones (`align_tracks`, `correct_drift`, `debleed`, `detect_tempo`, `duck`, `level_speakers`, `loudness_preset`, `rename_speaker`, `spectral_attenuate`) only when the request names it in Swedish or English (`AssistantCatalog.onDeviceWhenNamed`). A test fails if the list grows without a decision. Models in Ollama and at providers get the whole list.
 
-| Set | Before the change | After |
-|---|---|---|
-| Standard | 11/16 (10 of the original 14) | 13/16 (12 of the original 14) |
-| Hold-out 1 | 17/24 | 20/24 |
-| Hold-out 2 | 17/23 | 15/23 |
+**Three plans the clean-up now puts right** (`PlanParser.augment`, rules on the plan, not on the model's instructions): `delete_words` with nothing but filler words is `remove_fillers` ("ta bort alla ehm"); "remove the pauses" planned as deleting from the start to a point the request never named is `remove_silences`; and a request to put silence in no longer gets `remove_silences` added by the keyword safety net. The last two were found in hold-out set 2, so that set is no longer unseen; the next change needs a new one.
 
-Still wrong on the standard set: "ta bort alla ehm" (planned `delete_words` with a list instead of `remove_fillers`), "add an echo" (the context overflows even with `echo` as the only action: the model's own answer runs away), and "write a poem about the sea" (planned `measure_loudness` and `set_tempo` instead of refusing). So the model is not back at 14/14, hold-out 2 went down by two, and why 2026-11-15's code does better with the same model is not fully explained by the list alone. The results vary by a request or two between runs on a loaded Mac. qwen3:8b in Ollama, same day: 16/16, 19/24, 19/23, no figure of its own in any reply.
+On-device, each step measured on the same day (the standard set grew to 18 requests on the way; the first 14 are the original ones):
+
+| Step | Standard, original 14 | Standard, all | Hold-out 1 | Hold-out 2 |
+|---|---|---|---|---|
+| As found | 10/14 | 11/16 | 17/24 | 17/23 |
+| The 28-action list | 12/14 | 13/16 | 20/24 | 15/23 |
+| Plus the answer limit | 13/14 | 16/18 | 21/24 | 15/23 |
+| Plus the filler rule | 14/14 | 17/18 | 21/24 | 15/23 |
+| Plus the two pause rules | 14/14 | 17/18 | 21/24 | 17/23 |
+
+The instructions to the model were not changed, and no request was taken out of a set. The one standard request still wrong is "write a poem about the sea": the model plans `measure_loudness` and `set_tempo` instead of refusing. That plan is no longer run (next section). Results vary by a request or two between runs when the Mac is short of memory; right after a model in Ollama has been loaded the on-device model can fail altogether ("SensitiveContentAnalysisML error 15", "ModelManagerError 1013"), which is why `scripts/eval-assistant.sh` runs under the series' model lock and unloads its Ollama model when it ends.
+
+qwen3:8b in Ollama, same day, same code: 18/18 on the standard set, 19/24 and 20/23 on the hold-out sets, no figure of its own and no reply in the wrong language.
 
 A rule from this: the three sets are run (`scripts/eval-assistant.sh`) whenever an action is added or an action's description changes, not only when the assistant's own code does.
+
+## A change nobody asked for waits for a yes
+
+A plan that removes or replaces audio has always been shown first. From 2026-11-16 so is any step that changes the document when the request doesn't name its action (`AssistantPlan.unasked`, `AssistantCatalog.spokenAs`: the Swedish and English words for each action). "Write a poem about the sea" answered with `set_tempo` is shown with a note that it wasn't asked for, and nothing is done until Run. Measurements, and moving the playhead or the selection, change nothing and run as before. An action without words in the table always waits. The standard set has three requests that ask for nothing Jämmer does (a poem, a joke, the time), and counts plans that would have changed the document without a yes: 0 for every planner measured.
 
 ## How well the on-device model picks actions
 

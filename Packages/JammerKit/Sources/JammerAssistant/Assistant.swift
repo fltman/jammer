@@ -45,6 +45,37 @@ public enum AssistantCatalog {
                         kind: .macro, destructive: true),
     ]
 
+    /// Actions that leave the document as it is: measurements, and where the playhead and the selection are.
+    public static let changesNothing: Set<String> = ReplyGuard.measuring.union(["select", "select_all", "deselect", "set_playhead", "copy"])
+
+    /// How a request names each action that changes the document, in Swedish and English (lowercased,
+    /// matched anywhere in the request). Used for one thing: a step whose action the request doesn't
+    /// name waits for a yes. Generous on purpose where a word could mean the action; an action missing
+    /// here always waits.
+    public static let spokenAs: [String: [String]] = {
+        var w: [String: [String]] = [
+            "gain": ["volym", "volume", "level", "nivå", " db", "louder", "quieter", "högre", "lägre", "tystare", "starkare", "svagare", "sänk", "höj", "lower", "raise", "gain", "boost", "turn up", "turn down", "loud", "quiet", "soft"],
+            "normalize": ["normal", "lufs", "loudness", "ljudstyrk", "peak", "topp"],
+            "fade_in": ["fade", "tona"], "fade_out": ["fade", "tona"],
+            "echo": ["echo", "eko", "delay"],
+            "restore": ["hum", "brum", "buzz", "click", "klick", "noise", "brus", "hiss", "clip", "överstyr", "distort", "reverb", "rumsklang", "eko", "echo", "repair", "laga", "restore", "rensa", "clean", "crackl", "knast", "knäpp", "sprak"],
+            "add_marker": ["marker", "markör", "chapter", "kapitel"], "remove_marker": ["marker", "markör", "chapter", "kapitel"],
+            "set_tempo": ["tempo", "bpm", "takt"], "remove_tempo_change": ["tempo", "bpm", "takt"],
+            "transcribe": ["transcri", "transkri", "text", "skriv ut", "write down"],
+            "insert_silence": ["silence", "tystnad", "paus", "pause", "gap", "lucka"],
+            "silence": ["silence", "tysta", "mute", "tyst"],
+            "delete": ["delete", "remove", "radera", "ta bort", "cut", "klipp", "stryk"], "cut": ["cut", "klipp"],
+            "crop": ["crop", "trim", "beskär", "trimma", "keep only", "behåll bara"],
+            "paste": ["paste", "klistra"],
+            "delete_words": ["word", "ord", "delete", "remove", "ta bort", "radera", "stryk"],
+            "correct_word": ["word", "ord", "rätta", "correct", "stava", "spell"],
+            "remove_fillers": ["ehm", "eh ", "öh", "um ", "uh ", "filler", "fyllnad", "utfyllnad", "tvekljud"],
+            "remove_silences": ["silence", "tystnad", "paus", "pause", "gap", "luckor"],
+        ]
+        for (op, words) in onDeviceWhenNamed where w[op] == nil { w[op] = words }
+        return w
+    }()
+
     /// Values the assistant fills in when the model leaves out a required one.
     static let defaults: [String: [String: JSONValue]] = [
         "normalize": ["target": .string("loudness")],
@@ -174,6 +205,25 @@ public struct AssistantPlan: Sendable, Equatable {
 
     public func isDestructive(_ actions: [AssistantAction]) -> Bool {
         steps.contains { s in actions.first { $0.name == s.op }?.destructive ?? true }
+    }
+
+    /// The steps that would change the document although the request doesn't name them. A model answers
+    /// "write a poem about the sea" with `set_tempo` now and then; such a step is not run on its say-so.
+    /// On the safe side: an action Jämmer has no words for counts as not named.
+    public func unasked(goal: String, actions: [AssistantAction]) -> [PlannedStep] {
+        let text = " " + goal.lowercased() + " "
+        return steps.filter { s in
+            if AssistantCatalog.changesNothing.contains(s.op) { return false }
+            if case .sibling? = actions.first(where: { $0.name == s.op })?.kind { return false }   // offered only when the request names the app
+            guard let words = AssistantCatalog.spokenAs[s.op] else { return true }
+            return !words.contains { text.contains($0) }
+        }
+    }
+
+    /// Shown with Run and Cancel instead of being run: it removes or replaces audio, or it changes the
+    /// document in a way the request didn't ask for in so many words.
+    public func needsConfirmation(goal: String, actions: [AssistantAction]) -> Bool {
+        isDestructive(actions) || !unasked(goal: goal, actions: actions).isEmpty
     }
 }
 
@@ -383,11 +433,44 @@ public enum PlanParser {
         let fillerKeys: Set<String> = Project.fillerWords.union(["fyllnadsord", "utfyllnadsord", "filler", "fillers", "ehms", "ums"])
         let pauseKeys: Set<String> = ["tystnad", "tystnader", "tystnaderna", "paus", "pauser", "pauserna", "silence", "silences", "pause", "pauses"]
         var out = plan
-        let ops = Set(plan.steps.map(\.op))
+        // `delete_words` given nothing but filler words ("eh, ehm, öh, um, uh") is `remove_fillers` said the
+        // long way: the small model plans it so for "ta bort alla ehm". The macro is the one that works
+        // (it transcribes first when there is no transcript, and finds the words in every clip).
+        func said(_ v: JSONValue?) -> [String] {
+            switch v {
+            case .string(let t): Project.tokens(t)
+            case .array(let a): a.flatMap { said($0) }
+            default: []
+            }
+        }
+        out.steps = out.steps.map { step in
+            guard step.op == "delete_words" else { return step }
+            let named = said(step.params["text"]) + said(step.params["words"])
+            guard !named.isEmpty, named.allSatisfy(Project.fillerWords.contains) else { return step }
+            return PlannedStep(op: "remove_fillers", why: step.why)
+        }
+        if out.steps.filter({ $0.op == "remove_fillers" }).count > 1 {
+            var seen = false
+            out.steps.removeAll { s in guard s.op == "remove_fillers" else { return false }; defer { seen = true }; return seen }
+        }
+        let ops = Set(out.steps.map(\.op))
         if !words.isDisjoint(with: fillerKeys), !ops.contains("remove_fillers"), !ops.contains("delete_words") {
             out.steps.insert(PlannedStep(op: "remove_fillers", why: "The request mentions filler words."), at: 0)
         }
-        if !words.isDisjoint(with: pauseKeys), !ops.contains("remove_silences"), !ops.contains("delete"), !ops.contains("silence") {
+        // "Remove the pauses" planned as deleting from the start to somewhere the request never named
+        // (the small model deletes the whole document): what was asked for is the pauses.
+        if !words.isDisjoint(with: pauseKeys), !ops.contains("remove_silences") {
+            let named = ReplyGuard.numbers(in: goal)
+            func number(_ v: JSONValue?) -> Double? { if case .number(let d)? = v { return d }; return nil }
+            out.steps = out.steps.map { step in
+                guard step.op == "delete", (number(step.params["start"]) ?? 0) == 0, let end = number(step.params["end"]),
+                      !named.contains(where: { abs($0 - end) < 0.0005 }) else { return step }
+                return PlannedStep(op: "remove_silences", why: step.why)
+            }
+        }
+        let after = Set(out.steps.map(\.op))
+        // Putting silence in is not a request to take pauses out.
+        if !words.isDisjoint(with: pauseKeys), !after.contains("remove_silences"), !after.contains("delete"), !after.contains("silence"), !after.contains("insert_silence") {
             out.steps.append(PlannedStep(op: "remove_silences", why: "The request mentions pauses."))
         }
         return out

@@ -34,6 +34,8 @@ struct AssistantEval {
         // −18.0, and refused an English request in Swedish. The reply's figures and language are counted below.
         Case(goal: "what is the loudness?", ops: ["measure_loudness"]),
         Case(goal: "write a poem about the sea", ops: []),
+        Case(goal: "tell me a joke", ops: []),
+        Case(goal: "vad är klockan", ops: []),
     ] }
 
     /// The model under evaluation: the on-device one, or with `JAMMER_EVAL_PLANNER=ollama:<model>` a model
@@ -66,7 +68,7 @@ struct AssistantEval {
         let context = AssistantContext(project: p, selection: nil, playhead: 0)
         let planner = Self.planner
         let actions = AssistantCatalog.actions
-        var opsRight = 0, paramsRight = 0, paramsTotal = 0, invented = 0, wrongLanguage = 0
+        var opsRight = 0, paramsRight = 0, paramsTotal = 0, invented = 0, wrongLanguage = 0, unaskedRuns = 0
         var rows: [String] = []
         var seconds = 0.0
         for c in Self.cases(track2: p.tracks[1].id.uuidString) {
@@ -83,6 +85,11 @@ struct AssistantEval {
             if ok { opsRight += 1 }
             // The reply as the model wrote it (the app shows it only after ReplyGuard).
             let faults = ReplyGuard.faults(plan, goal: c.goal, context: context)
+            // Would the app have changed the document without asking? It must never: a change the request
+            // doesn't name waits for a yes (AssistantPlan.needsConfirmation).
+            if !plan.steps.allSatisfy({ AssistantCatalog.changesNothing.contains($0.op) }), !plan.needsConfirmation(goal: c.goal, actions: actions), !c.ops.contains(where: { op in plan.steps.contains { $0.op == op } }) {
+                unaskedRuns += 1; print("CHANGED WITHOUT ASKING: \(c.goal) → \(got)")
+            }
             if faults.inventedFigure { invented += 1; print("FIGURE OF ITS OWN: \(c.goal) → \(plan.reply)") }
             if faults.wrongLanguage { wrongLanguage += 1; print("OTHER LANGUAGE: \(c.goal) → \(plan.reply)") }
             var paramNotes: [String] = []
@@ -98,7 +105,7 @@ struct AssistantEval {
             rows.append("| \(c.goal) | \(c.ops.joined(separator: ", ")) | \(shown.isEmpty ? "(none) " + plan.reply.prefix(60) : shown)\(plan.dropped.isEmpty ? "" : " [dropped: \(plan.dropped.joined(separator: ", "))]") | \(ok ? (paramNotes.isEmpty ? "✓" : "ops ✓, " + paramNotes.joined(separator: " ")) : "✗") |")
         }
         let n = Self.cases(track2: "").count
-        let summary = "Right actions in the right order: \(opsRight)/\(n). Right key values: \(paramsRight)/\(paramsTotal). Average \(String(format: "%.1f", seconds / Double(n))) s per request. Replies with a figure of the model's own (struck before showing): \(invented). Replies in another language than the request (replaced): \(wrongLanguage)."
+        let summary = "Right actions in the right order: \(opsRight)/\(n). Right key values: \(paramsRight)/\(paramsTotal). Average \(String(format: "%.1f", seconds / Double(n))) s per request. Replies with a figure of the model's own (struck before showing): \(invented). Replies in another language than the request (replaced): \(wrongLanguage). Plans with none of the expected actions that would have changed the document without a yes: \(unaskedRuns)."
         let table = "| Request | Expected | Planned | Result |\n|---|---|---|---|\n" + rows.joined(separator: "\n") + "\n\n" + summary + "\n"
         print(table)
         if let path = ProcessInfo.processInfo.environment["JAMMER_EVAL_REPORT"] { try table.write(toFile: path, atomically: true, encoding: .utf8) }

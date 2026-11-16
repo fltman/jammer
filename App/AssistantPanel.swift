@@ -170,7 +170,11 @@ final class AssistantModel {
                 if !text.isEmpty { messages.append(Message(role: .assistant, text: text)) }
                 if !plan.dropped.isEmpty { messages.append(Message(role: .note, text: "Left out: " + plan.dropped.joined(separator: "; "))) }
                 guard !plan.steps.isEmpty else { return }
-                if plan.isDestructive(actions) {
+                let unasked = plan.unasked(goal: goal, actions: actions)
+                if !unasked.isEmpty {
+                    messages.append(Message(role: .note, text: "You didn't ask for \(unasked.count == 1 ? "this change" : "these changes") in so many words, so nothing has been done. Run it only if it is what you meant."))
+                }
+                if plan.needsConfirmation(goal: goal, actions: actions) {
                     let state = EditState(project: session.project, selection: session.selection, playhead: session.playhead,
                                           pool: session.pool, media: FileManager.default.temporaryDirectory.appending(path: "jammer-impact"))
                     pendingImpact = PlanImpact.compute(plan, goal: goal, state: state)
