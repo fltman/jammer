@@ -255,4 +255,36 @@ struct ResamplerTests {
         let sInfo = try AudioFileReader.info(at: s), fInfo = try AudioFileReader.info(at: file)
         #expect(SourcePool().read(SourceRef(name: "s", path: s.path, info: sInfo), from: 0, count: 96_000) == SourcePool().read(SourceRef(name: "f", path: file.path, info: fInfo), from: 0, count: 96_000))
     }
+
+    /// What is handed to Flimmer at Flimmer's rate is a delivery like an export, and goes through the
+    /// same converter: the file it writes is this converter's output, rounded to 24 bits.
+    @Test("The hand-over to Flimmer at another rate is converted by the same converter as an export")
+    func flimmerHandOver() throws {
+        let dir = FileManager.default.temporaryDirectory.appending(path: "jammer-flimmer-rate-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir); SampleRateConversion.factory = nil }
+        let n = 48_000 * 2
+        let x = Self.sine(997, rate: 48_000, seconds: 2)
+        let info = AudioFileInfo(container: .wav, sampleFormat: .float32, bigEndian: false, channels: 1, sampleRate: 48_000,
+                                 channelMask: nil, dataOffset: 0, frames: Int64(n), chunks: [], bext: nil, ixml: nil, markers: [])
+        let src = SourceRef(name: "tone", path: "/dev/null", info: info)
+        let pool = SourcePool()
+        pool.register(src.id, memory: x, channels: 1)
+        let project = Project(source: src)
+        let plan = PlanCompiler.compile(project, pool: pool)
+        Resampler.register()
+        let rendered = try FlimmerSend.wavFile(plan, range: 0..<project.length, bitDepth: 24, sampleRate: 44_100, scratch: dir)
+        let out = try AudioFileReader.info(at: rendered.file)
+        #expect(out.sampleRate == 44_100 && out.frames == 88_200)
+        let y = SourcePool().read(SourceRef(name: "o", path: rendered.file.path, info: out), from: 0, count: 88_200)
+        let direct = try Resampler.convert(x, channels: 1, from: 48_000, to: 44_100)
+        // The same samples as the converter gives, to within the 24-bit rounding of the file (half a step is −144.5 dB re full scale).
+        let worst = zip(y, direct).map { abs($0 - $1) }.max() ?? 1
+        #expect(worst <= 1.0 / 8_388_608, "\(worst)")
+        // With the system's converter instead, the file differs from this converter's by more than rounding: so the check tells them apart.
+        SampleRateConversion.factory = nil
+        let old = try FlimmerSend.wavFile(plan, range: 0..<project.length, bitDepth: 24, sampleRate: 44_100, scratch: dir)
+        let o = SourcePool().read(SourceRef(name: "o", path: old.file.path, info: try AudioFileReader.info(at: old.file)), from: 0, count: 88_200)
+        #expect((zip(o, direct).map { abs($0 - $1) }.max() ?? 0) > 1.0 / 8_388_608)
+    }
 }
