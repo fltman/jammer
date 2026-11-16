@@ -259,7 +259,8 @@ public enum ReplyGuard {
     /// The plan with a reply that is safe to show:
     /// - no sentence with a figure and a unit that nothing backs up (`Backing`); the sentences taken out
     ///   are kept in `heldBack`, and the user is told that something was held back;
-    /// - no sentence of the model's at all when the plan only measures (Jämmer writes that answer);
+    /// - no sentence of the model's at all when the plan only measures (Jämmer writes that answer), or
+    ///   when any step it planned was left out (the sentence may say that something was done that wasn't);
     /// - in the language of the request, or Jämmer's own words in that language.
     public static func checked(_ plan: AssistantPlan, goal: String, context: AssistantContext,
                                actions: [AssistantAction] = AssistantCatalog.actions) -> AssistantPlan {
@@ -272,6 +273,19 @@ public enum ReplyGuard {
         // A step of that kind that was left out for a missing value is not worth a line to the user either.
         out.dropped.removeAll { d in AssistantCatalog.viewOnly.keys.contains { d == $0 || d.hasPrefix($0 + " ") } }
         if !out.steps.isEmpty, out.steps.allSatisfy({ measuring.contains($0.op) }) {
+            out.reply = ""
+            return out
+        }
+        // Every step the model planned was left out: its sentence speaks of something that won't happen
+        // ("VCA Voices removed." above "Left out: remove_vca"). Jämmer's own words stand instead.
+        if out.steps.isEmpty, !out.dropped.isEmpty {
+            out.reply = cannot(language(of: goal))
+            return out
+        }
+        // Some steps stay and some were left out: whether the model's sentence claims more than what will
+        // run can't be told, so it isn't shown. The plan itself (what it does, in Jämmer's words) and the
+        // line about what was left out say it.
+        if !out.dropped.isEmpty {
             out.reply = ""
             return out
         }

@@ -88,6 +88,24 @@ struct ReplyGuardTests {
         #expect(checked("Half of it is 31 s.", goal: "what is half of this document, tell me").heldBack.count == 1)
     }
 
+    @Test("When every planned step was left out, the model's sentence about them isn't shown")
+    func nothingLeftToDo() {
+        let p = ReplyGuard.checked(AssistantPlan(reply: "VCA Voices removed.", steps: [], dropped: ["remove_vca (remove_vca needs \"vca\".)"]),
+                                   goal: "remove the Voices VCA", context: Self.context)
+        #expect(p.reply.hasPrefix("I can't do that as asked.") && p.dropped.count == 1)
+        // Some steps stay, one was left out: the plan and the line about what was left out speak, not the model.
+        let gain = [PlannedStep(op: "gain", params: ["db": .number(-3)])]
+        let q = ReplyGuard.checked(AssistantPlan(reply: "Lowered it and removed the group.", steps: gain, dropped: ["remove_vca"]), goal: "lower it 3 dB and remove the group", context: Self.context)
+        #expect(q.reply == "" && q.steps == gain)
+        // Nothing left out: the sentence stays.
+        #expect(ReplyGuard.checked(AssistantPlan(reply: "Lowering it.", steps: gain), goal: "lower it 3 dB", context: Self.context).reply == "Lowering it.")
+        // A delivery target that the request names is its preset, not a level the model chose; a level the request gives stays.
+        let n = [PlannedStep(op: "normalize", params: ["target": .string("loudness"), "level": .number(-16), "start": .number(0), "end": .number(60)])]
+        #expect(PlanParser.augment(goal: "master the episode for Spotify", plan: AssistantPlan(reply: "", steps: n)).steps
+                == [PlannedStep(op: "loudness_preset", params: ["preset": .string("spotify"), "start": .number(0), "end": .number(60)])])
+        #expect(PlanParser.augment(goal: "normalize to -16 LUFS for Spotify", plan: AssistantPlan(reply: "", steps: n)).steps == n)
+    }
+
     @Test("An action's own figures stand only in a sentence about that action, and never as a claim about the user's sound")
     func actionFigures() {
         // `limit` says its default ceiling is −1 dBTP and its release 100 ms.

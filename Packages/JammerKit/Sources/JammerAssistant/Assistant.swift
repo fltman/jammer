@@ -669,6 +669,21 @@ public enum PlanParser {
             out.steps.removeAll { $0.op == "set_master" && $0.params.isEmpty }
             out.dropped.append("set_master (nothing to change was given)")
         }
+        // "Master the episode for Spotify" answered with a normalize to a level the request never gave (−16,
+        // where Spotify's target is −14): a wrong target that runs is worse than a step left out. A delivery
+        // target that the request names is that preset, unless the request gives the level itself.
+        let targets: [String: String] = ["spotify": "spotify", "youtube": "youtube", "apple": "apple_podcasts", "r128": "ebu_r128", "ebu": "ebu_r128",
+                                         "atsc": "atsc_a85", "a85": "atsc_a85"]
+        if let preset = Set(words.compactMap { targets[$0] }).onlyOne, !out.steps.contains(where: { $0.op == "loudness_preset" }) {
+            let said = ReplyGuard.numbers(in: goal) + ReplyGuard.wordNumbers(in: goal)
+            out.steps = out.steps.map { step in
+                guard step.op == "normalize" else { return step }
+                if case .number(let level)? = step.params["level"], said.contains(where: { abs($0 - abs(level)) < 0.0005 }) { return step }
+                var params: [String: JSONValue] = ["preset": .string(preset)]
+                for k in ["start", "end"] { params[k] = step.params[k] }
+                return PlannedStep(op: "loudness_preset", params: params, why: step.why)
+            }
+        }
         // "Mute the Voices group" answered with a new group called "muted": nobody asked for a new group.
         let makeWords: Set<String> = ["add", "create", "new", "make", "need", "want", "skapa", "lägg", "ny", "nytt", "gör", "behöver", "vill"]
         if words.isDisjoint(with: makeWords), out.steps.contains(where: { $0.op == "add_vca" || $0.op == "add_bus" }) {

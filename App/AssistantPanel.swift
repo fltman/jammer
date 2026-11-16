@@ -96,6 +96,13 @@ final class AssistantModel {
     }
 
     var planner: any AssistantPlanner {
+        #if DEBUG
+        // `-assistantScript <file>`: answers from a file instead of a model, so that what the panel does with a
+        // plan (a step that is a job, a sentence held back, a step left out) can be looked at without waiting
+        // for a model to happen to say it. The file is JSON: {"<request>": {"reply": "…", "steps": [{"op": "…", "args": {…}}]}}.
+        if let path = UserDefaults.standard.string(forKey: "assistantScript"), let data = FileManager.default.contents(atPath: path),
+           let script = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] { return ScriptedPlanner(script: script) }
+        #endif
         if source == "ollama", !model.isEmpty { return OllamaPlanner(model: model) }
         if let provider, !model.isEmpty {
             let account = provider.id
@@ -522,3 +529,28 @@ struct AssistantView: View {
         }
     }
 }
+
+#if DEBUG
+/// A model's answers read from a file (`-assistantScript`), put through the same typing, repairs and
+/// checks as a real model's. Debug builds only.
+struct ScriptedPlanner: AssistantPlanner, @unchecked Sendable {
+    var id: String { "scripted" }
+    var paid: Bool { false }
+    let script: [String: Any]
+
+    func plan(goal: String, context: AssistantContext, history: [(user: String, reply: String)], actions: [AssistantAction]) async throws -> AssistantPlan {
+        if let reply = PlanParser.guardrail(goal) { return AssistantPlan(reply: reply, steps: []) }
+        guard let entry = script[goal] as? [String: Any] else { return AssistantPlan(reply: "The script has no answer for that.", steps: []) }
+        var dropped: [String] = []
+        let steps = (entry["steps"] as? [[String: Any]] ?? []).compactMap { s -> PlannedStep? in
+            let op = s["op"] as? String ?? ""
+            var params: [String: JSONValue] = [:]
+            for (k, v) in s["args"] as? [String: Any] ?? [:] { if let j = JSONValue(v) { params[k] = j } }
+            guard let step = PlanParser.typed(op: op, json: params, why: "", actions: actions, context: context) else { dropped.append(op); return nil }
+            return step
+        }
+        let plan = AssistantPlan(reply: entry["reply"] as? String ?? "", steps: steps, dropped: dropped)
+        return PlanParser.augment(goal: goal, plan: PlanParser.validate(plan, actions: actions))
+    }
+}
+#endif

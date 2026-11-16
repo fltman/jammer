@@ -17,6 +17,8 @@ Ask Jämmer in Swedish or English and it does the editing: "ta bort alla ehm och
 - All the editing in a plan is **one undo step**. Transcribing and repairs run as their own steps in between (they take a moment; the status bar shows the progress).
 - Removing filler words needs a transcript; the assistant transcribes first if there isn't one.
 - Questions like "how loud is it?" are answered in the chat. A measured value is always written by Jämmer from the measurement itself: the assistant chooses what to measure, and its own sentence isn't shown.
+- The assistant's own sentence is only shown when everything it planned can run. If a step was left out (a name it couldn't find, a value it didn't give), Jämmer says what was left out and why in its own words, so that you never read "removed" above something that wasn't.
+- A delivery target you name ("master it for Spotify") is that target's loudness preset, not a level of the assistant's choosing; say the level yourself and it is yours.
 - **The assistant doesn't make figures up.** Every figure with a unit in its answer is checked before you see it, and a sentence with a figure that nothing backs up is taken out; a line under the answer then says that a sentence was held back. A figure is backed up when it is:
   - in your request, in digits or in words ("two seconds", "en halv sekund");
   - in what the assistant was told about the document (its length, the playhead, the selection, the master limiter's ceiling), or among the values of the plan it shows you;
@@ -37,7 +39,7 @@ Click the gear in the assistant's header.
 
 ## Good to know
 
-- The mixer: the assistant can make a bus or a VCA group, set a bus's or a group's level, mute a bus, and set the master's gain and its limiter ("put a limiter on the master at −1 dBTP"). Buses and groups are named by their names. With the model on your Mac these were tried in English and Swedish; sends, muting a group and removing a group it usually doesn't manage, and then it does nothing and says what it left out.
+- The mixer: the assistant can make a bus or a VCA group, set a bus's or a group's level, mute a bus, set the master's gain and its limiter ("put a limiter on the master at −1 dBTP"), and freeze or unfreeze a track or a bus ("freeze the Music bus"). Tracks, buses and groups are named by their names. With the model on your Mac these were tried in English and Swedish; sends, muting a group and removing a group it usually doesn't manage, and then it does nothing and says what it left out.
 
 - Speakers are tracks: "talare 2" or "track 2" means the second track.
 - If a request is unclear, the assistant asks instead of guessing.
