@@ -41,10 +41,11 @@ enum HostedPluginsController {
         let before = HostedPlugins.current(), file = self.file
         var catalogue = await Task.detached(priority: .utility) { () -> PluginCatalogue in
             var c = before
-            // CLAP only for now: the scanner reads VST 3 bundles too, but nothing can run them yet,
-            // and a plugin that is listed has to be one that works.
-            let clap = HostedPlugins.folders(.clap)
-            c.scan(with: PluginScanner(probe: probe, readable: clap), folders: [.clap: clap],
+            // CLAP from the user's plugin folders. VST 3 can be hosted too, but so far only our own
+            // test plugins have been through it, and a plugin that is listed has to be one that works:
+            // until real ones have been tried, VST 3 is read only from the test folder (-pluginFolder).
+            let clap = HostedPlugins.folders(.clap), vst3 = HostedPlugins.extraFolders
+            c.scan(with: PluginScanner(probe: probe, readable: clap + vst3), folders: vst3.isEmpty ? [.clap: clap] : [.clap: clap, .vst3: vst3],
                    force: force, progress: progress, cancelled: cancelled)
             try? c.save(file)
             return c

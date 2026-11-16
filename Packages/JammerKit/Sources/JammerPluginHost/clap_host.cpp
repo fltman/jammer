@@ -1,6 +1,6 @@
 // The CLAP side of the plugin host (CLAP 1.2, MIT headers).
 
-#include "jammer_plugin_host.h"
+#include "host_internal.hpp"
 
 #include <CoreFoundation/CoreFoundation.h>
 #include <clap/clap.h>
@@ -11,14 +11,14 @@
 #include <string>
 #include <vector>
 
-struct jph_plugin {
+struct ClapPlugin : jph_plugin {
     CFBundleRef bundle = nullptr;
     const clap_plugin_entry_t *entry = nullptr;
     const clap_plugin_t *plugin = nullptr;
     clap_host_t host{};
     const clap_plugin_params_t *params = nullptr;
     const clap_plugin_state_t *state = nullptr;
-    const clap_plugin_latency_t *latency = nullptr;
+    const clap_plugin_latency_t *latencyExt = nullptr;
     int32_t channels = 2, maxFrames = 512;
     double sampleRate = 48000;
     bool active = false, processing = false, wantsCallback = false, wantsRestart = false;
@@ -26,6 +26,17 @@ struct jph_plugin {
     /// Parameter changes waiting for the next block.
     std::vector<clap_event_param_value_t> pending;
     std::vector<float> silence;
+
+    ~ClapPlugin() override;
+    bool process(const float *const *in, float *const *out, int32_t frames) override;
+    void reset() override;
+    int32_t latency() override { return latencyExt ? int32_t(latencyExt->get(plugin)) : 0; }
+    int32_t paramCount() override { return params ? int32_t(params->count(plugin)) : 0; }
+    bool paramInfo(int32_t index, jph_param *out) override;
+    bool paramSet(uint32_t id, double value) override;
+    bool paramGet(uint32_t id, double *value) override { return params && params->get_value(plugin, id, value); }
+    bool stateSave(std::vector<uint8_t> &bytes) override;
+    bool stateLoad(const uint8_t *data, size_t size) override;
 };
 
 namespace {
@@ -34,15 +45,15 @@ void fail(char *error, size_t size, const char *why) { std::snprintf(error, size
 
 // What the plugin may ask of its host. Everything runs on the one thread that drives the plugin.
 const void *hostExtension(const clap_host_t *, const char *id);
-void requestRestart(const clap_host_t *h) { static_cast<jph_plugin *>(h->host_data)->wantsRestart = true; }
+void requestRestart(const clap_host_t *h) { static_cast<ClapPlugin *>(h->host_data)->wantsRestart = true; }
 void requestProcess(const clap_host_t *) {}
-void requestCallback(const clap_host_t *h) { static_cast<jph_plugin *>(h->host_data)->wantsCallback = true; }
+void requestCallback(const clap_host_t *h) { static_cast<ClapPlugin *>(h->host_data)->wantsCallback = true; }
 
 bool isMainThread(const clap_host_t *) { return true; }
 bool isAudioThread(const clap_host_t *) { return true; }
 const clap_host_thread_check_t threadCheck{isMainThread, isAudioThread};
 
-void latencyChanged(const clap_host_t *h) { static_cast<jph_plugin *>(h->host_data)->wantsRestart = true; }
+void latencyChanged(const clap_host_t *h) { static_cast<ClapPlugin *>(h->host_data)->wantsRestart = true; }
 const clap_host_latency_t hostLatency{latencyChanged};
 
 void paramsRescan(const clap_host_t *, clap_param_rescan_flags) {}
@@ -68,18 +79,18 @@ const void *hostExtension(const clap_host_t *, const char *id) {
 }
 
 // Events into a block: the pending parameter changes, all at time 0.
-uint32_t inSize(const clap_input_events_t *l) { return uint32_t(static_cast<jph_plugin *>(l->ctx)->pending.size()); }
-const clap_event_header_t *inGet(const clap_input_events_t *l, uint32_t i) { return &static_cast<jph_plugin *>(l->ctx)->pending[i].header; }
+uint32_t inSize(const clap_input_events_t *l) { return uint32_t(static_cast<ClapPlugin *>(l->ctx)->pending.size()); }
+const clap_event_header_t *inGet(const clap_input_events_t *l, uint32_t i) { return &static_cast<ClapPlugin *>(l->ctx)->pending[i].header; }
 bool outPush(const clap_output_events_t *, const clap_event_header_t *) { return true; }
 
-void pump(jph_plugin *p) {
+void pump(ClapPlugin *p) {
     if (p->wantsCallback) {
         p->wantsCallback = false;
         p->plugin->on_main_thread(p->plugin);
     }
 }
 
-bool start(jph_plugin *p) {
+bool start(ClapPlugin *p) {
     if (!p->active) {
         if (!p->plugin->activate(p->plugin, p->sampleRate, 1, uint32_t(p->maxFrames))) return false;
         p->active = true;
@@ -91,13 +102,13 @@ bool start(jph_plugin *p) {
     return true;
 }
 
-void stop(jph_plugin *p) {
+void stop(ClapPlugin *p) {
     if (p->processing) { p->plugin->stop_processing(p->plugin); p->processing = false; }
     if (p->active) { p->plugin->deactivate(p->plugin); p->active = false; }
 }
 
 /// The plugin's main ports must both take our channel count.
-bool portsFit(jph_plugin *p) {
+bool portsFit(ClapPlugin *p) {
     auto *ports = static_cast<const clap_plugin_audio_ports_t *>(p->plugin->get_extension(p->plugin, CLAP_EXT_AUDIO_PORTS));
     if (!ports) return true; // no say: the default is stereo in, stereo out
     for (bool input : {true, false}) {
@@ -113,13 +124,13 @@ bool portsFit(jph_plugin *p) {
 extern "C" {
 
 jph_plugin *jph_clap_open(const char *bundlePath, const char *id, double sampleRate, int32_t channels, int32_t maxFrames, char *error, size_t errorSize) {
-    auto *p = new jph_plugin;
+    auto *p = new ClapPlugin;
     p->channels = std::clamp(channels, 1, 2);
     p->maxFrames = std::max(1, maxFrames);
     p->sampleRate = sampleRate;
     p->silence.assign(size_t(p->maxFrames), 0.0f);
     p->host = clap_host_t{CLAP_VERSION_INIT, p, "Jammer", "Brattoo", "https://jammer.brattoo.com", "0.1", hostExtension, requestRestart, requestProcess, requestCallback};
-    auto bail = [&](const char *why) -> jph_plugin * { fail(error, errorSize, why); jph_close(p); return nullptr; };
+    auto bail = [&](const char *why) -> jph_plugin * { fail(error, errorSize, why); delete p; return nullptr; };
     CFURLRef url = CFURLCreateFromFileSystemRepresentation(nullptr, reinterpret_cast<const UInt8 *>(bundlePath), CFIndex(std::strlen(bundlePath)), true);
     p->bundle = url ? CFBundleCreate(nullptr, url) : nullptr;
     if (url) CFRelease(url);
@@ -136,24 +147,26 @@ jph_plugin *jph_clap_open(const char *bundlePath, const char *id, double sampleR
     if (!portsFit(p)) return bail(p->channels == 1 ? "The plugin doesn't take mono audio." : "The plugin doesn't take stereo audio.");
     p->params = static_cast<const clap_plugin_params_t *>(p->plugin->get_extension(p->plugin, CLAP_EXT_PARAMS));
     p->state = static_cast<const clap_plugin_state_t *>(p->plugin->get_extension(p->plugin, CLAP_EXT_STATE));
-    p->latency = static_cast<const clap_plugin_latency_t *>(p->plugin->get_extension(p->plugin, CLAP_EXT_LATENCY));
+    p->latencyExt = static_cast<const clap_plugin_latency_t *>(p->plugin->get_extension(p->plugin, CLAP_EXT_LATENCY));
     if (!start(p)) return bail("The plugin couldn't be activated at this sample rate.");
     pump(p);
     return p;
 }
 
-void jph_close(jph_plugin *p) {
-    if (!p) return;
+} // extern "C"
+
+ClapPlugin::~ClapPlugin() {
+    ClapPlugin *p = this;
     if (p->plugin) {
         stop(p);
         p->plugin->destroy(p->plugin);
     }
     if (p->entry) p->entry->deinit();
     // The bundle stays loaded: unloading code that may have left threads or atexit handlers behind is how hosts crash.
-    delete p;
 }
 
-bool jph_process(jph_plugin *p, const float *const *in, float *const *out, int32_t frames) {
+bool ClapPlugin::process(const float *const *in, float *const *out, int32_t frames) {
+    ClapPlugin *p = this;
     auto passThrough = [&] { for (int32_t c = 0; c < p->channels; ++c) if (out[c] != in[c]) std::memcpy(out[c], in[c], size_t(frames) * sizeof(float)); };
     if (frames <= 0) return true;
     if (frames > p->maxFrames) { passThrough(); return false; }
@@ -187,16 +200,14 @@ bool jph_process(jph_plugin *p, const float *const *in, float *const *out, int32
     return true;
 }
 
-void jph_reset(jph_plugin *p) {
+void ClapPlugin::reset() {
+    ClapPlugin *p = this;
     if (p->plugin->reset) p->plugin->reset(p->plugin);
     p->steady = 0;
 }
 
-int32_t jph_latency(jph_plugin *p) { return p->latency ? int32_t(p->latency->get(p->plugin)) : 0; }
-
-int32_t jph_param_count(jph_plugin *p) { return p->params ? int32_t(p->params->count(p->plugin)) : 0; }
-
-bool jph_param_info(jph_plugin *p, int32_t index, jph_param *out) {
+bool ClapPlugin::paramInfo(int32_t index, jph_param *out) {
+    ClapPlugin *p = this;
     if (!p->params || index < 0) return false;
     clap_param_info_t info{};
     if (!p->params->get_info(p->plugin, uint32_t(index), &info)) return false;
@@ -216,9 +227,10 @@ bool jph_param_info(jph_plugin *p, int32_t index, jph_param *out) {
     return true;
 }
 
-bool jph_param_set(jph_plugin *p, uint32_t id, double value) {
+bool ClapPlugin::paramSet(uint32_t id, double value) {
+    ClapPlugin *p = this;
     if (!p->params) return false;
-    const int32_t n = jph_param_count(p);
+    const int32_t n = paramCount();
     for (int32_t i = 0; i < n; ++i) {
         clap_param_info_t info{};
         if (!p->params->get_info(p->plugin, uint32_t(i), &info) || info.id != id) continue;
@@ -248,25 +260,20 @@ bool jph_param_set(jph_plugin *p, uint32_t id, double value) {
     return false;
 }
 
-bool jph_param_get(jph_plugin *p, uint32_t id, double *value) { return p->params && p->params->get_value(p->plugin, id, value); }
-
-bool jph_state_save(jph_plugin *p, uint8_t **data, size_t *size) {
+bool ClapPlugin::stateSave(std::vector<uint8_t> &bytes) {
+    ClapPlugin *p = this;
     if (!p->state) return false;
-    std::vector<uint8_t> bytes;
     clap_ostream_t stream{&bytes, [](const clap_ostream_t *s, const void *buffer, uint64_t n) -> int64_t {
                               auto *v = static_cast<std::vector<uint8_t> *>(s->ctx);
                               const auto *b = static_cast<const uint8_t *>(buffer);
                               v->insert(v->end(), b, b + n);
                               return int64_t(n);
                           }};
-    if (!p->state->save(p->plugin, &stream)) return false;
-    *size = bytes.size();
-    *data = static_cast<uint8_t *>(std::malloc(std::max<size_t>(1, bytes.size())));
-    if (!bytes.empty()) std::memcpy(*data, bytes.data(), bytes.size());
-    return true;
+    return p->state->save(p->plugin, &stream);
 }
 
-bool jph_state_load(jph_plugin *p, const uint8_t *data, size_t size) {
+bool ClapPlugin::stateLoad(const uint8_t *data, size_t size) {
+    ClapPlugin *p = this;
     if (!p->state) return false;
     struct Cursor { const uint8_t *data; size_t size, at; } cursor{data, size, 0};
     clap_istream_t stream{&cursor, [](const clap_istream_t *s, void *buffer, uint64_t n) -> int64_t {
@@ -279,6 +286,3 @@ bool jph_state_load(jph_plugin *p, const uint8_t *data, size_t size) {
     return p->state->load(p->plugin, &stream);
 }
 
-void jph_free(void *data) { std::free(data); }
-
-} // extern "C"

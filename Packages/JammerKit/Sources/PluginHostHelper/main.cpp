@@ -117,7 +117,8 @@ int main() {
             std::memcpy(&maxFrames, s + 12, 4);
             char error[256] = "";
             if (parts[0] == "clap") plugin = jph_clap_open(parts[1].c_str(), parts[2].c_str(), rate, channels, maxFrames, error, sizeof error);
-            else std::snprintf(error, sizeof error, "This build can't host %s plugins yet.", parts[0].c_str());
+            else if (parts[0] == "vst3") plugin = jph_vst3_open(parts[1].c_str(), parts[2].c_str(), rate, channels, maxFrames, error, sizeof error);
+            else std::snprintf(error, sizeof error, "This build can't host %s plugins.", parts[0].c_str());
             if (!plugin) { answerError(error); break; }
             outBuffer.assign(size_t(channels) * size_t(maxFrames), 0.0f);
             const auto d = describe(plugin);

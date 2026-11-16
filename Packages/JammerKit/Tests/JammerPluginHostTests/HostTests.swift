@@ -443,7 +443,8 @@ struct HostProcessTests {
         #expect(message { try start(bundle, channels: 1) } == "The plugin doesn't take mono audio.")
         #expect(message { try start(try TestEffect.build("Dies", defines: ["CRASH_ON_INIT"], in: dir)) } == "The plugin crashed while it was being loaded.")
         #expect(message { try PluginHostProcess(helper: dir.appending(path: "none"), format: .clap, bundle: bundle, id: "x", sampleRate: 48_000, channels: 2) } == "The plugin host helper is missing.")
-        #expect(message { try PluginHostProcess(helper: Self.helper, format: .vst3, bundle: bundle, id: "x", sampleRate: 48_000, channels: 2) } == "This build can't host vst3 plugins yet.")
+        #expect(message { try PluginHostProcess(helper: Self.helper, format: .vst3, bundle: bundle, id: "x", sampleRate: 48_000, channels: 2) }
+                == (TestVST3.sdkPresent ? "That isn't a VST 3 class id." : "This build has no VST 3 support."))
     }
 }
 

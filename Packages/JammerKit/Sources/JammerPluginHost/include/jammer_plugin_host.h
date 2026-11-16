@@ -26,6 +26,10 @@ typedef struct jph_param {
 /// in blocks of at most `maxFrames`. NULL on failure, with the reason in `error`.
 jph_plugin *_Nullable jph_clap_open(const char *_Nonnull bundle, const char *_Nonnull id, double sampleRate, int32_t channels,
                                     int32_t maxFrames, char *_Nonnull error, size_t errorSize);
+/// The same for a VST 3 plugin; `id` is its class id as 32 hex digits. Parameters are in the plugin's
+/// own units when it has any (0 to 1 otherwise). Fails in words in a build without the VST 3 headers.
+jph_plugin *_Nullable jph_vst3_open(const char *_Nonnull bundle, const char *_Nonnull id, double sampleRate, int32_t channels,
+                                    int32_t maxFrames, char *_Nonnull error, size_t errorSize);
 void jph_close(jph_plugin *_Nullable plugin);
 
 /// Planar float in and out, `frames` <= maxFrames. False when the plugin reports an error

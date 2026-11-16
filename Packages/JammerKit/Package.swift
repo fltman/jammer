@@ -95,7 +95,7 @@ if hasCLAP {
         .testTarget(name: "JammerPluginsTests", dependencies: ["JammerPlugins", "JammerCore", "PluginProbe"]),
         // Hosting a plugin: load, activate, process, parameters, state, latency. Only ever linked
         // into helper processes (and their tests), never into the app.
-        .target(name: "JammerPluginHost", cxxSettings: [.headerSearchPath("../../Vendor/clap/include")],
+        .target(name: "JammerPluginHost", cxxSettings: [.headerSearchPath("../../Vendor/clap/include"), .headerSearchPath("../../Vendor/vst3sdk")],
                 linkerSettings: [.linkedFramework("CoreFoundation")]),
         // The process that holds one plugin while it works (one per plugin).
         .executableTarget(name: "PluginHostHelper", dependencies: ["JammerPluginHost"], path: "Sources/PluginHostHelper"),
