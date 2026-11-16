@@ -16,7 +16,13 @@ Ask Jämmer in Swedish or English and it does the editing: "ta bort alla ehm och
 - Under **What it does**, Jämmer says in numbers what the plan will do, worked out from the steps themselves rather than from the assistant's words: "Deletes 2.0 s of 3:12 at the end", "Removes 14 words (6.2 s)". If a plan would remove more than a fifth of the document, or deletes audio although you didn't ask to remove anything, it's outlined in orange with a warning, and Return cancels instead of running.
 - All the editing in a plan is **one undo step**. Transcribing and repairs run as their own steps in between (they take a moment; the status bar shows the progress).
 - Removing filler words needs a transcript; the assistant transcribes first if there isn't one.
-- Questions like "how loud is it?" are answered in the chat. A measured value is always written by Jämmer from the measurement itself: the assistant chooses what to measure, and a sentence of its own with a figure it wasn't given (a level, a frequency, a length, a tempo) is taken out before it is shown.
+- Questions like "how loud is it?" are answered in the chat. A measured value is always written by Jämmer from the measurement itself: the assistant chooses what to measure, and its own sentence isn't shown.
+- **The assistant doesn't make figures up.** Every figure with a unit in its answer is checked before you see it, and a sentence with a figure that nothing backs up is taken out; a line under the answer then says that a sentence was held back. A figure is backed up when it is:
+  - in your request, in digits or in words ("two seconds", "en halv sekund");
+  - in what the assistant was told about the document (its length, the playhead, the selection, the master limiter's ceiling), or among the values of the plan it shows you;
+  - a figure from the description of one of Jämmer's commands (a default, a range), but only in a sentence that is about that command, and never in a sentence that says something about your own sound;
+  - or one of these, which Jämmer works out itself from the first two before it reads the answer: the selection's length; what is left after the playhead and after the selection; half the document and half the selection; for two times in your request, their sum and their difference; any of these times said in milliseconds, seconds or minutes; and the difference between two levels that were given ("from −23 to −16 LUFS" is 7 dB). The answer's figure has to be that value as a person would round it, not something near it.
+  - Prices, sizes on disk, how long something will take, and anything about a service are never worked out: such a figure stands only when your request or the document gave it. 0, 1 and a count of the plan's steps are always allowed.
 - The answer follows the language of your request, Swedish or English.
 
 ## Which model
@@ -30,6 +36,8 @@ Click the gear in the assistant's header.
 | **OpenRouter**, **Berget**, **Grunden** | A model of your choice at one of these services, with your own key. The key is kept in your Keychain, one per service. The models and their prices are read from the service's own list; a model that can't call tools is marked and can't be used. Every request asks first and shows the approximate price; only your request and a short description of the document (length, tracks, the start of the transcript) are sent, never the audio. Berget and Grunden run in Sweden by their own account. They are built from their documentation and haven't yet been tried with a paid request, so if one of them answers with an error, Jämmer shows the error as it came. |
 
 ## Good to know
+
+- The mixer: the assistant can make a bus or a VCA group, set a bus's or a group's level, mute a bus, and set the master's gain and its limiter ("put a limiter on the master at −1 dBTP"). Buses and groups are named by their names. With the model on your Mac these were tried in English and Swedish; sends, muting a group and removing a group it usually doesn't manage, and then it does nothing and says what it left out.
 
 - Speakers are tracks: "talare 2" or "track 2" means the second track.
 - If a request is unclear, the assistant asks instead of guessing.

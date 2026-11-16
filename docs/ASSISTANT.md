@@ -20,7 +20,13 @@ Found in the app on 2026-11-16: asked "what is the loudness?", the on-device mod
 The rule (`JammerAssistant/ReplyGuard.swift`), for every planner, through `AssistantPlanner.answer`, which is what the app shows:
 
 - A plan made only of measuring actions (`measure_loudness`, `analyze_restoration`, `detect_tempo`, `analyze_rhythm`) is answered by Jämmer from the result. The model's sentence isn't shown at all.
-- In any other reply, a sentence with a number and a unit (LUFS, LU, dB, dBFS, dBTP, Hz, kHz, BPM, s, ms, minutes, %, …) is taken out unless that number stands in the request, in the document's description that the model was given, or in the plan's own values. "I'll normalize to −16 LUFS" stays when the request said −16; "the peak is at −1.2 dBTP" goes.
+- In any other reply, a sentence with a number and a unit (LUFS, LU, dB, dBFS, dBTP, Hz, kHz, BPM, s, ms, minutes, %, and since 2026-11-16 money and sizes on disk) is taken out unless something backs the number up. The series rule (the-apps/SIBLINGS.md, "Siffror i assistentens svar") says what does; in Jämmer (`ReplyGuard.Backing`):
+  1. the request, in digits or in words ("two seconds", "en och en halv sekund");
+  2. the document's description that the model was given; and, Jämmer's own addition, the values of the plan's steps (they are what will run, and the user sees them beside the sentence);
+  3. an action's description, its parameters' descriptions and ranges, only in a sentence that names the action (its name, a word of its name, a parameter name that isn't a common one, or one of its `onDeviceWhenNamed` words), and never in a sentence that speaks of the user's own sound ("your", "is at", "ligger på", …);
+  4. the closed set `ReplyGuard.derived`: the selection's length, what is left after the playhead and after the selection, half the document and half the selection, the sum and the difference of two times in the request, any of those times in ms, s or minutes, and the difference between two levels given. Membership with the rounding a person sees (the value, or to 0, 1 or 2 decimals). Not in the set, though suggested: a length from frames and sample rate, and the sum of two clips' lengths; the model isn't told the sample rate or the clips, so there is nothing given to work them out from.
+  - Money, sizes on disk, a time in a sentence about how long something takes, and any figure in a sentence about a service: only 1 and 2. 0, 1 and a count up to the number of steps are free.
+  - The sentences taken out are in `AssistantPlan.heldBack`; the panel says that a sentence was held back, in the request's language. "I'll normalize to −16 LUFS" stays when the request said −16; "the peak is at −1.2 dBTP" goes.
 - The reply follows the language of the request (Swedish or English, when both are long enough to tell). A reply in the other language is dropped when there is a plan to show, and replaced by Jämmer's own sentence in the request's language when there isn't.
 - The model's instructions are unchanged: they are the ones the evaluation results below were measured with, and the check, not the instructions, is what keeps a made-up figure off the screen.
 - Jämmer's own canned sentences (the clarifying question, the refusals) choose their language with the same recogniser; before, a Swedish request without one of eleven marker words was answered in English.
@@ -301,3 +307,35 @@ Right actions: 19/24 (task 12/16, multi 2/3, clarify 2/2, refuse 2/2, answer 1/1
 | answer | vilka format kan du exportera? | (no steps) | (no steps) “What should I change? For example noise, hum, clicks, level or pauses.” | ✓ |
 
 Right actions: 19/23 (task 12/16, multi 2/2, clarify 2/2, refuse 2/2, answer 1/1). Right values: 22/26.
+
+## The mixer's later parts, and the rule on figures (2026-11-16)
+
+The assistant was given `set_master`, `set_send`, `add_vca`, `set_vca`, `remove_vca`, `freeze` and `unfreeze`; the on-device model is shown each only when the request has its word (`onDeviceWhenNamed`). Tracks, buses and VCA groups are named by name and become ids (`AssistantContext.stripID`, `vcaID`); the model is told the VCA groups, what is frozen and the master limiter's ceiling. Hold-out set 5 (15 requests, written before any answer was seen) is about them. It was looked at after its first run and changed from: it is a regression set from now on.
+
+On-device, three runs the same evening, as the user gets it / the model's own plan:
+
+| Set | Before (new actions, old rule on figures) | New rule on figures and first repairs | Final |
+|---|---|---|---|
+| standard (18) | 17 / 17 | 17 / 17 | 17 / 17 |
+| hold-out 1 (24) | 21 / 21 | 21 / 21 | 21 / 21 |
+| hold-out 2 (23) | 18 / 18 | 18 / 18 | 18 / 18 |
+| hold-out 3 (29) | 19 / 18 | 20 / 19 | 20 / 19 |
+| hold-out 4 (9) | 7 / 7 | 7 / 7 | 7 / 7 |
+| hold-out 5 (15) | 8 / 8 | 10 / 10 | 11 / 11 |
+
+(Before the new actions the same day: standard 17, hold-out 1 21, hold-out 2 17, hold-out 3 18. The one-request moves in sets 2 and 3 are within what this model varies between runs.)
+
+What set 5's first run showed, and what was done (all in `PlanParser`, none in the model's instructions):
+- A short request about freezing, the master or a VCA was answered "What should I change?" before the model was asked: their words were added to the words that mean an action.
+- `set_master` came with every setting filled in ("limiter": false and a ceiling for "sänk mastern till −3 dB"; counted right because only the asked value was compared). Now the limiter's settings stay only when the request speaks of a limiter or a ceiling, a limiter that is asked for is switched on, and a setting nobody gave a figure for is left as it is.
+- "Freeze the Music bus" came as a change to the bus that changes nothing: that is now the freeze of that bus.
+- Two plans would have changed the document unasked: "send Erik to the Music bus at −6 dB" set the Music bus's own level to −6, and "tysta VCA-gruppen Voices" made a new group called "muted". Both are now left out with a line saying why. In the final run no plan changes the document without being asked.
+- Still wrong in the final run, 4 of 15: the send (nothing is done; the model doesn't choose `set_send`), muting a VCA group in Swedish (nothing is done), "remove the Voices VCA" (the model names the group in a way that isn't found; nothing is done, but its sentence "VCA Voices removed." is still shown above the line that says the step was left out), and "master the episode for Spotify" (normalised to −16 LUFS instead of the Spotify preset).
+
+The rule on figures, in the same runs. The evaluation prints, for every reply the check changed, what the model wrote, what the user is shown, and which sentences were held back for a figure (`REPLY CHANGED BY THE CHECK` in each set's log).
+- With the old rule, across the six sets, two replies lost a sentence whose figure the model had read rightly from the request, where the request gave it in words: "Pause shorter than 2 seconds to 0.5 seconds." (for "over two seconds to half a second") and "Loudness normalized to -18 LUFS." (for "minus eighteen"). So the same thing happened here as in Glimmer, in the form of numbers in words.
+- With the new rule, second run: one, "Ta bort pauser längre än 1.5 sekunder." for "en och en halv sekund"; "and a half" was added to the number words.
+- Final run: no sentence held back for a figure in any of the 118 requests, and no reply had a figure of the model's own. The other changed replies were changed for the language or because the plan only measures.
+- No reply in these sets used a figure from the worked-out set (the model doesn't do arithmetic in its replies here), so that part is shown by `ReplyGuardTests` only: a rightly worked-out figure stays and a made-up one beside it is held back.
+
+Not seen in the app: the panel running `freeze` and `unfreeze` from a plan (the code is the mixer's Frozen box's), and the held-back line in the panel.

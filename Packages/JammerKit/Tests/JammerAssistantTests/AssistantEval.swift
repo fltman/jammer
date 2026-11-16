@@ -87,6 +87,8 @@ struct AssistantEval {
             if ReplyGuard.checked(plan, goal: c.goal, context: context).steps.map(\.op) == c.ops { opsRightForUser += 1 }
             // The reply as the model wrote it (the app shows it only after ReplyGuard).
             let faults = ReplyGuard.faults(plan, goal: c.goal, context: context)
+            let guarded = ReplyGuard.checked(plan, goal: c.goal, context: context)
+            if guarded.reply != plan.reply { print("REPLY CHANGED BY THE CHECK: \(c.goal)\n   the model wrote: \(plan.reply)\n   the user is shown: \(guarded.reply)\n   held back for a figure: \(guarded.heldBack.isEmpty ? "nothing" : guarded.heldBack.joined(separator: " | "))") }
             // Would the app have changed the document without asking? It must never: a change the request
             // doesn't name waits for a yes (AssistantPlan.needsConfirmation).
             if !plan.steps.allSatisfy({ AssistantCatalog.changesNothing.contains($0.op) }), !plan.needsConfirmation(goal: c.goal, actions: actions), !c.ops.contains(where: { op in plan.steps.contains { $0.op == op } }) {

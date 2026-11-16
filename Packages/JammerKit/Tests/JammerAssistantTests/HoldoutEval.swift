@@ -14,7 +14,7 @@ struct HoldoutEval {
             return want == "<0" ? d < 0 : want == "<1" ? d < 1 : d > 0
         }
         let options = want.split(separator: "|").map { w -> String in
-            switch w { case "{track1}": tracks[0]; case "{track2}": tracks[1]; case "{music}": tracks.count > 2 ? tracks[2] : "-"; default: String(w) }
+            switch w { case "{track1}": tracks[0]; case "{track2}": tracks[1]; case "{music}": tracks.count > 2 ? tracks[2] : "-"; case "{voices}": tracks.count > 3 ? tracks[3] : "-"; default: String(w) }
         }
         return options.contains { $0.caseInsensitiveCompare(text) == .orderedSame || (Double($0) != nil && Double($0) == Double(text)) }
     }
@@ -22,7 +22,7 @@ struct HoldoutEval {
     @Test("Hold-out set, on-device (JAMMER_HOLDOUT=1 or 2)")
     func run() async throws {
         let which = ProcessInfo.processInfo.environment["JAMMER_HOLDOUT"]
-        let set = which == "4" ? HoldoutSet4.cases : which == "3" ? HoldoutSet3.cases : which == "2" ? HoldoutSet2.cases : HoldoutSet1.cases
+        let set = which == "5" ? HoldoutSet5.cases : which == "4" ? HoldoutSet4.cases : which == "3" ? HoldoutSet3.cases : which == "2" ? HoldoutSet2.cases : HoldoutSet1.cases
         let info = AudioFileInfo(container: .wav, sampleFormat: .float32, bigEndian: false, channels: 2, sampleRate: 48_000,
                                  channelMask: nil, dataOffset: 0, frames: 48_000 * 60, chunks: [], bext: nil, ixml: nil, markers: [])
         var p = Project(source: SourceRef(name: "Anna", path: "/dev/null", info: info))
@@ -31,7 +31,9 @@ struct HoldoutEval {
         p.tracks.append(Track(name: "Erik", clips: [Clip(sourceID: b.id, start: 0, length: 48_000 * 60)]))
         var tracks = p.tracks.map(\.id.uuidString)
         // Set 4 is about the mixer: its document has a bus the requests can name.
-        if which == "4" { tracks.append(try p.addBus(name: "Music").id.uuidString) }
+        if which == "4" || which == "5" { tracks.append(try p.addBus(name: "Music").id.uuidString) }
+        // Set 5 is about the mixer's later parts: a VCA group to name as well.
+        if which == "5" { tracks.append(try p.addVCA(name: "Voices").id.uuidString) }
         let context = AssistantContext(project: p, selection: nil, playhead: 0)
         let actions = AssistantCatalog.actions
         var right = 0, rightForUser = 0, valuesRight = 0, valuesTotal = 0, invented = 0, wrongLanguage = 0, unaskedRuns = 0
@@ -48,6 +50,11 @@ struct HoldoutEval {
                 unaskedRuns += 1; print("CHANGED WITHOUT ASKING: \(c.goal) → \(got)")
             }
             if faults.inventedFigure { invented += 1; print("FIGURE OF ITS OWN: \(c.goal) → \(plan.reply)") }
+            // The model's sentence as it wrote it, and as the user is shown it after the check on figures:
+            // printed whenever the check changed it, so that a figure the model worked out rightly from
+            // what it was given, and lost to the check, can be seen (the rule on figures is being looked at).
+            let guarded = ReplyGuard.checked(plan, goal: c.goal, context: context, actions: actions)
+            if guarded.reply != plan.reply { print("REPLY CHANGED BY THE CHECK: \(c.goal)\n   the model wrote: \(plan.reply)\n   the user is shown: \(guarded.reply)\n   held back for a figure: \(guarded.heldBack.isEmpty ? "nothing" : guarded.heldBack.joined(separator: " | "))") }
             if faults.wrongLanguage { wrongLanguage += 1; print("OTHER LANGUAGE: \(c.goal) → \(plan.reply)") }
             var notes: [String] = []
             for (op, expected) in c.params {

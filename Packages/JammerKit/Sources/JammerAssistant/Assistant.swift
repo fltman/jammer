@@ -108,11 +108,11 @@ public enum AssistantCatalog {
 
     /// Plugin steps need track and insert ids and weren't in the measured action set.
     /// (Buses are named to the model by name, and `set_bus` and `remove_bus` take the name. Sends are not offered yet.)
-    public static let stepsNotForAssistant: Set<String> = ["add_insert", "set_insert", "remove_insert", "spectral_edit", "set_track", "set_group", "set_send", "set_master", "add_vca", "set_vca", "remove_vca"]
+    public static let stepsNotForAssistant: Set<String> = ["add_insert", "set_insert", "remove_insert", "spectral_edit", "set_track", "set_group"]
 
     /// Own actions: every step (but the above), the useful endpoints, and the macros.
     public static var actions: [AssistantAction] {
-        let endpointNames: Set<String> = ["transcribe", "restore", "analyze_restoration", "measure_loudness"]
+        let endpointNames: Set<String> = ["transcribe", "restore", "analyze_restoration", "measure_loudness", "freeze", "unfreeze"]
         return Operations.all.filter { !stepsNotForAssistant.contains($0.name) }.map { AssistantAction(name: $0.name, description: $0.description, params: $0.params, kind: .step,
                                                     destructive: destructiveNames.contains($0.name)) }
             + Operations.endpoints.filter { endpointNames.contains($0.name) }.map {
@@ -138,6 +138,14 @@ public enum AssistantCatalog {
         "rename_speaker": ["rename", "döp", "byt namn", "kalla", "call speaker", "name speaker"],
         "spectral_attenuate": ["frequenc", "frekvens", " hz", "khz", "band", "spectral", "spektral"],
         "limit": ["limit", "ceiling", "begräns", "tak ", "taket", "true peak", "dbtp", "peaks under", "toppar under", "topparna under"],
+        // The mixer's later parts (2026-11-16): each only when the request has its word.
+        "set_master": ["master", "mastern"],
+        "set_send": [" send ", "sends", " sänd ", " skicka "],
+        "add_vca": ["vca"],
+        "set_vca": ["vca"],
+        "remove_vca": ["vca"],
+        "freeze": ["freeze", "frys"],
+        "unfreeze": ["unfreeze", "thaw", "tina", "frys upp", "avfrys"],
         "add_bus": ["bus", "buss", "submix", "undergrupp"],
         "set_bus": ["bus", "buss", "submix"],
         "remove_bus": ["bus", "buss", "submix"],
@@ -186,12 +194,41 @@ public struct AssistantContext: Sendable {
         let hits = buses.filter { $0.id == r || $0.name.caseInsensitiveCompare(r) == .orderedSame || plain($0.name) == plain(r) }
         return hits.count == 1 ? hits[0].id : nil
     }
+    /// The mixer's VCA groups, so that a request can name one.
+    public var vcas: [(id: String, name: String)] = []
+    /// A VCA group by its name (or its id): "the Drums VCA", "gruppen Drums" and "Drums" are the same group.
+    public func vcaID(_ ref: String) -> String? {
+        func plain(_ s: String) -> String {
+            let dropped: Set<String> = ["the", "vca", "group", "gruppen", "grupp", "vca-gruppen"]
+            return s.lowercased().split(separator: " ").filter { !dropped.contains(String($0)) }.joined(separator: " ")
+        }
+        let r = ref.trimmingCharacters(in: .whitespaces)
+        let hits = vcas.filter { $0.id == r || $0.name.caseInsensitiveCompare(r) == .orderedSame || plain($0.name) == plain(r) }
+        return hits.count == 1 ? hits[0].id : nil
+    }
+    /// A strip, as a request names one: a track (by name or number) or a bus (by name). A name that a
+    /// track and a bus share is neither, rather than a guess. "master" is not a strip here.
+    public func stripID(_ ref: String) -> String? {
+        func plain(_ s: String) -> String {
+            let dropped: Set<String> = ["the", "track", "spåret", "spår"]
+            return s.lowercased().split(separator: " ").filter { !dropped.contains(String($0)) }.joined(separator: " ")
+        }
+        let r = ref.trimmingCharacters(in: .whitespaces)
+        let track = trackID(r) ?? tracks.first { plain($0.name) == plain(r) }?.id
+        let bus = busID(r).flatMap { $0 == "master" ? nil : $0 }
+        if track != nil, bus != nil { return nil }
+        return track ?? bus
+    }
     /// "Speaker 2" / "talare 2" / track 2 → its id.
     public func trackID(_ ref: String) -> String? {
         if let n = Int(ref.filter(\.isNumber)), (1...tracks.count).contains(n), ref.count <= 12 { return tracks[n - 1].id }
         if let t = tracks.first(where: { $0.name.caseInsensitiveCompare(ref) == .orderedSame || $0.id == ref }) { return t.id }
         return nil
     }
+    /// The strips that are frozen, and the master limiter's ceiling when it is on: said to the model so
+    /// that "unfreeze the music" and "is there a limiter?" have something to go by.
+    public var frozenNames: [String] = []
+    public var masterLimiter: Double?
     public var transcriptLanguage: String?
     public var transcriptExcerpt: String?
     public var fillerCount: Int
@@ -202,6 +239,9 @@ public struct AssistantContext: Sendable {
         self.playhead = project.seconds(playhead)
         tracks = project.tracks.map { ($0.id.uuidString, $0.name) }
         buses = project.buses.map { ($0.id.uuidString, $0.name) }
+        vcas = project.vcas.map { ($0.id.uuidString, $0.name) }
+        frozenNames = project.tracks.filter { $0.frozen != nil }.map(\.name) + project.buses.filter { $0.frozen != nil }.map(\.name)
+        masterLimiter = project.master.limiter.map(\.ceilingDB)
         transcriptLanguage = project.transcripts.first?.language
         let text = project.transcriptText()
         transcriptExcerpt = text.isEmpty ? nil : String(text.prefix(600))
@@ -214,6 +254,9 @@ public struct AssistantContext: Sendable {
         lines.append("- selection: " + (selection.map { "\(t($0.0))–\(t($0.1)) s" } ?? "none"))
         lines.append("- tracks (speakers), by number: " + tracks.enumerated().map { "\($0.offset + 1) = \($0.element.name)" }.joined(separator: ", "))
         if !buses.isEmpty { lines.append("- buses, by name: " + buses.map(\.name).joined(separator: ", ")) }
+        if !vcas.isEmpty { lines.append("- VCA groups, by name: " + vcas.map(\.name).joined(separator: ", ")) }
+        if !frozenNames.isEmpty { lines.append("- frozen: " + frozenNames.joined(separator: ", ")) }
+        if let c = masterLimiter { lines.append("- master limiter: on, ceiling \(t(c)) dBTP") }
         if let lang = transcriptLanguage {
             lines.append("- transcript (\(lang)), \(fillerCount) filler words: \(transcriptExcerpt ?? "")")
         }
@@ -238,6 +281,9 @@ public struct AssistantPlan: Sendable, Equatable {
     public var steps: [PlannedStep]
     /// Ops the model named that don't exist, or steps whose params were invalid.
     public var dropped: [String] = []
+    /// Sentences of the model's that were taken out of the reply because a figure in them had nothing
+    /// behind it (`ReplyGuard`). The user is told that something was held back; the evaluation prints them.
+    public var heldBack: [String] = []
     /// Set by a paid planner: what the call cost, in USD, when known.
     public var cost: Double?
 
@@ -457,6 +503,8 @@ public enum PlanParser {
             case .list:
                 var items = value.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
                 if name == "tracks", let context { items = items.compactMap { context.trackID($0) } }
+                // A VCA group's members are tracks and buses, by name.
+                if ["members", "add", "remove"].contains(name), ["add_vca", "set_vca"].contains(op), let context { items = items.compactMap { context.stripID($0) } }
                 if items.isEmpty { continue }
                 params[name] = .array(items.map { .string($0) })
             case .string:
@@ -472,8 +520,27 @@ public enum PlanParser {
                     guard let id = context.busID(v) else { continue }
                     v = id
                 }
+                // The mixer's other names: a strip to freeze, the two ends of a send, a VCA group.
+                if let context {
+                    if name == "strip", ["freeze", "unfreeze"].contains(op) { guard let id = context.stripID(v) else { continue }; v = id }
+                    if op == "set_send", name == "from" { guard let id = context.stripID(v) else { continue }; v = id }
+                    if op == "set_send", name == "to" { guard let id = context.busID(v), id != "master" else { continue }; v = id }
+                    if name == "vca", ["set_vca", "remove_vca"].contains(op) { guard let id = context.vcaID(v) else { continue }; v = id }
+                }
                 params[name] = .string(v)
             }
+        }
+        // A group or a strip that the model named under another name than the parameter's ("name": "Voices"
+        // for remove_vca's `vca`): a value it gave that is the name of exactly one is the one meant.
+        if let context {
+            let given = args.map(\.1)
+            if ["set_vca", "remove_vca"].contains(op), params["vca"] == nil, let id = Set(given.compactMap { context.vcaID($0) }).onlyOne {
+                params["vca"] = .string(id)
+                if case .string(let n)? = params["name"], context.vcaID(n) == id { params["name"] = nil }
+            }
+            if ["freeze", "unfreeze"].contains(op), params["strip"] == nil, let id = Set(given.compactMap { context.stripID($0) }).onlyOne { params["strip"] = .string(id) }
+            // Freezing without knowing what: no step, so that the user is asked.
+            if ["freeze", "unfreeze"].contains(op), params["strip"] == nil { return nil }
         }
         for (k, v) in AssistantCatalog.defaults[op] ?? [:] where params[k] == nil { params[k] = v }
         // "set the Music bus to −6 dB" often comes with the bus's name under `name`, which for set_bus means
@@ -512,7 +579,8 @@ public enum PlanParser {
                            "klistra", "paste", "markera", "select", "mät", "measure", "loud", "högt", "tempo", "bpm", "radera", "delete", "ta bort", "remove",
                            // The mixer and the mastering steps (2026-11-16): without these a short request about them was
                            // answered "What should I change?" before the model was asked.
-                           "bus", "buss", "submix", "pan", "mixer", "limit", "begräns", "ceiling", "duck"]
+                           "bus", "buss", "submix", "pan", "mixer", "limit", "begräns", "ceiling", "duck",
+                           "freez", "frys", "tina", "master", "vca", "send", "skicka", "sänd"]
         let hasAction = actionWords.contains { text.contains($0) }
         let hasNumber = t.contains { Double($0) != nil }
         if !hasAction, !hasNumber, t.count <= 5 {
@@ -564,6 +632,64 @@ public enum PlanParser {
                 if s.params["gainDB"] == .number(0) { s.params["gainDB"] = nil }
                 return s
             }
+        }
+        // A VCA group is muted by the same words.
+        if !words.isDisjoint(with: muteWords.union(unmuteWords)) {
+            out.steps = out.steps.map { step in
+                guard step.op == "set_vca", step.params["vca"] != nil, step.params["muted"] == nil else { return step }
+                var s = step
+                s.params["muted"] = .bool(words.isDisjoint(with: unmuteWords))
+                if s.params["gainDB"] == .number(0) { s.params["gainDB"] = nil }
+                return s
+            }
+        }
+        // The master: the small model fills in every setting it is shown ("limiter": false and a ceiling for
+        // "lower the master 3 dB"; a gain as well as a ceiling for "a limiter at −1 dBTP"). What the request
+        // doesn't speak of is taken out, and a limiter that is asked for is switched on.
+        let limiterWords: Set<String> = ["limiter", "limitern", "limit", "begränsare", "begränsaren", "ceiling", "tak", "taket", "dbtp"]
+        let offWords: Set<String> = ["off", "av", "remove", "bort", "disable", "without", "utan", "stäng"]
+        out.steps = out.steps.map { step in
+            guard step.op == "set_master" else { return step }
+            var s = step
+            if words.isDisjoint(with: limiterWords) {
+                for k in ["limiter", "ceiling", "release", "lookahead"] { s.params[k] = nil }
+            } else {
+                let off = !words.isDisjoint(with: offWords)
+                s.params["limiter"] = .bool(!off)
+                if off { for k in ["ceiling", "release", "lookahead"] { s.params[k] = nil } }
+                // One figure in the request, and it is the limiter's: not the master's gain as well.
+                if s.params["gainDB"] == s.params["ceiling"] || s.params["gainDB"] == .number(0) || off { s.params["gainDB"] = nil }
+                // Settings nobody gave a figure for stay as they are in the document.
+                let said = ReplyGuard.numbers(in: goal) + ReplyGuard.wordNumbers(in: goal)
+                for k in ["ceiling", "release", "lookahead"] { if case .number(let d)? = s.params[k], !said.contains(where: { abs($0 - abs(d)) < 0.0005 }) { s.params[k] = nil } }
+            }
+            return s
+        }
+        if out.steps.contains(where: { $0.op == "set_master" && $0.params.isEmpty }) {
+            out.steps.removeAll { $0.op == "set_master" && $0.params.isEmpty }
+            out.dropped.append("set_master (nothing to change was given)")
+        }
+        // "Mute the Voices group" answered with a new group called "muted": nobody asked for a new group.
+        let makeWords: Set<String> = ["add", "create", "new", "make", "need", "want", "skapa", "lägg", "ny", "nytt", "gör", "behöver", "vill"]
+        if words.isDisjoint(with: makeWords), out.steps.contains(where: { $0.op == "add_vca" || $0.op == "add_bus" }) {
+            out.steps.removeAll { $0.op == "add_vca" || $0.op == "add_bus" }
+            out.dropped.append("a new group or bus (the request doesn't ask for one to be made)")
+        }
+        // "Freeze the Music bus" answered with a change to the bus that changes nothing: the bus is the strip
+        // to freeze. (The small model knows set_bus better than freeze.)
+        let freezeWords: Set<String> = ["freeze", "frys", "frysa"], unfreezeWords: Set<String> = ["unfreeze", "thaw", "tina", "avfrys"]
+        if !words.isDisjoint(with: freezeWords.union(unfreezeWords)), !out.steps.contains(where: { ["freeze", "unfreeze"].contains($0.op) }) {
+            out.steps = out.steps.map { step in
+                guard step.op == "set_bus", let bus = step.params["bus"], Set(step.params.keys).subtracting(["bus"]).isEmpty else { return step }
+                return PlannedStep(op: words.isDisjoint(with: unfreezeWords) ? "freeze" : "unfreeze", params: ["strip": bus], why: step.why)
+            }
+        }
+        // "Send Erik to the Music bus at −6 dB" answered with the bus's own level set to −6: not what was asked,
+        // and it would change the whole bus. Left out, so that the user is asked.
+        let sendWords: Set<String> = ["send", "sends", "skicka", "sänd"]
+        if !words.isDisjoint(with: sendWords), !out.steps.contains(where: { $0.op == "set_send" }), out.steps.contains(where: { $0.op == "set_bus" }) {
+            out.steps.removeAll { $0.op == "set_bus" }
+            out.dropped.append("set_bus (the request is about a send, not the bus's own level)")
         }
         // A change to a bus that changes nothing is left out, so that the user is asked instead of told "done".
         let empty = out.steps.filter { $0.op == "set_bus" && Set($0.params.keys).subtracting(["bus"]).isEmpty }
@@ -664,4 +790,9 @@ public enum MacroExpander {
         }
         return out
     }
+}
+
+extension Set {
+    /// The element, when there is exactly one.
+    var onlyOne: Element? { count == 1 ? first : nil }
 }

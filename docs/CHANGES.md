@@ -4,6 +4,7 @@ Not a list of commits: what behaves differently from before, for a user, an agen
 
 ## 2026-11-16
 
+- **The assistant and the mixer's later parts**: the master and its limiter, sends, VCA groups, freeze and unfreeze are actions it can plan, each shown to the on-device model only when named; hold-out set 5 (15 requests) is about them, 11 right on-device and none that changes the document unasked (`docs/ASSISTANT.md`). **The rule on figures in its replies is the series' new one**: given in the request (digits or words) or the document's description, an action's own figures only where the action is spoken of, a closed worked-out set (listed in the manual), never prices, sizes or waiting times; a line says when a sentence was held back. The evaluation prints what the model wrote beside what the user is shown.
 - **The older render paths are removed**; the mixer graph is the only way a plan is rendered. No behaviour changes with the removal: the commit before it is tagged `before-graph-only`, and the tests hold every kind of project to what the older paths gave.
 - **Every plan now goes through the mixer graph** (`docs/MIXER.md`). The sound is the same, sample for sample (21 kinds of project compared, and the whole suite both ways). **What an agent reads changes**: in `GET …/mixer`, `totalLatencySamples` now includes the tracks' own plugins, and a track's `compensationSamples` is the wait added to it; before, both spoke of buses only. A document with a limiter on one track and nothing else used to say 0 and now says that limiter's look-ahead.
 

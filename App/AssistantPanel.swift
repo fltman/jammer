@@ -168,6 +168,7 @@ final class AssistantModel {
                 var text = plan.reply
                 if let cost = plan.cost { text += String(format: text.isEmpty ? "Cost $%.4f." : " (cost $%.4f)", cost) }
                 if !text.isEmpty { messages.append(Message(role: .assistant, text: text)) }
+                if !plan.heldBack.isEmpty { messages.append(Message(role: .note, text: ReplyGuard.heldBackNote(ReplyGuard.language(of: goal), count: plan.heldBack.count))) }
                 if !plan.dropped.isEmpty { messages.append(Message(role: .note, text: "Left out: " + plan.dropped.joined(separator: "; "))) }
                 guard !plan.steps.isEmpty else { return }
                 let unasked = plan.unasked(goal: goal, actions: actions)
@@ -263,7 +264,7 @@ final class AssistantModel {
                 continue
             }
             switch s.op {
-            case "transcribe", "restore", "measure_loudness", "analyze_restoration":
+            case "transcribe", "restore", "measure_loudness", "analyze_restoration", "freeze", "unfreeze":
                 guard await flush() else { return }
                 guard await runEndpoint(s) else { return }
             default:
@@ -292,6 +293,18 @@ final class AssistantModel {
                 messages.append(Message(role: .note, text: (error as? AgentAPI.APIError)?.message ?? error.localizedDescription))
                 return false
             }
+        case "freeze", "unfreeze":
+            // The same as the mixer's Frozen box: freezing is a job, thawing is at once, each one undo step.
+            guard let id = UUID(uuidString: s.params["strip"]?.string ?? ""), let strip = session.project.strip(id), id != Master.id else {
+                messages.append(Message(role: .note, text: "I couldn't tell which track or bus you meant."))
+                return false
+            }
+            if s.op == "freeze" {
+                guard session.project.frozen(id) == nil else { messages.append(Message(role: .note, text: "\(strip.name) is frozen already.")); return true }
+                return await runJob(JobRegistry.shared.startFreeze(session, strip: id))
+            }
+            do { session.commit(try session.project.unfreezing(id), action: "Unfreeze \(strip.name)"); return true }
+            catch { messages.append(Message(role: .note, text: error.localizedDescription)); return false }
         case "measure_loudness":
             let r = await session.analyze(session.selection)
             func f(_ v: Double?, _ u: String) -> String { v.map { String(format: "%.1f %@", $0, u) } ?? "—" }

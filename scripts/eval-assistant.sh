@@ -5,7 +5,9 @@
 #   scripts/eval-assistant.sh                     the on-device model (Apple)
 #   scripts/eval-assistant.sh ollama:qwen3:8b     a model already installed in Ollama on this Mac
 #
-# Five sets: the standard 18 requests and four hold-out sets (24, 23, 29 and 6), Swedish and English.
+# Six sets: the standard 18 requests and five hold-out sets (24, 23, 29, 9 and 15), Swedish and English.
+# Each set's log (build/eval/<model>/<set>.md.log) also has, under "REPLY CHANGED BY THE CHECK", every
+# reply that the check on figures changed: what the model wrote and what the user is shown.
 # The reports go to build/eval/<model>/; the last line of each is the score. Nothing is
 # downloaded and nothing is paid for: only models on this Mac can be evaluated this way.
 # For comparison, docs/ASSISTANT.md has the on-device model's and qwen3:8b's results.
@@ -43,4 +45,5 @@ run holdout1.md HoldoutEval JAMMER_HOLDOUT=1
 run holdout2.md HoldoutEval JAMMER_HOLDOUT=2
 run holdout3.md HoldoutEval JAMMER_HOLDOUT=3
 run holdout4.md HoldoutEval JAMMER_HOLDOUT=4
+run holdout5.md HoldoutEval JAMMER_HOLDOUT=5
 echo "Reports in $out"

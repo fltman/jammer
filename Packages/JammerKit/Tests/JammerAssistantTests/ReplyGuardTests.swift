@@ -54,6 +54,110 @@ struct ReplyGuardTests {
         #expect(try await shown("I'll work on track 2.", steps: normalize, goal: "normalize track two please") == "I'll work on track 2.")
     }
 
+    func checked(_ reply: String, steps: [PlannedStep] = [], goal: String, selection: Range<Frame>? = nil, playhead: Frame = 0) -> AssistantPlan {
+        ReplyGuard.checked(AssistantPlan(reply: reply, steps: steps), goal: goal,
+                           context: AssistantContext(project: Self.project, selection: selection, playhead: playhead))
+    }
+
+    @Test("A figure worked out rightly from what was given stays, and a made-up one beside it is held back and said to be")
+    func derivedFigures() {
+        // The document is 60 s; the selection is 10–25 s; the playhead is at 40 s.
+        let sel: Range<Frame> = (48_000 * 10)..<(48_000 * 25)
+        var p = checked("The selection is 15 s long. The peak is at -3.2 dBTP.", goal: "how long is the selection, please tell me", selection: sel)
+        #expect(p.reply == "The selection is 15 s long.")
+        #expect(p.heldBack == ["The peak is at -3.2 dBTP."])
+        #expect(ReplyGuard.heldBackNote(.english, count: 1).contains("held back") && ReplyGuard.heldBackNote(.swedish, count: 2).contains("hölls tillbaka"))
+        // Half the document, what is left after the playhead, the length in minutes.
+        #expect(checked("Half of it is 30 s.", goal: "what is half of this document, tell me").heldBack.isEmpty)
+        #expect(checked("There are 20 s left after the playhead.", goal: "how much is left of it, tell me", playhead: 48_000 * 40).heldBack.isEmpty)
+        #expect(checked("That is 1 min of sound.", goal: "how long is it, tell me that").heldBack.isEmpty)
+        // Two times in the request: their difference, and one of them in another unit.
+        #expect(checked("That is 15 s of sound.", goal: "how much is it from 10 s to 25 s?").heldBack.isEmpty)
+        #expect(checked("A fade of 500 ms.", goal: "what is 0.5 s in milliseconds?").heldBack.isEmpty)
+        // Two levels: how far apart they are. Not some other distance.
+        #expect(checked("That is 7 dB up.", goal: "how far is it from -23 LUFS to -16 LUFS?").heldBack.isEmpty)
+        #expect(checked("That is 9 dB up.", goal: "how far is it from -23 LUFS to -16 LUFS?").heldBack.count == 1)
+        // A time is not backed by a level's arithmetic, nor the other way round.
+        #expect(checked("That is 7 s.", goal: "how far is it from -23 LUFS to -16 LUFS?").heldBack.count == 1)
+        // A number the request gives in words is given.
+        #expect(checked("Loudness normalized to -18 LUFS.", goal: "normalize the loudness to minus eighteen").heldBack.isEmpty)
+        #expect(checked("Pauser över 2 sekunder kortas till 0,5 sekunder.", goal: "korta alla pauser över två sekunder till en halv sekund").heldBack.isEmpty)
+        #expect(checked("Ta bort pauser längre än 1.5 sekunder.", goal: "ta bort pauser som är längre än en och en halv sekund").heldBack.isEmpty)
+        #expect(checked("Pauses over 2.5 seconds go.", goal: "remove pauses longer than two and a half seconds").heldBack.isEmpty)
+        // Not within "seems reasonable": 31 s is not half of 60.
+        #expect(checked("Half of it is 31 s.", goal: "what is half of this document, tell me").heldBack.count == 1)
+    }
+
+    @Test("An action's own figures stand only in a sentence about that action, and never as a claim about the user's sound")
+    func actionFigures() {
+        // `limit` says its default ceiling is −1 dBTP and its release 100 ms.
+        #expect(checked("The limiter's ceiling is -1 dBTP unless you say otherwise.", goal: "what does the limiter do by default?").heldBack.isEmpty)
+        #expect(checked("By default the release is 100 ms.", goal: "what does the limiter do by default?").heldBack.isEmpty)
+        // The same figure in a sentence that names no action.
+        #expect(checked("It settles after 100 ms.", goal: "what happens to the peaks then, tell me").heldBack.count == 1)
+        // And as a statement about the user's own sound, even with the action named.
+        #expect(checked("Your recording is at -20 dBTP, so the limiter isn't needed.", goal: "do I need the limiter here?").heldBack.count == 1)
+        #expect(checked("Inspelningen ligger på -20 dBTP, så limitern behövs inte.", goal: "behöver jag en limiter här?").heldBack.count == 1)
+        // (The same figure where the sentence is about the action: its range.)
+        #expect(checked("The limiter's ceiling can be set from -20 dBTP.", goal: "do I need the limiter here?").heldBack.isEmpty)
+    }
+
+    @Test("Money, sizes on disk, how long something takes and anything about a service: only when given")
+    func neverWorkedOut() {
+        #expect(checked("That costs $0.02.", goal: "transcribe this for me please").heldBack.count == 1)
+        #expect(checked("Det kostar 3 kr.", goal: "transkribera det här åt mig").heldBack.count == 1)
+        #expect(checked("The file will be 30 MB.", goal: "what is half of this document, tell me").heldBack.count == 1)
+        // 30 s is half the document, but not how long anything takes.
+        #expect(checked("It takes 30 s to finish.", goal: "what is half of this document, tell me").heldBack.count == 1)
+        #expect(checked("The service allows 30 s per request.", goal: "can I transcribe it in the cloud?").heldBack.count == 1)
+        // Given in the request, they may be repeated.
+        #expect(checked("You said 5 kr.", goal: "it cost me 5 kr last time").heldBack.isEmpty)
+    }
+
+    @Test("The mixer's names: a strip to freeze, the ends of a send, a VCA group; and the master without settings nobody asked for")
+    func mixerNames() throws {
+        var project = ReplyGuardTests.project
+        let b = SourceRef(name: "Erik", path: "/dev/null", info: project.sources[0].info)
+        project.sources.append(b)
+        project.tracks.append(Track(name: "Erik", clips: [Clip(sourceID: b.id, start: 0, length: 48_000)]))
+        let music = try project.addBus(name: "Music"), voices = try project.addVCA(name: "Voices")
+        let anna = project.tracks[0].id.uuidString, erik = project.tracks[1].id.uuidString
+        let c = AssistantContext(project: project, selection: nil, playhead: 0)
+        #expect(c.rendered.contains("- VCA groups, by name: Voices"))
+        let actions = AssistantCatalog.actions
+        func step(_ op: String, _ args: [(String, String)]) -> PlannedStep? { PlanParser.typed(op: op, args: args, why: "", actions: actions, context: c) }
+        #expect(step("freeze", [("strip", "the Music bus")])?.params == ["strip": .string(music.id.uuidString)])
+        #expect(step("freeze", [("strip", "spåret Erik")])?.params == ["strip": .string(erik)])
+        #expect(step("unfreeze", [("track", "Anna")])?.params == ["strip": .string(anna)])
+        #expect(step("freeze", [("strip", "Nobody")]) == nil)
+        #expect(step("set_send", [("from", "Erik"), ("to", "Music"), ("gainDB", "-6")])?.params == ["from": .string(erik), "to": .string(music.id.uuidString), "gainDB": .number(-6)])
+        #expect(step("set_vca", [("vca", "the Voices VCA"), ("gainDB", "-4")])?.params == ["vca": .string(voices.id.uuidString), "gainDB": .number(-4)])
+        #expect(step("remove_vca", [("name", "Voices")])?.params == ["vca": .string(voices.id.uuidString)])
+        #expect(step("set_vca", [("name", "Voices"), ("muted", "true")])?.params == ["vca": .string(voices.id.uuidString), "muted": .bool(true)])
+        #expect(step("set_vca", [("vca", "Voices"), ("members", "Anna, Music")])?.params["members"] == .array([.string(anna), .string(music.id.uuidString)]))
+        // The master.
+        func master(_ goal: String, _ params: [String: JSONValue]) -> [String: JSONValue]? {
+            PlanParser.augment(goal: goal, plan: AssistantPlan(reply: "", steps: [PlannedStep(op: "set_master", params: params)])).steps.first?.params
+        }
+        #expect(master("put a limiter on the master at -1 dBTP", ["ceiling": .number(-1), "limiter": .bool(false), "gainDB": .number(-1)]) == ["ceiling": .number(-1), "limiter": .bool(true)])
+        #expect(master("sänk mastern till -3 dB", ["ceiling": .number(-3), "gainDB": .number(-3), "limiter": .bool(false)]) == ["gainDB": .number(-3)])
+        #expect(master("turn the limiter on the master off", ["limiter": .bool(true), "ceiling": .number(-1)]) == ["limiter": .bool(false)])
+        #expect(master("set the master to -2 dB", ["ceiling": .number(0), "gainDB": .number(-2), "limiter": .bool(false), "lookahead": .number(10)]) == ["gainDB": .number(-2)])
+        // A freeze answered with an empty change to the bus is the freeze; a send answered with the bus's level is nothing.
+        let viaBus = PlanParser.augment(goal: "freeze the Music bus", plan: AssistantPlan(reply: "", steps: [PlannedStep(op: "set_bus", params: ["bus": .string(music.id.uuidString)])]))
+        #expect(viaBus.steps == [PlannedStep(op: "freeze", params: ["strip": .string(music.id.uuidString)])])
+        let notASend = PlanParser.augment(goal: "send Erik to the Music bus at -6 dB", plan: AssistantPlan(reply: "", steps: [PlannedStep(op: "set_bus", params: ["bus": .string(music.id.uuidString), "gainDB": .number(-6)])]))
+        #expect(notASend.steps.isEmpty && notASend.dropped.count == 1)
+        let notNew = PlanParser.augment(goal: "tysta VCA-gruppen Voices", plan: AssistantPlan(reply: "", steps: [PlannedStep(op: "add_vca", params: ["name": .string("muted")])]))
+        #expect(notNew.steps.isEmpty && notNew.dropped.count == 1)
+        #expect(PlanParser.augment(goal: "create a VCA group called Drums", plan: AssistantPlan(reply: "", steps: [PlannedStep(op: "add_vca", params: ["name": .string("Drums")])])).steps.count == 1)
+        // Offered to the small model only when named.
+        for (goal, op) in [("freeze the Music bus", "freeze"), ("frys spåret Erik", "freeze"), ("unfreeze Anna", "unfreeze"), ("sänk mastern 3 dB", "set_master"),
+                           ("send Erik to the Music bus", "set_send"), ("remove the Voices VCA", "remove_vca")] {
+            #expect(AssistantCatalog.forOnDevice(actions, goal: goal).contains { $0.name == op }, "\(goal)")
+        }
+    }
+
     @Test("The on-device model's action list stays the size it was measured at")
     func onDeviceList() {
         let all = AssistantCatalog.actions
