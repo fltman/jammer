@@ -94,6 +94,32 @@ public enum FlimmerSend {
         return out
     }
 
+    /// The names the plan may carry, as agreed with Flimmer (SEND-TO-FLIMMER-API.md). Flimmer refuses a
+    /// name it doesn't know (SIBLINGS.md §3), so Jämmer treats this as a closed list and checks its own
+    /// plan against it before anything is uploaded or sent: a new field is added here, on purpose.
+    public static let planFields: Set<String> = ["projectId", "storyId", "exportVersion", "mode", "dryRun", "items", "trackSettings", "listed"]
+    public static let itemFields: Set<String> = ["kind", "clipId", "uploadId", "position", "name", "trackId"]
+    public static let positionFields: Set<String> = ["clipRelativeOffset", "timelineOffset"]
+    public static let trackSettingFields: Set<String> = ["trackId", "volume", "muted"]
+    public static let listedFields: Set<String> = ["kind", "clipId", "shotClipId", "note"]
+
+    /// Every name in `body` that isn't one of the agreed ones, with where it stands ("items[1].gain").
+    public static func strangers(in body: [String: J]) -> [String] {
+        var found = body.keys.filter { !planFields.contains($0) }
+        func rows(_ key: String, _ allowed: Set<String>) {
+            guard case .array(let list)? = body[key] else { return }
+            for (i, row) in list.enumerated() {
+                guard case .object(let d) = row else { continue }
+                found += d.keys.filter { !allowed.contains($0) }.map { "\(key)[\(i)].\($0)" }
+                if key == "items", case .object(let p)? = d["position"] {
+                    found += p.keys.filter { !positionFields.contains($0) }.map { "items[\(i)].position.\($0)" }
+                }
+            }
+        }
+        rows("items", itemFields); rows("trackSettings", trackSettingFields); rows("listed", listedFields)
+        return found.sorted()
+    }
+
     /// The body of `POST /api/v1/audio/sibling-plan`.
     public static func body(_ project: Project, plan: FlimmerReturn.Plan, mode: Mode, items: [Item], uploads: [String], dryRun: Bool) -> [String: J] {
         let record = project.imported
@@ -293,6 +319,9 @@ public enum FlimmerSend {
 
         /// Dry run: Flimmer's answer at once. For real: the finished job's result.
         public func plan(_ body: [String: J], items: [Item]) async throws -> [String: Any] {
+            // Nothing is sent that Flimmer hasn't agreed to take: it would refuse the whole plan.
+            let strange = FlimmerSend.strangers(in: body)
+            guard strange.isEmpty else { throw Failure("bad_request", "Jämmer's plan has names Flimmer doesn't take (\(strange.joined(separator: ", "))); nothing was sent.") }
             let data = try JSONSerialization.data(withJSONObject: J.object(body).any, options: [.sortedKeys])
             let (status, answer) = try await call("POST", "/api/v1/audio/sibling-plan", body: data, contentType: "application/json", items: items)
             guard status == 202, let id = (answer["job"] as? [String: Any])?["id"] as? String else { return answer }

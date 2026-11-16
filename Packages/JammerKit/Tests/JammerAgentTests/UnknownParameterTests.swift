@@ -161,4 +161,22 @@ struct UnknownParameterTests {
         do { _ = try TimelineImport.check(["path": "/nowhere/x.fcpxml", "frameRate": 25], policy: nil); Issue.record("an unknown field was taken") }
         catch { #expect("\(error)".contains("frameRate"), "\(error)") }
     }
+
+    @Test("What Jämmer sends Flimmer is a closed list too: the plan's names are the agreed ones, and a stranger is found before anything is sent")
+    func flimmerPlan() {
+        typealias J = FlimmerSend.J
+        var body: [String: J] = ["projectId": .string("p"), "storyId": .string("s"), "exportVersion": .number(2), "mode": .string("takes"), "dryRun": .bool(true),
+                                 "items": .array([.object(["kind": .string("take"), "clipId": .string("c"), "uploadId": .string("u"), "name": .string("n"),
+                                                           "position": .object(["clipRelativeOffset": .number(0.4)])]),
+                                                  .object(["kind": .string("new"), "uploadId": .string("u2"), "trackId": .string("t"), "position": .object(["timelineOffset": .number(3)])])]),
+                                 "trackSettings": .array([.object(["trackId": .string("t"), "volume": .number(0.7), "muted": .bool(false)])]),
+                                 "listed": .array([.object(["kind": .string("trackChange"), "clipId": .string("c"), "note": .string("moved")]),
+                                                   .object(["kind": .string("videoAudio"), "shotClipId": .string("v"), "note": .string("changed")])])]
+        #expect(FlimmerSend.strangers(in: body) == [])
+        body["rationale"] = .string("why")
+        body["items"] = .array([.object(["kind": .string("take"), "clipId": .string("c"), "uploadId": .string("u"), "gain": .number(1),
+                                         "position": .object(["timelineOffset": .number(1), "frames": .number(48_000)])])])
+        body["trackSettings"] = .array([.object(["trackId": .string("t"), "pan": .number(0)])])
+        #expect(FlimmerSend.strangers(in: body) == ["items[0].gain", "items[0].position.frames", "rationale", "trackSettings[0].pan"])
+    }
 }
