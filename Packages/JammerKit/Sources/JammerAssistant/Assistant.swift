@@ -162,6 +162,10 @@ public enum AssistantError: Error, LocalizedError, Equatable {
     case unavailable(String)
     /// A model server on this Mac (Ollama, MLX) that can't do it, in words that stand on their own.
     case local(String)
+    /// A provider answered with an error: its name, the status, and its own words.
+    case provider(String, Int, String)
+    /// No key for this provider in the Keychain.
+    case missingKey(String)
     case noKey
     case http(Int, String)
     case badResponse
@@ -170,6 +174,8 @@ public enum AssistantError: Error, LocalizedError, Equatable {
         switch self {
         case .unavailable(let why): "The on-device model isn't available: \(why)"
         case .local(let why): why
+        case .provider(let name, let status, let said): "\(name) answered \(status): \(said)"
+        case .missingKey(let name): "Add your \(name) key in the assistant's settings to use it."
         case .noKey: "Add your OpenRouter key in Settings to use a cloud model."
         case .http(let c, let m): "The model service answered \(c): \(m)"
         case .badResponse: "The model's answer couldn't be read."

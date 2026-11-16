@@ -106,7 +106,7 @@ struct BatchRecipe: @preconcurrency Identifiable, @preconcurrency Hashable {
     ]
 
     static var folder: URL {
-        let u = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appending(path: "Jammer/Recipes")
+        let u = AppData.folder.appending(path: "Recipes")
         try? FileManager.default.createDirectory(at: u, withIntermediateDirectories: true)
         return u
     }

@@ -24,7 +24,8 @@ Click the gear in the assistant's header.
 | Choice | What it means |
 |---|---|
 | **On this Mac** (default) | Apple's on-device model. Free, private, works offline; nothing leaves the Mac. Understands Swedish and English (and Danish, Norwegian, German and more). |
-| **OpenRouter** | A model of your choice on OpenRouter (or a compatible service), with your own key. The key is kept in your Keychain. Every request asks first and shows the approximate price; only your request and a short description of the document (length, tracks, the start of the transcript) are sent, never the audio. |
+| **Ollama on this Mac** | A model you have installed in [Ollama](https://ollama.com), when Ollama is running. Free and private: nothing leaves the Mac, and Jämmer never downloads a model. Only models that can call tools are listed. It is slower than the on-device model (about 8 seconds a request in our test) and the model takes about 6 GB of memory while it runs. Tried with `qwen3:8b` on one Mac, where it picked the right actions at least as often as the on-device model; other models are marked "not evaluated with Jämmer", and you can evaluate one yourself with `scripts/eval-assistant.sh` from the source. |
+| **OpenRouter**, **Berget**, **Grunden** | A model of your choice at one of these services, with your own key. The key is kept in your Keychain, one per service. The models and their prices are read from the service's own list; a model that can't call tools is marked and can't be used. Every request asks first and shows the approximate price; only your request and a short description of the document (length, tracks, the start of the transcript) are sent, never the audio. Berget and Grunden run in Sweden by their own account. They are built from their documentation and haven't yet been tried with a paid request, so if one of them answers with an error, Jämmer shows the error as it came. |
 
 ## Good to know
 

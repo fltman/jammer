@@ -122,7 +122,36 @@ final class EditorSession {
 
     /// Set when a sibling app handed Jämmer a file to edit; ⌘S then saves back into it.
     var linkedFile: LinkedFile? {
-        didSet { (window?.windowController as? EditorWindowController)?.showLink() }
+        didSet {
+            if let l = linkedFile {
+                linkRecord = l.record
+                lostLink = nil
+            }
+            // The link is saved with the window, so a restart (or a crash) doesn't make this an ordinary document.
+            document?.invalidateRestorableState()
+            (window?.windowController as? EditorWindowController)?.showLink()
+        }
+    }
+    /// What is kept of the link across a restart.
+    private(set) var linkRecord: LinkedFile.Record?
+    /// Set for a document that was linked and whose file can't be used any more (gone, read-only,
+    /// another kind of file). It is still not an ordinary document: ⌘S says what is wrong instead of
+    /// offering Save As.
+    private(set) var lostLink: (name: String, requester: String, why: String)?
+    var wasLinked: Bool { linkedFile != nil || lostLink != nil }
+
+    /// After a restart: the link again, or the fact that it is lost.
+    func restoreLink(_ record: LinkedFile.Record) {
+        linkRecord = record
+        switch LinkedFile.restore(record) {
+        case .linked(let link):
+            linkedFile = link
+        case .lost(let name, let requester, let why):
+            linkedFile = nil
+            lostLink = (name, requester, why)
+            status = "\(name) can't be saved back to \(requester): \(why)"
+            (window?.windowController as? EditorWindowController)?.showLink()
+        }
     }
 
     /// Turns safe mode on or off and starts every plugin again.

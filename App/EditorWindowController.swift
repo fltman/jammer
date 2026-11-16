@@ -74,6 +74,10 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
 
     /// A linked file says so under the title: "clip.wav · For Flimmer – ⌘S saves back".
     func showLink() {
+        if let lost = session.lostLink {
+            window?.subtitle = "\(lost.name) · For \(lost.requester) – can't be saved back"
+            return
+        }
         guard let link = session.linkedFile else { window?.subtitle = ""; return }
         window?.subtitle = "\(link.fileName) · For \(link.requester) – ⌘S saves back"
     }
@@ -81,11 +85,13 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
     // File › Save and Duplicate come here first (the window controller is ahead of the
     // document in the responder chain): linked documents save back instead.
     @objc(saveDocument:) func saveOrSaveBack(_ sender: Any?) {
-        if session.linkedFile != nil { session.saveBack() } else { session.document?.save(sender) }
+        if session.linkedFile != nil { session.saveBack() }
+        else if session.lostLink != nil, let window { session.saveBackOrExplain(in: window) }
+        else { session.document?.save(sender) }
     }
 
     @objc(duplicateDocument:) func duplicateOrCopy(_ sender: Any?) {
-        if session.linkedFile != nil { session.saveJammerCopy() } else { session.document?.duplicate(sender) }
+        if session.wasLinked { session.saveJammerCopy() } else { session.document?.duplicate(sender) }
     }
 
     func windowDidBecomeKey(_ notification: Notification) {
@@ -516,11 +522,11 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
             return true
         }
         if item.action == #selector(saveOrSaveBack(_:)) {
-            item.title = session.linkedFile.map { "Save Back to \($0.fileName)" } ?? "Save…"
+            item.title = (session.linkedFile?.fileName ?? session.lostLink?.name).map { "Save Back to \($0)" } ?? "Save…"
             return true
         }
         if item.action == #selector(duplicateOrCopy(_:)) {
-            item.title = session.linkedFile != nil ? "Save a Jämmer Copy…" : "Duplicate"
+            item.title = session.wasLinked ? "Save a Jämmer Copy…" : "Duplicate"
             return true
         }
         if item.action == #selector(sendToFlimmer(_:)) { return session.project.imported?.app == "flimmer" }

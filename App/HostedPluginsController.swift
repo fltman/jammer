@@ -9,8 +9,7 @@ import JammerPlugins
 enum HostedPluginsController {
     /// Per build, so a test copy never rewrites the catalogue of the user's real Jämmer.
     static var file: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appending(path: "Jammer/plugins-\(Bundle.main.bundleIdentifier ?? "com.brattoo.jammer").json")
+        AppData.folder.appending(path: "plugins-\(Bundle.main.bundleIdentifier ?? "com.brattoo.jammer").json")
     }
     static var probe: URL? { Bundle.main.url(forAuxiliaryExecutable: "jammer-plugin-probe") }
     static var helper: URL? { Bundle.main.url(forAuxiliaryExecutable: "jammer-plugin-host") }

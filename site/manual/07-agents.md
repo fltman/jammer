@@ -14,6 +14,12 @@ Jämmer serves a guide and a small HTTP API on your Mac, so an AI agent such as 
 
 The agent fetches the guide and follows it. **Help › Open the Agent Guide** shows the same guide in your browser.
 
+## Bring your own agent
+
+Any agent that can fetch a web page and make HTTP requests on your Mac can work in Jämmer this way: Claude Code, Codex, or another one you run yourself in a terminal or an app. You start the agent and sign in to it as you always do; Jämmer doesn't start it, doesn't see its login, and doesn't pay for it. The line above is all the set-up there is.
+
+This is separate from the built-in assistant in the editor's side panel (see [The assistant](14-assistant.md)), which makes a plan for one request with a model you choose there.
+
 ## What an agent can do
 
 - Open audio you or it provides (as bytes; the API never reads file paths).

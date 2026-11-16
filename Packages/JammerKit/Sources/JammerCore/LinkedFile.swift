@@ -65,6 +65,70 @@ public struct LinkedFile: Sendable, Equatable {
         guard (1...2).contains(channels) else { return nil }
     }
 
+    // MARK: Across a restart
+
+    /// What a document keeps about its link, so that it is still linked after Jämmer has been quit,
+    /// or has died, and started again: where the file is (a bookmark follows it if it was moved),
+    /// what it was, and who asked.
+    public struct Record: Codable, Sendable, Equatable {
+        public var path: String
+        public var bookmark: Data?
+        public var format: String
+        public var bitDepth: Int
+        public var isFloat: Bool
+        public var sampleRate: Double
+        public var channels: Int
+        public var requester: String
+    }
+
+    public var record: Record {
+        Record(path: url.path, bookmark: try? url.bookmarkData(), format: format.rawValue, bitDepth: bitDepth, isFloat: isFloat,
+               sampleRate: sampleRate, channels: channels, requester: requester)
+    }
+
+    public enum Restored: Sendable, Equatable {
+        case linked(LinkedFile)
+        /// The link can't be used any more: the file's name, who asked, and why, in words for the user.
+        case lost(name: String, requester: String, why: String)
+    }
+
+    /// The link again, if the file is still there, can be written, and is still the kind of file the
+    /// document can be written back into. Otherwise why not: a document that was linked says so, it
+    /// doesn't quietly become an ordinary one.
+    public static func restore(_ r: Record) -> Restored {
+        // Where the file is now (the bookmark follows a move), then where it was: a file put back at
+        // its old place counts, also when the one that was moved away has become something else.
+        var places: [URL] = []
+        if let b = r.bookmark {
+            var stale = false
+            if let found = try? URL(resolvingBookmarkData: b, options: [.withoutUI], bookmarkDataIsStale: &stale) { places.append(found) }
+        }
+        let original = URL(fileURLWithPath: r.path)
+        if !places.contains(where: { $0.standardizedFileURL.path == original.standardizedFileURL.path }) { places.append(original) }
+        var failures: [(exists: Bool, lost: Restored)] = []
+        for url in places {
+            switch restore(r, at: url) {
+            case .linked(let link): return .linked(link)
+            case let lost: failures.append((FileManager.default.fileExists(atPath: url.path), lost))
+            }
+        }
+        // What is wrong with the file that is there, if one is; otherwise that it is gone.
+        return failures.first(where: \.exists)?.lost ?? failures.last!.lost
+    }
+
+    private static func restore(_ r: Record, at url: URL) -> Restored {
+        let name = url.lastPathComponent
+        func lost(_ why: String) -> Restored { .lost(name: name, requester: r.requester, why: why) }
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory), !isDirectory.boolValue else { return lost("The file is no longer where it was.") }
+        guard FileManager.default.isWritableFile(atPath: url.path) else { return lost("The file can't be written to any more.") }
+        guard let link = LinkedFile(url: url, requester: r.requester) else { return lost("It is no longer a file Jämmer can write back into (format, bit depth or channels).") }
+        guard link.channels == r.channels, link.sampleRate == r.sampleRate else {
+            return lost("It has changed since: it was \(r.channels == 1 ? "mono" : "stereo") at \(Int(r.sampleRate)) Hz and is now \(link.channels == 1 ? "mono" : "stereo") at \(Int(link.sampleRate)) Hz.")
+        }
+        return .linked(link)
+    }
+
     static func dataFormat(_ url: URL) -> AudioStreamBasicDescription? {
         var file: AudioFileID?
         guard AudioFileOpenURL(url as CFURL, .readPermission, 0, &file) == noErr, let file else { return nil }

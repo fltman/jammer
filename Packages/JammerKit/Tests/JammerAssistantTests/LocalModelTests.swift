@@ -46,6 +46,11 @@ final class StandInServer: URLProtocol, @unchecked Sendable {
     override func stopLoading() {}
 }
 
+/// Everything that talks to the stand-in server takes turns: it is one server with one set of answers.
+@Suite("Model services", .serialized)
+struct ModelServices {}
+
+extension ModelServices {
 @Suite("Models on this Mac", .serialized)
 struct LocalModelTests {
     let actions = AssistantCatalog.actions
@@ -141,4 +146,5 @@ struct LocalModelTests {
         await #expect(throws: AssistantError.self) { try await away.plan(goal: "normalisera till -16 LUFS", context: c, history: [], actions: actions) }
         #expect(StandInServer.requests.count == before)
     }
+}
 }

@@ -105,7 +105,7 @@ targets:
     info:
       path: App/Info.plist
       properties:
-        CFBundleName: Jammer
+        CFBundleName: Jämmer
         CFBundleDisplayName: Jämmer
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)

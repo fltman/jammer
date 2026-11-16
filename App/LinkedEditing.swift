@@ -72,8 +72,8 @@ enum LinkedEditing {
 
 extension EditorSession {
     /// File › Save Back to clip.wav: the mix as heard, plugins included, into the linked file.
-    func saveBack() {
-        guard let link = linkedFile else { return }
+    func saveBack(then done: (@MainActor (Bool) -> Void)? = nil) {
+        guard let link = linkedFile else { done?(false); return }
         let project = self.project, pool = self.pool
         let markers = project.markers.map { FileMarker(position: $0.position, length: $0.length, name: $0.cueLabel) }
         status = "Saving \(link.fileName)…"
@@ -86,17 +86,39 @@ extension EditorSession {
                 }.value
                 document?.updateChangeCount(.changeCleared)
                 status = "Saved \(link.fileName) for \(link.requester)."
+                done?(true)
             } catch {
                 status = "Couldn't save \(link.fileName): \(error.localizedDescription)"
                 NSSound.beep()
+                done?(false)
             }
+        }
+    }
+
+    /// ⌘S in a document whose link was lost: the file may be back (a disk mounted again, a file put
+    /// back), and then it is linked again and saved; otherwise the user is told why it can't be, and
+    /// offered the one thing that keeps the edit. Never the ordinary Save As by silence.
+    func saveBackOrExplain(in window: NSWindow) {
+        if let record = linkRecord, case .linked(let link) = LinkedFile.restore(record) {
+            linkedFile = link
+            saveBack()
+            return
+        }
+        guard let lost = lostLink else { return }
+        let alert = NSAlert()
+        alert.messageText = "“\(lost.name)” can't be saved back to \(lost.requester)"
+        alert.informativeText = "\(lost.why)\n\nYour edit is still here. Save it as a Jämmer project to keep it, or put the file back where it was and press ⌘S again."
+        alert.addButton(withTitle: "Save a Jämmer Copy…")
+        alert.addButton(withTitle: "Cancel")
+        alert.beginSheetModal(for: window) { [weak self] answer in
+            MainActor.assumeIsolated { if answer == .alertFirstButtonReturn { self?.saveJammerCopy() } }
         }
     }
 
     /// File › Save a Jämmer Copy…: the project as a `.jammer` package; the linked file is
     /// still what ⌘S writes.
     func saveJammerCopy() {
-        guard let document, linkedFile != nil else { return }
+        guard let document, wasLinked else { return }
         document.runModalSavePanel(for: .saveToOperation, delegate: nil, didSave: nil, contextInfo: nil)
     }
 }

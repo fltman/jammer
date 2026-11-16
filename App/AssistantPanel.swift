@@ -48,9 +48,29 @@ final class AssistantModel {
     /// What the pending plan does, worked out from its steps (not from the model's words).
     var pendingImpact: PlanImpact?
     @ObservationIgnored private var pendingGoal = ""
-    var useCloud = UserDefaults.standard.bool(forKey: "assistant.cloud")
-    var cloudModel = UserDefaults.standard.string(forKey: "assistant.model") ?? "anthropic/claude-sonnet-4.5"
-    var cloudEndpoint = UserDefaults.standard.string(forKey: "assistant.endpoint") ?? "https://openrouter.ai/api/v1"
+    /// Where the plan is made: "device" (Apple's model on this Mac), "ollama" (a model in Ollama on this
+    /// Mac), or a provider's slug. Settings from before there were several providers are carried over.
+    var source = UserDefaults.standard.string(forKey: "assistant.source") ?? (UserDefaults.standard.bool(forKey: "assistant.cloud") ? "openrouter" : "device")
+    /// The model chosen at each source. No id is built in: they are picked from the source's own list.
+    var chosen: [String: String] = (UserDefaults.standard.dictionary(forKey: "assistant.models") as? [String: String])
+        ?? (UserDefaults.standard.string(forKey: "assistant.model").map { ["openrouter": $0] } ?? [:])
+    /// What the selected source offers, read from its list (settings only).
+    var choices: [ModelChoice] = []
+    var listNote: String?
+    /// Ollama on this Mac: its version when it is running, and the installed models that can call tools.
+    var ollamaVersion: String?
+    var ollamaModels: [String] = []
+    /// False until Ollama has been asked what it has: nothing is said about its models before that.
+    var ollamaAsked = false
+    /// The one local model that has been through Jämmer's own evaluation (docs/ASSISTANT.md).
+    static let evaluatedLocally = ["qwen3:8b"]
+    static var showHidden: Bool { UserDefaults.standard.bool(forKey: "assistant.showHiddenProviders") }
+
+    var provider: TextProvider? { TextProvider.offered(showHidden: Self.showHidden).first { $0.id == source } }
+    var model: String { chosen[source] ?? "" }
+    var sourceName: String { source == "device" ? "On this Mac" : source == "ollama" ? "Ollama" : provider?.name ?? "On this Mac" }
+    var summary: String { source == "device" || model.isEmpty ? sourceName : "\(sourceName): \(model)" }
+
     @ObservationIgnored private var history: [(user: String, reply: String)] = []
     @ObservationIgnored private var siblings: [Sibling] = []
     @ObservationIgnored private var scanned: Date?
@@ -72,17 +92,47 @@ final class AssistantModel {
     }
 
     var planner: any AssistantPlanner {
-        if useCloud {
-            return OpenRouterPlanner(endpoint: URL(string: cloudEndpoint) ?? URL(string: "https://openrouter.ai/api/v1")!,
-                                     model: cloudModel, key: { Keychain.get("openrouter") })
+        if source == "ollama", !model.isEmpty { return OllamaPlanner(model: model) }
+        if let provider, !model.isEmpty {
+            let account = provider.id
+            // Grunden: the least reasoning the model takes (left out, it means the most).
+            let effort = provider.id == "grunden" ? (choices.first { $0.id == model }?.reasoningLevels.first ?? "low") : nil
+            return CloudPlanner(provider: provider, model: model, key: { Keychain.get(account) }, reasoningEffort: effort)
         }
         return OnDevicePlanner()
     }
 
     func saveSettings() {
-        UserDefaults.standard.set(useCloud, forKey: "assistant.cloud")
-        UserDefaults.standard.set(cloudModel, forKey: "assistant.model")
-        UserDefaults.standard.set(cloudEndpoint, forKey: "assistant.endpoint")
+        UserDefaults.standard.set(source, forKey: "assistant.source")
+        UserDefaults.standard.set(chosen, forKey: "assistant.models")
+    }
+
+    /// For the settings: is Ollama there, and what does the selected source offer?
+    func refreshSources() async {
+        ollamaVersion = await Ollama.version()
+        if ollamaVersion != nil {
+            var withTools: [String] = []
+            for name in await Ollama.models() where await Ollama.supportsTools(name) { withTools.append(name) }
+            ollamaModels = withTools
+        } else {
+            ollamaModels = []
+            if source == "ollama" { source = "device" }
+        }
+        ollamaAsked = true
+        await loadChoices()
+    }
+
+    func loadChoices() async {
+        choices = []
+        listNote = nil
+        guard let provider else { return }
+        do {
+            choices = try await ModelCatalog.list(provider, key: Keychain.get(provider.id))
+            if choices.isEmpty { listNote = "\(provider.name)'s list has no text models." }
+        } catch {
+            // The provider's own words: a wrong key or a list that needs one is said, not hidden.
+            listNote = Keychain.get(provider.id) == nil ? "Add your key to see \(provider.name)'s models." : error.localizedDescription
+        }
     }
 
     func send() {
@@ -252,24 +302,28 @@ final class AssistantModel {
         return false
     }
 
-    /// Asks before a paid request, with the price per million tokens when OpenRouter reports it.
+    /// Asks before a paid request, with the price from the provider's own list when it gives one. What
+    /// can't work is said here, before anything is sent: no key, no model chosen, a model without tools.
     private func confirmPaid(_ goal: String) async -> Bool {
-        guard Keychain.get("openrouter") != nil else {
-            messages.append(Message(role: .note, text: AssistantError.noKey.localizedDescription))
+        guard let provider else { return false }
+        guard Keychain.get(provider.id) != nil else {
+            messages.append(Message(role: .note, text: AssistantError.missingKey(provider.name).localizedDescription))
             return false
         }
-        var price = "Your OpenRouter account is charged at the model's rate."
-        if let url = URL(string: cloudEndpoint + "/models"), let (data, _) = try? await URLSession.shared.data(from: url),
-           let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-           let model = (obj["data"] as? [[String: Any]])?.first(where: { $0["id"] as? String == cloudModel }),
-           let pricing = model["pricing"] as? [String: Any],
-           let input = Double(pricing["prompt"] as? String ?? ""), let output = Double(pricing["completion"] as? String ?? "") {
-            // Roughly 6 000 tokens in (catalogue and document) and 500 out.
-            price = String(format: "About $%.4f for this request (%@).", input * 6_000 + output * 500, cloudModel)
+        guard !model.isEmpty else {
+            messages.append(Message(role: .note, text: "Choose one of \(provider.name)'s models in the assistant's settings first."))
+            return false
         }
+        if choices.isEmpty { await loadChoices() }
+        let choice = choices.first { $0.id == model }
+        if choice?.tools == false {
+            messages.append(Message(role: .note, text: "\(model) can't call tools, which the assistant needs. Choose another of \(provider.name)'s models."))
+            return false
+        }
+        let price = choice?.estimate ?? "Your \(provider.name) account is charged at the model's rate."
         let alert = NSAlert()
-        alert.messageText = "Send this to \(cloudModel)?"
-        alert.informativeText = "\(price) The request and a short description of the document go to the model service; the audio doesn't."
+        alert.messageText = "Send this to \(model) at \(provider.name)?"
+        alert.informativeText = "\(price) The request and a short description of the document go to \(provider.name); the audio doesn't. \(provider.note)"
         alert.addButton(withTitle: "Send")
         alert.addButton(withTitle: "Cancel")
         guard let window = session.window else { return alert.runModal() == .alertFirstButtonReturn }
@@ -300,7 +354,7 @@ struct AssistantView: View {
             HStack {
                 Text("Assistant").font(.system(size: 11, weight: .semibold))
                 Spacer()
-                Text(model.useCloud ? model.cloudModel : "On this Mac").font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
+                Text(model.summary).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
                 Button { showSettings.toggle() } label: { Label("Assistant model", systemImage: "gearshape").labelStyle(.iconOnly) }
                     .buttonStyle(.borderless)
                     .help("Model")
@@ -379,23 +433,55 @@ struct AssistantView: View {
 
     private var settings: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Picker("Model", selection: $model.useCloud) {
-                Text("On this Mac (free, private)").tag(false)
-                Text("OpenRouter (your key, paid)").tag(true)
+            Picker("Model", selection: $model.source) {
+                Text("On this Mac (Apple, free, private)").tag("device")
+                if model.ollamaVersion != nil { Text("Ollama on this Mac (free, private)").tag("ollama") }
+                ForEach(TextProvider.offered(showHidden: AssistantModel.showHidden)) { p in
+                    Text("\(p.name) (your key, paid)").tag(p.id)
+                }
             }
             .pickerStyle(.radioGroup)
-            if model.useCloud {
-                TextField("Model", text: $model.cloudModel)
-                TextField("Endpoint", text: $model.cloudEndpoint)
-                SecureField(Keychain.get("openrouter") == nil ? "OpenRouter key" : "Key saved; type to replace", text: $key)
-                Text("The key stays in your Keychain. Every request asks first and shows the price.").font(.caption).foregroundStyle(.secondary)
+            if model.source == "ollama" {
+                if !model.ollamaAsked {
+                    Text("Asking Ollama what it has…").font(.caption).foregroundStyle(.secondary)
+                } else if model.ollamaModels.isEmpty {
+                    Text("None of the models installed in Ollama can call tools, which the assistant needs.")
+                        .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                } else {
+                    Picker("Ollama model", selection: Binding(get: { model.model }, set: { model.chosen["ollama"] = $0 })) {
+                        Text("Choose…").tag("")
+                        ForEach(model.ollamaModels, id: \.self) { name in
+                            Text(AssistantModel.evaluatedLocally.contains(name) ? name : "\(name) (not evaluated with Jämmer)").tag(name)
+                        }
+                    }
+                }
+                Text("Slower than the on-device model, and the model takes about 6 GB of memory while it runs. Tried with qwen3:8b on one Mac. Jämmer doesn't download models; it uses the ones you have installed.")
+                    .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            } else if let p = model.provider {
+                Picker("\(p.name) model", selection: Binding(get: { model.model }, set: { model.chosen[p.id] = $0 })) {
+                    Text("Choose…").tag("")
+                    // A model saved earlier that the list no longer has is still shown, so it isn't silently replaced.
+                    if !model.model.isEmpty, !model.choices.contains(where: { $0.id == model.model }) { Text(model.model).tag(model.model) }
+                    ForEach(model.choices) { c in
+                        Text(c.tools == false ? "\(c.id) (no tool calls: can't be used)" : c.id).tag(c.id)
+                    }
+                }
+                if let note = model.listNote { Text(note).font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true) }
+                SecureField(Keychain.get(p.id) == nil ? "\(p.name) key" : "Key saved; type to replace", text: $key)
+                Text("\(p.note) The key stays in your Keychain. Every request asks first and shows the price.")
+                    .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
             Button("Done") {
-                if !key.isEmpty { Keychain.set("openrouter", key); key = "" }
+                if !key.isEmpty, let p = model.provider { Keychain.set(p.id, key); key = "" }
                 model.saveSettings()
                 showSettings = false
             }
         }
-        .onChange(of: model.useCloud) { model.saveSettings() }
+        .task { await model.refreshSources() }
+        .onChange(of: model.source) {
+            key = ""
+            model.saveSettings()
+            Task { await model.loadChoices() }
+        }
     }
 }

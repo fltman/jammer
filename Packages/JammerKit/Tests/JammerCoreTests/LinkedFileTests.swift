@@ -83,6 +83,61 @@ struct LinkedFileTests {
         }
     }
 
+    @Test("A link is kept across a restart: found again where it is or where it was moved to, and lost in words when it can't be used")
+    func acrossRestart() throws {
+        let dir = TempDir()
+        let file = dir.file("clip.wav")
+        try writeWAV(sine(440, amplitudeDB: -12, seconds: 1), to: file, encoding: .int24)
+        let link = try #require(LinkedFile(url: file, requester: "Flimmer"))
+        // As it is saved with the window, and read again by the next launch.
+        let record = try JSONDecoder().decode(LinkedFile.Record.self, from: try JSONEncoder().encode(link.record))
+        #expect(record == link.record && record.requester == "Flimmer" && record.bitDepth == 24)
+        guard case .linked(let again) = LinkedFile.restore(record) else { Issue.record("not restored"); return }
+        #expect(again.url.resolvingSymlinksInPath() == file.resolvingSymlinksInPath() && again.format == .wav && again.requester == "Flimmer" && again.bitDepth == 24)
+        // Written back through the restored link: the same file, in place.
+        let before = try inode(file)
+        var (p, pool) = try project(from: file, dir: dir)
+        try p.changeGain(0..<p.length, by: -6)
+        try again.write(PlanCompiler.compile(p, pool: pool), range: 0..<p.length, markers: [], scratch: dir.file("scratch"))
+        #expect(try inode(file) == before && abs(Double(try samples(file).map(abs).max() ?? 0) - pow(10, -18.0 / 20)) < 0.001)
+        // Moved while Jämmer was away: the bookmark follows it.
+        let moved = dir.file("renamed clip.wav")
+        try FileManager.default.moveItem(at: file, to: moved)
+        guard case .linked(let followed) = LinkedFile.restore(record) else { Issue.record("a moved file wasn't followed"); return }
+        #expect(followed.fileName == "renamed clip.wav")
+        // Read-only: it can't be saved back, and that is said.
+        try FileManager.default.setAttributes([.posixPermissions: 0o444], ofItemAtPath: moved.path)
+        #expect(LinkedFile.restore(record) == .lost(name: "renamed clip.wav", requester: "Flimmer", why: "The file can't be written to any more."))
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: moved.path)
+        // Replaced, at its own path, by a file of another shape (mono): the document no longer fits it.
+        let other = dir.file("other.wav")
+        try writeWAV(sine(440, amplitudeDB: -12, seconds: 1), to: other, encoding: .int24)
+        let second = try #require(LinkedFile(url: other, requester: "Flimmer")).record
+        try writeWAV(sine(440, amplitudeDB: -12, seconds: 1, channels: 1), to: other, channels: 1, encoding: .int24)
+        if case .lost(let name, _, let why) = LinkedFile.restore(second) { #expect(why.contains("mono") && name == "other.wav") } else { Issue.record("a file of another shape was linked") }
+        // The same shape at another bit depth is still a file the document can be written back into.
+        try writeWAV(sine(440, amplitudeDB: -12, seconds: 1), to: other, encoding: .int16)
+        if case .linked(let l) = LinkedFile.restore(second) { #expect(l.bitDepth == 16) } else { Issue.record("16-bit in place of 24-bit wasn't linked") }
+        // Not audio any more, or gone: lost, each with its reason, never an ordinary document by silence.
+        try Data("not audio".utf8).write(to: other)
+        if case .lost(_, _, let why) = LinkedFile.restore(second) { #expect(why.contains("no longer a file")) } else { Issue.record("text was linked") }
+        try FileManager.default.removeItem(at: other)
+        #expect(LinkedFile.restore(second) == .lost(name: "other.wav", requester: "Flimmer", why: "The file is no longer where it was."))
+        try FileManager.default.removeItem(at: moved)
+        // Moved away and turned into something else, and a proper file put back where the first one was: that one is used.
+        let third = dir.file("third.wav")
+        try writeWAV(sine(440, amplitudeDB: -12, seconds: 1), to: third, encoding: .int24)
+        let rec3 = try #require(LinkedFile(url: third, requester: "Flimmer")).record
+        try FileManager.default.moveItem(at: third, to: dir.file("third.hidden"))
+        if case .lost(let name, _, let why) = LinkedFile.restore(rec3) { #expect(name == "third.hidden" && why.contains("no longer a file")) } else { Issue.record("a file with no audio extension was linked") }
+        try writeWAV(sine(440, amplitudeDB: -12, seconds: 1), to: third, encoding: .int24)
+        if case .linked(let l) = LinkedFile.restore(rec3) { #expect(l.fileName == "third.wav") } else { Issue.record("the file put back wasn't found") }
+        // Without a bookmark (or one that doesn't resolve), the path is what there is.
+        var plain = record
+        plain.bookmark = Data([1, 2, 3])
+        #expect(LinkedFile.restore(plain) == .lost(name: "clip.wav", requester: "Flimmer", why: "The file is no longer where it was."))
+    }
+
     @Test("Formats Jämmer can't write back exactly aren't linked")
     func unsupported() throws {
         let dir = TempDir()

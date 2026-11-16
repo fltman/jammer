@@ -57,6 +57,10 @@ When Flimmer sends a clip's sound to Jämmer ("Edit in Jämmer"), it opens as a 
 
 Jämmer never writes the file by itself: autosave keeps your edits in the document, not in the clip. **File › Save a Jämmer Copy…** (⇧⌘S) saves the whole project, with its edit list and transcript, as a `.jammer` package; ⌘S still saves back to the clip.
 
+If you close the window or quit with changes you haven't saved back, Jämmer asks **Save your changes back to "clip.wav"?**: **Save Back** writes the file and closes, **Don't Save** leaves the file as it was, **Cancel** keeps the document open. It never offers to save a linked document as a new file on its own.
+
+A linked document stays linked if Jämmer is restarted, or quits unexpectedly, with the window still open: it comes back with the same title, and ⌘S still saves back. If the file can't be used any more (it was deleted, made read-only, or replaced by another kind of file), the title says **can't be saved back** and ⌘S tells you why, with **Save a Jämmer Copy…** to keep your edit; put the file back where it was and ⌘S works again. A file that was only moved or renamed is followed.
+
 This works for 16- and 24-bit and 32-bit float WAV, 16- and 24-bit AIFF and FLAC, mono or stereo. Other files from Flimmer open as ordinary new projects.
 
 ## A project from someone else

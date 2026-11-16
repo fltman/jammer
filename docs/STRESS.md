@@ -96,3 +96,21 @@ The hostile audio files, opened in the app the three ways a person opens a file:
 No file was changed by being opened, no copy was left in the media folder, and the app answered afterwards.
 
 Two things this found. The alerts said only "The document … could not be opened", without the reason: AppKit shows an error's failure reason there and nothing of its description, so the tests, which read the error's text, passed while a person saw no reason. The reason is now given as the failure reason, for audio files and for damaged projects. And a linked file with no sound was reported under the name of Jämmer's private copy ("791EC49A no-sound.wav"); it is now reported under its own name.
+
+## A linked document across quit, kill and a missing file (2026-11-16)
+
+Found by Flimmer's live test: a document linked to a sibling's file ("Edit in Jämmer") stopped being linked when Jämmer was started again, and ⌘S then offered the ordinary Save panel. Reproducing it found the larger half: quitting or closing a linked document with changes showed AppKit's Save panel (Delete / Cancel / Save), as for any unsaved document.
+
+Now: the link (bookmark, path, format, who asked) is saved with the window's state and restored with it; a link that can't be used is reported, never dropped; and closing or quitting asks about saving back to the linked file. In the package tests: restored, followed when the file is moved or renamed, found again when a file is put back at the old path, and lost in words when it is read-only, another shape, not audio, or gone. In the app, with a 24-bit WAV handed over as Flimmer does it:
+
+| What | Result |
+|---|---|
+| Quit with changes | "Save your changes back to "clip.wav"?"; Cancel keeps the document, linked; Save Back writes the file in place and quits; Don't Save quits and leaves the file as it was |
+| SIGKILL with changes, start again | the document is back, linked, File › Save Back to clip.wav; ⌘S writes the file |
+| SIGTERM with nothing unsaved, start again | the document is back, linked |
+| The file removed while Jämmer was away | the title says it can't be saved back; ⌘S explains why and offers Save a Jämmer Copy…; no Save panel by itself |
+| The file put back, ⌘S | linked again and saved |
+
+The window state is only written when Jämmer stops being the front app (AppKit's doing), so a kill while it has been in front all along, straight after the hand-over, restores nothing. In use the user has gone back to the other app, which is when it is written.
+
+Two faults in the test equipment came out of this and are fixed: `scripts/with-app.sh` had lost its `$pid` in an edit, so its clean-up stopped nothing and waited for ever (a stray test app, and once a held GUI lock); and GUI scripts now run under the series' `run-supervised.sh`, with a time limit.

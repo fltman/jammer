@@ -12,7 +12,7 @@ Yes. Jämmer is free and open source under the MIT licence. The source code will
 
 ## Does it cost anything to use the AI features?
 
-No, unless you choose to. Transcription, speaker finding, noise reduction and the built-in assistant all run on your Mac at no cost. The assistant can optionally use a cloud model through OpenRouter instead of the one on your Mac; that uses your own OpenRouter key (kept in the Keychain) and is billed by OpenRouter to you. An agent can only trigger paid steps when it explicitly allows them.
+No, unless you choose to. Transcription, speaker finding, noise reduction and the built-in assistant all run on your Mac at no cost. The assistant can optionally use a model in Ollama on your Mac (also free), or a cloud model at OpenRouter, Berget or Grunden instead of the one on your Mac; a cloud model uses your own key for that service (kept in the Keychain) and is billed by the service to you. An agent can only trigger paid steps when it explicitly allows them.
 
 ## What runs locally, and what leaves my Mac?
 

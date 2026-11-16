@@ -58,8 +58,9 @@ struct ModelStoreTests {
         #expect(store.url(for: .kbWhisperSmallQ5).absoluteString == "https://huggingface.co/KBLab/kb-whisper-small/resolve/main/ggml-model-q5_0.bin")
         let mirror = ModelStore(source: URL(string: "https://mirror.example/hf")!, folder: URL(fileURLWithPath: "/tmp/m"))
         #expect(mirror.url(for: .kbWhisperSmallQ5).absoluteString == "https://mirror.example/hf/KBLab/kb-whisper-small/resolve/main/ggml-model-q5_0.bin")
-        let defaults = UserDefaults(suiteName: "jammer-test-\(UUID().uuidString)")!
-        defaults.set("https://mirror.example", forKey: "models.source")
+        // Defaults that live only in this object: a test leaves nothing in ~/Library/Preferences.
+        let defaults = UserDefaults()
+        defaults.setVolatileDomain(["models.source": "https://mirror.example"], forName: UserDefaults.argumentDomain)
         let s = ModelStore.standard(defaults: defaults, environment: ["JAMMER_MODELS_DIR": "/Volumes/x/models"])
         #expect(s.source.absoluteString == "https://mirror.example" && s.folder.path == "/Volumes/x/models")
     }

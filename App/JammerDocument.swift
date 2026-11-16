@@ -7,10 +7,22 @@ extension UTType {
 }
 
 /// Where Jammer keeps audio it decodes or receives, until a project gathers it.
+/// Where this copy of Jämmer keeps its own files. Debug builds have a folder of their own, so what
+/// tests leave behind can be cleared without touching anything of the real app's.
+enum AppData {
+    static var folder: URL {
+        #if DEBUG
+        let name = "Jammer Debug"
+        #else
+        let name = "Jammer"
+        #endif
+        return FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appending(path: name)
+    }
+}
+
 enum MediaStore {
     static var folder: URL {
-        let url = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appending(path: "Jammer/Media")
+        let url = AppData.folder.appending(path: "Media")
         try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         return url
     }
@@ -31,13 +43,28 @@ final class JammerDocument: NSDocument {
     var readFromPackage = false
     /// A history read from the package before the window opened.
     var pendingHistory: History?
+    /// A link read from the saved window state before the window opened.
+    var pendingLink: LinkedFile.Record?
     static let historyFile = "history.json"
+    /// In Jämmer's own autosaves only: the link of a document a sibling app handed over.
+    static let linkFile = "link.json"
 
-    override class var autosavesInPlace: Bool { true }
-    override class var readableTypes: [String] { [UTType.jammerProject.identifier, UTType.audio.identifier] }
-    override class var writableTypes: [String] { [UTType.jammerProject.identifier] }
-    override class func isNativeType(_ type: String) -> Bool { type == UTType.jammerProject.identifier }
-    override func writableTypes(for saveOperation: NSDocument.SaveOperationType) -> [String] { [UTType.jammerProject.identifier] }
+    /// The file being read, while it is being read.
+    nonisolated(unsafe) private var readingURL: URL?
+
+    override func read(from url: URL, ofType typeName: String) throws {
+        readingURL = url
+        defer { readingURL = nil }
+        try super.read(from: url, ofType: typeName)
+    }
+
+    /// True while reading one of Jämmer's own autosaved documents back (a file in the system's
+    /// Autosave Information folder). A link names the file that ⌘S writes into, so it is taken only
+    /// from there: never from a project file that was opened, which could name any file it liked.
+    private var readingOwnAutosave: Bool {
+        guard let url = readingURL, let folder = FileManager.default.urls(for: .autosavedInformationDirectory, in: .userDomainMask).first else { return false }
+        return url.resolvingSymlinksInPath().path.hasPrefix(folder.resolvingSymlinksInPath().path + "/")
+    }
 
     override func makeWindowControllers() {
         let project = pendingProject ?? session?.project ?? Project(sampleRate: 48_000, channels: 2, tracks: [Track(name: "Track 1")])
@@ -46,6 +73,8 @@ final class JammerDocument: NSDocument {
         s.document = self
         if let pendingStatus { s.status = pendingStatus }
         pendingStatus = nil
+        if let pendingLink { s.restoreLink(pendingLink) }
+        pendingLink = nil
         session = s
         let wc = EditorWindowController(session: s)
         addWindowController(wc)
@@ -60,6 +89,55 @@ final class JammerDocument: NSDocument {
             }
         }
         AgentRegistry.shared.register(s)
+    }
+
+    /// Closing or quitting with changes. An ordinary document gets AppKit's question and its Save
+    /// panel. A linked one must not: its changes belong in the file the sibling app handed over, so
+    /// the question is about that file, and the Save panel never appears on its own.
+    override func canClose(withDelegate delegate: Any, shouldClose shouldCloseSelector: Selector?, contextInfo: UnsafeMutableRawPointer?) {
+        let linked = MainActor.assumeIsolated { session?.wasLinked ?? false }
+        guard linked, isDocumentEdited, let window = windowControllers.first?.window else {
+            super.canClose(withDelegate: delegate, shouldClose: shouldCloseSelector, contextInfo: contextInfo)
+            return
+        }
+        let answer: @MainActor (Bool) -> Void = { [weak self] should in
+            guard let self, let selector = shouldCloseSelector, let target = delegate as? NSObject else { return }
+            if should { self.updateChangeCount(.changeCleared) }
+            typealias Callback = @convention(c) (AnyObject, Selector, NSDocument, Bool, UnsafeMutableRawPointer?) -> Void
+            unsafeBitCast(target.method(for: selector), to: Callback.self)(target, selector, self, should, contextInfo)
+        }
+        MainActor.assumeIsolated {
+            guard let session else { return }
+            let alert = NSAlert()
+            if let link = session.linkedFile {
+                alert.messageText = "Save your changes back to “\(link.fileName)”?"
+                alert.informativeText = "\(link.requester) is waiting for this file. If you don't save, the file stays as it was and the changes are lost."
+                alert.addButton(withTitle: "Save Back")
+            } else {
+                let lost = session.lostLink
+                alert.messageText = "“\(lost?.name ?? "The file")” can't be saved back to \(lost?.requester ?? "the other app")"
+                alert.informativeText = "\(lost?.why ?? "")\n\nSave your changes as a Jämmer project to keep them, or close without saving."
+                alert.addButton(withTitle: "Save a Jämmer Copy…")
+            }
+            alert.addButton(withTitle: "Don't Save")
+            alert.addButton(withTitle: "Cancel")
+            alert.buttons[1].hasDestructiveAction = true
+            window.makeKeyAndOrderFront(nil)
+            alert.beginSheetModal(for: window) { response in
+                MainActor.assumeIsolated {
+                    switch response {
+                    case .alertFirstButtonReturn where session.linkedFile != nil:
+                        session.saveBack { saved in answer(saved) }
+                    case .alertFirstButtonReturn:
+                        // The copy is saved through the ordinary panel; the document stays open until that is done.
+                        session.saveJammerCopy()
+                        answer(false)
+                    case .alertSecondButtonReturn: answer(true)
+                    default: answer(false)
+                    }
+                }
+            }
+        }
     }
 
     override func close() {
@@ -77,14 +155,25 @@ final class JammerDocument: NSDocument {
     override func encodeRestorableState(with coder: NSCoder) {
         super.encodeRestorableState(with: coder)
         let project = MainActor.assumeIsolated { session?.project ?? pendingProject }
-        if let project, let data = try? ProjectPackage.encode(project) {
-            coder.encode(data as NSData, forKey: Self.restoreKey)
-            coder.encode(displayName as NSString, forKey: Self.restoreKey + ".name")
-        }
+        if let project, let data = try? ProjectPackage.encode(project) { coder.encode(data as NSData, forKey: Self.restoreKey) }
+        coder.encode(displayName as NSString, forKey: Self.restoreKey + ".name")
+        // A linked document stays linked across a quit, a crash or a kill (SIBLINGS.md §6).
+        let record = MainActor.assumeIsolated { session?.linkRecord ?? pendingLink }
+        if let record, let data = try? JSONEncoder().encode(record) { coder.encode(data as NSData, forKey: Self.restoreKey + ".link") }
     }
 
     override func restoreState(with coder: NSCoder) {
         super.restoreState(with: coder)
+        // The link first, and whatever else is restored: also a document that comes back from its autosave.
+        if let data = coder.decodeObject(of: NSData.self, forKey: Self.restoreKey + ".link") as Data?,
+           let record = try? JSONDecoder().decode(LinkedFile.Record.self, from: data) {
+            MainActor.assumeIsolated {
+                if let session { session.restoreLink(record) } else { pendingLink = record }
+            }
+        }
+        // The name too, whichever way the document came back: one that returns from its autosave would
+        // otherwise be "Untitled".
+        if fileURL == nil, let name = coder.decodeObject(of: NSString.self, forKey: Self.restoreKey + ".name") as String?, !name.isEmpty { displayName = name }
         guard fileURL == nil, !isDocumentEdited,
               let data = coder.decodeObject(of: NSData.self, forKey: Self.restoreKey) as Data?,
               let project = try? ProjectPackage.decode(data) else { return }
@@ -106,6 +195,7 @@ final class JammerDocument: NSDocument {
         readFromPackage = true
         if !notes.isEmpty { pendingStatus = notes.joined(separator: " ") }
         let history = fileWrapper.fileWrappers?[Self.historyFile]?.regularFileContents.flatMap { try? JSONDecoder().decode(History.self, from: $0) }
+        let link = readingOwnAutosave ? fileWrapper.fileWrappers?[Self.linkFile]?.regularFileContents.flatMap { try? JSONDecoder().decode(LinkedFile.Record.self, from: $0) } : nil
         // NSDocument reads on the main thread (no concurrent reading).
         MainActor.assumeIsolated {
             if let session {
@@ -113,7 +203,11 @@ final class JammerDocument: NSDocument {
                 session.restrictReading(package: self.fileURL)
                 session.load(project, history: history)
                 if !notes.isEmpty { session.status = notes.joined(separator: " ") }
-            } else { pendingProject = project; pendingHistory = history }
+                if let link { session.restoreLink(link) }
+            } else {
+                pendingProject = project; pendingHistory = history
+                if let link { pendingLink = link }
+            }
         }
     }
 
@@ -175,6 +269,13 @@ final class JammerDocument: NSDocument {
     override func write(to url: URL, ofType typeName: String, for saveOperation: NSDocument.SaveOperationType,
                         originalContentsURL absoluteOriginalContentsURL: URL?) throws {
         try super.write(to: url, ofType: typeName, for: saveOperation, originalContentsURL: absoluteOriginalContentsURL)
+        // An autosave of a linked document carries its link, so the document that comes back from it
+        // (after a crash, when the window's own state is gone) is still linked. A project the user
+        // saves does not: a Jämmer Copy is a project of its own.
+        let autosave = saveOperation == .autosaveElsewhereOperation || saveOperation == .autosaveAsOperation || saveOperation == .autosaveInPlaceOperation
+        if autosave, let record = MainActor.assumeIsolated({ session?.linkRecord ?? pendingLink }), let data = try? JSONEncoder().encode(record) {
+            try? data.write(to: url.appending(path: Self.linkFile))
+        }
         // project.json already names the copies; put them in place before the save counts.
         try ProjectPackage.copyMedia(pendingCopies, intoPackage: url)
     }

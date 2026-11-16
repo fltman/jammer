@@ -1,0 +1,31 @@
+#!/bin/sh
+# Runs Jämmer's assistant evaluation against a model, so that "tried with Jämmer" is something
+# anyone can find out for a model of their own instead of guessing.
+#
+#   scripts/eval-assistant.sh                     the on-device model (Apple)
+#   scripts/eval-assistant.sh ollama:qwen3:8b     a model already installed in Ollama on this Mac
+#
+# Three sets: the standard 14 requests and two hold-out sets (24 and 23), Swedish and English.
+# The reports go to build/eval/<model>/; the last line of each is the score. Nothing is
+# downloaded and nothing is paid for: only models on this Mac can be evaluated this way.
+# For comparison, docs/ASSISTANT.md has the on-device model's and qwen3:8b's results.
+set -eu
+root="$(cd "$(dirname "$0")/.." && pwd)"
+model="${1:-}"
+case "$model" in
+  "") name="on-device" ;;
+  ollama:*) name="$(printf '%s' "$model" | tr ':/' '--')" ;;
+  *) echo "eval-assistant: give nothing (the on-device model) or ollama:<model>." >&2; exit 64 ;;
+esac
+out="$root/build/eval/$name"
+mkdir -p "$out"
+cd "$root/Packages/JammerKit"
+run() { # <report> <test filter> <env…>
+  report="$1"; filter="$2"; shift 2
+  env JAMMER_EVAL_PLANNER="$model" JAMMER_EVAL_REPORT="$out/$report" "$@" swift test --filter "$filter" >"$out/$report.log" 2>&1 || { echo "eval-assistant: $report failed; see $out/$report.log" >&2; return 1; }
+  printf '%s: %s\n' "$report" "$(tail -1 "$out/$report")"
+}
+run standard.md AssistantEval JAMMER_ASSISTANT_EVAL=1
+run holdout1.md HoldoutEval JAMMER_HOLDOUT=1
+run holdout2.md HoldoutEval JAMMER_HOLDOUT=2
+echo "Reports in $out"
