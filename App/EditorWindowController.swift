@@ -551,6 +551,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
             let url = chosen.deletingPathExtension().appendingPathExtension(model.choice.fileExtension)
             var options = EditorSession.ExportOptions(encoding: model.choice.encoding, dither: model.dither, encoded: model.choice.encoded,
                                                       chapters: model.chapters, chaptersJSON: model.chaptersJSON)
+            // Opus is always 48 kHz; for the rest, the rate chosen when it isn't the document's own.
+            if model.sampleRate > 0, model.choice != .opus { options.sampleRate = model.sampleRate }
             if model.selectionOnly { options.range = self.session.selection }
             // After a loudness preset, a lossy file is delivered at the preset's target: measured as written, corrected, encoded again.
             options.loudness = self.session.deliveryTarget
@@ -710,7 +712,9 @@ struct StatusBar: View {
 final class ExportChoices {
     enum Choice: String, CaseIterable {
         case wav16 = "WAV 16-bit", wav24 = "WAV 24-bit", wavFloat = "WAV 32-bit float", aiff24 = "AIFF 24-bit",
-             flac16 = "FLAC 16-bit", flac24 = "FLAC 24-bit", alac24 = "Apple Lossless (ALAC) 24-bit", aac = "AAC 192 kbit/s", opus = "Opus 96 kbit/s (Ogg)", mp3 = "MP3 160 kbit/s"
+             flac16 = "FLAC 16-bit", flac24 = "FLAC 24-bit", alac24 = "Apple Lossless (ALAC) 24-bit", aac = "AAC 192 kbit/s", opus = "Opus 96 kbit/s (Ogg)", mp3 = "MP3 160 kbit/s",
+             // What ACX asks for at the least ("192 kbps or higher CBR").
+             mp3High = "MP3 192 kbit/s"
         var encoded: EncodedExportOptions? {
             switch self {
             case .wav16, .wav24, .wavFloat: nil
@@ -721,6 +725,7 @@ final class ExportChoices {
             case .aac: .init(format: .aac, bitRate: 192_000)
             case .opus: .init(format: .opus, bitRate: 96_000)
             case .mp3: .init(format: .mp3, bitRate: 160_000)
+            case .mp3High: .init(format: .mp3, bitRate: 192_000)
             }
         }
         var encoding: WAVWriter.Encoding { self == .wav16 ? .int16 : (self == .wavFloat ? .float32 : .int24) }
@@ -731,11 +736,13 @@ final class ExportChoices {
         didSet { UserDefaults.standard.set(choice.rawValue, forKey: "export.format") }
     }
     /// MP3 (ID3), AAC and ALAC (a chapter track) and Opus (comments) carry chapters.
-    var takesChapters: Bool { [.mp3, .aac, .alac24, .opus].contains(choice) }
+    var takesChapters: Bool { [.mp3, .mp3High, .aac, .alac24, .opus].contains(choice) }
     var chapters = true
     var chaptersJSON = false
     var encoding: WAVWriter.Encoding = .int24
     var dither = false
+    /// 0: the document's own rate.
+    var sampleRate = 0.0
     var selectionOnly = false
     let hasSelection: Bool
     init(hasSelection: Bool) {
@@ -750,8 +757,14 @@ struct ExportAccessory: View {
     var body: some View {
         Form {
             Picker("Format", selection: $model.choice) {
-                ForEach(ExportChoices.Choice.allCases.filter { $0 != .mp3 || EncodedWriter.mp3Factory != nil }, id: \.self) { Text($0.rawValue).tag($0) }
+                ForEach(ExportChoices.Choice.allCases.filter { ($0 != .mp3 && $0 != .mp3High) || EncodedWriter.mp3Factory != nil }, id: \.self) { Text($0.rawValue).tag($0) }
             }
+            Picker("Sample rate", selection: $model.sampleRate) {
+                Text("Same as the document").tag(0.0)
+                ForEach([44_100.0, 48_000, 88_200, 96_000, 22_050, 16_000], id: \.self) { Text(String(format: "%g kHz", $0 / 1_000)).tag($0) }
+            }
+            .disabled(model.choice == .opus)
+            .help("The file's sample rate. Converting changes every sample; leave it as the document's unless the file has to be at another rate.")
             Toggle("Dither (TPDF)", isOn: $model.dither).disabled(model.choice != .wav16 && model.choice != .wav24)
                 // Going down to 16 bits is where dither matters, so it is suggested there; it leaves audio
                 // that is already 16 bits exactly as it was, so the suggestion costs nothing.

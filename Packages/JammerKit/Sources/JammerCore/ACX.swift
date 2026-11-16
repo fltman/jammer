@@ -54,11 +54,14 @@ public enum ACX {
         /// again, with the bit rate it was encoded at; nil when no such file could be made.
         public var encoded: LoudnessResult?
         public var encodedBitRate: Int?
+        /// The rate that file was written at (converted from the document's when they differ).
+        public var encodedSampleRate: Double?
         /// Why no encoded file was measured.
         public var encodedReason: String?
 
         public init(mix: LoudnessResult, noiseFloor: Double?, noiseSeconds: Double = 0, channels: Int, sampleRate: Double, seconds: Double,
-                    head: Double, tail: Double, encoded: LoudnessResult? = nil, encodedBitRate: Int? = nil, encodedReason: String? = nil) {
+                    head: Double, tail: Double, encoded: LoudnessResult? = nil, encodedBitRate: Int? = nil, encodedSampleRate: Double? = nil, encodedReason: String? = nil) {
+            self.encodedSampleRate = encodedSampleRate ?? (encoded != nil ? sampleRate : nil)
             self.mix = mix; self.noiseFloor = noiseFloor; self.noiseSeconds = noiseSeconds; self.channels = channels; self.sampleRate = sampleRate
             self.seconds = seconds; self.head = head; self.tail = tail; self.encoded = encoded; self.encodedBitRate = encodedBitRate; self.encodedReason = encodedReason
         }
@@ -91,11 +94,15 @@ public enum ACX {
                          pass: m.noiseFloor.map { $0 <= noiseFloorMax },
                          note: "ACX doesn't say how the noise floor is measured. Here: the RMS of the quietest stretches between the speech (the pauses), on the mix."))
 
-        let formatOK = m.encoded != nil && (m.encodedBitRate ?? 0) >= minBitRate && m.sampleRate == sampleRate
+        let fileRate = m.encodedSampleRate ?? m.sampleRate
+        let formatOK = m.encoded != nil && (m.encodedBitRate ?? 0) >= minBitRate && fileRate == sampleRate
         out.append(.init(name: "format", required: "Each file must be a 192 kbps or higher CBR, 44.1kHz MP3",
-                         measured: m.encoded != nil ? "MP3, \((m.encodedBitRate ?? 0) / 1_000) kbps constant bit rate, \(String(format: "%.1f", m.sampleRate / 1_000)) kHz"
+                         measured: m.encoded != nil ? "MP3, \((m.encodedBitRate ?? 0) / 1_000) kbps constant bit rate, \(String(format: "%.1f", fileRate / 1_000)) kHz"
                                                     : "the document is \(String(format: "%.1f", m.sampleRate / 1_000)) kHz",
-                         pass: formatOK, note: m.encoded != nil ? "Encoded here to measure it; export it the same way (MP3, \((m.encodedBitRate ?? 0) / 1_000) kbps)." : m.encodedReason))
+                         pass: formatOK,
+                         note: m.encoded != nil ? "Encoded here to measure it; export it the same way: MP3, \((m.encodedBitRate ?? 0) / 1_000) kbps"
+                             + (fileRate != m.sampleRate ? String(format: ", sample rate %.1f kHz (the document is %.1f kHz and is converted).", fileRate / 1_000, m.sampleRate / 1_000) : ".")
+                             : m.encodedReason))
 
         out.append(.init(name: "channels", required: "All files must be in the same channel format (all mono or all stereo)",
                          measured: m.channels == 1 ? "mono" : m.channels == 2 ? "stereo" : "\(m.channels) channels",

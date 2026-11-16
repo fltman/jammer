@@ -6,6 +6,7 @@
 |---|---|
 | Format | WAV 16-bit, WAV 24-bit (default), WAV 32-bit float |
 | Dither (TPDF) | Adds triangular dither when writing 16 or 24 bits, which keeps quiet detail from turning into distortion when the bit depth goes down. It is ticked for you when you choose 16-bit WAV. Only samples that rounding would change get it: audio that is already 16 bits comes out exactly as it was, and silence stays silent, so it is safe to leave on. |
+| Sample rate | **Same as the document** (default), or 44.1, 48, 88.2, 96, 22.05 or 16 kHz. Choose another rate only when the file has to be at it (an MP3 for ACX at 44.1 kHz, a 16 kHz file for a speech service): converting changes every sample. Opus is always 48 kHz. |
 | Selection only | Exports just the selection (on by default when there is one) |
 
 Exports that grow past 4 GB are written as RF64 automatically.
@@ -29,3 +30,12 @@ This only happens while the document is as the preset left it. Edit anything aft
 ![The export dialog with MP3 chosen and Chapters from markers ticked](../screens/export.webp)
 
 Markers are chapters. Each marker starts a chapter that runs to the next marker (or the end). **MP3** gets ID3 chapter frames, **AAC and ALAC** (.m4a) a chapter track like the ones Apple Podcasts and QuickTime show, and **Opus** CHAPTER comments, which ffmpeg-based players read; if the first marker comes after the start, a chapter called "Start" covers the beginning. **Also save chapters as JSON** writes the same chapters as a Podcasting 2.0 chapters file (`name.chapters.json`) next to the audio, for hosts that take a separate file. WAV keeps markers as cue points, as before; AIFF and FLAC get no chapters.
+
+## Another sample rate
+
+When you choose another sample rate than the document's, the mix is converted on the way out; the document itself is not changed. Markers and chapters stay at the same times.
+
+Sample rate converter designed by Aleksey Vaneev of Voxengo (r8brain-free-src). What Jämmer measured it to before putting it in, from 48 to 44.1 kHz: a tone comes out at the same level to four decimals of a dB, with everything else more than 150 dB under it; the response is flat up to 21 kHz; a tone above the new rate's limit (which would otherwise fold back as a false tone) is more than 150 dB down; nothing moves in time, and the file is exactly as long as it should be. On the same signal its output agrees with Apple's converter to −146 dB and with ffmpeg's to −124 dB.
+
+Going down in bit depth as well (a 16-bit WAV at 44.1 kHz from a 48 kHz, 24-bit document): the rate is converted first and dither is added last, once.
+

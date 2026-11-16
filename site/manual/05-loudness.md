@@ -51,7 +51,7 @@ The limiter is for peaks, not for making things loud: taking off many dB makes s
 | "between the specific volume range of -23dB and -18dB RMS" | All samples of the whole file, both channels together, unweighted. ACX doesn't say how to measure it. |
 | "peak values no higher than -3dB" | The highest sample and the true peak (between the samples) both have to be at or under −3. ACX says only "peak"; a file whose samples pass and whose true peak doesn't can still be turned down, so Jämmer asks both and says which one decided. |
 | "a noise floor no higher than -60dB RMS" | The level of the quietest stretches between the speech. ACX doesn't say how to measure it. |
-| "a 192 kbps or higher CBR, 44.1kHz MP3" | A document at 44.1 kHz is encoded to exactly that and measured as it decodes, because the encoder changes the level a little. |
+| "a 192 kbps or higher CBR, 44.1kHz MP3" | The document is encoded to exactly that (converted to 44.1 kHz when it is at another rate) and measured as it decodes, because the encoder changes the level a little. |
 | "the same channel format (all mono or all stereo)" | Shown, not judged: it is about all the files of a book together. |
 | "no longer than 120 minutes" | The document's length. |
 | "Room tone spacing must not exceed 5 seconds" (1 to 5 seconds at each end is recommended) | The stretch at the start and at the end that stays under −45 dBFS. |
@@ -60,6 +60,6 @@ The limiter is for peaks, not for making things loud: taking off many dB makes s
 Good to know:
 
 - It says what was measured against the requirements as they read on that date. It never says a file is approved: only ACX does that, and ACX also asks for things no meter sees (one chapter per file with its header read out, opening and closing credits, a retail sample).
-- A document at another sample rate than 44.1 kHz fails the format line, and the other lines are then measured on the mix instead of on the MP3: Jämmer can't convert the sample rate yet. Record or import at 44.1 kHz for now.
+- The check is made on the MP3 as ACX wants it, so export it the same way: **File › Export Audio…**, **MP3 192 kbit/s**, and **Sample rate 44.1 kHz** when the document is at another rate.
 - To bring a chapter into the range, use **Audio › Normalize** or a gain to set the level and **Limit Peaks** with a ceiling a little under −3 dBTP (say −3.5) to leave room for what the MP3 encoder adds, then check again.
 

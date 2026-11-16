@@ -52,6 +52,8 @@ targets:
       - package: JammerKit
         product: JammerMP3
       - package: JammerKit
+        product: JammerResample
+      - package: JammerKit
         product: JammerDiarize
       - package: JammerKit
         product: JammerParakeet

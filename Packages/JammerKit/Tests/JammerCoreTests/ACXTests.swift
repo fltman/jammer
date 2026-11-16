@@ -9,7 +9,7 @@ struct ACXTests {
     }
     func measured(_ mix: LoudnessResult, encoded: LoudnessResult? = nil, rate: Double = 44_100, floor: Double? = -65, head: Double = 1.2, tail: Double = 3) -> ACX.Measured {
         ACX.Measured(mix: mix, noiseFloor: floor, noiseSeconds: 12, channels: 1, sampleRate: rate, seconds: 600, head: head, tail: tail,
-                     encoded: encoded, encodedBitRate: encoded == nil ? nil : 192_000, encodedReason: encoded == nil ? "the document is 48.0 kHz and Jämmer can't convert the sample rate yet" : nil)
+                     encoded: encoded, encodedBitRate: encoded == nil ? nil : 192_000, encodedSampleRate: encoded == nil ? nil : 44_100, encodedReason: encoded == nil ? "the MP3 couldn't be made (no encoder in this build)" : nil)
     }
     func row(_ rows: [DeliveryRequirement], _ name: String) -> DeliveryRequirement { rows.first { $0.name == name }! }
 
@@ -47,9 +47,12 @@ struct ACXTests {
         #expect(row(ACX.requirements(measured(ok, encoded: ok, floor: -52)), "noiseFloor").pass == false)
         let noPause = row(ACX.requirements(measured(ok, encoded: ok, floor: nil)), "noiseFloor")
         #expect(noPause.pass == nil && noPause.measured == "no pause found to measure it in")
-        // 48 kHz: no MP3 at 44.1 kHz could be made, so the format fails and says why, and the rest is judged on the mix.
+        // No MP3 could be made: the format fails and says why, and the rest is judged on the mix.
         let at48 = ACX.requirements(measured(ok, rate: 48_000))
-        #expect(row(at48, "format").pass == false && row(at48, "format").note?.contains("can't convert the sample rate") == true && row(at48, "rms").note?.contains("the mix before encoding") == true)
+        #expect(row(at48, "format").pass == false && row(at48, "format").note?.contains("couldn't be made") == true && row(at48, "rms").note?.contains("the mix before encoding") == true)
+        // A 48 kHz document converted to 44.1 kHz for the MP3: the format is met, and the note says it is converted.
+        let converted = row(ACX.requirements(measured(ok, encoded: ok, rate: 48_000)), "format")
+        #expect(converted.pass == true && converted.measured == "MP3, 192 kbps constant bit rate, 44.1 kHz" && converted.note?.contains("the document is 48.0 kHz and is converted") == true)
         #expect(row(ACX.requirements(measured(ok, encoded: ok, head: 6.5)), "roomTone").pass == false)
         #expect(row(ACX.requirements(measured(ok, encoded: ok, head: 0.2)), "roomTone").note?.contains("Under the recommended 1 second at the start") == true)
         var long = measured(ok, encoded: ok)

@@ -54,7 +54,7 @@ The requirements are quoted from ACX's article "ACX Audio Submission Requirement
 | `rms` | "Each file needs to fall between the specific volume range of -23dB and -18dB RMS" | Plain RMS of all samples, channels together, unweighted (`LoudnessResult.rms`; a full-scale sine reads −3.01). ACX gives no method. |
 | `peak` | "Each file must have peak values no higher than -3dB" | Sample peak and true peak both at or under −3; the note says which decided. ACX says "peak" and "dB". |
 | `noiseFloor` | "Each file must have a noise floor no higher than -60dB RMS" | RMS of the pauses (`Restoration.noiseFloor`). ACX gives no method. `pass` is null when there is no pause to measure in. |
-| `format` | "Each file must be a 192 kbps or higher CBR, 44.1kHz MP3" | At 44.1 kHz the document is encoded to a 192 kbps constant-bit-rate MP3 and the levels are measured on that file as it decodes. At another rate this fails and says that sample-rate conversion is missing; the levels are then measured on the mix (`measuredOn`). |
+| `format` | "Each file must be a 192 kbps or higher CBR, 44.1kHz MP3" | The document is encoded to a 192 kbps constant-bit-rate MP3 at 44.1 kHz (converted when it is at another rate) and the levels are measured on that file as it decodes. If no MP3 can be made this fails and says why; the levels are then measured on the mix (`measuredOn`). |
 | `channels` | "All files must be in the same channel format (all mono or all stereo)" | Shown; `pass` null (it is about the files together). |
 | `length` | "Each file must be no longer than 120 minutes" | The document's length. |
 | `roomTone` | "Room tone spacing must not exceed 5 seconds" (1–5 s recommended at each end) | The stretch at each end under −45 dBFS. |
@@ -64,7 +64,7 @@ Not found on ACX's page, and so not claimed: how RMS and the noise floor are to 
 
 **Against an outside reference** (ffmpeg `astats`): a 48 kHz test file reads RMS −22.6 dB and peak −7.4 dB here, −22.55 and −7.41 in ffmpeg. The same speech at 44.1 kHz reads −19.55 dB RMS as a WAV in ffmpeg and −19.8 as the 192 kbps MP3 decoded here: the encoder takes about a quarter of a dB, which is why the check is made on the encoded file.
 
-**In the app** (2026-11-16): a 44.1 kHz mono chapter measured on the MP3 with every measured line met; a 48 kHz document with `format` failing and the rest measured on the mix; the sheet read through the accessibility API; the document not marked as edited by the check.
+**In the app** (2026-11-16): a 44.1 kHz mono chapter measured on the MP3 with every measured line met; a 48 kHz document, first (before sample-rate conversion existed) with `format` failing and the rest measured on the mix, then, with conversion, measured on the converted MP3 with `format` met; the sheet read through the accessibility API; the document not marked as edited by the check.
 
 ## Dither, measured 2026-11-16
 
@@ -82,7 +82,30 @@ TPDF dither on a 16- or 24-bit WAV has been in the export since phase 0 without 
 
 **Not built:** a noise-shaped dither. The published curves (Lipshitz, Vanderkooy and Wannamaker) are behind a paywall and have not been read, and no curve is taken from memory or from a product; until one has been read at its source there is TPDF only.
 
+## Sample rate conversion, built 2026-11-16
+
+`"sampleRate"` on `export`, **Sample rate** in the export sheet. The mix is rendered once at the document's rate, converted into a temporary 32-bit float file, and the export (any format, the loudness correction for lossy formats included) then runs on that as if it were the document; markers are moved to the new rate, chapters are in seconds and stay. Opus is always 48 kHz and refuses another rate. The document is never changed. Dither, when asked for, is added after the conversion, once.
+
+The converter is r8brain-free-src 7.7 by Aleksey Vaneev of Voxengo (MIT), one converter per channel at its 24-bit setting, compiled from source with its own Ooura FFT (`JammerResample`). Fetching it was approved by Anders on 2026-11-16; see `docs/LICENSES.md`.
+
+**Measured before it went in** (`ResamplerTests`, the middle of two seconds, away from the ends):
+
+| What | Result |
+|---|---|
+| A 997 Hz tone, 48 → 44.1, 44.1 → 48, 96 → 44.1 kHz | level +0.0000 dB; everything else −150.9, −150.7, −152.1 dB under the tone |
+| 48 → 44.1 kHz at 20 Hz, 10, 18, 20 and 21 kHz | −0.0000 dB at each |
+| 48 → 44.1 kHz, tones at 22.5, 23 and 23.9 kHz (over the new half rate; they would fold back if they got through) | −156.2, −154.9, −153.8 dB |
+| A click at 1.000 s, 48 → 44.1 kHz; at 0.5 s, 44.1 → 96 kHz | at frame 44 100; at frame 48 000 |
+| Length | exactly round(frames × to / from), in every case |
+| Fed in blocks of 1, 7, 4 095, 4 097, 20 000 frames | the same output bit for bit as in one piece |
+| 48 → 44.1 → 48 kHz of tones under 18 kHz | nulls against the original to under −100 dB |
+| Against Apple's converter (afconvert, bats, quality 127), band-limited signal, 48 → 44.1 kHz | same length; difference −146.2 dB |
+| Against ffmpeg's (swresample, filter size 512) | same length; difference −123.7 dB |
+
+**In the app** (2026-11-16), a 48 kHz stereo document of 25.08 s: WAV 24-bit at 44.1 kHz, FLAC at 96 kHz, MP3 192 kbps and AAC at 44.1 kHz, and WAV 16-bit at 16 kHz with dither all came out at the rate asked, the right length, with `X-Jammer-Sample-Rate` saying so (and `X-Jammer-Dither: tpdf` on the last); 44 000 Hz was refused with the list of rates, and Opus at 44.1 kHz with "opus is always written at 48000 Hz". The 44.1 kHz WAV against ffmpeg's own conversion of the 48 kHz export of the same speech: same number of frames, difference −79 dB. (That is real speech with content up to the band edge, where the two converters' filters differ, compared through 24-bit files; the band-limited comparison above is the measure of agreement.) The ACX check on the 48 kHz document was then measured on the converted MP3, with `format` met.
+
+**Not done:** a sample rate in the batch export; conversion of imported files to the document's rate uses the earlier path and has not been moved to this converter.
+
 ## Not built yet
 
-- Sample-rate conversion on export (r8brain-free-src, MIT; to be fetched only when Anders has said yes).
 - The limiter as a live insert comes with the mixer, after its realtime measurements. With the mixer its place is on the master bus, after everything; today it comes before the tracks' plugins and says so (`beforePlugins`).

@@ -1,6 +1,7 @@
 import AppKit
 import JammerAgent
 import JammerCore
+import JammerResample
 import JammerPlugins
 import JammerStems
 import Network
@@ -1056,8 +1057,17 @@ enum AgentRouter {
         let tmp = FileManager.default.temporaryDirectory.appending(path: "jammer-export-\(UUID().uuidString).\(format.fileExtension)")
         try UploadStore.checkSpace(for: bytes, at: tmp.deletingLastPathComponent())
         defer { try? FileManager.default.removeItem(at: tmp) }
+        // Another sample rate for the file than the document's: only the rates the converter is offered at.
+        var sampleRate: Double?
+        if let v = obj["sampleRate"] {
+            guard let n = v as? NSNumber, CFGetTypeID(n) != CFBooleanGetTypeID(), Resampler.rates.contains(n.doubleValue) else {
+                throw APIError.badRequest("sampleRate must be one of \(Resampler.rates.map { String(Int($0)) }.joined(separator: ", ")).")
+            }
+            if format == .opus, n.doubleValue != 48_000 { throw APIError.badRequest("opus is always written at 48000 Hz; leave sampleRate out or give 48000.") }
+            sampleRate = n.doubleValue
+        }
         let delivery = try await session.export(to: tmp, options: .init(encoding: encoding, range: range, dither: obj["dither"] as? Bool ?? false, encoded: encoded,
-                                                                        chapters: obj["chapters"] as? Bool ?? true, loudness: target, tracks: only))
+                                                                        chapters: obj["chapters"] as? Bool ?? true, loudness: target, tracks: only, sampleRate: sampleRate))
         var headers = ["Content-Disposition": "attachment; filename=\"\(asciiName(session.name)).\(format.fileExtension)\""]
         if let d = delivery, let target {
             // What the file measures when decoded again, and what was added before the encoder to get there.
@@ -1073,6 +1083,7 @@ enum AgentRouter {
             if let tp = d.truePeak { headers["X-Jammer-True-Peak"] = String(format: "%.2f", tp) }
         }
         if format == .wav { headers["X-Jammer-Dither"] = session.lastExportDither }
+        headers["X-Jammer-Sample-Rate"] = String(Int(session.lastExportSampleRate))
         let data = try Data(contentsOf: tmp, options: .mappedIfSafe)
         let types: [ExportFormat: String] = [.wav: "audio/wav", .aiff: "audio/aiff", .flac: "audio/flac", .alac: "audio/mp4", .aac: "audio/mp4", .opus: "audio/ogg", .mp3: "audio/mpeg"]
         return Response(status: 200, contentType: types[format] ?? "application/octet-stream", body: data, extraHeaders: headers)

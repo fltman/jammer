@@ -2,6 +2,7 @@ import AppKit
 import JammerAgent
 import JammerAudio
 import JammerCore
+import JammerResample
 import JammerEngine
 import Observation
 
@@ -572,19 +573,17 @@ final class EditorSession {
         }.value
         var m = ACX.Measured(mix: mix, noiseFloor: floor?.level, noiseSeconds: floor?.seconds ?? 0, channels: p.channels, sampleRate: p.sampleRate,
                              seconds: p.seconds(p.length), head: head, tail: tail)
-        guard p.sampleRate == ACX.sampleRate else {
-            m.encodedReason = String(format: "the document is %.1f kHz, and an MP3 at 44.1 kHz needs sample-rate conversion, which Jämmer doesn't have yet", p.sampleRate / 1_000)
-            return m
-        }
         let dir = FileManager.default.temporaryDirectory.appending(path: "jammer-acx-\(UUID().uuidString.prefix(8))")
         defer { try? FileManager.default.removeItem(at: dir) }
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let file = dir.appending(path: "check.mp3")
         do {
-            _ = try await export(to: file, options: .init(encoded: EncodedExportOptions(format: .mp3, bitRate: ACX.minBitRate), chapters: false))
+            // At ACX's rate, converted when the document is at another.
+            _ = try await export(to: file, options: .init(encoded: EncodedExportOptions(format: .mp3, bitRate: ACX.minBitRate), chapters: false, sampleRate: ACX.sampleRate))
             if let measured = await Task.detached(priority: .userInitiated, operation: { EncodedWriter.measureWritten(file, scratch: dir) }).value {
                 m.encoded = measured
                 m.encodedBitRate = ACX.minBitRate
+                m.encodedSampleRate = ACX.sampleRate
             } else {
                 m.encodedReason = "the MP3 couldn't be read back on this Mac"
             }
@@ -609,6 +608,8 @@ final class EditorSession {
         var loudness: LoudnessDelivery.Target?
         /// Only these tracks (see `alone`); the file still covers the whole timeline, so stems line up.
         var tracks: Set<UUID>?
+        /// The file's sample rate when it is to differ from the document's (one of `Resampler.rates`).
+        var sampleRate: Double?
     }
 
     /// The target of a loudness preset, while the document is still as that preset left it:
@@ -624,10 +625,44 @@ final class EditorSession {
     @discardableResult
     func export(to url: URL, options: ExportOptions, progress: @escaping @Sendable (Double) -> Void = { _ in }) async throws -> LoudnessDelivery? {
         // Units of its own: playback keeps going untouched while this renders.
-        let plan = await PlanCompiler.mix(alone(options.tracks), pool: pool, outOfProcess: Self.pluginSafeMode)
-        let range = options.range ?? 0..<project.length
-        guard !range.isEmpty else { throw EditError.emptyRange }
-        let chapters = project.chapters(in: range)
+        let mixed = await PlanCompiler.mix(alone(options.tracks), pool: pool, outOfProcess: Self.pluginSafeMode)
+        let asked = options.range ?? 0..<project.length
+        guard !asked.isEmpty else { throw EditError.emptyRange }
+        let chapters = project.chapters(in: asked)
+        // Another sample rate than the document's: the mix is rendered once and converted (r8brain, see
+        // docs/MASTERING.md), and everything below, the loudness correction included, then works on the
+        // converted audio as if it were the document. Times in seconds (chapters) stay as they are.
+        var plan = mixed, range = asked, project = self.project, pool = self.pool
+        var scratch: URL?
+        defer { if let scratch { try? FileManager.default.removeItem(at: scratch) } }
+        lastExportSampleRate = project.sampleRate
+        if let to = options.sampleRate, to != project.sampleRate {
+            let dir = FileManager.default.temporaryDirectory.appending(path: "jammer-convert-\(UUID().uuidString.prefix(8))")
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            scratch = dir
+            let file = dir.appending(path: "converted.wav")
+            let from = project.sampleRate, channels = project.channels, total = Double(asked.count)
+            try UploadStore.checkSpace(for: Int64(Double(asked.count) * to / from) * Int64(channels) * 4, at: dir)
+            let converted = try await Task.detached(priority: .userInitiated) { () -> SourceRef in
+                let converter = try Resampler(from: from, to: to, channels: channels)
+                let writer = try WAVWriter(url: file, options: .init(encoding: .float32, channels: channels, sampleRate: to))
+                var done = 0.0
+                try mixed.render(asked) { block in
+                    try writer.write(converter.process(Array(block)))
+                    done += Double(block.count / channels)
+                    progress(done / total * 0.5)
+                }
+                try writer.write(converter.finish())
+                try writer.finish()
+                return SourceRef(name: "converted", path: file.path, info: try AudioFileReader.info(at: file))
+            }.value
+            project = Project(source: converted)
+            pool = SourcePool()
+            plan = PlanCompiler.compile(project, pool: pool)
+            range = 0..<project.length
+            lastExportSampleRate = to
+        }
+        let scale = project.sampleRate / self.project.sampleRate
         if options.chaptersJSON, !chapters.isEmpty {
             try ChapterFormats.podcastingJSON(chapters).write(to: url.deletingPathExtension().appendingPathExtension("chapters.json"))
         }
@@ -640,7 +675,7 @@ final class EditorSession {
                 encoded.language = project.transcripts.first?.language
             }
             if let target = options.loudness, encoded.format.loudnessIsCompensated {
-                let project = self.project, pool = self.pool, safe = Self.pluginSafeMode, final = encoded
+                let project = project, pool = pool, range = range, plan = plan, safe = Self.pluginSafeMode, final = encoded
                 return try await Task.detached(priority: .userInitiated) {
                     try LoudnessDelivery.deliver(target, encode: { gain in
                         var p = project
@@ -651,15 +686,16 @@ final class EditorSession {
                     }, measure: { EncodedWriter.measureWritten(url, scratch: FileManager.default.temporaryDirectory) })
                 }.value
             }
+            let (thePlan, theRange, final) = (plan, range, encoded)
             try await Task.detached(priority: .userInitiated) {
-                try EncodedWriter.export(plan, range: range, to: url, options: encoded) { p in progress(p); return true }
+                try EncodedWriter.export(thePlan, range: theRange, to: url, options: final) { p in progress(p); return true }
             }.value
             return nil
         }
         var wav = WAVWriter.Options(encoding: options.encoding, channels: project.channels, sampleRate: project.sampleRate,
                                     dither: options.dither)
-        let first = project.sources.first?.info
-        if range.lowerBound == 0 {
+        let first = self.project.sources.first?.info
+        if asked.lowerBound == 0 {
             if var bext = first?.bext {
                 bext.codingHistory += "A=PCM,F=\(Int(project.sampleRate)),W=\(options.encoding == .int16 ? 16 : (options.encoding == .int24 ? 24 : 32)),T=Jammer\r\n"
                 bext.loudnessValue = nil
@@ -669,16 +705,18 @@ final class EditorSession {
             }
             wav.ixml = first?.ixml
         }
-        wav.markers = project.markers.filter { range.contains($0.position) }
-            .map { FileMarker(position: $0.position - range.lowerBound, length: $0.length, name: $0.cueLabel) }
+        // Markers follow the audio to the new rate.
+        wav.markers = self.project.markers.filter { asked.contains($0.position) }
+            .map { FileMarker(position: Frame((Double($0.position - asked.lowerBound) * scale).rounded()), length: Frame((Double($0.length) * scale).rounded()), name: $0.cueLabel) }
         let finalOptions = wav
+        let (thePlan, theRange) = (plan, range)
         let dithered = try await Task.detached(priority: .userInitiated) { () -> Int64 in
             let writer = try WAVWriter(url: url, options: finalOptions)
-            let total = Double(range.count)
+            let total = Double(theRange.count)
             var done = 0.0
-            try plan.render(range) { block in
+            try thePlan.render(theRange) { block in
                 try writer.write(block)
-                done += Double(block.count / plan.channels)
+                done += Double(block.count / thePlan.channels)
                 progress(done / total)
             }
             try writer.finish()
@@ -692,4 +730,6 @@ final class EditorSession {
 
     /// See `export`: "none", "tpdf" or "not_needed" for the last WAV written.
     var lastExportDither = "none"
+    /// The sample rate of the last file written.
+    var lastExportSampleRate = 0.0
 }

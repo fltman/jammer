@@ -19,6 +19,9 @@ let releaseHasDereverb = features.split(separator: "\n").contains { $0.replacing
 let dereverbSettings: [SwiftSetting] = [.define("JAMMER_DEREVERB", .when(configuration: .debug))]
     + (releaseHasDereverb ? [.define("JAMMER_DEREVERB", .when(configuration: .release))] : [])
 
+// r8brain-free-src (MIT) for sample rate conversion, from scripts/fetch-r8brain.sh.
+let hasR8Brain = FileManager.default.fileExists(atPath: Context.packageDirectory + "/Vendor/r8brain/CDSPResampler.h")
+
 // The plugin-format SDKs (MIT), from scripts/fetch-plugin-sdks.sh.
 let hasCLAP = FileManager.default.fileExists(atPath: Context.packageDirectory + "/Vendor/clap/include/clap/clap.h")
 
@@ -81,6 +84,16 @@ let package = Package(
     ],
     cxxLanguageStandard: .cxx20
 )
+
+if hasR8Brain {
+    package.products.append(.library(name: "JammerResample", targets: ["JammerResample"]))
+    package.targets += [
+        // The one translation unit that includes r8brain's headers (header-only, with its Ooura FFT).
+        .target(name: "JammerResampleC", cxxSettings: [.headerSearchPath("../../Vendor/r8brain"), .unsafeFlags(["-w"])]),
+        .target(name: "JammerResample", dependencies: ["JammerResampleC"]),
+        .testTarget(name: "JammerResampleTests", dependencies: ["JammerResample", "JammerCore"]),
+    ]
+}
 
 // Scanning VST 3 and CLAP plugins in a helper process, so a plugin that crashes or hangs
 // while it is loaded can't touch the app.
