@@ -507,7 +507,7 @@ enum AgentRouter {
             case ["stop"]:
                 try only("POST")
                 session.stop()
-                return .json(["playing": false, "playhead": seconds(session, session.playhead)])
+                return .json(["playing": false, "playhead": seconds(session, session.playhead), "underruns": session.underruns])
             default:
                 throw APIError.notFound("No such path: \(r.path). See \(AgentAPI.guidePath).")
             }
@@ -524,7 +524,7 @@ enum AgentRouter {
         s.checkLink()
         return ["id": s.agentID, "name": s.name, "duration": seconds(s, s.project.length), "frames": s.project.length,
          "sampleRate": s.project.sampleRate, "channels": s.project.channels, "tracks": s.project.tracks.count,
-         "edited": s.document?.isDocumentEdited ?? false, "playing": s.isPlaying,
+         "edited": s.document?.isDocumentEdited ?? false, "playing": s.isPlaying, "underruns": s.underruns,
          "linkedFile": s.linkedFile.map { ["name": $0.fileName, "format": $0.format.rawValue, "requester": $0.requester, "available": true] as [String: Any] } as Any?
              ?? s.lostLink.map { ["name": $0.name, "requester": $0.requester, "available": false, "reason": $0.why] as [String: Any] } as Any? ?? NSNull(),
          // The document the user is looking at (restored windows can be many; SIBLINGS.md §1).

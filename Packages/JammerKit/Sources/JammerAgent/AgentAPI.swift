@@ -380,7 +380,7 @@ public enum AgentAPI {
         | GET | `/api/v1/jobs/{id}` | A job's state. |
         | DELETE | `/api/v1/jobs/{id}` | Cancels a job. |
         | POST | `/api/v1/documents/{id}/play` | Starts playback in the document's window, from `{"at": seconds}` or the playhead. Only works when the window is visible. |
-        | POST | `/api/v1/documents/{id}/stop` | Stops playback. |
+        | POST | `/api/v1/documents/{id}/stop` | Stops playback. Answers `underruns`: the times since playback started that the sound card asked for audio and not enough was rendered, each a gap that was heard. A document's summary (`GET /api/v1/status`, `GET /api/v1/documents`) has the same count while it plays. 0 is what it should be. |
         | POST | `/api/v1/uploads` | Starts an upload for a big file. Answers `{"upload": {"id": "…", "size": 0}}`. |
         | PUT | `/api/v1/uploads/{id}?offset=N` | Appends a chunk (≤ 256 MB). `offset` must equal the bytes received so far. |
         | GET | `/api/v1/uploads/{id}` | How many bytes have arrived. |

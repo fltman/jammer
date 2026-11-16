@@ -455,10 +455,17 @@ final class EditorSession {
 
     func togglePlay() { isPlaying ? stop() : play() }
 
+    /// Times, since playback last started, that the sound card asked for audio and there wasn't enough
+    /// rendered: each is a gap that was heard. (The engine counts nothing finer: a block that was late
+    /// but in time for the card isn't heard and isn't counted.)
+    var underruns: Int64 { max(0, output.underruns - underrunsAtStart) }
+    @ObservationIgnored private var underrunsAtStart: Int64 = 0
+
     func play(from frame: Frame? = nil) {
         var start = frame ?? (selection?.lowerBound ?? playhead)
         if start >= project.length { start = 0 }
         do {
+            underrunsAtStart = output.underruns
             try output.play(from: start)
             isPlaying = true
             playhead = start
