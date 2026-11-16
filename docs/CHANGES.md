@@ -4,6 +4,8 @@ Not a list of commits: what behaves differently from before, for a user, an agen
 
 ## 2026-11-16
 
+- **Every plan now goes through the mixer graph** (`docs/MIXER.md`). The sound is the same, sample for sample (21 kinds of project compared, and the whole suite both ways). **What an agent reads changes**: in `GET …/mixer`, `totalLatencySamples` now includes the tracks' own plugins, and a track's `compensationSamples` is the wait added to it; before, both spoke of buses only. A document with a limiter on one track and nothing else used to say 0 and now says that limiter's look-ahead.
+
 - **File › Storage…**, the first place where Jämmer moves files away, built to the rule that the user's data is never removed:
   - Only files Jämmer made itself in its media folder (effects, repairs, frozen strips, stems) and noted in a register there (`.jammer-media-register.json`, written whole, in the folder so it follows it) can be offered. A file without a row is an original and is never touched; that includes derived files from before the register, which are shown in a group of their own with their sizes. Decoded or resampled copies of imported files are treated as originals. A register that is missing or can't be read means nothing can be chosen, and a broken one is not written over.
   - "No longer used" means: no project that can be read uses it now or at any step of its history, on any branch, and no project that has used it is out of reach. Known projects are the open ones, the recent ones, autosaved ones, and those the register has seen use a file. A project that can't be read makes its files "can't tell", not free. Only an untitled document that is no longer open, and an autosaved one whose file is gone, are taken as gone for certain.

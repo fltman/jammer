@@ -87,7 +87,21 @@ Phase 3, part 2. The sketch as the coordinator approved it on 2026-11-16, with t
 - The whole test suite, 425 tests, passes with `JAMMER_GRAPH_FOR_ALL=1`.
 - Cost, medians and means on a Mac that was not quiet (load 8): without plugins the same within what could be told apart (64 stereo tracks 0.195 against 0.192 ms a block, mean); with plugins about half (64 tracks × 2 plugins and 8 buses × 2: median 2.67 against 1.33 ms; 64 × 2 without buses: 2.61 against 1.20 ms). The worst block is not measured.
 - What changes for an agent when it is switched on: `totalLatencySamples` then includes the tracks' own plugins (they are no longer made up for inside each track), and a track's `compensationSamples` is the wait added to it for that reason. The mix is on the sample either way.
-- To do before the older paths are removed: the worst block on a quiet Mac, both ways; then switch on, run everything again, and delete `renderRouted`, the plain loop in `Renderer::render` and `Chain::process`.
+- **The worst block, measured on a quiet Mac, 2026-11-16** (load 3.90 at the start and 2.68 at the end, in a window Anders gave; one run; 936 blocks of 512 frames, Apple's low-pass and limiter; `scratch quiet-measure.sh`, the figures from `MixerBaselineTests/withPlugins`). No block was over its 10.7 ms by either way.
+
+  | Tracks × plugins, buses × plugins | older paths: median / worst | graph: median / worst | first block after a seek, older / graph |
+  |---|---|---|---|
+  | 8 × 1, 2 × 2 | 0.308 / 0.386 ms | 0.121 / 0.322 ms | 9.2 / 2.5 ms |
+  | 16 × 2, 4 × 2 | 0.692 / 0.754 | 0.317 / 0.362 | 20.9 / 7.0 |
+  | 32 × 2, 8 × 2 | 1.399 / 3.373 | 0.626 / 0.681 | 41.8 / 13.9 |
+  | 64 × 2, 8 × 2 (144 units) | 2.639 / 3.028 | 1.152 / 3.017 | 80.5 / 26.5 |
+  | 64 × 0, 8 × 2 | 0.339 / 0.379 | 0.339 / 0.372 | 4.9 / 4.9 |
+  | 64 × 2, no buses | 2.599 / 8.273 | 1.004 / 1.077 | 20.6 / 21.6 |
+
+  The graph's worst block is no worse in any row, and its median is the same or about half. The older paths also had single blocks far over their median (8.3 ms against a median of 2.6 with 64 × 2 and no buses; 3.4 against 1.4 with 32 × 2), which the graph did not: a reason for the move beside the cost. The heaviest case takes 3.0 ms of 10.7, 28 % of the block's time, with these light plugins. A third-party plugin can cost many times more; this says what Jämmer's own part costs.
+- **Playback in the app, the same window** (the paths as they shipped then): 32 tracks × 2 plugins into 8 buses × 2, twice 20 s with the output silent: no gaps counted either time, and what went to the device measured −8.27 dB, the same as the render.
+- So both conditions hold: the same samples, and a worst block that is no worse. The graph is switched on for every plan from this commit on (`PlanCompiler.graphForAll` is true; `JAMMER_GRAPH_FOR_ALL=0` in a debug build's or a test run's environment goes back to the older paths while they exist). With it on: the whole suite green (and green again with `JAMMER_GRAPH_FOR_ALL=0`); playback in the app of the same 32 × 2 into 8 × 2, twice 20 s, on a Mac that was busy this time (load 14): no gaps counted, −8.27 dB out and −8.27 dB rendered, the figure the older paths gave.
+- Next, in a commit of its own so that it can be taken back by itself: compare a bounce through the graph with one through the older paths, bit for bit, for the real projects on this Mac (opened in copies), and then remove `renderRouted`, the plain loop in `Renderer::render` and `Chain::process`.
 
 **Still to do in the mixer:** move every plan to the graph (agreed 2026-11-16, with its conditions), the measurements that wait for a quiet Mac, sidechain in the app, the assistant's actions with their evaluation.
 

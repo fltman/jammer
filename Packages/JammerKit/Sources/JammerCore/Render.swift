@@ -167,15 +167,18 @@ public enum PlanCompiler {
     /// dry mix (what the bounced effects and restoration work from).
     /// `masterMargin`: how far under its ceiling the master's limiter aims (dB); an export that measured
     /// its file over the ceiling renders again with more.
-    /// Every plan through the mixer graph (as plans with a sidechain key already go), instead of the
-    /// older paths. Off until the two have been shown to agree; a test can ask for either.
+    /// Every plan goes through the mixer graph (as plans with a sidechain key always did), instead of
+    /// the older paths. A test can ask for either while both exist.
     nonisolated(unsafe) public static var graphForAll: Bool = {
         // `JAMMER_GRAPH_FOR_ALL=1` in the environment of a debug build or a test run: the whole test
         // suite can then be run through the graph, to see that every test still holds.
+        // On since 2026-11-16 (docs/MIXER.md: the same samples as the older paths, and a worst block that
+        // is no worse). `JAMMER_GRAPH_FOR_ALL=0` in a debug build's or a test run's environment goes back
+        // to the older paths for as long as they are still in the engine.
         #if DEBUG
-        ProcessInfo.processInfo.environment["JAMMER_GRAPH_FOR_ALL"] != nil
+        ProcessInfo.processInfo.environment["JAMMER_GRAPH_FOR_ALL"] != "0"
         #else
-        false
+        true
         #endif
     }()
 
