@@ -56,6 +56,18 @@ public final class AudioOutput {
     public var playhead: Frame { jm_engine_playhead(engine) }
     public var isPlaying: Bool { jm_engine_is_playing(engine) }
     public var underruns: Int64 { jm_engine_underruns(engine) }
+    /// Test copies: nothing reaches the device, after the meters have seen it.
+    public func setSilent(_ silent: Bool) { jm_engine_set_silent(engine, silent) }
+    /// Test copies: counts what is handed to the device (before the volume) from now on.
+    public func startTap() { jm_engine_tap(engine, true) }
+    /// The device frames handed over since `startTap`, and their level (RMS over all channels, dB; nil for silence).
+    public var tapped: (frames: Int64, rmsDB: Double?) {
+        var e = 0.0
+        var n: Int64 = 0
+        jm_engine_tap_read(engine, &e, &n)
+        guard n > 0, e > 0 else { return (n, nil) }
+        return (n, 10 * log10(e / Double(n * Int64(channels))))
+    }
     public func setGain(_ gain: Float) { jm_engine_set_gain(engine, gain) }
     public func takePeak(channel: Int) -> Float { jm_engine_take_peak(engine, Int32(channel)) }
 

@@ -142,6 +142,12 @@ struct Engine {
     std::atomic<uint64_t> ackSeq{0};
     std::atomic<int64_t> playhead{0};
     std::atomic<int64_t> underruns{0};
+    /// For test copies of the app: nothing reaches the device (set after all metering), and what would
+    /// have is counted, so a test can measure what was "heard" without a sound in the room.
+    std::atomic<bool> silent{false};
+    std::atomic<bool> tap{false};
+    std::atomic<double> tapEnergy{0.0};
+    std::atomic<int64_t> tapFrames{0};
     std::atomic<float> gain{1.0f};
     std::atomic<float> peaks[kMaxChannels];
     std::atomic<uint64_t> renderedSinceAck{0};
@@ -285,6 +291,17 @@ void pull(Engine &e, const Out *outs, int32_t count, int32_t frames) JM_NONBLOCK
         }
         const float g = e.gain.load(std::memory_order_relaxed);
         const int32_t ec = e.channels;
+        const bool silent = e.silent.load(std::memory_order_relaxed);
+        if (e.tap.load(std::memory_order_relaxed) && n > 0) {
+            // What is handed over, before the volume: the sum of squares of every channel's samples.
+            double sum = 0.0;
+            for (int64_t i = 0; i < n; ++i) {
+                const float *frame = &e.ringData[((r + uint64_t(i)) & e.mask) * uint64_t(ec)];
+                for (int32_t ch = 0; ch < ec; ++ch) sum += double(frame[ch]) * double(frame[ch]);
+            }
+            e.tapEnergy.store(e.tapEnergy.load(std::memory_order_relaxed) + sum, std::memory_order_relaxed);
+            e.tapFrames.store(e.tapFrames.load(std::memory_order_relaxed) + n, std::memory_order_relaxed);
+        }
         float peaks[kMaxChannels] = {};
         for (int32_t k = 0; k < count; ++k) {
             float *o = outs[k].base;
@@ -294,7 +311,7 @@ void pull(Engine &e, const Out *outs, int32_t count, int32_t frames) JM_NONBLOCK
                 float peak = 0.0f;
                 for (int64_t i = 0; i < n; ++i) {
                     const float v = e.ringData[((r + uint64_t(i)) & e.mask) * uint64_t(ec) + uint64_t(ch)] * g;
-                    o[i * stride] = v;
+                    o[i * stride] = silent ? 0.0f : v;
                     const float a = v < 0 ? -v : v;
                     if (a > peak) peak = a;
                 }
@@ -373,6 +390,17 @@ void jm_engine_stop(jm_engine *engine) { engine->e.playing.store(false, std::mem
 bool jm_engine_is_playing(const jm_engine *engine) { return engine->e.playing.load(std::memory_order_acquire); }
 int64_t jm_engine_playhead(const jm_engine *engine) { return engine->e.playhead.load(std::memory_order_relaxed); }
 void jm_engine_set_gain(jm_engine *engine, float gain) { engine->e.gain.store(gain, std::memory_order_relaxed); }
+void jm_engine_set_silent(jm_engine *engine, bool silent) { engine->e.silent.store(silent, std::memory_order_relaxed); }
+void jm_engine_tap(jm_engine *engine, bool on) {
+    engine->e.tap.store(false, std::memory_order_relaxed);
+    engine->e.tapEnergy.store(0.0, std::memory_order_relaxed);
+    engine->e.tapFrames.store(0, std::memory_order_relaxed);
+    engine->e.tap.store(on, std::memory_order_relaxed);
+}
+void jm_engine_tap_read(const jm_engine *engine, double *energy, int64_t *frames) {
+    *energy = engine->e.tapEnergy.load(std::memory_order_relaxed);
+    *frames = engine->e.tapFrames.load(std::memory_order_relaxed);
+}
 int64_t jm_engine_underruns(const jm_engine *engine) { return engine->e.underruns.load(std::memory_order_relaxed); }
 
 float jm_engine_take_peak(jm_engine *engine, int32_t channel) {

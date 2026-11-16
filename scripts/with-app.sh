@@ -20,7 +20,11 @@ app="${JAMMER_APP_BUNDLE:-$root/build/dd/Build/Products/Debug/Jammer.app}/Conten
 # window restoration is off unless the check is about just that (JAMMER_RESTORE=1).
 restore=()
 [[ -n "${JAMMER_RESTORE:-}" ]] || restore=(-ApplePersistenceIgnoreState YES)
-env -u OPENROUTER_API_KEY ${=JAMMER_WRAP:-} "$app" $restore ${=JAMMER_ARGS:-} >"${JAMMER_LOG:-/dev/null}" 2>&1 &
+# A test copy makes no sound: the engine plays, meters and counts as usual and hands the device silence
+# (debug builds; see EditorSession). A check that really needs sound in the room asks for it: JAMMER_SOUND=1.
+quiet=(-silentOutput YES)
+[[ -n "${JAMMER_SOUND:-}" ]] && quiet=()
+env -u OPENROUTER_API_KEY ${=JAMMER_WRAP:-} "$app" $restore $quiet ${=JAMMER_ARGS:-} >"${JAMMER_LOG:-/dev/null}" 2>&1 &
 pid=$!
 # On the way out the test copy is stopped, and (unless the check is about restoration) the windows it
 # would bring back next time are forgotten: the debug copy's saved state, nothing of the real app's.

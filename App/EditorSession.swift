@@ -70,6 +70,12 @@ final class EditorSession {
         plan = PlanCompiler.compile(project, pool: pool)
         output.setPlan(plan)
         output.setGain(volume)
+        #if DEBUG
+        // A test copy is started with `-silentOutput YES` (scripts/with-app.sh always passes it): the
+        // engine plays, meters and counts as usual and hands the device silence. What it would have
+        // handed over is counted instead, so "what was heard" can be measured without a sound.
+        if Self.silentOutput { output.setSilent(true) }
+        #endif
         history = try? History(root: project)
         loadPeaks()
         syncInserts()
@@ -455,6 +461,14 @@ final class EditorSession {
 
     func togglePlay() { isPlaying ? stop() : play() }
 
+    #if DEBUG
+    static let silentOutput = UserDefaults.standard.bool(forKey: "silentOutput")
+    /// Where playback last started (project frames), for comparing what went out with a render.
+    private(set) var lastPlayStart: Frame = 0
+    /// What the engine handed to the device since playback last started.
+    var tapped: (frames: Int64, rmsDB: Double?) { output.tapped }
+    #endif
+
     /// The strips that are soloed: a way of listening, not part of the document. Not saved, not undone,
     /// and nothing that is exported, measured or bounced is changed by it. Ids of strips that are gone
     /// are dropped when it is read.
@@ -482,6 +496,10 @@ final class EditorSession {
         if start >= project.length { start = 0 }
         do {
             underrunsAtStart = output.underruns
+            #if DEBUG
+            lastPlayStart = start
+            output.startTap()
+            #endif
             try output.play(from: start)
             isPlaying = true
             NotificationCenter.default.post(name: PulsingGlow.transportChanged, object: nil)

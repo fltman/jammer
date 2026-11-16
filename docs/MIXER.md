@@ -53,7 +53,7 @@ Phase 3, part 2. The sketch as the coordinator approved it on 2026-11-16, with t
 
 - Tested (`SoloTests`): one track, two, a bus reached by output, through another bus and by a send; buses are never muted by solo; a muted track stays muted; ids that are no strips count for nothing; the document is untouched.
 - In the app: with the music soloed the measurement was the same (−15.42 LUFS) and the export the same file, byte for byte, as before; an edit and its undo left the solo on; an id that is no strip got 404; the window's title read "Solo: Music (listening only; exports are not affected)"; the Solo box found by its id and clicked; the sheet looked at as a picture.
-- Not verified: what comes out of the speakers. That playback uses the listening copy is in the code and the copy is tested; nobody has heard it.
+- What goes to the device, measured without a sound: a test copy of the app (debug, `-silentOutput YES`, which `scripts/with-app.sh` always passes) hands the device silence and counts what it would have handed over. Three seconds played from 3.0 s, the level that went out beside the same stretch rendered offline as listened to and as the document: no solo −13.76 / −13.76 / −13.76 dB; the music soloed −14.27 / −14.27 / −13.75; the speech soloed −23.32 / −23.32 / −13.75; both soloed −13.74 / −13.74 / −13.74; everything muted, silence. (`GET …/debug/heard`, debug builds only.) That the device then really gets zeros is one line in the device callback, read and not measured.
 
 Not built: sidechain keys (design agreed 2026-11-16: with a key in the project every strip is a node in one graph; own test unit first, a real plugin before users see it), freeze.
 

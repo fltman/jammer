@@ -507,6 +507,23 @@ enum AgentRouter {
                 let obj = try json(r)
                 session.play(from: (obj["at"] as? Double).map { session.project.frames($0) })
                 return .json(["playing": true, "playhead": seconds(session, session.playhead)])
+            #if DEBUG
+            case ["debug", "heard"]:
+                // Debug builds only: the level of what the engine handed to the device since playback last
+                // started, beside the level of the same stretch rendered offline, as it is listened to
+                // (solo applied) and as the document is (solo ignored). No one has to listen.
+                try only("GET")
+                let from = session.lastPlayStart, to = max(from + 1, min(session.playhead, session.project.length))
+                let heard = session.tapped
+                let listening = session.project.listening(solo: session.solo), document = session.project, pool = session.pool
+                let (a, b) = await Task.detached(priority: .userInitiated) {
+                    (LoudnessMeter.measure(PlanCompiler.mixBlocking(listening, pool: pool), from..<to).rms,
+                     LoudnessMeter.measure(PlanCompiler.mixBlocking(document, pool: pool), from..<to).rms)
+                }.value
+                return .json(["heard": ["deviceFrames": heard.frames, "rmsDB": heard.rmsDB as Any? ?? NSNull(), "silentOutput": EditorSession.silentOutput] as [String: Any],
+                              "range": ["start": seconds(session, from), "end": seconds(session, to)],
+                              "renderedAsListened": ["rmsDB": a as Any? ?? NSNull()], "renderedAsDocument": ["rmsDB": b as Any? ?? NSNull()]])
+            #endif
             case ["solo"]:
                 // Listening only: not a step, not undone, not saved, and nothing exported or measured changes.
                 try only("POST")

@@ -184,6 +184,12 @@ void jm_engine_set_gain(jm_engine *_Nonnull engine, float gain);
 float jm_engine_take_peak(jm_engine *_Nonnull engine, int32_t channel);
 /// Times the device asked for audio the worker hadn't rendered yet.
 int64_t jm_engine_underruns(const jm_engine *_Nonnull engine);
+/// For test copies of the app. Silent: the device gets zeros, after the meters have seen the audio.
+/// The tap counts what is handed to the device before the volume (the sum of squares over every channel,
+/// and the device frames), from when it is switched on; switching it on or off starts the count afresh.
+void jm_engine_set_silent(jm_engine *_Nonnull engine, bool silent);
+void jm_engine_tap(jm_engine *_Nonnull engine, bool on);
+void jm_engine_tap_read(const jm_engine *_Nonnull engine, double *_Nonnull energy, int64_t *_Nonnull frames);
 /// True once the audio thread has taken the latest play request (the seek has happened).
 bool jm_engine_seek_settled(const jm_engine *_Nonnull engine);
 /// Blocks until the worker has rendered ahead (or `timeout_ms` passes). For tests.
