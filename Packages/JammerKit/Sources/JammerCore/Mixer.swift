@@ -204,7 +204,52 @@ public enum Mixer {
 extension Project {
     /// True when the project uses anything of the mixer. Such a project is saved as format 2, which a
     /// Jämmer from before the mixer refuses to open instead of playing every track straight out.
-    public var usesMixer: Bool { !buses.isEmpty || !vcas.isEmpty || !master.isDefault || tracks.contains { $0.pan != 0 || $0.output != nil || !$0.sends.isEmpty || $0.vca != nil } }
+    public var usesMixer: Bool {
+        !buses.isEmpty || !vcas.isEmpty || !master.isDefault
+            || tracks.contains { $0.pan != 0 || $0.output != nil || !$0.sends.isEmpty || $0.vca != nil || $0.inserts.contains { $0.key != nil } }
+    }
+
+    /// Whether the signal of `from` (a track or a bus) reaches `to`: through outputs, sends, and the keys
+    /// that plugins listen to. A key from `from` to a plugin on `to` would close a loop exactly when
+    /// `to` already reaches `from`.
+    public func reaches(from: UUID, to: UUID) -> Bool {
+        var seen = Set<UUID>(), queue = [from]
+        while let id = queue.popLast() {
+            if id == to { return true }
+            guard seen.insert(id).inserted else { continue }
+            if let t = tracks.first(where: { $0.id == id }) { queue += [t.output].compactMap { $0 } + t.sends.map(\.to) }
+            if let b = bus(id) { queue += [b.output].compactMap { $0 } + b.sends.map(\.to) }
+            // Everything that listens to this strip.
+            for t in tracks where t.inserts.contains(where: { $0.key == id }) { queue.append(t.id) }
+            for b in buses where b.inserts.contains(where: { $0.key == id }) { queue.append(b.id) }
+        }
+        return false
+    }
+
+    /// True when some strip reaches itself (only possible through a key; routes and sends alone are
+    /// refused where they are set).
+    public var hasKeyLoop: Bool {
+        let listening = tracks.filter { $0.inserts.contains { $0.key != nil } }.map(\.id) + buses.filter { $0.inserts.contains { $0.key != nil } }.map(\.id)
+        for strip in listening {
+            let inserts = self.strip(strip)?.inserts ?? []
+            for source in inserts.compactMap(\.key) where source == strip || reaches(from: strip, to: source) { return true }
+        }
+        return false
+    }
+
+    /// Gives the plugin `insert` on `strip` (a track or a bus) a key, or (`nil`) takes it away. Refused
+    /// when the source isn't there, is the strip itself, or would be fed by what it is to control.
+    public mutating func setKey(strip: UUID, insert: UUID, key: UUID?) throws {
+        guard strip != Master.id, var list = self.strip(strip)?.inserts, let i = list.firstIndex(where: { $0.id == insert }) else {
+            throw Mixer.Failure.noStrip(strip.uuidString)
+        }
+        if let key {
+            guard tracks.contains(where: { $0.id == key }) || bus(key) != nil else { throw Mixer.Failure.noStrip(key.uuidString) }
+            guard key != strip, !reaches(from: strip, to: key) else { throw Mixer.Failure.loop(self.strip(strip)?.name ?? "the strip") }
+        }
+        list[i].key = key
+        setInserts(list, on: strip)
+    }
 
     public func vca(_ id: UUID) -> VCA? { vcas.first { $0.id == id } }
 
@@ -375,6 +420,7 @@ extension Project {
                 sends.append(Send(to: to, gainDB: gainDB ?? 0, pre: pre ?? false))
             }
         }
+        let unchanged = self
         if let t = tracks.firstIndex(where: { $0.id == from }) {
             try change(&tracks[t].sends, name: tracks[t].name)
         } else if let b = buses.firstIndex(where: { $0.id == from }) {
@@ -383,6 +429,8 @@ extension Project {
         } else {
             throw Mixer.Failure.noStrip(from.uuidString)
         }
+        // A send can close a loop through a key (a plugin that listens to what this would now feed).
+        if !remove, hasKeyLoop { let name = strip(from)?.name ?? "the strip"; self = unchanged; throw Mixer.Failure.loop(name) }
     }
 
     @discardableResult
@@ -418,7 +466,9 @@ extension Project {
                 guard bus(to) != nil else { throw Mixer.Failure.noBus(to.uuidString) }
                 guard !loops(bus: id, into: to) else { throw Mixer.Failure.loop(buses[i].name) }
             }
+            let before = buses[i].output
             buses[i].output = output
+            if hasKeyLoop { buses[i].output = before; throw Mixer.Failure.loop(buses[i].name) }
         }
     }
 
@@ -437,7 +487,9 @@ extension Project {
             for t in tracks.indices where tracks[t].output == id { tracks[t].output = reroute }
             for o in buses.indices where buses[o].output == id { buses[o].output = reroute }
         }
-        // Sends to a bus that is gone go with it.
+        // Sends to a bus that is gone go with it, and so do the keys taken from it.
+        for t in tracks.indices { for i in tracks[t].inserts.indices where tracks[t].inserts[i].key == id { tracks[t].inserts[i].key = nil } }
+        for o in buses.indices { for i in buses[o].inserts.indices where buses[o].inserts[i].key == id { buses[o].inserts[i].key = nil } }
         for t in tracks.indices { tracks[t].sends.removeAll { $0.to == id } }
         for o in buses.indices { buses[o].sends.removeAll { $0.to == id } }
         buses.removeAll { $0.id == id }
@@ -452,7 +504,10 @@ extension Project {
         }
         if let output {
             if let to = output, bus(to) == nil { throw Mixer.Failure.noBus(to.uuidString) }
+            let before = tracks[t].output
             tracks[t].output = output
+            // A plugin on this track may listen to a bus the track would now feed.
+            if hasKeyLoop { tracks[t].output = before; throw Mixer.Failure.loop(tracks[t].name) }
         }
     }
 }

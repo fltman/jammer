@@ -53,6 +53,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Lasso and brush can be left out of a build (Config/Features.xcconfig): only the box then.
         Operations.spectralFreeform = false
         #endif
+        #if DEBUG
+        // Sidechain keys are in debug builds only until a real plugin with a sidechain input has been
+        // through them (docs/RELEASE.md, rehearsal item 7).
+        Operations.sidechain = true
+        #endif
         NSApp.mainMenu = buildMenu()
         // Our own "open documents" handler: AppKit hands document-based apps' opens straight
         // to the document controller, so this is where the sending app can be seen.

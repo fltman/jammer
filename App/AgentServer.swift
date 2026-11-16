@@ -589,6 +589,17 @@ enum AgentRouter {
 
     /// The mixer as it is: every track and bus with its level, pan, mute and where it goes ("master" for
     /// the output), and for each bus what comes into it.
+    /// Sidechain, in builds that have it: the strip the plugin listens to, whether the running plugin has
+    /// the input, and, when it has one that can't be fed here, why.
+    static func keyFields(_ s: EditorSession, _ i: Insert, into d: inout [String: Any]) {
+        guard Operations.sidechain else { return }
+        d["key"] = i.key?.uuidString ?? NSNull()
+        if let live = s.inserts.instance(i.id) {
+            d["hasKeyInput"] = live.hasKeyInput
+            if let why = live.keyRefusal { d["keyRefusal"] = why }
+        }
+    }
+
     /// What is soloed and which tracks are heard because of it. Always says that it is listening only.
     static func soloJSON(_ s: EditorSession) -> [String: Any] {
         let on = s.solo
@@ -602,7 +613,13 @@ enum AgentRouter {
         // Latency, in samples: a strip's own plugins, and the delay the mixer adds to its way out so that
         // it lines up with the longest path it meets. The mix itself comes out on the sample.
         func own(_ inserts: [Insert]) -> Int64 { inserts.filter { !$0.bypass }.reduce(0) { $0 + (session.inserts.instance($1.id)?.latency ?? 0) } }
-        func plugins(_ inserts: [Insert]) -> [[String: Any]] { inserts.map { ["id": $0.id.uuidString, "name": $0.name, "plugin": $0.plugin.description, "bypass": $0.bypass] } }
+        func plugins(_ inserts: [Insert]) -> [[String: Any]] {
+            inserts.map { i in
+                var d: [String: Any] = ["id": i.id.uuidString, "name": i.name, "plugin": i.plugin.description, "bypass": i.bypass]
+                keyFields(session, i, into: &d)
+                return d
+            }
+        }
         func sends(_ s: [Send]) -> [[String: Any]] { s.map { ["to": $0.to.uuidString, "gainDB": $0.gainDB, "pre": $0.pre] } }
         // A strip's fader and mute with its VCA's added: what is heard. Its own `gainDB` and `muted` stay what they are.
         func heard(_ gainDB: Double, _ muted: Bool, _ vca: UUID?) -> [String: Any] {
@@ -639,6 +656,7 @@ enum AgentRouter {
                 "inserts": t.inserts.map { i -> [String: Any] in
                     var d: [String: Any] = ["id": i.id.uuidString, "plugin": i.plugin.description, "name": i.name, "bypass": i.bypass]
                     if let f = s.inserts.failure(i.id) { d["error"] = ["reason": f.reason, "message": f.localizedDescription] }
+                    keyFields(s, i, into: &d)
                     return d
                 },
                 "clips": t.clips.map { c -> [String: Any] in

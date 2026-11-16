@@ -1,4 +1,5 @@
-// The mixer when a bus has plugins: delay compensation across buses and sends. See Graph in internal.hpp.
+// The mixer when it has state: plugins on buses, a master that does something, or a sidechain key.
+// Delay compensation across every path. See Graph in internal.hpp.
 
 #include "internal.hpp"
 
@@ -8,21 +9,26 @@
 namespace jm {
 
 Graph::Graph(const Plan &plan) : channels_(plan.channels) {
-    const size_t nb = plan.buses.size();
+    const size_t nt = plan.tracks.size(), nb = plan.buses.size();
+    keyed_ = !plan.keys.empty();
     busLatency.assign(nb, 0);
     for (size_t b = 0; b < nb; ++b) {
         if (!plan.buses[b].chain) continue;
         busLatency[b] = plan.buses[b].chain->latency;
         preroll_ = std::max(preroll_, plan.buses[b].chain->preroll);
     }
+    // With a key the tracks' chains run as streams here too, and need their run-in from here.
+    if (keyed_)
+        for (const Track &t : plan.tracks)
+            if (t.chain) preroll_ = std::max(preroll_, t.chain->preroll);
     for (const auto &c : {plan.masterChain, plan.masterLimiter}) {
         if (!c) continue;
         masterLatency += c->latency;
         preroll_ = std::max(preroll_, c->preroll);
     }
     auto valid = [nb](int32_t to) { return to >= 0 && size_t(to) < nb ? to : -1; };
-    trackEdges_.resize(plan.tracks.size());
-    for (size_t t = 0; t < plan.tracks.size(); ++t) {
+    trackEdges_.resize(nt);
+    for (size_t t = 0; t < nt; ++t) {
         const Track &track = plan.tracks[t];
         trackEdges_[t].push_back(Edge(valid(track.bus), 1.0f, false, true));
         for (const Send &s : track.sends)
@@ -35,16 +41,46 @@ Graph::Graph(const Plan &plan) : channels_(plan.channels) {
         for (const Send &s : bus.sends)
             if (valid(s.bus) >= 0 && size_t(s.bus) != b) busEdges_[b].push_back(Edge(s.bus, s.gain, s.pre, false));
     }
-    // How late the signal is where it arrives at each bus, and where it leaves: the longest path in.
-    // `busOrder` has every bus before the ones it feeds, so one pass is enough. A track leaves on time:
-    // its own chain makes up for its plugins by itself.
-    std::vector<int64_t> in(nb, 0), outLat(nb, 0);
+    // Keys: an edge from the source strip, after its fader, to one unit of the listening strip's chain.
+    keyBuffers_.resize(nt + nb);
+    feeds_.resize(nt + nb);
+    for (const Plan::Key &k : plan.keys) {
+        const size_t from = size_t(k.from) + (k.fromBus ? nt : 0), to = size_t(k.to) + (k.toBus ? nt : 0);
+        Edge e(-1, 1.0f, false, false);
+        e.keyNode = int32_t(to);
+        e.keyUnit = k.unit;
+        (k.fromBus ? busEdges_[size_t(k.from)] : trackEdges_[size_t(k.from)]).push_back(std::move(e));
+        keyBuffers_[to].push_back(KeyBuffer{k.unit, std::vector<float>(size_t(kQuantum * channels_), 0.0f)});
+        (void)from;
+    }
+    for (size_t n = 0; n < keyBuffers_.size(); ++n)
+        for (const KeyBuffer &kb : keyBuffers_[n]) feeds_[n].push_back(Chain::KeyFeed{kb.unit, kb.data.data()});
+
+    // The order the strips are worked through in. Without a key: the tracks, then the buses as finalize
+    // ordered them, exactly as before. With one: the order finalize found for all of them.
+    if (keyed_) {
+        order_ = plan.nodeOrder;
+    } else {
+        for (size_t t = 0; t < nt; ++t) order_.push_back(int32_t(t));
+        for (int32_t b : plan.busOrder) order_.push_back(int32_t(nt) + b);
+    }
+    // How late the signal is where it arrives at each strip, and where it leaves: the longest path in.
+    // One pass in that order is enough. Without a key a track leaves on time: its own chain makes up
+    // for its plugins by itself. With one, a track's chain is a stream and makes the track late.
+    nodeIn_.assign(nt + nb, 0);
+    std::vector<int64_t> out(nt + nb, 0);
     total = 0;
-    for (int32_t b : plan.busOrder) {
-        outLat[size_t(b)] = in[size_t(b)] + busLatency[size_t(b)];
-        for (const Edge &e : busEdges_[size_t(b)]) {
-            if (e.to >= 0) in[size_t(e.to)] = std::max(in[size_t(e.to)], outLat[size_t(b)]);
-            else total = std::max(total, outLat[size_t(b)]);
+    for (int32_t n : order_) {
+        const bool isBus = size_t(n) >= nt;
+        const size_t i = isBus ? size_t(n) - nt : size_t(n);
+        int64_t own = 0;
+        if (isBus) own = busLatency[i];
+        else if (keyed_ && plan.tracks[i].chain) own = plan.tracks[i].chain->latency;
+        out[size_t(n)] = nodeIn_[size_t(n)] + own;
+        for (const Edge &e : isBus ? busEdges_[i] : trackEdges_[i]) {
+            if (e.keyNode >= 0) nodeIn_[size_t(e.keyNode)] = std::max(nodeIn_[size_t(e.keyNode)], out[size_t(n)]);
+            else if (e.to >= 0) nodeIn_[nt + size_t(e.to)] = std::max(nodeIn_[nt + size_t(e.to)], out[size_t(n)]);
+            else total = std::max(total, out[size_t(n)]);
         }
     }
     auto line = [this](Edge &e, int64_t d) {
@@ -52,14 +88,15 @@ Graph::Graph(const Plan &plan) : channels_(plan.channels) {
         e.line.assign(size_t(e.delay * channels_), 0.0f);
         e.at = 0;
     };
-    trackDelay.assign(plan.tracks.size(), 0);
+    auto arrival = [&](const Edge &e) { return e.keyNode >= 0 ? nodeIn_[size_t(e.keyNode)] : e.to >= 0 ? nodeIn_[nt + size_t(e.to)] : total; };
+    trackDelay.assign(nt, 0);
     busDelay.assign(nb, 0);
-    for (size_t t = 0; t < trackEdges_.size(); ++t) {
-        for (Edge &e : trackEdges_[t]) line(e, e.to >= 0 ? in[size_t(e.to)] : total);
+    for (size_t t = 0; t < nt; ++t) {
+        for (Edge &e : trackEdges_[t]) line(e, arrival(e) - out[t]);
         trackDelay[t] = trackEdges_[t][0].delay;
     }
     for (size_t b = 0; b < nb; ++b) {
-        for (Edge &e : busEdges_[b]) line(e, (e.to >= 0 ? in[size_t(e.to)] : total) - outLat[b]);
+        for (Edge &e : busEdges_[b]) line(e, arrival(e) - out[nt + b]);
         busDelay[b] = busEdges_[b][0].delay;
     }
     strip_.assign(size_t(kQuantum * channels_), 0.0f);
@@ -70,6 +107,9 @@ Graph::Graph(const Plan &plan) : channels_(plan.channels) {
 void Graph::reset(const Plan &plan, int64_t start) {
     for (const Bus &b : plan.buses)
         if (b.chain) b.chain->restart();
+    if (keyed_)
+        for (const Track &t : plan.tracks)
+            if (t.chain) t.chain->restart();
     if (plan.masterChain) plan.masterChain->restart();
     if (plan.masterLimiter) plan.masterLimiter->restart();
     for (auto &edges : trackEdges_)
@@ -88,7 +128,16 @@ void Graph::reset(const Plan &plan, int64_t start) {
 
 /// Adds `n` frames of `in`, times the gains, to where the edge goes, as late as the edge's delay says.
 void Graph::send(Edge &e, const float *in, float gainL, float gainR, int64_t n) {
-    float *to = e.to >= 0 ? bus_[size_t(e.to)].data() : mix_.data();
+    float *to = mix_.data();
+    if (e.keyNode >= 0) {
+        // (A strip has few keys; the one for this unit is found by looking.)
+        to = nullptr;
+        for (KeyBuffer &kb : keyBuffers_[size_t(e.keyNode)])
+            if (kb.unit == e.keyUnit) { to = kb.data.data(); break; }
+        if (!to) return;
+    } else if (e.to >= 0) {
+        to = bus_[size_t(e.to)].data();
+    }
     const int32_t ch = channels_;
     if (e.delay == 0) {
         if (ch == 2) {
@@ -114,35 +163,46 @@ void Graph::send(Edge &e, const float *in, float gainL, float gainR, int64_t n) 
 void Graph::produce(const Plan &plan, Renderer &renderer) {
     const int64_t q = kQuantum;
     const size_t samples = size_t(q * channels_);
+    const size_t nt = plan.tracks.size();
     std::fill(mix_.begin(), mix_.end(), 0.0f);
     for (auto &b : bus_) std::fill(b.begin(), b.end(), 0.0f);
-    for (size_t t = 0; t < plan.tracks.size(); ++t) {
-        const Track &track = plan.tracks[t];
-        if (track.mute) {
-            // A muted strip sends silence, so that its delay lines empty in step with the others.
-            std::fill(strip_.begin(), strip_.end(), 0.0f);
-        } else if (track.chain) {
-            track.chain->process(plan, int32_t(t), renderer, cursor_, q, strip_.data());
+    for (auto &node : keyBuffers_)
+        for (KeyBuffer &kb : node) std::fill(kb.data.begin(), kb.data.end(), 0.0f);
+    for (int32_t n : order_) {
+        if (size_t(n) < nt) {
+            const size_t t = size_t(n);
+            const Track &track = plan.tracks[t];
+            if (track.mute) {
+                // A muted strip sends silence, so that its delay lines empty in step with the others.
+                std::fill(strip_.begin(), strip_.end(), 0.0f);
+            } else if (keyed_) {
+                // As a stream: the track's own audio, taken as much earlier as the node is late (so that it
+                // meets its keys), through its plugins with those keys.
+                renderer.renderTrack(plan, int32_t(t), cursor_ - nodeIn_[t], q, strip_.data());
+                if (track.chain) track.chain->stream(strip_.data(), feeds_[t].data(), feeds_[t].size());
+            } else if (track.chain) {
+                track.chain->process(plan, int32_t(t), renderer, cursor_, q, strip_.data());
+            } else {
+                renderer.renderTrack(plan, int32_t(t), cursor_, q, strip_.data());
+            }
+            for (Edge &e : trackEdges_[t]) {
+                if (e.main || e.keyNode >= 0) send(e, strip_.data(), track.gain * track.panL, track.gain * track.panR, q);
+                else if (e.pre) send(e, strip_.data(), e.gain, e.gain, q);
+                else send(e, strip_.data(), track.gain * e.gain * track.panL, track.gain * e.gain * track.panR, q);
+            }
         } else {
-            renderer.renderTrack(plan, int32_t(t), cursor_, q, strip_.data());
-        }
-        for (Edge &e : trackEdges_[t]) {
-            if (e.main) send(e, strip_.data(), track.gain * track.panL, track.gain * track.panR, q);
-            else if (e.pre) send(e, strip_.data(), e.gain, e.gain, q);
-            else send(e, strip_.data(), track.gain * e.gain * track.panL, track.gain * e.gain * track.panR, q);
-        }
-    }
-    for (int32_t b : plan.busOrder) {
-        const Bus &bus = plan.buses[size_t(b)];
-        float *sum = bus_[size_t(b)].data();
-        if (bus.chain) bus.chain->stream(sum);
-        if (bus.mute) std::memset(sum, 0, samples * sizeof(float));
-        // Into a copy: an edge may add to a bus later in the order, never to this one.
-        std::memcpy(strip_.data(), sum, samples * sizeof(float));
-        for (Edge &e : busEdges_[size_t(b)]) {
-            if (e.main) send(e, strip_.data(), bus.gain * bus.panL, bus.gain * bus.panR, q);
-            else if (e.pre) send(e, strip_.data(), e.gain, e.gain, q);
-            else send(e, strip_.data(), bus.gain * e.gain * bus.panL, bus.gain * e.gain * bus.panR, q);
+            const size_t b = size_t(n) - nt;
+            const Bus &bus = plan.buses[b];
+            float *sum = bus_[b].data();
+            if (bus.chain) bus.chain->stream(sum, feeds_[size_t(n)].data(), feeds_[size_t(n)].size());
+            if (bus.mute) std::memset(sum, 0, samples * sizeof(float));
+            // Into a copy: an edge may add to a bus later in the order, never to this one.
+            std::memcpy(strip_.data(), sum, samples * sizeof(float));
+            for (Edge &e : busEdges_[b]) {
+                if (e.main || e.keyNode >= 0) send(e, strip_.data(), bus.gain * bus.panL, bus.gain * bus.panR, q);
+                else if (e.pre) send(e, strip_.data(), e.gain, e.gain, q);
+                else send(e, strip_.data(), bus.gain * e.gain * bus.panL, bus.gain * e.gain * bus.panR, q);
+            }
         }
     }
     // The master: its plugins, its gain, and the limiter last of all.

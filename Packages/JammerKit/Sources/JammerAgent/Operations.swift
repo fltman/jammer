@@ -111,7 +111,25 @@ public enum Operations {
     nonisolated(unsafe) public static var spectralFreeform = true
 
     /// The steps this build offers.
-    public static var all: [OperationSpec] { all(freeform: spectralFreeform, clap: InsertUnits.external != nil) }
+    /// Sidechain keys (`set_insert` `key`). Off until a real plugin with a sidechain input has been
+    /// through it (docs/RELEASE.md); a build that has it switched off doesn't offer the parameter and
+    /// refuses it.
+    nonisolated(unsafe) public static var sidechain = false
+    /// For a test that tries the keyed path without switching it on for every other test in the process.
+    @TaskLocal public static var sidechainForThisTask: Bool?
+    static var sidechainOn: Bool { sidechainForThisTask ?? sidechain }
+    static let keyParam = OperationSpec.Param("key", .string, "A sidechain key: the id of the track or bus the plugin listens to (its signal after the fader, in step with the audio), or \"none\" to take the key away. Only for a plugin with a sidechain input (reason no_key_input otherwise); a key that would be fed by what it controls is refused (routing_loop).")
+
+    public static var all: [OperationSpec] {
+        let list = all(freeform: spectralFreeform, clap: InsertUnits.external != nil)
+        guard sidechainOn else { return list }
+        return list.map { op in
+            guard op.name == "set_insert" else { return op }
+            var o = op
+            o.params.append(keyParam)
+            return o
+        }
+    }
     public static func all(freeform: Bool, clap: Bool = true) -> [OperationSpec] {
         let list = freeform ? everything : boxOnly
         guard !clap else { return list }
@@ -1173,6 +1191,23 @@ extension StepRunner {
             var list = current
             list[i] = insert
             put(list, &s)
+            if let named = p["key"]?.string {
+                guard Operations.sidechainOn else { throw StepFailure("set_insert: this build has no sidechain keys.", reason: "not_available") }
+                do {
+                    if named.lowercased() == "none" {
+                        try s.project.setKey(strip: id, insert: insert.id, key: nil)
+                    } else {
+                        guard let source = UUID(uuidString: named) else { throw StepFailure("set_insert: key is the id of a track or bus, or \"none\".", reason: "not_found") }
+                        // Asked of the plugin itself: does it have the input, and can it be fed here?
+                        let unit: any InsertUnit
+                        do { unit = try InsertUnits.makeBlocking(insert.plugin, channels: project.channels, sampleRate: project.sampleRate, state: nil) } catch { throw failure(error) }
+                        guard unit.hasKeyInput else {
+                            throw StepFailure("set_insert: " + (unit.keyRefusal ?? "\(insert.name) has no sidechain input, so it can't be given a key."), reason: "no_key_input")
+                        }
+                        try s.project.setKey(strip: id, insert: insert.id, key: source)
+                    }
+                } catch let e as Mixer.Failure { throw StepFailure("set_insert: " + (e.errorDescription ?? ""), reason: e.reason) }
+            }
             return info
         default:
             let i = try insertIndex()

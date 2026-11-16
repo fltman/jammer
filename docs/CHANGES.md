@@ -4,6 +4,8 @@ Not a list of commits: what behaves differently from before, for a user, an agen
 
 ## 2026-11-16
 
+- **Sidechain keys, debug builds only** (`docs/MIXER.md`, step 6): `set_insert` `key`; `key`, `hasKeyInput`, `keyRefusal` on listed inserts. A release build has none of it. A project whose plugin has a key is format 2.
+
 - **Solo** as a way of listening: `POST …/solo`, `solo` in `GET …/mixer`, a Solo box on every strip. Not saved, not undone, and no export or measurement changes. The mixer sheet is wider (1070 points).
 
 - **VCA groups** (`docs/MIXER.md`, step 5): `add_vca`, `set_vca`, `remove_vca`; `vcas` in `GET …/mixer`, and `vca` and `heard` on every track and bus there. A project with a group is format 2.

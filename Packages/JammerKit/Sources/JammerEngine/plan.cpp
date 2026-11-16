@@ -216,6 +216,14 @@ void jm_plan_set_bus_chain(jm_plan *plan, int32_t bus, jm_chain *chain) {
     p.buses[size_t(bus)].chain = chain->ptr;
 }
 
+void jm_plan_add_key(jm_plan *plan, bool to_bus, int32_t to, int32_t unit, bool from_bus, int32_t from) {
+    Plan &p = *plan->ptr;
+    if (p.finalized) return;
+    p.keys.push_back(Plan::Key{to_bus, to, unit, from_bus, from});
+}
+
+int32_t jm_plan_key_count(const jm_plan *plan) { return int32_t(plan->ptr->keys.size()); }
+
 void jm_plan_set_master(jm_plan *plan, float gain, jm_chain *chain, jm_chain *limiter) {
     Plan &p = *plan->ptr;
     if (p.finalized) return;
@@ -278,7 +286,51 @@ void jm_plan_finalize(jm_plan *plan) {
         }
     }
     p.busOrder.assign(placed.rbegin(), placed.rend());
-    bool stateful = p.masterChain || p.masterLimiter || p.masterGain != 1.0f;
+    // Keys: every strip is then a node, and each must come after the strips it is fed by or listens to.
+    // Keys that point at nothing are dropped; and a key that would close a loop (through routes, sends
+    // or other keys) is dropped too, the last given first, until an order exists.
+    const size_t nt = p.tracks.size();
+    auto real = [&](const Plan::Key &k) {
+        const size_t fromCount = k.fromBus ? nb : nt, toCount = k.toBus ? nb : nt;
+        if (k.from < 0 || size_t(k.from) >= fromCount || k.to < 0 || size_t(k.to) >= toCount || k.unit < 0) return false;
+        if (k.fromBus == k.toBus && k.from == k.to) return false;
+        const auto &chain = k.toBus ? p.buses[size_t(k.to)].chain : p.tracks[size_t(k.to)].chain;
+        return chain && size_t(k.unit) < chain->units.size();
+    };
+    p.keys.erase(std::remove_if(p.keys.begin(), p.keys.end(), [&](const Plan::Key &k) { return !real(k); }), p.keys.end());
+    p.nodeOrder.clear();
+    while (!p.keys.empty()) {
+        const size_t nodes = nt + nb;
+        std::vector<std::vector<int32_t>> next(nodes);
+        std::vector<int> waiting(nodes, 0);
+        auto edge = [&](size_t from, size_t to) { next[from].push_back(int32_t(to)); ++waiting[to]; };
+        for (size_t t = 0; t < nt; ++t) {
+            const Track &track = p.tracks[t];
+            if (track.bus >= 0 && size_t(track.bus) < nb) edge(t, nt + size_t(track.bus));
+            for (const Send &s : track.sends)
+                if (s.bus >= 0 && size_t(s.bus) < nb) edge(t, nt + size_t(s.bus));
+        }
+        for (size_t b = 0; b < nb; ++b) {
+            const Bus &bus = p.buses[b];
+            if (bus.output >= 0 && size_t(bus.output) < nb) edge(nt + b, nt + size_t(bus.output));
+            for (const Send &s : bus.sends)
+                if (s.bus >= 0 && size_t(s.bus) < nb && size_t(s.bus) != b) edge(nt + b, nt + size_t(s.bus));
+        }
+        for (const Plan::Key &k : p.keys) edge(size_t(k.from) + (k.fromBus ? nt : 0), size_t(k.to) + (k.toBus ? nt : 0));
+        std::vector<int32_t> order, ready;
+        for (size_t n = nodes; n-- > 0;)
+            if (waiting[n] == 0) ready.push_back(int32_t(n));
+        while (!ready.empty()) {
+            const int32_t n = ready.back();
+            ready.pop_back();
+            order.push_back(n);
+            for (int32_t m : next[size_t(n)])
+                if (--waiting[size_t(m)] == 0) ready.push_back(m);
+        }
+        if (order.size() == nodes) { p.nodeOrder = std::move(order); break; }
+        p.keys.pop_back();
+    }
+    bool stateful = p.masterChain || p.masterLimiter || p.masterGain != 1.0f || !p.keys.empty();
     for (const Bus &b : p.buses) stateful = stateful || b.chain;
     if (stateful) p.graph = std::make_shared<Graph>(p);
     p.finalized = true;

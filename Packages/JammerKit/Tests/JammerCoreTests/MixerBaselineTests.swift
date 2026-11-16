@@ -85,6 +85,53 @@ struct MixerBaselineTests {
         }
     }
 
+    /// The same load with and without one sidechain key. With a key every track's chain runs as a stream
+    /// in the mixer graph instead of pulling for itself: a new path for the tracks, so what it costs is measured.
+    @Test func withAKey() async throws {
+        #expect(KeyedGateAU.registered)
+        let rate = 48_000.0, seconds = 10, n = Int(rate) * 20
+        let info = AudioFileInfo(container: .wav, sampleFormat: .float32, bigEndian: false, channels: 2, sampleRate: rate,
+                                 channelMask: nil, dataOffset: 0, frames: Int64(n), chunks: [], bext: nil, ixml: nil, markers: [])
+        let lowpass = PluginID("aufx/lpas/appl")!, limiter = PluginID("aufx/lmtr/appl")!
+        for (tracks, buses) in [(16, 4), (64, 8)] {
+            for keyed in [false, true, false, true] {
+                let pool = SourcePool()
+                var made: Project?
+                for t in 0..<tracks {
+                    let src = SourceRef(name: "s\(t)", path: "/dev/null", info: info)
+                    pool.register(src.id, memory: (0..<(n * 2)).map { Float(0.01 * sin(Double($0 + t * 977) * 0.01)) }, channels: 2)
+                    if made == nil { made = Project(source: src) } else { _ = made!.addTrack(source: src, name: "t\(t)") }
+                }
+                var p = made!
+                for b in 0..<buses {
+                    _ = try p.addBus(name: "bus \(b)")
+                    p.buses[b].inserts = [Insert(plugin: limiter, name: "p"), Insert(plugin: lowpass, name: "p")]
+                }
+                for t in 0..<tracks {
+                    p.tracks[t].inserts = [Insert(plugin: lowpass, name: "p"), Insert(plugin: limiter, name: "p")]
+                    try p.setTrackRoute(p.tracks[t].id, output: .some(p.buses[t % buses].id))
+                }
+                // The gate is there both times; only the key differs, so only the path differs.
+                p.tracks[0].inserts.append(Insert(plugin: KeyedGateAU.plugin, name: "gate"))
+                if keyed { try p.setKey(strip: p.tracks[0].id, insert: p.tracks[0].inserts[2].id, key: p.tracks[1].id) }
+                let host = await InsertHost.make(for: p)
+                let plan = PlanCompiler.compile(p, pool: pool, inserts: host)
+                #expect(plan.keyCount == (keyed ? 1 : 0))
+                var times: [Double] = []
+                let blocks = seconds * Int(rate) / 512
+                for b in 0..<blocks {
+                    let t0 = DispatchTime.now().uptimeNanoseconds
+                    _ = plan.render(from: Frame(b * 512), frames: 512)
+                    if b > 0 { times.append(Double(DispatchTime.now().uptimeNanoseconds - t0) / 1e9) }
+                }
+                let sorted = times.sorted()
+                print(String(format: "MIXER KEY %2d tracks × 2 plugins, %d buses × 2: %@  block median %.3f ms, mean %.3f, 99 %% under %.3f; mixer latency %lld frames",
+                             tracks, buses, (keyed ? "with one key (all strips in the graph)" : "no key (tracks pull for themselves) ") as NSString,
+                             sorted[sorted.count / 2] * 1000, times.reduce(0, +) / Double(times.count) * 1000, sorted[Int(Double(sorted.count) * 0.99)] * 1000, plan.totalLatency))
+            }
+        }
+    }
+
     /// What the mixer adds per block on top of rendering the tracks: sums into buses, sends, gains, and
     /// delay lines for compensation. Done here with the same vector routines the engine would use.
     @Test func busArithmetic() {

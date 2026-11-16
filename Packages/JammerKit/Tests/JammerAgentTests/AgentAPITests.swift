@@ -792,6 +792,39 @@ struct InsertStepTests {
         #expect(s.project.vcas.isEmpty && s.project.tracks[2].gainDB == -6 && s.project.tracks[2].isMuted && s.project.tracks[2].vca == nil)
     }
 
+    @Test("set_insert key: off unless the build has it; a plugin without the input says so; a keyed plugin takes a key, loses it with none, and a loop is refused")
+    func key() throws {
+        #expect(KeyedGateAU.registered)
+        var p = Project(sampleRate: 48_000, channels: 2)
+        p.tracks = [Track(name: "A", inserts: [Insert(plugin: PluginID("aufx/lpas/appl")!, name: "AULowpass"), Insert(plugin: KeyedGateAU.plugin, name: "Gate")]), Track(name: "K")]
+        let bus = try p.addBus(name: "Bus")
+        try p.setTrackRoute(p.tracks[0].id, output: .some(bus.id))
+        var s = EditState(project: p)
+        let measure: StepRunner.Measure = { _, _ in LoudnessResult(integrated: nil, range: nil, maxMomentary: nil, maxShortTerm: nil, samplePeak: 0, truePeak: 0, duration: 0) }
+        func run(_ params: [String: JSONValue]) -> StepResult { StepRunner.run([Step(op: "set_insert", params: params)], on: &s, measure: measure)[0] }
+        let a = p.tracks[0].id.uuidString, k = p.tracks[1].id.uuidString
+        let plain = p.tracks[0].inserts[0].id.uuidString, gate = p.tracks[0].inserts[1].id.uuidString
+        // A build without sidechain keys: the parameter isn't in the schema and is refused.
+        #expect(!Operations.all.first { $0.name == "set_insert" }!.params.contains { $0.name == "key" })
+        let off = run(["track": .string(a), "insert": .string(gate), "key": .string(k)])
+        #expect(off.status == .failed && (off.error ?? "").contains("has no parameter \"key\"") && s.project == p, "\(off.error ?? "")")
+        Operations.$sidechainForThisTask.withValue(true) {
+            #expect(Operations.all.first { $0.name == "set_insert" }!.params.contains { $0.name == "key" })
+            var r = run(["track": .string(a), "insert": .string(plain), "key": .string(k)])
+            #expect(r.status == .failed && r.reason == "no_key_input" && (r.error ?? "").contains("no sidechain input"), "\(r.error ?? "")")
+            r = run(["track": .string(a), "insert": .string(gate), "key": .string(bus.id.uuidString)])
+            #expect(r.status == .failed && r.reason == "routing_loop", "\(r.reason ?? "-") \(r.error ?? "")")
+            r = run(["track": .string(a), "insert": .string(gate), "key": .string(UUID().uuidString)])
+            #expect(r.status == .failed && r.reason == "not_found")
+            r = run(["track": .string("master"), "insert": .string(gate), "key": .string(k)])
+            #expect(r.status == .failed)
+            #expect(s.project == p)
+            r = run(["track": .string(a), "insert": .string(gate), "key": .string(k)])
+            #expect(r.status == .done && s.project.tracks[0].inserts[1].key?.uuidString == k, "\(r.error ?? "")")
+            #expect(run(["track": .string(a), "insert": .string(gate), "key": .string("none")]).status == .done && s.project.tracks[0].inserts[1].key == nil)
+        }
+    }
+
     @Test("The same steps put a plugin on a bus, by the bus's id; the track's plugins are not touched")
     func onBus() throws {
         var p = Project(sampleRate: 48_000, channels: 2)

@@ -57,6 +57,12 @@ struct Unit {
     /// Set by the chain right before AudioUnitRender: non-interleaved input.
     const float *feed = nullptr;
     int64_t feedFrames = 0;
+    /// A unit with a sidechain input gets its key here, laid out like `feed`, in step with it; silence
+    /// when nothing is keyed to it. A processor takes it through `processKeyed`, an Audio Unit pulls
+    /// it on its second input (`keyBus`).
+    const float *key = nullptr;
+    bool keyBus = false;
+    bool (*processKeyed)(void *context, const float *in, const float *key, float *out, int32_t channels, int32_t frames) = nullptr;
     ~Unit();
 };
 
@@ -71,6 +77,15 @@ struct Chain {
         /// chain has already been compensated for the unit's latency.
         std::vector<float> held;
         int64_t heldAt = 0;
+        /// The key on its way to this unit: as late as the units before it make the audio (planar ring).
+        std::vector<float> keyHeld;
+        int64_t keyAt = 0;
+    };
+    /// A key for one unit of the chain (its place among the units), one quantum, interleaved, in step
+    /// with the audio that goes into the chain.
+    struct KeyFeed {
+        int32_t unit;
+        const float *interleaved;
     };
 
     int32_t channels;
@@ -85,7 +100,7 @@ struct Chain {
     void process(const Plan &plan, int32_t track, Renderer &renderer, int64_t start, int64_t n, float *out);
     /// For a chain on a bus: one quantum of interleaved audio through the units, in place. What comes
     /// out is as late as the units make it (`latency` frames); the mixer graph lines the paths up.
-    void stream(float *interleaved);
+    void stream(float *interleaved, const KeyFeed *keys = nullptr, size_t keyCount = 0);
     /// Starts the units afresh (a seek).
     void restart();
 
@@ -98,7 +113,9 @@ private:
     double sampleTime_ = 0;
     std::vector<float> fifo_;  // interleaved, processed, from readPos_
     size_t fifoHead_ = 0;      // frames consumed from fifo_
-    std::vector<float> interleaved_, a_, b_;
+    std::vector<float> interleaved_, a_, b_, key_, zeros_;
+    const KeyFeed *keys_ = nullptr;
+    size_t keyCount_ = 0;
     AudioBufferList *list_ = nullptr;
     void reset(int64_t start);
     void produce(const Plan &plan, int32_t track, Renderer &renderer);
@@ -150,6 +167,8 @@ public:
         int64_t delay = 0; // frames added so this path lines up with the longest into `to`
         std::vector<float> line;
         size_t at = 0;
+        /// A key: the strip's signal after its fader, to unit `keyUnit` of node `keyNode`'s chain. -1: not a key.
+        int32_t keyNode = -1, keyUnit = -1;
         Edge(int32_t to, float gain, bool pre, bool main) : to(to), gain(gain), pre(pre), main(main) {}
     };
     explicit Graph(const Plan &plan);
@@ -172,6 +191,18 @@ private:
     size_t fifoHead_ = 0;
     std::vector<float> strip_, mix_;
     std::vector<std::vector<float>> bus_;
+    /// With a key in the plan every strip is a node (tracks 0…, then buses), worked through in an order
+    /// in which a key's source comes before the strip that listens to it. The tracks' chains then run as
+    /// streams like the buses', and `nodeIn_` is how late each node's input is.
+    bool keyed_ = false;
+    std::vector<int32_t> order_;
+    std::vector<int64_t> nodeIn_;
+    struct KeyBuffer {
+        int32_t unit;
+        std::vector<float> data;
+    };
+    std::vector<std::vector<KeyBuffer>> keyBuffers_;
+    std::vector<std::vector<Chain::KeyFeed>> feeds_;
     void reset(const Plan &plan, int64_t start);
     void produce(const Plan &plan, Renderer &renderer);
     void send(Edge &e, const float *in, float gainL, float gainR, int64_t n);
@@ -185,6 +216,18 @@ struct Plan {
     std::vector<Bus> buses;
     /// Buses in the order they are summed: every bus before the one it feeds. Made by finalize.
     std::vector<int32_t> busOrder;
+    /// Sidechain keys: the signal of one strip, after its fader, to one unit of another strip's chain.
+    struct Key {
+        bool toBus;
+        int32_t to;
+        int32_t unit;
+        bool fromBus;
+        int32_t from;
+    };
+    std::vector<Key> keys;
+    /// With keys: every strip (a track is its index, a bus is the number of tracks plus its index),
+    /// each after every strip it listens to or is fed by.
+    std::vector<int32_t> nodeOrder;
     /// True when anything is routed to a bus or panned. False is the path every plan took before
     /// there was a mixer, and still takes: the same code, the same bits.
     bool routed = false;

@@ -134,6 +134,15 @@ jm_unit *_Nonnull jm_unit_create(AudioUnit _Nonnull unit, int32_t channels, void
 /// (channel c at c × frames), and returns false when the block wasn't processed; the chain then
 /// lets the input through, delayed by the unit's latency so the track stays in time. It is
 /// called from the render worker or an offline render, never the device thread, and may block.
+/// A processor with a sidechain input: `key` is laid out like `in` and is in step with it (silence when
+/// nothing is keyed to the unit).
+jm_unit *_Nonnull jm_unit_create_keyed_processor(int32_t channels, void *_Nullable context,
+                                                 bool (*_Nonnull process)(void *_Nullable context, const float *_Nonnull in, const float *_Nonnull key,
+                                                                          float *_Nonnull out, int32_t channels, int32_t frames),
+                                                 void (*_Nullable reset)(void *_Nullable context), void (*_Nullable release)(void *_Nullable context));
+/// Lets an Audio Unit pull a key on its second input (the caller has given that input its format before
+/// the unit was initialised). False if the unit won't take it. True for a keyed processor.
+bool jm_unit_enable_key_input(jm_unit *_Nonnull unit);
 jm_unit *_Nonnull jm_unit_create_processor(int32_t channels, void *_Nullable context,
                                            bool (*_Nonnull process)(void *_Nullable context, const float *_Nonnull in, float *_Nonnull out,
                                                                     int32_t channels, int32_t frames),
@@ -157,6 +166,12 @@ void jm_plan_set_chain(jm_plan *_Nonnull plan, int32_t track, jm_chain *_Nonnull
 /// leaves the bus late by the chain's latency; the plan then delays every other path to the longest where
 /// signals meet, and renders that far ahead, so the mix still comes out on the sample. Before finalize.
 void jm_plan_set_bus_chain(jm_plan *_Nonnull plan, int32_t bus, jm_chain *_Nonnull chain);
+/// A sidechain key: the signal of a track or a bus (`from`), after its fader and pan, goes to the key
+/// input of unit `unit` (its place in the chain) on a track or a bus (`to`), in step with the audio that
+/// unit is working on. With a key in a plan every strip runs in the mixer graph. A key that points at
+/// nothing, or that would close a loop, is dropped by finalize; `jm_plan_key_count` says how many are left.
+void jm_plan_add_key(jm_plan *_Nonnull plan, bool to_bus, int32_t to, int32_t unit, bool from_bus, int32_t from);
+int32_t jm_plan_key_count(const jm_plan *_Nonnull plan);
 /// The master: everything summed runs through `chain` (its plugins, or null), is multiplied by `gain`,
 /// and then runs through `limiter` (or null), last of all. Both chains are retained. What they add in
 /// latency is part of `jm_plan_total_latency` and is hidden like the rest. Before finalize.

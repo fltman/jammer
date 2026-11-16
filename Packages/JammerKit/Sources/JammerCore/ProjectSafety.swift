@@ -111,6 +111,25 @@ public enum ProjectSafety {
             for t in p.tracks.indices { if let v = p.tracks[t].vca, !known.contains(v) { p.tracks[t].vca = nil; strays += 1 } }
             for b in p.buses.indices { if let v = p.buses[b].vca, !known.contains(v) { p.buses[b].vca = nil; strays += 1 } }
             if strays > 0 { notes.append("\(strays) strip\(strays == 1 ? "" : "s") belonged to a VCA that isn't in the project and \(strays == 1 ? "plays" : "play") at \(strays == 1 ? "its" : "their") own level.") }
+            // Keys: one that names a strip that isn't there, or the strip it sits on, or a plugin on the master,
+            // is taken away; then any that close a loop, one at a time, until none does.
+            let strips = Set(p.tracks.map(\.id)).union(seen)
+            var keysGone = 0
+            for t in p.tracks.indices { for i in p.tracks[t].inserts.indices { if let k = p.tracks[t].inserts[i].key, !strips.contains(k) || k == p.tracks[t].id { p.tracks[t].inserts[i].key = nil; keysGone += 1 } } }
+            for b in p.buses.indices { for i in p.buses[b].inserts.indices { if let k = p.buses[b].inserts[i].key, !strips.contains(k) || k == p.buses[b].id { p.buses[b].inserts[i].key = nil; keysGone += 1 } } }
+            for i in p.master.inserts.indices where p.master.inserts[i].key != nil { p.master.inserts[i].key = nil; keysGone += 1 }
+            loops: while p.hasKeyLoop {
+                for t in p.tracks.indices.reversed() { for i in p.tracks[t].inserts.indices.reversed() where p.tracks[t].inserts[i].key != nil {
+                    let k = p.tracks[t].inserts[i].key!
+                    if p.reaches(from: p.tracks[t].id, to: k) { p.tracks[t].inserts[i].key = nil; keysGone += 1; continue loops }
+                } }
+                for b in p.buses.indices.reversed() { for i in p.buses[b].inserts.indices.reversed() where p.buses[b].inserts[i].key != nil {
+                    let k = p.buses[b].inserts[i].key!
+                    if p.reaches(from: p.buses[b].id, to: k) { p.buses[b].inserts[i].key = nil; keysGone += 1; continue loops }
+                } }
+                break
+            }
+            if keysGone > 0 { notes.append("\(keysGone) plugin\(keysGone == 1 ? "" : "s") listened to a track or bus that isn't there, or to one that it feeds; \(keysGone == 1 ? "it plays" : "they play") without that key.") }
             var cut = 0
             for t in p.tracks.indices where p.tracks[t].inserts.count > 64 { cut += p.tracks[t].inserts.count - 64; p.tracks[t].inserts = Array(p.tracks[t].inserts.prefix(64)) }
             for b in p.buses.indices where p.buses[b].inserts.count > 64 { cut += p.buses[b].inserts.count - 64; p.buses[b].inserts = Array(p.buses[b].inserts.prefix(64)) }

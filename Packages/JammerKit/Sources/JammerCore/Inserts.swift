@@ -92,6 +92,9 @@ public struct Insert: Codable, Hashable, Sendable, Identifiable {
     public var name: String
     public var state: Data?
     public var bypass: Bool
+    /// The sidechain key: the track or bus whose signal, after its fader, the plugin listens to on its
+    /// second input. nil: none.
+    public var key: UUID?
 
     public init(id: UUID = UUID(), plugin: PluginID, name: String, state: Data? = nil, bypass: Bool = false) {
         self.id = id
@@ -227,6 +230,15 @@ public protocol InsertUnit: AnyObject, Sendable {
     func set(_ identifier: String, to value: Double) throws
     var factoryPresets: [String] { get }
     func loadPreset(_ name: String) throws
+    /// Whether the plugin has a sidechain input that Jämmer can feed a key.
+    var hasKeyInput: Bool { get }
+    /// Why it can't be given a key although it has the input, in words; nil when it can or has none.
+    var keyRefusal: String? { get }
+}
+
+public extension InsertUnit {
+    var hasKeyInput: Bool { false }
+    var keyRefusal: String? { nil }
 }
 
 public enum InsertUnits {
@@ -279,6 +291,8 @@ public final class PluginInstance: InsertUnit, @unchecked Sendable {
 
     public var audioUnit: AudioUnit { avUnit.audioUnit }
     public var au: AUAudioUnit { avUnit.auAudioUnit }
+    public private(set) var hasKeyInput = false
+    public private(set) var keyRefusal: String?
 
     init(plugin: PluginID, avUnit: AVAudioUnit, channels: Int, sampleRate: Double) {
         self.plugin = plugin
@@ -357,11 +371,30 @@ public final class PluginInstance: InsertUnit, @unchecked Sendable {
                 throw PluginError.unsupportedFormat("\(av.name) can't process \(channels == 1 ? "mono" : "\(channels)-channel") float audio at \(Int(sampleRate)) Hz.")
             }
         }
+        // A second input is the sidechain: given the same format as the first, before the unit is initialised.
+        var inputs: UInt32 = 0, inputsSize = UInt32(MemoryLayout<UInt32>.size)
+        AudioUnitGetProperty(u, kAudioUnitProperty_ElementCount, kAudioUnitScope_Input, 0, &inputs, &inputsSize)
+        var keyed = false
+        var refusal: String?
+        if inputs >= 2 {
+            if !av.auAudioUnit.isLoadedInProcess {
+                refusal = "\(av.name) has a sidechain input, but it runs in a process of its own here (Safe Mode, or because macOS wouldn't load it into Jämmer), and a key isn't carried there yet."
+            } else if AudioUnitSetProperty(u, kAudioUnitProperty_StreamFormat, kAudioUnitScope_Input, 1, &asbd, size) == noErr {
+                keyed = true
+            } else {
+                refusal = "\(av.name) has a sidechain input, but it wouldn't take \(channels == 1 ? "mono" : "stereo") float audio on it."
+            }
+        }
         var maxFrames: UInt32 = 4_096
         AudioUnitSetProperty(u, kAudioUnitProperty_MaximumFramesPerSlice, kAudioUnitScope_Global, 0, &maxFrames, UInt32(MemoryLayout<UInt32>.size))
         let status = AudioUnitInitialize(u)
         guard status == noErr else { throw PluginError.failed("\(av.name) couldn't initialize (error \(status)).") }
         let instance = PluginInstance(plugin: plugin, avUnit: av, channels: channels, sampleRate: sampleRate)
+        if keyed {
+            if jm_unit_enable_key_input(instance.unit) { instance.hasKeyInput = true }
+            else { refusal = "\(av.name) has a sidechain input, but wouldn't let Jämmer feed it." }
+        }
+        instance.keyRefusal = refusal
         if let state { try instance.apply(state) }
         return instance
     }
@@ -444,6 +477,8 @@ public protocol ChainProvider: AnyObject {
     func attachChain(for bus: Bus, to plan: OpaquePointer, index: Int32) -> Int64?
     /// The chain of the master's plugins, if it has any running (not retained for the caller).
     func masterChain(for master: Master) -> OpaquePointer?
+    /// The place in a strip's chain of the unit for `insert`, when that unit runs and can take a key.
+    func keyUnit(of insert: UUID, among inserts: [Insert]) -> Int32?
 }
 
 public extension ChainProvider {
@@ -451,6 +486,7 @@ public extension ChainProvider {
     @discardableResult
     func attachChain(for bus: Bus, to plan: OpaquePointer, index: Int32) -> Int64? { nil }
     func masterChain(for master: Master) -> OpaquePointer? { nil }
+    func keyUnit(of insert: UUID, among inserts: [Insert]) -> Int32? { nil }
 }
 
 /// The running instances for a project's inserts and the chains built from them. One
@@ -595,6 +631,15 @@ public final class InsertHost: ChainProvider, @unchecked Sendable {
 
     public func masterChain(for master: Master) -> OpaquePointer? {
         lock.withLock { chainLocked(for: Master.id, inserts: master.inserts) }
+    }
+
+    public func keyUnit(of insert: UUID, among inserts: [Insert]) -> Int32? {
+        lock.withLock {
+            // The chain holds the strip's inserts that aren't bypassed and are running, in order.
+            let running = inserts.filter { !$0.bypass && entries[$0.id] != nil }
+            guard let at = running.firstIndex(where: { $0.id == insert }), entries[insert]?.instance.hasKeyInput == true else { return nil }
+            return Int32(at)
+        }
     }
 
     /// The chain of a strip (a track or a bus, by its id).

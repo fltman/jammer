@@ -144,6 +144,8 @@ public final class RenderPlan: @unchecked Sendable {
     public var totalLatency: Int64 { jm_plan_total_latency(pointer) }
     /// The part of it that the master adds (its plugins and its limiter).
     public var masterLatency: Int64 { jm_plan_master_latency(pointer) }
+    /// The sidechain keys the plan carries (those the engine kept).
+    public var keyCount: Int { Int(jm_plan_key_count(pointer)) }
     /// The delay added to a track's (or a bus's) own way out so that it lines up with the longest path it meets.
     public func compensation(bus: Bool, index: Int) -> Int64 { jm_plan_compensation(pointer, bus, Int32(index)) }
 
@@ -168,6 +170,7 @@ public enum PlanCompiler {
     public static func compile(_ project: Project, pool: SourcePool, inserts: ChainProvider? = nil, masterMargin: Double = Mixer.masterMargins[0]) -> RenderPlan {
         let plan = jm_plan_create(Int32(project.channels), project.sampleRate)
         var indices: [UUID: Int32] = [:]
+        var trackIndex: [UUID: Int32] = [:]
         // The buses first, when the project uses the mixer at all; otherwise the plan is the one it always was.
         var busIndex: [UUID: Int32] = [:]
         let routed = project.usesMixer
@@ -189,6 +192,7 @@ public enum PlanCompiler {
             // With a VCA its level is added to the fader; without one this is the track's own, bit for bit.
             let fader = project.heard(gainDB: t.gainDB, muted: t.isMuted, vca: t.vca)
             let track = jm_plan_add_track(plan, Float(dbToGain(fader.gainDB)), fader.muted)
+            trackIndex[t.id] = track
             if routed {
                 let pan = project.channels == 2 ? Mixer.panGains(t.pan) : (1, 1)
                 jm_plan_set_track_route(plan, track, t.output.flatMap { busIndex[$0] } ?? -1, pan.0, pan.1)
@@ -208,6 +212,19 @@ public enum PlanCompiler {
                 jm_plan_add_clip(plan, track, index, c.sourceStart, c.start, c.length, Float(dbToGain(c.gainDB)),
                                  c.fadeIn, c.fadeOut, c.fadeShape == .linear ? JM_FADE_LINEAR : JM_FADE_EQUAL_POWER)
             }
+        }
+        // Sidechain keys: a plugin that listens to another strip. Only where the plugin runs and has the
+        // input, and the strip it names is there; the engine drops any that would close a loop.
+        if let inserts {
+            func keys(_ list: [Insert], toBus: Bool, to: Int32) {
+                for i in list where !i.bypass {
+                    guard let source = i.key, let unit = inserts.keyUnit(of: i.id, among: list) else { continue }
+                    if let from = trackIndex[source] { jm_plan_add_key(plan, toBus, to, unit, false, from) }
+                    else if let from = busIndex[source] { jm_plan_add_key(plan, toBus, to, unit, true, from) }
+                }
+            }
+            for t in project.tracks { if let to = trackIndex[t.id] { keys(t.inserts, toBus: false, to: to) } }
+            for b in project.buses { if let to = busIndex[b.id] { keys(b.inserts, toBus: true, to: to) } }
         }
         // The master, when it does anything: its plugins (with a provider), its gain, its limiter last.
         let master = project.master
