@@ -152,5 +152,13 @@ struct UnknownParameterTests {
         #expect(batch(["brightness": 1])?.contains("brightness") == true)
         #expect(batch(["jobs": [["op": "restore", "params": ["kind": "dehum"], "when": "now"]]])?.contains("A job has no field \"when\"") == true)
         #expect(batch(["jobs": [["op": "restore", "params": ["kind": "dehum", "strength": 2]]]])?.contains("has no parameter \"strength\"") == true)
+        // rationale, wherever a model might put it: beside the fields, in export, in a job, in a job's params.
+        #expect(batch(["rationale": "why", "export": ["format": "wav", "rationale": "why"],
+                       "jobs": [["op": "restore", "rationale": "why", "params": ["kind": "dehum", "rationale": "why"]]]]) == nil)
+        // The timeline import fails here for its own reason (the file isn't there), never for rationale.
+        do { _ = try TimelineImport.check(["path": "/nowhere/x.fcpxml", "rationale": "why"], policy: nil); Issue.record("a file that isn't there was read") }
+        catch { #expect(!"\(error)".contains("rationale") && !"\(error)".contains("Unknown field"), "\(error)") }
+        do { _ = try TimelineImport.check(["path": "/nowhere/x.fcpxml", "frameRate": 25], policy: nil); Issue.record("an unknown field was taken") }
+        catch { #expect("\(error)".contains("frameRate"), "\(error)") }
     }
 }

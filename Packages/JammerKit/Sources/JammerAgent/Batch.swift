@@ -96,7 +96,6 @@ public struct BatchRequest: Sendable {
 
     /// From an API body. With `policy`, every path must lie in a folder the user allowed.
     static let fields: Set<String> = ["files", "folder", "steps", "jobs", "export", "output", "suffix", "overwrite", "allowPaid"]
-    static let exportFields: Set<String> = ["format", "bitDepth", "bitRate", "chapters", "compensate", "sampleRate", "targetLUFS"]
 
     public static func parse(_ body: [String: Any], policy: FolderPolicy?) throws -> BatchRequest {
         let known = fields
@@ -131,7 +130,7 @@ public struct BatchRequest: Sendable {
         for item in (body["jobs"] as? [[String: Any]]) ?? [] {
             guard let op = item["op"] as? String, jobOps.contains(op) else { throw BatchError("bad_request", "jobs take op \(jobOps.sorted().joined(separator: ", ")).") }
             // A job says what it is and with what, and nothing else; and only what that job takes.
-            if let k = item.keys.sorted().first(where: { !["op", "params"].contains($0) }) { throw BatchError("bad_request", "A job has no field \"\(k)\". It takes: op, params.") }
+            if let k = item.keys.sorted().first(where: { !["op", "params", AgentAPI.rationale].contains($0) }) { throw BatchError("bad_request", "A job has no field \"\(k)\". It takes: op, params.") }
             let takes = Operations.endpoints.first { $0.name == op }.map { Set($0.params.map(\.name)) }
             var params: [String: JSONValue] = [:]
             for (k, v) in (item["params"] as? [String: Any]) ?? [:] {
@@ -143,8 +142,8 @@ public struct BatchRequest: Sendable {
         }
         if let given = body["export"], !(given is [String: Any]) { throw BatchError("bad_request", "export must be an object.") }
         let e = (body["export"] as? [String: Any]) ?? [:]
-        if let k = e.keys.sorted().first(where: { !exportFields.contains($0) }) {
-            throw BatchError("bad_request", "export has no field \"\(k)\". It takes: \(exportFields.sorted().joined(separator: ", ")).")
+        if let k = e.keys.sorted().first(where: { !exportKeys.contains($0) && $0 != AgentAPI.rationale }) {
+            throw BatchError("bad_request", "export has no field \"\(k)\". It takes: \(exportKeys.sorted().joined(separator: ", ")).")
         }
         guard let format = ExportFormat(rawValue: (e["format"] as? String) ?? "wav"), ExportFormat.available.contains(format) else {
             throw BatchError("bad_request", "export.format must be one of \(ExportFormat.available.map(\.rawValue).joined(separator: ", ")).")
@@ -156,7 +155,7 @@ public struct BatchRequest: Sendable {
                                    export: .init(format: format, bitDepth: depth, bitRate: (e["bitRate"] as? Int) ?? defaults[format] ?? 160_000),
                                    chapters: (e["chapters"] as? Bool) ?? true, output: try checked(out, "output"),
                                    suffix: (body["suffix"] as? String) ?? " (Jämmer)", overwrite: (body["overwrite"] as? Bool) ?? false)
-        if let unknown = e.keys.first(where: { !exportKeys.contains($0) }) {
+        if let unknown = e.keys.first(where: { !exportKeys.contains($0) && $0 != AgentAPI.rationale }) {
             throw BatchError("bad_request", "Unknown export field \"\(unknown)\". export takes: \(exportKeys.sorted().joined(separator: ", ")).")
         }
         if let t = e["targetLUFS"] {

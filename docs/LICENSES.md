@@ -91,3 +91,12 @@ Read at the source by a research pass on 2026-11-16; each entry is finished (ver
 | CMX3600 EDL | No licence found for the format (SMPTE 258M is the paid specification text) | OK, own parser and writer | Descriptive use of the name |
 | Dither | TPDF and noise shaping from the published AES papers (Lipshitz, Vanderkooy, Wannamaker 1991; Wannamaker 1992): no licence found; the papers were not read (paywalled). UV22, POW-r and MBIT+ are others' products | OK | Cite the paper for any curve used; none of the product names, none of their coefficients |
 | True peak (ITU-R BS.1770-5) | A free-to-read Recommendation under ITU's patent policy; ITU's patent database was not searched | OK | No ITU text or emblem reproduced |
+
+## Used in tests only, never distributed
+
+Things Jämmer was tried against and that are no part of it: nothing of them is read into, copied to or linked with Jämmer, its helper programs or its tests; they are not in the repository, in a release or on the site, and no screenshot of them is in the manual. A plugin that Jämmer only loads in a test, as a host loads a plugin, is not a dependency. That is why an AGPL plugin can be here although the series takes no GPL dependencies.
+
+| Item | Source and version | Licence, as read | How it is used |
+|---|---|---|---|
+| ZL Compressor (ZL Audio) | github.com/ZL-Audio/ZLCompressor, tag 0.6.1, commit 6d8c79cff62b42b1d5e4cf60c8eda2ca90b7e938 | AGPL-3.0 (LICENSE.md read in the source, 2026-11-16; its logos are excluded from that licence) | Built by itself with `scripts/build-test-sidechain-plugin.sh` into a folder outside the repository (Anders approved building it from source, 2026-11-16; its un-notarized installer was not used). Only its Audio Unit, not installed in the Mac's plugin folders. `ThirdPartyKeyTests` is given the finished component by path and registers it in the test process: the one plugin from another vendor that sidechain keys have been tried with. It never goes with Jämmer. |
+| …its submodules, fetched and compiled by that build | JUCE (ZL Audio's fork, e66b825); highway 1.4.0; zldsp_fft (b741fb7) | JUCE: AGPL-3.0 or JUCE's commercial licence; highway: Apache-2.0 or BSD-3-Clause; zldsp_fft: Apache-2.0 | Part of the plugin's own build, nothing else. The configure step downloaded nothing beyond these three. |

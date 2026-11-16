@@ -265,7 +265,8 @@ enum AgentRouter {
             return .json(["job": job.json])
         case ["api", "v1", "batch"]:
             try only("POST")
-            guard let body = (try? JSONSerialization.jsonObject(with: r.body)) as? [String: Any] else { throw APIError.badRequest("The body isn't a JSON object.") }
+            guard var body = (try? JSONSerialization.jsonObject(with: r.body)) as? [String: Any] else { throw APIError.badRequest("The body isn't a JSON object.") }
+            body[AgentAPI.rationale] = nil   // accepted everywhere, used for nothing
             do {
                 // Paths from an agent must lie in a folder the user allowed in Settings › Agents.
                 let request = try BatchRequest.parse(body, policy: AgentFolders.policy)
@@ -276,7 +277,8 @@ enum AgentRouter {
             }
         case ["api", "v1", "import", "fcpxml"]:
             try only("POST")
-            guard let body = (try? JSONSerialization.jsonObject(with: r.body)) as? [String: Any] else { throw APIError.badRequest("The body isn't a JSON object.") }
+            guard var body = (try? JSONSerialization.jsonObject(with: r.body)) as? [String: Any] else { throw APIError.badRequest("The body isn't a JSON object.") }
+            body[AgentAPI.rationale] = nil   // accepted everywhere, used for nothing
             do {
                 // Like batch: the file and its media must lie in a folder the user allowed in Settings › Agents.
                 let timeline = try TimelineImport.check(body, policy: AgentFolders.policy)
@@ -706,9 +708,11 @@ enum AgentRouter {
 
     private static func json(_ r: AgentAPI.Request) throws -> [String: Any] {
         if r.body.isEmpty { return [:] }
-        guard let obj = try? JSONSerialization.jsonObject(with: r.body) as? [String: Any] else {
+        guard var obj = try? JSONSerialization.jsonObject(with: r.body) as? [String: Any] else {
             throw APIError.badRequest("The body isn't a JSON object.")
         }
+        // Accepted everywhere and used for nothing, so no handler ever sees it (or refuses it).
+        obj[AgentAPI.rationale] = nil
         return obj
     }
 
