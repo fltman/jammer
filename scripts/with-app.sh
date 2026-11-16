@@ -26,7 +26,11 @@ quiet=(-silentOutput YES)
 [[ -n "${JAMMER_SOUND:-}" ]] && quiet=()
 # A test copy never touches the Keychain (keys are held in memory, debug builds): a copy with another
 # signature than the app that saved a real key would otherwise wait on macOS's password question.
-env -u OPENROUTER_API_KEY ${=JAMMER_WRAP:-} "$app" $restore $quiet -ai.noKeychain YES ${=JAMMER_ARGS:-} >"${JAMMER_LOG:-/dev/null}" 2>&1 &
+# A test copy's language is set here, never taken from the Mac's settings, so both languages can be
+# tried on one Mac and a script knows which it gets: JAMMER_LANG=sv for Swedish, English otherwise.
+# (Scripts find menus and texts by key: scripts/l10n.sh <key>.)
+language=(-AppleLanguages "(${JAMMER_LANG:-en})")
+env -u OPENROUTER_API_KEY ${=JAMMER_WRAP:-} "$app" $restore $quiet -ai.noKeychain YES $language ${=JAMMER_ARGS:-} >"${JAMMER_LOG:-/dev/null}" 2>&1 &
 pid=$!
 # On the way out the test copy is stopped, and (unless the check is about restoration) the windows it
 # would bring back next time are forgotten: the debug copy's saved state, nothing of the real app's.

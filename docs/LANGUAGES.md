@@ -2,6 +2,15 @@
 
 The rule is the series' (the-apps/SIBLINGS.md, "Språk"): English and Swedish in the interface, the texts in a string catalogue, no text a user sees written straight in the code; the agent API's exact words and what a model itself writes are not translated; the catalogue check tells `%1$@` from `%@`; every state is looked at as a picture in both languages. Sites and manuals stay English first.
 
+## The foundation, built 2026-11-17 (no Swedish word used yet)
+
+- **The catalogue:** `App/Localizable.xcstrings`, English as the source, built into the app by Xcode (the project is generated again by the pre-commit check, so a new file can't be left out).
+- **The lookup:** `L10n.text(key, values…)` and `L10n.count(key, n)` (`App/L10n.swift`).
+- **The pattern, on the three hard kinds**, in the mixer sheet's automation lines: a count through the catalogue's plural forms ("1 point", "2 points": seen in the app from the compiled catalogue), a phrase with two values as `%1$@` and `%2$@`, and sentences that used to be glued from halves as whole entries with the other part as a value ("%@ (for every strip in the group)"). Eleven keys.
+- **The check** (`scripts/check-strings.py`, in the pre-commit check, after its own self-test): every key has English; one text never mixes `%1$@` and `%@`, and numbers its placeholders when it has more than one; a translation has the source's placeholders written the same way (`%1$@` is not `%@`); a count has the forms `one` and `other` with exactly one number and nothing else; every key the code asks for exists, counts are asked for as counts, and no key is unused; and a file listed in `scripts/l10n-moved.txt` has no text for the user written in its code. The self-test plants twelve kinds of fault and fails unless each is caught. `--require sv` adds "every key has Swedish" the day the words are chosen.
+- **The test copy's language** is set on its start line (`JAMMER_LANG=sv scripts/with-app.sh …`, English otherwise), never from the Mac's settings. `scripts/l10n.sh <key> [en|sv]` prints a key's text for GUI scripts.
+- **Not done:** the other 780 or so texts of the app (only `App/L10n.swift` is on the list of fully moved files), the operation titles, the packages' messages, any Swedish, and the scripts' own move from English titles to keys.
+
 ## How much there is (counted roughly in the code, 2026-11-17)
 
 | Where | Texts | Of them built with values | Translated? |

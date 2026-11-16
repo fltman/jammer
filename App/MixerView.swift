@@ -57,7 +57,7 @@ struct MixerSheet: View {
                                  remove: { session.perform("remove_vca", ["vca": .string(v.id.uuidString)]) })
                         // A group's lanes move every member: said here, where the group's level is.
                         if let text = MixerStrip.automationText(project.lanes(of: v.id)) {
-                            Text(text + " (for every strip in the group)")
+                            Text(L10n.text("mixer.automation.forGroup", text))
                                 .font(.caption).foregroundStyle(.orange)
                                 .lineLimit(1).padding(.leading, 160).frame(height: 16)
                                 .accessibilityIdentifier("mixer.vca.automation")
@@ -292,20 +292,24 @@ private struct MixerStrip: View {
     static func levelText(_ db: Double) -> String { String(format: "%+.1f dB", db).replacingOccurrences(of: "-", with: "−") }
     /// What a strip's lanes are, in words: the slider beside it is then not the whole level.
     static func automationText(_ lanes: [AutomationLane]) -> String? {
+        // From the catalogue: the count by its plural forms, each lane a whole phrase with its values as
+        // placeholders, joined by the catalogue's own separator.
         let parts = lanes.compactMap { lane -> String? in
             let n = lane.points.count, values = lane.points.map(\.value)
             guard n > 0 else { return nil }
-            let points = "\(n) point\(n == 1 ? "" : "s")", off = lane.enabled ? "" : " (switched off)"
+            let points = L10n.count("mixer.automation.points", n)
+            let text: String
             switch lane.param {
             case .gain:
-                let span = values.min() == values.max() ? levelText(values[0]) : "\(levelText(values.min()!)) to \(levelText(values.max()!))"
-                return "\(points) on the level, \(span), added to the fader" + off
-            case .pan: return "\(points) on the pan, in the slider's place" + off
-            case .mute: return "\(points) on the mute" + off
-            case .send: return "\(points) on a send" + off
+                let span = values.min() == values.max() ? levelText(values[0]) : L10n.text("mixer.automation.span", levelText(values.min()!), levelText(values.max()!))
+                text = L10n.text("mixer.automation.level", points, span)
+            case .pan: text = L10n.text("mixer.automation.pan", points)
+            case .mute: text = L10n.text("mixer.automation.mute", points)
+            case .send: text = L10n.text("mixer.automation.send", points)
             }
+            return lane.enabled ? text : L10n.text("mixer.automation.off", text)
         }
-        return parts.isEmpty ? nil : "Automation: " + parts.joined(separator: "; ")
+        return parts.isEmpty ? nil : L10n.text("mixer.automation.line", parts.joined(separator: L10n.text("mixer.automation.separator")))
     }
     static func panText(_ p: Double) -> String { p == 0 ? "Centre" : "\(Int((abs(p) * 100).rounded())) % \(p < 0 ? "left" : "right")" }
 
@@ -334,7 +338,7 @@ private struct MixerStrip: View {
                     .accessibilityIdentifier("mixer.strip.automation")
             }
             if let group {
-                Text(Self.heardText(own: gainDB, muted: muted, group: group) + (groupAutomated ? ", and the group's automation on top" : ""))
+                Text(groupAutomated ? L10n.text("mixer.heard.groupAutomated", Self.heardText(own: gainDB, muted: muted, group: group)) : Self.heardText(own: gainDB, muted: muted, group: group))
                     .font(.caption).foregroundStyle(group.isMuted ? Color.orange : Color.secondary)
                     .lineLimit(1).padding(.leading, 160).frame(height: 16)
                     .accessibilityIdentifier("mixer.strip.heard")

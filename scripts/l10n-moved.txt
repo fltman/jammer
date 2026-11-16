@@ -1,0 +1,4 @@
+# Files of the app whose texts have ALL been moved to the string catalogue (App/Localizable.xcstrings).
+# scripts/check-strings.py fails when a file listed here has a text for the user written in its code.
+# One path a line, from the repository's root. Add a file when its last text has moved.
+App/L10n.swift

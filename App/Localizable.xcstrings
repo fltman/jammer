@@ -1,0 +1,150 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "mixer.automation.forGroup": {
+      "comment": "The line under a VCA group. %@ is the whole automation line.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ (for every strip in the group)"
+          }
+        }
+      }
+    },
+    "mixer.automation.level": {
+      "comment": "Under a strip in the mixer. %1$@ is the count of points (\"4 points\"), %2$@ the span of the lane (\"−12.0 dB to +0.0 dB\").",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ on the level, %2$@, added to the fader"
+          }
+        }
+      }
+    },
+    "mixer.automation.line": {
+      "comment": "The whole line under a strip. %@ is the lanes' descriptions joined by the separator below.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automation: %@"
+          }
+        }
+      }
+    },
+    "mixer.automation.mute": {
+      "comment": "Under a strip in the mixer. %@ is the count of points.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ on the mute"
+          }
+        }
+      }
+    },
+    "mixer.automation.off": {
+      "comment": "Added after a lane's description when the lane is switched off. Begins with a space.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ (switched off)"
+          }
+        }
+      }
+    },
+    "mixer.automation.pan": {
+      "comment": "Under a strip in the mixer. %@ is the count of points.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ on the pan, in the slider's place"
+          }
+        }
+      }
+    },
+    "mixer.automation.points": {
+      "comment": "A count of automation points. Used inside the lines below as the first part.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld point"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld points"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "mixer.automation.send": {
+      "comment": "Under a strip in the mixer. %@ is the count of points.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ on a send"
+          }
+        }
+      }
+    },
+    "mixer.automation.separator": {
+      "comment": "Between two lanes' descriptions in one line.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "; "
+          }
+        }
+      }
+    },
+    "mixer.automation.span": {
+      "comment": "The lowest and highest value of a lane, each a level like \"−12.0 dB\".",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ to %2$@"
+          }
+        }
+      }
+    },
+    "mixer.heard.groupAutomated": {
+      "comment": "A member strip's line when its group has automation. %@ is the sentence about what is heard with the group.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@, and the group's automation on top"
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}
