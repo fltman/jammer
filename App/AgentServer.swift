@@ -360,6 +360,31 @@ enum AgentRouter {
                 if let range { body["start"] = seconds(session, range.lowerBound); body["end"] = seconds(session, range.upperBound) }
                 if let only { body["tracks"] = session.project.tracks.filter { only.contains($0.id) }.map(\.id.uuidString) }
                 return .json(["analysis": body])
+            case ["analysis", "rhythm"]:
+                try only("GET")
+                let range = try queryRange(r, session) ?? 0..<session.project.length
+                let named = try namedTracks(session, (r.query["tracks"] ?? r.query["track"])?.split(separator: ",").map(String.init))
+                let project = session.project, pool = session.pool
+                let found = await Task.detached(priority: .userInitiated) { Result { try Rhythm.estimate(project, range: range, tracks: named, pool: pool) } }.value
+                var body: [String: Any] = ["start": seconds(session, range.lowerBound), "end": seconds(session, range.upperBound),
+                                           "analysedSeconds": min(session.project.seconds(Frame(range.count)), Rhythm.maxSeconds)]
+                let offset = session.project.seconds(range.lowerBound)
+                switch found {
+                case .success(let e):
+                    body["bpm"] = e.bpm
+                    body["firstBeat"] = ((offset + e.firstBeat) * 1_000).rounded() / 1_000
+                    body["beats"] = e.beats.map { (($0 + offset) * 1_000).rounded() / 1_000 }
+                    body["pulse"] = e.pulse
+                    body["alternatives"] = e.alternatives
+                case .failure(let error):
+                    guard let f = error as? Rhythm.Failure, f != .unavailable else { throw APIError.notAvailable("Tempo detection isn't available in this build.") }
+                    body["bpm"] = NSNull()
+                    body["beats"] = [Double]()
+                    body["alternatives"] = [Double]()
+                    body["reason"] = f.reason
+                    body["message"] = f.localizedDescription
+                }
+                return .json(["rhythm": body])
             case ["waveform"]:
                 try only("GET")
                 return try waveform(session, r)

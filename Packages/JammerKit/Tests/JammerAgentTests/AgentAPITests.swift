@@ -456,6 +456,54 @@ struct SiblingTests {
         #expect(Operations.named("duck")?.tier == "core")
     }
 
+    @Test("detect_tempo through steps: sets the tempo map from what the analyser found, refuses in words, takes a known tempo")
+    func detectTempoThroughSteps() throws {
+        // Clicks every 0.5 s from 0.2 s (120 BPM), 20 s.
+        let n = 48_000 * 20
+        var x = [Float](repeating: 0, count: n * 2)
+        for k in 0..<40 { let s = 9_600 + k * 24_000; for i in 0..<480 where s + i < n { let v = Float(exp(-Double(i) / 100) * sin(Double(i) * 0.2)); x[(s + i) * 2] = v; x[(s + i) * 2 + 1] = v } }
+        let info = AudioFileInfo(container: .wav, sampleFormat: .float32, bigEndian: false, channels: 2, sampleRate: 48_000,
+                                 channelMask: nil, dataOffset: 0, frames: Int64(n), chunks: [], bext: nil, ixml: nil, markers: [])
+        let ref = SourceRef(name: "clicks", path: "/dev/null", info: info)
+        let pool = SourcePool()
+        pool.register(ref.id, memory: x, channels: 2)
+        let project = Project(source: ref)
+        let quiet: StepRunner.Measure = { _, _ in LoudnessResult(integrated: nil, range: nil, maxMomentary: nil, maxShortTerm: nil, samplePeak: 0, truePeak: 0, duration: 0) }
+        func run(_ params: [String: JSONValue]) -> (StepResult, Project) {
+            var s = EditState(project: project, pool: pool)
+            let r = StepRunner.run([Step(op: "detect_tempo", params: params)], on: &s, measure: quiet)
+            return (r[0], s.project)
+        }
+        // A tracker that answers as the system's does for this file: beats on the clicks, counted at half speed for the second case.
+        func tracker(_ bpm: Double) -> @Sendable (URL) -> Rhythm.Reading? {
+            { url in
+                let seconds = (try? AudioFileReader.info(at: url)).map { Double($0.frames) / $0.sampleRate } ?? 0
+                // The halves start elsewhere in the click pattern; only the spacing matters for them.
+                return Rhythm.Reading(bpm: bpm, beats: stride(from: 0.2, to: seconds, by: 60 / bpm).map { $0 })
+            }
+        }
+        Rhythm.analyser = tracker(120)
+        let (r, q) = run([:])
+        #expect(r.status == .done && r.info["bpm"] == 120 && r.info["firstBeat"] == 0.2 && (r.info["pulse"] ?? 0) > 0.5)
+        #expect(q.tempo.changes.count == 2 && q.tempo.changes[1] == TempoChange(position: 9_600, bpm: 120) && q != project)
+        // The ruler's beats are on the clicks: tick 0 at the click 3 s in.
+        #expect(q.musicalPosition(at: 9_600 + 6 * 24_000).tick == 0)
+        // Counted at half speed: 60 comes back; multiply 2, or the known tempo, puts it right.
+        Rhythm.analyser = tracker(60)
+        #expect(run([:]).0.info["bpm"] == 60 && run(["multiply": .number(2)]).0.info["bpm"] == 120 && run(["bpm": .number(120)]).0.info["bpm"] == 120)
+        let (known, _) = run(["bpm": .number(119.5)])
+        #expect(known.status == .done && known.info["bpm"] == 119.5)
+        // A tempo that doesn't fit the sound, bad parameters, and sound without a beat: refused, nothing changed.
+        let (wrong, same) = run(["bpm": .number(100)])
+        #expect(wrong.status == .failed && wrong.reason == "tempo_mismatch" && same == project)
+        #expect(run(["multiply": .number(1.5)]).0.status == .failed && run(["multiply": .number(2), "bpm": .number(120)]).0.status == .failed)
+        #expect(run(["tracks": .array([.string("nope")])]).0.reason == "not_found")
+        Rhythm.analyser = tracker(97)
+        #expect(run([:]).0.reason == "no_steady_tempo")
+        Rhythm.analyser = nil
+        #expect(run([:]).0.reason == "not_available")
+    }
+
     @Test("echo through steps, as a sibling would call it")
     func echoThroughSteps() throws {
         let signal = (0..<96_000).map { $0 % 9_600 == 0 ? Float(0.5) : 0 }

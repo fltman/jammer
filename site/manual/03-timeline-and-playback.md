@@ -10,6 +10,13 @@
 
 Every project has a tempo map. It starts at 120 BPM in 4/4, and for speech you can ignore it. For music, choose **Audio › Set Tempo…** (or click the tempo in the status bar). Enter the tempo in quarter notes per minute and the time signature. Tick **From the playhead** to make it a change at the playhead instead of the tempo for the whole project.
 
+**Audio › Detect Tempo** finds the tempo of music for you and sets the ruler's beats on the music's beats. It works on the selection, or on the whole document (it listens to up to two minutes), and Undo brings the old tempo back.
+
+- It answers only for music with one steady beat. For speech, noise or silence, and for music whose tempo changes, it says "no steady tempo was found" and changes nothing.
+- A fast tempo can come back at half speed (174 as 87), and a slow one doubled. If the number looks wrong by a factor of two, set it with **Set Tempo…**; an agent can ask for the other one directly.
+- It finds beats, not bars: bar numbers count from the first beat, which need not be where the music's bars begin.
+- Tried on click and drum tracks at known tempi (found within 0.1 BPM, the first beat within 20 ms) and one synthesised song; not yet on recordings of played music, where it may decline.
+
 - The tempo stays the same until the next change. Gradual tempo changes aren't supported yet.
 - A new time signature starts a new bar. If the bar before it isn't finished, it still counts as a bar.
 - Tempo changes are tied to the audio: when you delete or insert, they move with what follows. If you delete a range that contains a change, the tempo that was playing at the end of the range carries on from the cut.

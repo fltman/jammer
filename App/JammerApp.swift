@@ -3,6 +3,7 @@ import JammerDereverb
 #endif
 import AppKit
 import JammerAgent
+import JammerAudio
 import JammerCore
 import JammerDenoise
 import JammerDiarize
@@ -91,6 +92,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // out (Config/Features.xcconfig), and releases do until it has been tried in a signed build.
         HostedPluginsController.start()
         #endif
+        // Tempo and beats: the system's own analysis, on this Mac.
+        MusicRhythm.register()
         // MP3 through LAME, a separate dynamic framework (LGPL).
         MP3Writer.register()
         // Diarisation: the Community-1 model, fetched from the user's model source on first use.
@@ -234,6 +237,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             item("Measure Loudness", #selector(EditorWindowController.analyzeLoudness(_:)), "l", [.command, .option]),
             item("Add Marker", #selector(EditorWindowController.addMarker(_:)), "m", [.command, .option]),
             item("Set Tempo…", #selector(EditorWindowController.setTempo(_:)), ""),
+            op("Detect Tempo", "detect_tempo"),
             .separator(),
             restoreItem("Remove Hum…", "dehum"),
             restoreItem("Repair Clipping…", "declip"),

@@ -354,12 +354,18 @@ final class EditorSession {
         Task {
             let r = await run([Step(op: op, params: params)], action: title)
             if let failed = r.first(where: { $0.status == .failed }) {
-                status = failed.error
+                // The step's name means nothing in the status bar, and the reason has to fit there.
+                status = op == "detect_tempo" && failed.reason == "no_steady_tempo" ? "No steady tempo was found, so the tempo is as it was."
+                    : op == "duck" && failed.reason == "no_speech" ? "No speech was found to duck under, so nothing was changed."
+                    : failed.error
                 NSSound.beep()
             } else if let info = r.first?.info, let after = info["integratedAfter"], let target = info["target"] {
                 status = info["limitedByPeak"] == 1
                     ? String(format: "Reached %.1f instead of %.0f LUFS: the peaks held it back (no limiter yet).", after, target)
                     : String(format: "%@: %.1f LUFS (%+.2f dB)", title, after, info["gainDB"] ?? 0)
+            } else if op == "detect_tempo", let info = r.first?.info, let bpm = info["bpm"] {
+                let shown = bpm == bpm.rounded() ? String(format: "%.0f", bpm) : String(format: "%.2f", bpm)
+                status = "Tempo \(shown) BPM, first beat at \(String(format: "%.3f", info["firstBeat"] ?? 0)) s."
             } else if op == "duck", let info = r.first?.info, let regions = info["regions"] {
                 let n = Int(regions), by = params["amount"]?.double ?? -12
                 status = "Ducked under \(n) passage\(n == 1 ? "" : "s") of speech, \(by < 0 ? "−" : "")\(abs(by).formatted(.number.precision(.fractionLength(0...1)))) dB"

@@ -245,6 +245,11 @@ public enum Operations {
                        .init("at", .seconds, "Where the tempo starts. Defaults to 0, the start of the document."),
                        .init("beats", .number, "Beats per bar (1–64). Give it with `unit`; without both, the time signature in effect at `at` is kept."),
                        .init("unit", .number, "Note value of a beat: 1, 2, 4, 8, 16 or 32 (4 is a quarter note).")]),
+        .init("detect_tempo", "Detect Tempo", "Finds the tempo of music and sets the document's tempo map from it, so the ruler's beats fall on the music's beats (one tempo for the whole document; changes of tempo aren't followed). Changes no audio. Only music with a steady beat has a tempo: for speech, noise, silence, or music whose tempo changes it fails with reason no_steady_tempo and nothing is changed. A fast tempo can come back at half speed (174 as 87) or a slow one doubled: GET …/analysis/rhythm lists the alternatives; give multiply 2 or 0.5, or the bpm you know. Where bars begin is not detected: bar numbers on the ruler count from the first beat and say nothing about the music's bars. info: bpm, firstBeat (seconds on the timeline of the first beat the grid is set from), pulse (how strongly the sound repeats at the beat, 0 to 1), beats (how many were found).",
+              params: [.init("tracks", .list, "Only these tracks' sound. Default: the mix."),
+                       start, end,
+                       .init("multiply", .number, "0.5 or 2: the tempo found, halved or doubled.", options: nil, range: 0.5...2),
+                       .init("bpm", .number, "The tempo, when you know it (10–999): it has to fit the beat found (or half or double it); only where the beats fall is then taken from the sound.", range: 10...999)]),
         .init("delete_words", "Delete Words", "Removes words from the audio by their transcript, closing the gaps (ripple). Give word ids (best: they stay valid across edits, undo and saving) or the text to find. Text must match in exactly one place, unless you pass `occurrence` or `all`. Words follow each other without gaps, so a pause sits inside a neighbouring word (usually the one after it) and goes with that word. info has words and removedSeconds.",
               params: [.init("words", .list, "Word ids from GET /api/v1/documents/{id}/transcript."),
                        .init("text", .string, "A word or phrase as it reads in the transcript; case and punctuation don't count."),
@@ -328,6 +333,9 @@ public enum Operations {
               params: [start, end], edits: false, call: ("GET", "/api/v1/documents/{id}/chapters")),
         .init("measure_loudness", "Measure Loudness", "Integrated LUFS, loudness range, max momentary and short-term, sample and true peak.",
               params: [start, end, .init("tracks", .list, "Only these tracks, as they sound without the others (query: comma-separated).")], edits: false, call: ("GET", "/api/v1/documents/{id}/analysis")),
+        .init("analyze_rhythm", "Find Tempo and Beats", "The tempo and the beat times of music, without changing anything: bpm, firstBeat, beats (seconds), pulse, alternatives (half and double the tempo: a fast tempo can come back at half speed). bpm is null, with reason no_steady_tempo, for speech, noise, silence, or music without one steady tempo. Looks at up to 120 s from the start of the range.",
+              params: [start, end, .init("tracks", .list, "Only these tracks' sound (query: comma-separated). Default: the mix.")], edits: false,
+              call: ("GET", "/api/v1/documents/{id}/analysis/rhythm")),
         .init("analyze_restoration", "Find Problems", "Looks for mains hum, clipping and clicks without changing anything.",
               params: [start, end, .init("tracks", .list, "Track ids (query: comma-separated).")], edits: false,
               call: ("GET", "/api/v1/documents/{id}/analysis/restoration")),
@@ -859,6 +867,28 @@ public enum StepRunner {
             let tail = p["tail"].map { $0 == .bool(true) } ?? false
             s.project = try s.project.applyingEcho(e, range: r, tracks: tracks, tail: tail, pool: pool, media: media)
             return ["tailSeconds": tail ? (project.seconds(e.tail(sampleRate: project.sampleRate)) * 1_000).rounded() / 1_000 : 0]
+        case "detect_tempo":
+            guard let pool = s.pool else { throw StepFailure("detect_tempo needs the app.") }
+            let multiply = p["multiply"]?.double ?? 1
+            guard [0.5, 1, 2].contains(multiply) else { throw StepFailure("detect_tempo: multiply must be 0.5, 1 or 2.") }
+            guard !(p["multiply"] != nil && p["bpm"] != nil) else { throw StepFailure("detect_tempo: give multiply or bpm, not both.") }
+            var only: Set<UUID>?
+            if let raw = p["tracks"]?.strings {
+                only = []
+                for r in raw {
+                    guard let id = UUID(uuidString: r), project.tracks.contains(where: { $0.id == id }) else { throw StepFailure("detect_tempo: no track with id \(r).", reason: "not_found") }
+                    only?.insert(id)
+                }
+            }
+            let r = try range(wholeIfNone: true)
+            do {
+                let e = try Rhythm.estimate(project, range: r, tracks: only, pool: pool, multiply: multiply, bpm: p["bpm"]?.double)
+                let first = project.seconds(r.lowerBound) + e.firstBeat
+                s.project.tempo = try Rhythm.tempoMap(bpm: e.bpm, firstBeat: first, sampleRate: project.sampleRate, meter: project.tempo.meter(at: 0))
+                return ["bpm": e.bpm, "firstBeat": (first * 1_000).rounded() / 1_000, "pulse": e.pulse, "beats": Double(e.beats.count)]
+            } catch let e as Rhythm.Failure {
+                throw StepFailure("detect_tempo: \(e.localizedDescription)", reason: e.reason)
+            }
         case "set_tempo":
             var meter: Meter?
             switch (p["beats"]?.double, p["unit"]?.double) {
