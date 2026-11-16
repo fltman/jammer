@@ -1,6 +1,6 @@
 # Mixer
 
-![The Mixer sheet: a track and a bus, each with a mute box, a level slider, a pan slider, where it goes, and its sends; under them the master with its level, its limiter and the limiter's ceiling](../screens/mixer.webp)
+![The Mixer sheet: two tracks, each with a mute box, a level slider, a pan slider, where it goes and its sends; a VCA group at −6 dB with its Members menu open and both tracks ticked; under them the master with its level and its limiter box](../screens/mixer.webp)
 
 **Audio › Mixer…** (⌥⌘X) shows every track as a strip: mute, level, pan, and where it goes. Use it to set the balance between tracks, to place a track to the left or the right, and to gather tracks on a bus.
 
@@ -42,6 +42,18 @@ A bus can hold plugins, like a track: one compressor for all the voices, or a re
 
 What this costs the computer depends on the plugins, not on the buses. It has not been measured well enough yet for the manual to give a number of tracks or plugins.
 
+## VCA groups
+
+A VCA group moves several tracks and buses together without anything being routed through it. Type a name at the bottom of the mixer and choose **Add VCA**, then tick the strips in the group's **Members** menu.
+
+- The group's **level** is added to each member's own, and its **Mute** mutes them all. Each member keeps its own level, its plugins and where it goes, so the balance inside the group stays.
+- A strip in the mixer shows its own level; what you hear is that plus the group's.
+- A strip is in one group at most. Ticking it in another group moves it there. Unticking it takes the group's level off it.
+- A send taken **before the fader** doesn't follow the group, just as it doesn't follow the fader.
+- Removing a group (the − on its row) leaves the sound as it was: the group's level goes into each member's own level, and the members of a muted group stay muted.
+
+When to use which: a **bus** when the tracks should share a plugin or be one thing on the way out; a **VCA group** when they should only move together.
+
 ## The master
 
 Everything goes through the master last. At the bottom of the mixer it has a level, and a **Limiter** box.
@@ -64,8 +76,8 @@ A project that uses the mixer (a bus, a pan, a track sent to a bus) is saved in 
 
 ## Agents
 
-An agent sees the mixer with `GET /api/v1/documents/{id}/mixer` and changes it with the steps `add_bus`, `set_bus`, `remove_bus`, `set_send`, `set_master` and `set_track` (`pan`, `output`), and puts a plugin on a bus with `add_insert` and the bus's id; the mixer answers each strip's `latencySamples` and `compensationSamples`; see [the guide](../agents.md#operations). The assistant can add a bus, and change or remove one you name ("set the Music bus to −6 dB"); for pan, routing and sends, use the sheet.
+An agent sees the mixer with `GET /api/v1/documents/{id}/mixer` and changes it with the steps `add_bus`, `set_bus`, `remove_bus`, `set_send`, `add_vca`, `set_vca`, `remove_vca`, `set_master` and `set_track` (`pan`, `output`), and puts a plugin on a bus with `add_insert` and the bus's id; the mixer answers each strip's `latencySamples` and `compensationSamples`; see [the guide](../agents.md#operations). The assistant can add a bus, and change or remove one you name ("set the Music bus to −6 dB"); for pan, routing and sends, use the sheet.
 
 An export through the master's limiter answers what the file measured in the `X-Jammer-Master-Limiter` header, or fails with `ceiling_not_met`.
 
-Not there yet: solo, VCA groups and freezing.
+Not there yet: solo, sidechain keys and freezing.

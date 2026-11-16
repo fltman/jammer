@@ -174,7 +174,8 @@ public enum PlanCompiler {
         if routed {
             for b in project.buses {
                 let pan = project.channels == 2 ? Mixer.panGains(b.pan) : (1, 1)
-                let index = jm_plan_add_bus(plan, Float(dbToGain(b.gainDB)), b.isMuted, pan.0, pan.1)
+                let fader = project.heard(gainDB: b.gainDB, muted: b.isMuted, vca: b.vca)
+                let index = jm_plan_add_bus(plan, Float(dbToGain(fader.gainDB)), fader.muted, pan.0, pan.1)
                 busIndex[b.id] = index
                 if let inserts, b.inserts.contains(where: { !$0.bypass }) { inserts.attachChain(for: b, to: plan, index: index) }
             }
@@ -185,7 +186,9 @@ public enum PlanCompiler {
             }
         }
         for t in project.tracks {
-            let track = jm_plan_add_track(plan, Float(dbToGain(t.gainDB)), t.isMuted)
+            // With a VCA its level is added to the fader; without one this is the track's own, bit for bit.
+            let fader = project.heard(gainDB: t.gainDB, muted: t.isMuted, vca: t.vca)
+            let track = jm_plan_add_track(plan, Float(dbToGain(fader.gainDB)), fader.muted)
             if routed {
                 let pan = project.channels == 2 ? Mixer.panGains(t.pan) : (1, 1)
                 jm_plan_set_track_route(plan, track, t.output.flatMap { busIndex[$0] } ?? -1, pan.0, pan.1)

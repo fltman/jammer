@@ -31,6 +31,8 @@ public struct Bus: Codable, Hashable, Sendable, Identifiable {
     /// Plugins on the bus, in order, after its sum and before its fader. What they add in latency is
     /// made up for across the mixer (every other path is delayed to match), so the mix stays in time.
     public var inserts: [Insert] = []
+    /// The VCA group whose level and mute are added to the bus's own; nil: none.
+    public var vca: UUID?
 
     public init(id: UUID = UUID(), name: String, gainDB: Double = 0, pan: Double = 0, isMuted: Bool = false, output: UUID? = nil, sends: [Send] = []) {
         self.id = id
@@ -42,7 +44,7 @@ public struct Bus: Codable, Hashable, Sendable, Identifiable {
         self.sends = sends
     }
 
-    private enum CodingKeys: String, CodingKey { case id, name, gainDB, pan, isMuted, output, sends, inserts }
+    private enum CodingKeys: String, CodingKey { case id, name, gainDB, pan, isMuted, output, sends, inserts, vca }
     public func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(id, forKey: .id)
@@ -53,10 +55,12 @@ public struct Bus: Codable, Hashable, Sendable, Identifiable {
         try c.encodeIfPresent(output, forKey: .output)
         if !sends.isEmpty { try c.encode(sends, forKey: .sends) }
         if !inserts.isEmpty { try c.encode(inserts, forKey: .inserts) }
+        try c.encodeIfPresent(vca, forKey: .vca)
     }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(UUID.self, forKey: .id)
+        vca = try c.decodeIfPresent(UUID.self, forKey: .vca)
         name = try c.decode(String.self, forKey: .name)
         gainDB = try c.decodeIfPresent(Double.self, forKey: .gainDB) ?? 0
         pan = try c.decodeIfPresent(Double.self, forKey: .pan) ?? 0
@@ -64,6 +68,22 @@ public struct Bus: Codable, Hashable, Sendable, Identifiable {
         output = try c.decodeIfPresent(UUID.self, forKey: .output)
         sends = try c.decodeIfPresent([Send].self, forKey: .sends) ?? []
         inserts = try c.decodeIfPresent([Insert].self, forKey: .inserts) ?? []
+    }
+}
+
+/// A VCA group: no audio goes through it. Its level is added to the fader of every strip that belongs
+/// to it, and its mute mutes them, so a group of tracks moves together while each keeps its own level,
+/// its own plugins and its own route. (Sends before the fader don't follow it, as they don't follow the fader.)
+public struct VCA: Codable, Hashable, Sendable, Identifiable {
+    public var id: UUID
+    public var name: String
+    public var gainDB: Double
+    public var isMuted: Bool
+    public init(id: UUID = UUID(), name: String, gainDB: Double = 0, isMuted: Bool = false) {
+        self.id = id
+        self.name = name
+        self.gainDB = gainDB
+        self.isMuted = isMuted
     }
 }
 
@@ -131,6 +151,7 @@ public enum Mixer {
     /// An export's tries: the same, and further for an encoder that overshoots more than a converter does.
     public static let exportMargins: [Double] = masterMargins + [1.5, 3]
     public static let maxBuses = 64
+    public static let maxVCAs = 64
     public static let maxSends = 16
     public static let gainRange = -96.0...24.0
     public static let panRange = -1.0...1.0
@@ -148,12 +169,13 @@ public enum Mixer {
 
     public enum Failure: Error, LocalizedError, Equatable {
         case noBus(String), loop(String), tooMany, inUse(String, Int), mono, badValue(String), noStrip(String), noSend(String, String), tooManySends(String)
+        case noVCA(String), tooManyVCAs
 
         public var reason: String {
             switch self {
-            case .noBus: "not_found"
+            case .noBus, .noVCA: "not_found"
             case .loop: "routing_loop"
-            case .tooMany: "too_many"
+            case .tooMany, .tooManyVCAs: "too_many"
             case .inUse: "in_use"
             case .mono: "needs_stereo"
             case .noStrip, .noSend: "not_found"
@@ -172,6 +194,8 @@ public enum Mixer {
             case .noSend(let from, let to): "\(from) has no send to \(to)."
             case .tooManySends(let name): "\(name) already has \(Mixer.maxSends) sends, which is the most a strip can have."
             case .badValue(let m): m
+            case .noVCA(let id): "there is no VCA with id \(id)."
+            case .tooManyVCAs: "a document can have \(Mixer.maxVCAs) VCAs at most."
             }
         }
     }
@@ -180,7 +204,66 @@ public enum Mixer {
 extension Project {
     /// True when the project uses anything of the mixer. Such a project is saved as format 2, which a
     /// Jämmer from before the mixer refuses to open instead of playing every track straight out.
-    public var usesMixer: Bool { !buses.isEmpty || !master.isDefault || tracks.contains { $0.pan != 0 || $0.output != nil || !$0.sends.isEmpty } }
+    public var usesMixer: Bool { !buses.isEmpty || !vcas.isEmpty || !master.isDefault || tracks.contains { $0.pan != 0 || $0.output != nil || !$0.sends.isEmpty || $0.vca != nil } }
+
+    public func vca(_ id: UUID) -> VCA? { vcas.first { $0.id == id } }
+    /// A strip's fader and mute as they are heard: its own, with its VCA's level added and its VCA's mute.
+    /// Without a VCA, exactly its own.
+    public func heard(gainDB: Double, muted: Bool, vca: UUID?) -> (gainDB: Double, muted: Bool) {
+        guard let v = vca.flatMap({ self.vca($0) }) else { return (gainDB, muted) }
+        return (gainDB + v.gainDB, muted || v.isMuted)
+    }
+
+    @discardableResult
+    public mutating func addVCA(name: String) throws -> VCA {
+        guard vcas.count < Mixer.maxVCAs else { throw Mixer.Failure.tooManyVCAs }
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed.count <= 200 else { throw Mixer.Failure.badValue("a VCA needs a name of 1 to 200 characters.") }
+        let v = VCA(name: trimmed)
+        vcas.append(v)
+        return v
+    }
+
+    public mutating func setVCA(_ id: UUID, name: String? = nil, gainDB: Double? = nil, muted: Bool? = nil) throws {
+        guard let i = vcas.firstIndex(where: { $0.id == id }) else { throw Mixer.Failure.noVCA(id.uuidString) }
+        if let name {
+            let t = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !t.isEmpty, t.count <= 200 else { throw Mixer.Failure.badValue("a VCA needs a name of 1 to 200 characters.") }
+            vcas[i].name = t
+        }
+        if let gainDB {
+            guard gainDB.isFinite, Mixer.gainRange.contains(gainDB) else { throw Mixer.Failure.badValue("gainDB must be \(Int(Mixer.gainRange.lowerBound)) to \(Int(Mixer.gainRange.upperBound)).") }
+            vcas[i].gainDB = gainDB
+        }
+        if let muted { vcas[i].isMuted = muted }
+    }
+
+    /// Takes a VCA away and leaves the sound as it was: its level goes into each member's own fader
+    /// (kept within what a fader can be), and a muted VCA leaves its members muted.
+    public mutating func removeVCA(_ id: UUID) throws {
+        guard let v = vca(id) else { throw Mixer.Failure.noVCA(id.uuidString) }
+        func fold(_ g: Double) -> Double { min(Mixer.gainRange.upperBound, max(Mixer.gainRange.lowerBound, ((g + v.gainDB) * 100).rounded() / 100)) }
+        for t in tracks.indices where tracks[t].vca == id {
+            if v.gainDB != 0 { tracks[t].gainDB = fold(tracks[t].gainDB) }
+            tracks[t].isMuted = tracks[t].isMuted || v.isMuted
+            tracks[t].vca = nil
+        }
+        for b in buses.indices where buses[b].vca == id {
+            if v.gainDB != 0 { buses[b].gainDB = fold(buses[b].gainDB) }
+            buses[b].isMuted = buses[b].isMuted || v.isMuted
+            buses[b].vca = nil
+        }
+        vcas.removeAll { $0.id == id }
+    }
+
+    /// Puts a track or a bus in a VCA group, or (`nil`) takes it out. Taking it out changes its level by
+    /// what the VCA added; that is what leaving a group means.
+    public mutating func setMember(_ strip: UUID, vca: UUID?) throws {
+        if let vca, self.vca(vca) == nil { throw Mixer.Failure.noVCA(vca.uuidString) }
+        if let t = tracks.firstIndex(where: { $0.id == strip }) { tracks[t].vca = vca }
+        else if let b = buses.firstIndex(where: { $0.id == strip }) { buses[b].vca = vca }
+        else { throw Mixer.Failure.noStrip(strip.uuidString) }
+    }
 
     public func bus(_ id: UUID) -> Bus? { buses.first { $0.id == id } }
 
@@ -223,7 +306,8 @@ extension Project {
     public mutating func withoutMixer() {
         buses = []
         master = Master()
-        for t in tracks.indices { tracks[t].pan = 0; tracks[t].output = nil; tracks[t].sends = [] }
+        vcas = []
+        for t in tracks.indices { tracks[t].pan = 0; tracks[t].output = nil; tracks[t].sends = []; tracks[t].vca = nil }
     }
 
     /// Whether sending `bus` to `output`, by its output or by a send, would make a loop: whether

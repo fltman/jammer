@@ -40,18 +40,39 @@ struct MixerSheet: View {
                                    send: { session.perform("set_send", ["from": .string(b.id.uuidString)].merging($0) { $1 }) },
                                    remove: { session.perform("remove_bus", ["bus": .string(b.id.uuidString), "reroute": .string(b.output?.uuidString ?? "master")]) })
                     }
+                    Text("VCA groups").font(.headline).padding(.top, 8)
+                    if project.vcas.isEmpty { Text("No VCA groups yet. A group moves the level of several tracks and buses together; each keeps its own level, plugins and route.").foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }
+                    ForEach(project.vcas) { v in
+                        VCAStrip(vca: v,
+                                 strips: project.tracks.map { ($0.id, $0.name, $0.vca == v.id) } + project.buses.map { ($0.id, "\($0.name) (bus)", $0.vca == v.id) },
+                                 change: { session.perform("set_vca", ["vca": .string(v.id.uuidString)].merging($0) { $1 }) },
+                                 remove: { session.perform("remove_vca", ["vca": .string(v.id.uuidString)]) })
+                    }
                 }
                 .padding(.trailing, 6)
             }
-            .frame(minHeight: 180, maxHeight: 420)
+            // As tall as what is in it, up to a limit; only past that does it scroll. A fixed short list cut
+            // its last rows off (seen in a picture of the sheet, 2026-11-16).
+            .frame(height: min(440, listHeight))
             // Outside the list that scrolls: the master and what its limiter promises are always in view.
             Text("Master").font(.headline)
             MasterStrip(master: project.master, change: { session.perform("set_master", $0) })
             HStack {
-                TextField("Name of a new bus", text: $newBus)
-                    .accessibilityLabel("Name of a new bus")
+                TextField("Name of a new bus or VCA group", text: $newBus)
+                    .accessibilityLabel("Name of a new bus or VCA group")
+                    .accessibilityIdentifier("mixer.newName")
                     .onSubmit(add)
                 Button("Add Bus", action: add).disabled(newBus.trimmingCharacters(in: .whitespaces).isEmpty || project.buses.count >= Mixer.maxBuses)
+                    .accessibilityIdentifier("mixer.addBus")
+                // The same name field makes a VCA group.
+                Button("Add VCA") {
+                    let name = newBus.trimmingCharacters(in: .whitespaces)
+                    guard !name.isEmpty else { return }
+                    session.perform("add_vca", ["name": .string(name)])
+                    newBus = ""
+                }
+                .disabled(newBus.trimmingCharacters(in: .whitespaces).isEmpty || project.vcas.count >= Mixer.maxVCAs)
+                .accessibilityIdentifier("mixer.addVCA")
             }
             HStack {
                 Spacer()
@@ -61,6 +82,12 @@ struct MixerSheet: View {
         .padding(20)
         // Wide enough for a whole strip: a row that doesn't fit pushes the sheet's content out of its left edge.
         .frame(width: 1000)
+    }
+
+    /// The height the strips need: three headings, a row per strip, and a line where a section is empty.
+    private var listHeight: CGFloat {
+        let rows = project.tracks.count + project.buses.count + project.vcas.count
+        return CGFloat(3 * 34 + rows * 34 + (project.buses.isEmpty ? 24 : 0) + (project.vcas.isEmpty ? 44 : 0) + 8)
     }
 
     private func add() {
@@ -84,6 +111,54 @@ struct MixerSheet: View {
 }
 
 /// One strip. The level and the pan are moved freely and sent when the slider is let go, so a drag is one undo step.
+/// A VCA group: its level and mute for all its members, and which strips those are.
+private struct VCAStrip: View {
+    let vca: VCA
+    let strips: [(UUID, String, Bool)]
+    let change: ([String: JSONValue]) -> Void
+    let remove: () -> Void
+    @State private var level = 0.0
+    @State private var dragging = false
+
+    var body: some View {
+        let members = strips.filter(\.2).count
+        HStack(spacing: 10) {
+            Text(vca.name).lineLimit(1).truncationMode(.middle).frame(width: 150, alignment: .leading)
+            Toggle("Mute", isOn: Binding(get: { vca.isMuted }, set: { change(["muted": .bool($0)]) }))
+                .toggleStyle(.checkbox)
+                .fixedSize()
+                .accessibilityLabel("Mute the group \(vca.name)")
+                .accessibilityIdentifier("mixer.vca.mute")
+            Slider(value: $level, in: -60...12, onEditingChanged: { editing in
+                dragging = editing
+                if !editing, level != vca.gainDB { change(["gainDB": .number((level * 10).rounded() / 10)]) }
+            })
+            .frame(width: 150)
+            .accessibilityLabel("Level of the group \(vca.name)")
+            .accessibilityValue(Text(MixerStrip.levelText(level)))
+            .accessibilityIdentifier("mixer.vca.level")
+            Text(MixerStrip.levelText(level)).monospacedDigit().lineLimit(1).frame(width: 72, alignment: .trailing)
+            Menu(members == 0 ? "Members" : "Members (\(members))") {
+                ForEach(strips, id: \.0) { strip in
+                    Button("\(strip.2 ? "✓ " : "")\(strip.1)") { change([strip.2 ? "remove" : "add": .array([.string(strip.0.uuidString)])]) }
+                }
+            }
+            .fixedSize()
+            .accessibilityLabel("Members of the group \(vca.name)")
+            .accessibilityIdentifier("mixer.vca.members")
+            Button(action: remove) { Label("Remove the group \(vca.name)", systemImage: "minus.circle").labelStyle(.iconOnly) }
+                .buttonStyle(.borderless)
+                .help("Remove this group. Its members keep the level they had with it.")
+            Spacer(minLength: 0)
+        }
+        .frame(height: 28)
+        .onAppear { level = vca.gainDB }
+        .onChange(of: vca.gainDB) { if !dragging { level = vca.gainDB } }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("\(vca.name), VCA group")
+    }
+}
+
 /// The master: everything goes through it last. Its level, and the limiter after everything else.
 private struct MasterStrip: View {
     let master: Master

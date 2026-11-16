@@ -95,6 +95,22 @@ public enum ProjectSafety {
                 if let o = p.tracks[t].output, !seen.contains(o) { p.tracks[t].output = nil; lost += 1 }
             }
             // Plugins: sixty-four on a strip is more than anyone puts there; a file with more is cut to that and says so.
+            // VCAs: twins dropped, levels brought into range, members of a VCA that isn't there released.
+            var known = Set<UUID>(), groups: [VCA] = []
+            for v in p.vcas.prefix(Mixer.maxVCAs) where known.insert(v.id).inserted { groups.append(v) }
+            if groups.count < p.vcas.count { notes.append("\(p.vcas.count - groups.count) VCA\(p.vcas.count - groups.count == 1 ? "" : "s") in the project had the same id as another, or came after the \(Mixer.maxVCAs) a document can have, and \(p.vcas.count - groups.count == 1 ? "was" : "were") left out.") }
+            p.vcas = groups
+            for i in p.vcas.indices {
+                let v = p.vcas[i]
+                p.vcas[i].gainDB = level(v.gainDB)
+                if p.vcas[i].gainDB != v.gainDB { fixed += 1 }
+                p.vcas[i].name = String(v.name.prefix(200))
+                if p.vcas[i].name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { p.vcas[i].name = "VCA \(i + 1)" }
+            }
+            var strays = 0
+            for t in p.tracks.indices { if let v = p.tracks[t].vca, !known.contains(v) { p.tracks[t].vca = nil; strays += 1 } }
+            for b in p.buses.indices { if let v = p.buses[b].vca, !known.contains(v) { p.buses[b].vca = nil; strays += 1 } }
+            if strays > 0 { notes.append("\(strays) strip\(strays == 1 ? "" : "s") belonged to a VCA that isn't in the project and \(strays == 1 ? "plays" : "play") at \(strays == 1 ? "its" : "their") own level.") }
             var cut = 0
             for t in p.tracks.indices where p.tracks[t].inserts.count > 64 { cut += p.tracks[t].inserts.count - 64; p.tracks[t].inserts = Array(p.tracks[t].inserts.prefix(64)) }
             for b in p.buses.indices where p.buses[b].inserts.count > 64 { cut += p.buses[b].inserts.count - 64; p.buses[b].inserts = Array(p.buses[b].inserts.prefix(64)) }

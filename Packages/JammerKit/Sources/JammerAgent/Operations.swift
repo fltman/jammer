@@ -224,6 +224,19 @@ public enum Operations {
                        .init("gainDB", .number, "The send's level in dB. Default 0 for a new send.", range: -96...24),
                        .init("pre", .boolean, "True: before the fader and pan. Default false."),
                        .init("remove", .boolean, "True takes the send away.")]),
+        .init("add_vca", "Add VCA", "Adds a VCA group: no audio goes through it; its level is added to the fader of every track and bus that belongs to it and its mute mutes them, so they move together while each keeps its own level, plugins and route. The answer's `ids.vca` is the new group's id.",
+              params: [.init("name", .string, "What the group is called.", required: true),
+                       .init("members", .list, "The ids of the tracks and buses to put in it. A strip is in one VCA at most; it leaves the one it was in.")]),
+        .init("set_vca", "Change VCA", "Changes a VCA group: its name, its level, its mute, or which strips belong to it. Sends taken before the fader don't follow a VCA, as they don't follow the fader. A strip that leaves a group loses what the group added to its level.",
+              params: [.init("vca", .string, "VCA id (GET …/mixer shows it).", required: true),
+                       .init("name", .string, "A new name."),
+                       .init("gainDB", .number, "The group's level in dB, added to each member's own: the new value.", range: -96...24),
+                       .init("muted", .boolean, "True mutes every member."),
+                       .init("members", .list, "The ids of the tracks and buses that belong to it, in place of the ones that did."),
+                       .init("add", .list, "Ids of tracks and buses to put in the group."),
+                       .init("remove", .list, "Ids of tracks and buses to take out of the group.")]),
+        .init("remove_vca", "Remove VCA", "Takes a VCA group away and leaves the sound as it was: the group's level goes into each member's own, and members of a muted group stay muted.",
+              params: [.init("vca", .string, "VCA id.", required: true)]),
         .init("set_master", "Change Master", "Changes the master, which everything goes through last: its gain, and a true-peak limiter after everything else (every track, bus and plugin). With the limiter on, an export is measured as written and rendered again further under the ceiling until the file holds it; playback has one pass and aims 0.1 dB under. Plugins go on the master with `add_insert` and `track: \"master\"`.",
               params: [.init("gainDB", .number, "The master's gain in dB.", range: -96...24),
                        .init("limiter", .boolean, "True puts the limiter on (with the values given, else the ones it had, else the defaults); false takes it off."),
@@ -815,6 +828,48 @@ public enum StepRunner {
             if let v = p["remove"], case .bool(let b) = v { remove = b }
             do { try s.project.setSend(from: from, to: to, gainDB: p["gainDB"]?.double, pre: pre, remove: remove) }
             catch let e as Mixer.Failure { throw StepFailure("set_send: " + (e.errorDescription ?? ""), reason: e.reason) }
+        case "add_vca", "set_vca", "remove_vca":
+            func strips(_ key: String) throws -> [UUID]? {
+                guard let names = p[key]?.strings else { return nil }
+                return try names.map { n in
+                    guard let id = UUID(uuidString: n), project.tracks.contains(where: { $0.id == id }) || project.bus(id) != nil else {
+                        throw StepFailure("\(step.op): no track or bus with id \(n).", reason: "not_found")
+                    }
+                    return id
+                }
+            }
+            do {
+                if step.op == "add_vca" {
+                    let members = try strips("members") ?? []
+                    let v = try s.project.addVCA(name: p["name"]?.string ?? "")
+                    for m in members { try s.project.setMember(m, vca: v.id) }
+                    s.made["vca"] = v.id.uuidString
+                    return ["vcas": Double(s.project.vcas.count), "members": Double(members.count)]
+                }
+                guard let id = UUID(uuidString: p["vca"]?.string ?? ""), project.vca(id) != nil else {
+                    throw StepFailure("\(step.op): no VCA with id \(p["vca"]?.string ?? "").", reason: "not_found")
+                }
+                if step.op == "remove_vca" { try s.project.removeVCA(id); return [:] }
+                var muted: Bool?
+                if let m = p["muted"], case .bool(let v) = m { muted = v }
+                let members = try strips("members"), add = try strips("add"), remove = try strips("remove")
+                guard p["name"] != nil || p["gainDB"] != nil || muted != nil || members != nil || add != nil || remove != nil else {
+                    throw StepFailure("set_vca: give name, gainDB, muted, members, add or remove.")
+                }
+                try s.project.setVCA(id, name: p["name"]?.string, gainDB: p["gainDB"]?.double, muted: muted)
+                if let members {
+                    for t in s.project.tracks where t.vca == id && !members.contains(t.id) { try s.project.setMember(t.id, vca: nil) }
+                    for b in s.project.buses where b.vca == id && !members.contains(b.id) { try s.project.setMember(b.id, vca: nil) }
+                    for m in members { try s.project.setMember(m, vca: id) }
+                }
+                for m in add ?? [] { try s.project.setMember(m, vca: id) }
+                // Only what is in this group is taken out of it.
+                for m in remove ?? [] where s.project.tracks.contains(where: { $0.id == m && $0.vca == id }) || s.project.buses.contains(where: { $0.id == m && $0.vca == id }) {
+                    try s.project.setMember(m, vca: nil)
+                }
+                let count = s.project.tracks.filter { $0.vca == id }.count + s.project.buses.filter { $0.vca == id }.count
+                return ["members": Double(count), "gainDB": s.project.vca(id)?.gainDB ?? 0]
+            } catch let e as Mixer.Failure { throw StepFailure("\(step.op): " + (e.errorDescription ?? ""), reason: e.reason) }
         case "set_master":
             var limiter: MasterLimiter?? = nil
             var on: Bool?

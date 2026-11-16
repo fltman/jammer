@@ -40,7 +40,16 @@ Phase 3, part 2. The sketch as the coordinator approved it on 2026-11-16, with t
 - The Plugins sheet on a bus, as a picture (a debug build opens it on a strip with `-pluginsStrip <name>`): the picker says "Speech (bus)" and the bus's plugin is listed with its switch, Edit and bin.
 - `set_master` is not offered to the assistant yet.
 
-Not built: VCAs, sidechain keys, freeze, solo.
+**Step 5, 2026-11-16: VCA groups.** `Project.vcas`, `Track.vca`, `Bus.vca`. Nothing in the engine: when the plan is compiled a member's fader is its own level plus the group's and its mute is its own or the group's (`Project.heard`). Steps `add_vca` (`name`, `members`), `set_vca` (`name`, `gainDB`, `muted`, `members`, `add`, `remove`), `remove_vca`. `GET …/mixer` has `vcas`, and `vca` and `heard` on every track and bus.
+
+- Different from the sketch: membership is set on `set_vca`, not with a `vca` parameter on `set_track` and `set_bus`. `set_bus` is an action the assistant has, and changing its description means running the evaluation sets; this keeps the groups in their own steps.
+- Removing a group folds its level into each member's own (and leaves the members of a muted group muted), so the sound doesn't change.
+- Tested (`VCATests`): at 0 dB bit for bit the same; −6 dB on the group is the same samples as −6 dB on each member; a bus as a member; a pre-fader send doesn't follow the group and a post-fader one does; removal keeps the samples; one group per strip; refusals change nothing; a hostile file (twins, a member of a group that isn't there, an absurd level) is mended and said. With the group's level ignored once, three of the four failed.
+- In the app: a group of both tracks at −6 took the mix from −15.42 to −21.42 LUFS; one member taken out, −16.77; the group muted, only the other track (−13.92); removed again with both in it, −21.42 before and after, each track at −6 of its own. The group's Mute box found by its id and clicked: silence. The Members menu read with its ticks, and the sheet looked at as a picture: the list of strips was too short and cut the group's row off, so the list is now as tall as what is in it (up to a limit, then it scrolls).
+- A strip's row shows its own level, not the level with the group's; the manual says so.
+- The VCA steps are not offered to the assistant yet.
+
+Not built: sidechain keys, freeze, solo.
 
 ## What the render path costs today (measured 2026-11-16)
 

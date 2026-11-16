@@ -98,7 +98,7 @@ public enum AssistantCatalog {
 
     /// Plugin steps need track and insert ids and weren't in the measured action set.
     /// (Buses are named to the model by name, and `set_bus` and `remove_bus` take the name. Sends are not offered yet.)
-    public static let stepsNotForAssistant: Set<String> = ["add_insert", "set_insert", "remove_insert", "spectral_edit", "set_track", "set_group", "set_send", "set_master"]
+    public static let stepsNotForAssistant: Set<String> = ["add_insert", "set_insert", "remove_insert", "spectral_edit", "set_track", "set_group", "set_send", "set_master", "add_vca", "set_vca", "remove_vca"]
 
     /// Own actions: every step (but the above), the useful endpoints, and the macros.
     public static var actions: [AssistantAction] {

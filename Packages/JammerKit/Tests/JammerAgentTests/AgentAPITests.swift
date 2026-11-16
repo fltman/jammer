@@ -758,6 +758,40 @@ struct InsertStepTests {
         #expect(Operations.all.contains { $0.name == "set_master" })
     }
 
+    @Test("VCA steps: a group with members, its level and mute, members replaced, added and taken out, removal that keeps the sound, refusals")
+    func vca() throws {
+        var p = Project(sampleRate: 48_000, channels: 2)
+        p.tracks = [Track(name: "A"), Track(name: "B"), Track(name: "C")]
+        let bus = try p.addBus(name: "Room")
+        var s = EditState(project: p)
+        let measure: StepRunner.Measure = { _, _ in LoudnessResult(integrated: nil, range: nil, maxMomentary: nil, maxShortTerm: nil, samplePeak: 0, truePeak: 0, duration: 0) }
+        func run(_ op: String, _ params: [String: JSONValue]) -> StepResult { StepRunner.run([Step(op: op, params: params)], on: &s, measure: measure)[0] }
+        let ids = s.project.tracks.map(\.id.uuidString)
+        var r = run("add_vca", ["name": .string("Voices"), "members": .array([.string(ids[0]), .string(ids[1])])])
+        let v = try #require(r.ids["vca"])
+        #expect(r.status == .done && r.info["members"] == 2 && s.project.tracks[0].vca?.uuidString == v && s.project.tracks[2].vca == nil)
+        r = run("set_vca", ["vca": .string(v), "gainDB": .number(-6), "muted": .bool(true), "name": .string("Speech")])
+        #expect(r.status == .done && s.project.vcas[0] == VCA(id: UUID(uuidString: v)!, name: "Speech", gainDB: -6, isMuted: true))
+        #expect(run("set_vca", ["vca": .string(v), "add": .array([.string(bus.id.uuidString)]), "remove": .array([.string(ids[0])])]).info["members"] == 2)
+        #expect(s.project.tracks[0].vca == nil && s.project.buses[0].vca?.uuidString == v)
+        #expect(run("set_vca", ["vca": .string(v), "members": .array([.string(ids[2])])]).info["members"] == 1)
+        #expect(s.project.tracks[2].vca?.uuidString == v && s.project.tracks[1].vca == nil && s.project.buses[0].vca == nil)
+        let before = s.project
+        for (op, params, reason): (String, [String: JSONValue], String?) in [
+            ("set_vca", ["vca": .string(UUID().uuidString), "gainDB": .number(0)], "not_found"),
+            ("set_vca", ["vca": .string(v), "add": .array([.string(UUID().uuidString)])], "not_found"),
+            ("set_vca", ["vca": .string(v)], nil),
+            ("add_vca", ["name": .string("  ")], "bad_request"),
+            ("remove_vca", ["vca": .string("nope")], "not_found"),
+        ] {
+            let r = run(op, params)
+            #expect(r.status == .failed && (reason == nil || r.reason == reason), "\(op): \(r.reason ?? "-") \(r.error ?? "")")
+        }
+        #expect(s.project == before)
+        #expect(run("remove_vca", ["vca": .string(v)]).status == .done)
+        #expect(s.project.vcas.isEmpty && s.project.tracks[2].gainDB == -6 && s.project.tracks[2].isMuted && s.project.tracks[2].vca == nil)
+    }
+
     @Test("The same steps put a plugin on a bus, by the bus's id; the track's plugins are not touched")
     func onBus() throws {
         var p = Project(sampleRate: 48_000, channels: 2)

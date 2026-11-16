@@ -147,6 +147,8 @@ public struct Track: Codable, Hashable, Sendable, Identifiable {
     public var output: UUID?
     /// Copies of the track sent to buses.
     public var sends: [Send] = []
+    /// The VCA group whose level and mute are added to the track's own; nil: none.
+    public var vca: UUID?
 
     public init(id: UUID = UUID(), name: String, clips: [Clip] = [], gainDB: Double = 0, isMuted: Bool = false, inserts: [Insert] = []) {
         self.id = id
@@ -157,7 +159,7 @@ public struct Track: Codable, Hashable, Sendable, Identifiable {
         self.inserts = inserts
     }
 
-    private enum CodingKeys: String, CodingKey { case id, name, clips, gainDB, isMuted, inserts, group, origin, ducked, pan, output, sends }
+    private enum CodingKeys: String, CodingKey { case id, name, clips, gainDB, isMuted, inserts, group, origin, ducked, pan, output, sends, vca }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -173,6 +175,7 @@ public struct Track: Codable, Hashable, Sendable, Identifiable {
         pan = try c.decodeIfPresent(Double.self, forKey: .pan) ?? 0
         output = try c.decodeIfPresent(UUID.self, forKey: .output)
         sends = try c.decodeIfPresent([Send].self, forKey: .sends) ?? []
+        vca = try c.decodeIfPresent(UUID.self, forKey: .vca)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -180,6 +183,7 @@ public struct Track: Codable, Hashable, Sendable, Identifiable {
         try c.encode(id, forKey: .id)
         try c.encode(name, forKey: .name)
         try c.encode(clips, forKey: .clips)
+        try c.encodeIfPresent(vca, forKey: .vca)
         try c.encode(gainDB, forKey: .gainDB)
         try c.encode(isMuted, forKey: .isMuted)
         if !inserts.isEmpty { try c.encode(inserts, forKey: .inserts) }
@@ -263,6 +267,8 @@ public struct Project: Codable, Equatable, Sendable {
     public var buses: [Bus] = []
     /// The master strip. As made it does nothing.
     public var master = Master()
+    /// VCA groups: one level and one mute for the strips that belong to each.
+    public var vcas: [VCA] = []
     public var sampleRate: Double
     public var channels: Int
     public var tracks: [Track]
@@ -310,7 +316,7 @@ public struct Project: Codable, Equatable, Sendable {
         self.transcripts = transcripts
     }
 
-    private enum CodingKeys: String, CodingKey { case formatVersion, sampleRate, channels, tracks, markers, sources, tempo, transcripts, speakers, speakerTurns, imported, buses, master }
+    private enum CodingKeys: String, CodingKey { case formatVersion, sampleRate, channels, tracks, markers, sources, tempo, transcripts, speakers, speakerTurns, imported, buses, master, vcas }
 
     public func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
@@ -327,6 +333,7 @@ public struct Project: Codable, Equatable, Sendable {
         try c.encodeIfPresent(imported, forKey: .imported)
         if !buses.isEmpty { try c.encode(buses, forKey: .buses) }
         if !master.isDefault { try c.encode(master, forKey: .master) }
+        if !vcas.isEmpty { try c.encode(vcas, forKey: .vcas) }
     }
 
     public init(from decoder: Decoder) throws {
@@ -338,6 +345,7 @@ public struct Project: Codable, Equatable, Sendable {
         formatVersion = Self.formatVersion
         buses = try c.decodeIfPresent([Bus].self, forKey: .buses) ?? []
         master = try c.decodeIfPresent(Master.self, forKey: .master) ?? Master()
+        vcas = try c.decodeIfPresent([VCA].self, forKey: .vcas) ?? []
         sampleRate = try c.decode(Double.self, forKey: .sampleRate)
         channels = try c.decode(Int.self, forKey: .channels)
         tracks = try c.decode([Track].self, forKey: .tracks)

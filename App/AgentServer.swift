@@ -565,12 +565,23 @@ enum AgentRouter {
         func own(_ inserts: [Insert]) -> Int64 { inserts.filter { !$0.bypass }.reduce(0) { $0 + (session.inserts.instance($1.id)?.latency ?? 0) } }
         func plugins(_ inserts: [Insert]) -> [[String: Any]] { inserts.map { ["id": $0.id.uuidString, "name": $0.name, "plugin": $0.plugin.description, "bypass": $0.bypass] } }
         func sends(_ s: [Send]) -> [[String: Any]] { s.map { ["to": $0.to.uuidString, "gainDB": $0.gainDB, "pre": $0.pre] } }
+        // A strip's fader and mute with its VCA's added: what is heard. Its own `gainDB` and `muted` stay what they are.
+        func heard(_ gainDB: Double, _ muted: Bool, _ vca: UUID?) -> [String: Any] {
+            let h = p.heard(gainDB: gainDB, muted: muted, vca: vca)
+            return ["gainDB": (h.gainDB * 100).rounded() / 100, "muted": h.muted]
+        }
+        let vcas = p.vcas.map { v -> [String: Any] in
+            ["id": v.id.uuidString, "name": v.name, "gainDB": v.gainDB, "muted": v.isMuted,
+             "members": ["tracks": p.tracks.filter { $0.vca == v.id }.map(\.id.uuidString), "buses": p.buses.filter { $0.vca == v.id }.map(\.id.uuidString)]]
+        }
         let tracks = p.tracks.map { t -> [String: Any] in
             ["id": t.id.uuidString, "name": t.name, "gainDB": t.gainDB, "pan": t.pan, "muted": t.isMuted, "output": to(t.output), "sends": sends(t.sends),
+             "vca": t.vca?.uuidString ?? NSNull(), "heard": heard(t.gainDB, t.isMuted, t.vca),
              "latencySamples": own(t.inserts), "compensationSamples": plan.compensation(bus: false, index: p.tracks.firstIndex { $0.id == t.id } ?? 0)]
         }
         let buses = p.buses.map { b -> [String: Any] in
             ["id": b.id.uuidString, "name": b.name, "gainDB": b.gainDB, "pan": b.pan, "muted": b.isMuted, "output": to(b.output), "sends": sends(b.sends),
+             "vca": b.vca?.uuidString ?? NSNull(), "heard": heard(b.gainDB, b.isMuted, b.vca),
              "inserts": plugins(b.inserts), "latencySamples": own(b.inserts), "compensationSamples": plan.compensation(bus: true, index: p.buses.firstIndex { $0.id == b.id } ?? 0),
              "inputs": ["tracks": p.tracks.filter { $0.output == b.id }.map(\.id.uuidString), "buses": p.buses.filter { $0.output == b.id }.map(\.id.uuidString)]]
         }
@@ -578,7 +589,7 @@ enum AgentRouter {
         let limiter: Any = p.master.limiter.map { ["ceilingDB": $0.ceilingDB, "releaseMs": $0.releaseMs, "lookaheadMs": $0.lookaheadMs,
                                                     "guarantee": "exports"] as [String: Any] } ?? NSNull()
         let master: [String: Any] = ["gainDB": p.master.gainDB, "inserts": plugins(p.master.inserts), "limiter": limiter, "latencySamples": plan.masterLatency]
-        return ["tracks": tracks, "buses": buses, "master": master, "usesMixer": p.usesMixer, "panAvailable": p.channels == 2, "totalLatencySamples": plan.totalLatency,
+        return ["tracks": tracks, "buses": buses, "vcas": vcas, "master": master, "usesMixer": p.usesMixer, "panAvailable": p.channels == 2, "totalLatencySamples": plan.totalLatency,
                 "limits": ["buses": Mixer.maxBuses, "sendsPerStrip": Mixer.maxSends, "gainDB": [Mixer.gainRange.lowerBound, Mixer.gainRange.upperBound], "pan": [-1, 1]]]
     }
 
