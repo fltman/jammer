@@ -21,7 +21,7 @@ public final class WAVWriter {
         public var markers: [FileMarker]
         /// Chunks to carry over byte for byte (id, payload).
         public var foreignChunks: [(id: String, payload: Data)]
-        /// TPDF dither when writing integers. Off for bit-exact copies.
+        /// TPDF dither when writing integers, on the samples that rounding would change. Off by default.
         public var dither: Bool
         /// Write RF64 even when the file would fit in a plain WAV.
         public var alwaysRF64 = false
@@ -107,12 +107,20 @@ public final class WAVWriter {
 
     private func quantize(_ x: Float, scale: Double) -> Int32 {
         var v = Double(x) * scale
-        if options.dither {
+        // Dither is for what rounding would otherwise distort. A sample that already sits on a step of the
+        // target depth is written as it is: audio that is already 16 bits is not dithered a second time,
+        // and digital silence stays silence. (In processed audio about one sample in 256 happens to sit on
+        // a 16-bit step; leaving those out changes the noise by a hundredth of a dB.)
+        if options.dither, v != v.rounded() {
             // Triangular dither of ±1 LSB from two uniform values.
             v += nextUniform() - nextUniform()
+            ditheredSamples += 1
         }
         return Int32(max(-scale, min(scale - 1, v.rounded())))
     }
+
+    /// How many samples got dither so far. 0 with dither on means there was nothing to dither.
+    public private(set) var ditheredSamples: Int64 = 0
 
     private func nextUniform() -> Double {
         rng = rng &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407

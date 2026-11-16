@@ -66,7 +66,23 @@ Not found on ACX's page, and so not claimed: how RMS and the noise floor are to 
 
 **In the app** (2026-11-16): a 44.1 kHz mono chapter measured on the MP3 with every measured line met; a 48 kHz document with `format` failing and the rest measured on the mix; the sheet read through the accessibility API; the document not marked as edited by the check.
 
+## Dither, measured 2026-11-16
+
+TPDF dither on a 16- or 24-bit WAV has been in the export since phase 0 without a measurement of its own. It has one now (`DitherTests`), against what the arithmetic says: one step of 16 bits is 1/32768; rounding alone leaves an error of LSB/√12 (−101.09 dBFS), and triangular dither of ±1 LSB brings the total to LSB/2 (−96.33 dBFS), with the error no longer depending on the signal.
+
+| What | Expected | Measured |
+|---|---|---|
+| Error of a −12 dBFS tone written to 16 bits, no dither | −101.09 dBFS | within 0.15 dB |
+| The same with dither | −96.33 dBFS | within 0.15 dB, mean under 0.02 LSB |
+| A 1 kHz tone at −100 dBFS (a third of a step), no dither | lost | every sample 0 |
+| The same with dither | still there | its amplitude found within 10 % over 20 s |
+| 24 bits with dither | −144.49 dBFS for an ideal source | −144.9: a 32-bit float source already sits on a 24-bit step for about one sample in ten |
+
+**Once, last, and not again.** Dither is added only to a sample that rounding would change. Audio that is already at the target depth (an untouched 16-bit file exported at 16 bits) comes out bit for bit and gets none, and digital silence stays silent. The answer says what was done: the export's `X-Jammer-Dither` header is `tpdf`, `none`, or `not_needed` (asked for, nothing to dither). Default in the API: none. In the export sheet it is ticked when 16-bit WAV is chosen.
+
+**Not built:** a noise-shaped dither. The published curves (Lipshitz, Vanderkooy and Wannamaker) are behind a paywall and have not been read, and no curve is taken from memory or from a product; until one has been read at its source there is TPDF only.
+
 ## Not built yet
 
-- Sample-rate conversion on export (r8brain-free-src, MIT; to be fetched only when Anders has said yes) and dither when the bit depth goes down.
+- Sample-rate conversion on export (r8brain-free-src, MIT; to be fetched only when Anders has said yes).
 - The limiter as a live insert comes with the mixer, after its realtime measurements. With the mixer its place is on the master bus, after everything; today it comes before the tracks' plugins and says so (`beforePlugins`).

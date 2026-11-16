@@ -1071,6 +1071,7 @@ enum AgentRouter {
             }
             if let tp = d.truePeak { headers["X-Jammer-True-Peak"] = String(format: "%.2f", tp) }
         }
+        if format == .wav { headers["X-Jammer-Dither"] = session.lastExportDither }
         let data = try Data(contentsOf: tmp, options: .mappedIfSafe)
         let types: [ExportFormat: String] = [.wav: "audio/wav", .aiff: "audio/aiff", .flac: "audio/flac", .alac: "audio/mp4", .aac: "audio/mp4", .opus: "audio/ogg", .mp3: "audio/mpeg"]
         return Response(status: 200, contentType: types[format] ?? "application/octet-stream", body: data, extraHeaders: headers)

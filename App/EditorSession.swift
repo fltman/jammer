@@ -635,7 +635,7 @@ final class EditorSession {
         wav.markers = project.markers.filter { range.contains($0.position) }
             .map { FileMarker(position: $0.position - range.lowerBound, length: $0.length, name: $0.cueLabel) }
         let finalOptions = wav
-        try await Task.detached(priority: .userInitiated) {
+        let dithered = try await Task.detached(priority: .userInitiated) { () -> Int64 in
             let writer = try WAVWriter(url: url, options: finalOptions)
             let total = Double(range.count)
             var done = 0.0
@@ -645,7 +645,14 @@ final class EditorSession {
                 progress(done / total)
             }
             try writer.finish()
+            return writer.ditheredSamples
         }.value
+        // What was done about dither, said afterwards: "tpdf", or "not_needed" when it was asked for and
+        // every sample already sat on a step of the target depth (audio that was 16 bits to begin with).
+        lastExportDither = !options.dither || options.encoding == .float32 ? "none" : dithered > 0 ? "tpdf" : "not_needed"
         return nil
     }
+
+    /// See `export`: "none", "tpdf" or "not_needed" for the last WAV written.
+    var lastExportDither = "none"
 }

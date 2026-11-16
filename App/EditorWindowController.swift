@@ -751,6 +751,10 @@ struct ExportAccessory: View {
                 ForEach(ExportChoices.Choice.allCases.filter { $0 != .mp3 || EncodedWriter.mp3Factory != nil }, id: \.self) { Text($0.rawValue).tag($0) }
             }
             Toggle("Dither (TPDF)", isOn: $model.dither).disabled(model.choice != .wav16 && model.choice != .wav24)
+                // Going down to 16 bits is where dither matters, so it is suggested there; it leaves audio
+                // that is already 16 bits exactly as it was, so the suggestion costs nothing.
+                .onChange(of: model.choice) { _, now in model.dither = now == .wav16 }
+                .help("Keeps quiet detail from turning into distortion when the bit depth goes down. Audio that is already at that depth is left exactly as it is.")
             if model.choice.encoded != nil {
                 Text("Broadcast Wave metadata and markers are kept in WAV only.").font(.caption).foregroundStyle(.secondary)
             }

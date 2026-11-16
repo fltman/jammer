@@ -5,7 +5,7 @@
 | Option | Choices |
 |---|---|
 | Format | WAV 16-bit, WAV 24-bit (default), WAV 32-bit float |
-| Dither (TPDF) | Adds triangular dither when writing 16 or 24 bits. Leave it off for bit-exact copies of untouched audio. |
+| Dither (TPDF) | Adds triangular dither when writing 16 or 24 bits, which keeps quiet detail from turning into distortion when the bit depth goes down. It is ticked for you when you choose 16-bit WAV. Only samples that rounding would change get it: audio that is already 16 bits comes out exactly as it was, and silence stays silent, so it is safe to leave on. |
 | Selection only | Exports just the selection (on by default when there is one) |
 
 Exports that grow past 4 GB are written as RF64 automatically.
