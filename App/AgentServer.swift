@@ -350,7 +350,7 @@ enum AgentRouter {
                 return try await steps(session, r)
             case ["undo"], ["redo"]:
                 try only("POST")
-                return try undoRedo(session, redo: p.last == "redo")
+                return try await undoRedo(session, redo: p.last == "redo")
             case ["analysis"]:
                 try only("GET")
                 let range = try queryRange(r, session)
@@ -693,6 +693,7 @@ enum AgentRouter {
             return .json(["error": err,
                           "results": list, "document": detail(session)], status: 422)
         }
+        await settle()
         return .json(["results": list, "document": detail(session)])
     }
 
@@ -869,7 +870,11 @@ enum AgentRouter {
                         extraHeaders: ["Content-Disposition": "attachment; filename=\"preview.wav\""])
     }
 
-    private static func undoRedo(_ session: EditorSession, redo: Bool) throws -> Response {
+    /// AppKit marks a document edited a turn of the run loop after the undo step that changed it.
+    /// A reply built before that says "edited": false about a document that was just changed.
+    private static func settle() async { try? await Task.sleep(nanoseconds: 2_000_000) }
+
+    private static func undoRedo(_ session: EditorSession, redo: Bool) async throws -> Response {
         guard let undo = session.undoManager else { throw APIError.notAvailable("The document has no undo history yet.") }
         // The reply names what was undone or redone, so an agent needn't compare histories to know.
         let name: String
@@ -882,6 +887,7 @@ enum AgentRouter {
             name = undo.undoActionName
             undo.undo()
         }
+        await settle()
         return .json([redo ? "redone" : "undone": name, "document": detail(session)])
     }
 
