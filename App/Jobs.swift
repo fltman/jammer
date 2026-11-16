@@ -267,7 +267,7 @@ final class JobRegistry {
         return job
     }
 
-    func startTranscription(_ session: EditorSession, locale: Locale, replace: Bool, engine choice: SpeechEngines.Choice = .auto) -> Job {
+    func startTranscription(_ session: EditorSession, locale: Locale, replace: Bool, engine choice: SpeechEngines.Choice = .auto, model: String? = nil) -> Job {
         var job = Job(kind: "transcribe", documentID: session.agentID)
         jobs[job.id] = job
         let project = session.project
@@ -275,7 +275,16 @@ final class JobRegistry {
         let todo = project.sources.filter { src in used.contains(src.id) && (replace || !project.transcripts.contains { $0.sourceID == src.id }) }
         let pool = session.pool
         // See SpeechEngines: KB-Whisper for Swedish, then Parakeet, then Apple (docs/TRANSCRIPTION.md).
-        let engine: any TranscriptionEngine = (try? SpeechEngines.engine(choice, for: locale)) ?? AppleSpeechEngine()
+        // A paid engine that can't be had is never quietly replaced by another: the caller checked it first,
+        // and if it has gone since, the job fails saying so.
+        let wanted = try? SpeechEngines.engine(choice, for: locale, model: model)
+        if choice.paid, wanted == nil {
+            job.status = .failed
+            job.error = ("engine_unavailable", "The \(choice.rawValue) engine can't be used now (its key or model is missing). Nothing was sent.")
+            jobs[job.id] = job
+            return job
+        }
+        let engine: any TranscriptionEngine = wanted ?? AppleSpeechEngine()
         let id = job.id
         let total = Double(todo.reduce(Frame(0)) { $0 + $1.info.frames })
         tasks[id] = Task { [weak self, weak session] in

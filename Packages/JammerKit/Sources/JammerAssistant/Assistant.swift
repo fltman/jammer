@@ -518,6 +518,7 @@ public enum MacroExpander {
             case "remove_fillers":
                 let extra = Set(s.params["words"]?.strings ?? [])
                 let ids = scratch.project.fillerWordIDs(extra: extra)
+                guard !scratch.project.areTextOnly(Set(ids)) else { throw StepFailure("remove_fillers: " + SourceTranscript.textOnlyReason, reason: "text_only") }
                 concrete = ids.isEmpty ? [] : [Step(op: "delete_words", params: ["words": .array(ids.map { .string($0.uuidString) }), "bridge": .number(0.05)])]
             case "remove_silences":
                 guard let pool = scratch.pool else { throw StepFailure("remove_silences needs the app.") }

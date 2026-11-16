@@ -52,3 +52,18 @@ Found by an agent reading the guide cold. With the Mac's own recogniser (Dictati
 What is done about it: the guide tells agents that `confidence: null` means a rough time and to check the waveform first. What is not done: the app doesn't mark such words in the transcript, and nothing re-times them. Options, not built: re-time untimed words against the sound (speech activity between the last timed word and the end), or prefer KB-Whisper or Parakeet when installed (they don't show this).
 
 Also seen: pauses are folded into the word after them ("mattor" 13.32–14.52 starts with 0.8 s of silence), so deleting a sentence takes the pause before it.
+
+## OpenAI as "text only" (hidden; not tried against the provider)
+
+Built 2026-11-16 from OpenAI's documentation as read that day, and tested only against a stand-in server: no request has been made to OpenAI, so nothing here is in the manual or the agent guide yet. It is shown and described when Anders has run it with a real, paid request (PROVIDERS.md, rule 3).
+
+- **What the provider gives.** `POST /v1/audio/transcriptions`, multipart with `file` and `model`. The model the documentation recommends for recorded speech answers `{"text", "languages"}`: the text, and no time for any word, no speakers. (`timestamp_granularities` "is only supported for `whisper-1`", and that model and the `gpt-4o-…-transcribe` ones "will shut down on February 26, 2027".) "Files can be up to 25 MB."
+- **Long files** are cut by Jämmer: 16 kHz mono 16-bit WAV, at most 10 minutes a piece (19.2 MB), each cut at the quietest 0.4 s in the last 30 s of the piece, so that it falls in a pause. The end of the text so far goes along as `prompt`, which the documentation gives as the way of "carrying context from a previous chunk". The language goes as `languages[]` (ISO 639-1); the documentation says not to send `language` as well.
+- **The model** is chosen from the provider's own list (`GET /v1/models`, ids that say "transcribe", without the live and the speaker-labelling ones). No model id is written into the app; a test fails if one is.
+- **The transcript** is marked `textOnly`. Its words are spread evenly over the piece they were heard in, so the text reads in order under the right ten minutes and no closer.
+  - Works: reading, searching, correcting a word (`correct_word`), finding where a phrase is roughly, speaker turns from the speaker analysis (they come from the audio, not from the words), so ducking under speech and levelling speakers are unaffected.
+  - Doesn't, and says why (`422 text_only` in the API; a line in the status bar in the app): deleting words (`delete_words`), removing filler words (`remove_fillers`), clicking a word to go to it.
+  - `GET …/transcript` has `"textOnly": true` when a transcript in the document is of this kind.
+- **Paid and leaving the Mac.** `POST …/transcribe` with `"engine": "openai"` answers 402 `paid_not_allowed` without `"allowPaid": true`, 422 `missing_key` without a key in the Keychain (account `openai`) and 422 `model_missing` without a model (`"model"` in the request, or the setting `transcribe.openai.model`). "auto" never chooses it, and a job that can't have it fails instead of quietly using another engine. A key never follows a redirect to another host (`KeyedRequest`).
+- **Not built yet:** a place in the app's interface to choose it (the cloud notice and the price dialog belong there). Until then it can only be run through the agent API with the hidden providers switched on (`defaults write com.brattoo.jammer assistant.showHiddenProviders -bool YES`).
+- **Not read:** OpenAI's terms of use (the page answered 403 to the reader). What a user should know of them is to be written where the key is entered, from the page itself.

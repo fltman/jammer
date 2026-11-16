@@ -838,6 +838,7 @@ public enum StepRunner {
             } else {
                 throw StepFailure("delete_words needs words (ids) or text.")
             }
+            guard !project.areTextOnly(ids) else { throw StepFailure("delete_words: " + SourceTranscript.textOnlyReason, reason: "text_only") }
             let removed = project.ranges(ofWords: ids, bridge: bridge).reduce(Frame(0)) { $0 + Frame($1.count) }
             try s.project.deleteWords(ids, bridge: bridge)
             s.selection = nil

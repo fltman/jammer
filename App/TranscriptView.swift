@@ -227,6 +227,11 @@ final class TranscriptPanel: NSView, NSTextViewDelegate {
         if sel.length == 0 {
             // A click: the playhead goes to the word.
             if let i = ranges.firstIndex(where: { NSLocationInRange(sel.location, $0) || NSMaxRange($0) == sel.location }) {
+                // Without word times the word's place is a guess; going there would look like knowing.
+                if session.project.areTextOnly([placed[i].word.id]) {
+                    session.status = "This transcript has no word times, so a click can't find the word in the audio."
+                    return
+                }
                 session.selection = nil
                 session.seek(placed[i].start)
             }

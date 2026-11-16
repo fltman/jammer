@@ -393,14 +393,19 @@ enum AgentRouter {
                 let body = try json(r)
                 let lang = (body["language"] as? String) ?? Locale.current.identifier(.bcp47)
                 let name = (body["engine"] as? String) ?? "auto"
-                guard let choice = SpeechEngines.Choice(rawValue: name) else {
-                    throw APIError.badRequest("engine must be one of \(SpeechEngines.Choice.allCases.map(\.rawValue).joined(separator: ", ")).")
+                guard let choice = SpeechEngines.Choice(rawValue: name), SpeechEngines.Choice.offered.contains(choice) else {
+                    throw APIError.badRequest("engine must be one of \(SpeechEngines.Choice.offered.map(\.rawValue).joined(separator: ", ")).")
                 }
-                do { _ = try SpeechEngines.engine(choice, for: Locale(identifier: lang)) } catch let e as SpeechEngines.Unavailable {
+                // A paid engine sends the audio to its provider and costs money: only on an explicit yes.
+                if choice.paid, body["allowPaid"] as? Bool != true {
+                    throw APIError.paidNotAllowed("engine \(name) sends the audio to its provider and is paid for by the user. Pass \"allowPaid\": true to run it.")
+                }
+                let model = body["model"] as? String
+                do { _ = try SpeechEngines.engine(choice, for: Locale(identifier: lang), model: model) } catch let e as SpeechEngines.Unavailable {
                     throw APIError.unprocessable(e.reason, e.message)
                 }
                 let job = JobRegistry.shared.startTranscription(session, locale: Locale(identifier: lang),
-                                                                replace: body["replace"] as? Bool ?? false, engine: choice)
+                                                                replace: body["replace"] as? Bool ?? false, engine: choice, model: model)
                 return .json(["job": job.json], status: 202)
             case ["transcript"]:
                 try only("GET")
@@ -767,7 +772,10 @@ enum AgentRouter {
             return d
         }
         let langs = Set(session.project.transcripts.map(\.language)).sorted()
-        return .json(["words": words, "text": placed.map(\.word.text).joined(separator: " "), "languages": langs,
+        // True when a transcript here has the text but no word times: its words' start and end are
+        // spread evenly, and delete_words and remove_fillers answer 422 text_only.
+        let textOnly = session.project.transcripts.contains { $0.textOnly == true }
+        return .json(["words": words, "text": placed.map(\.word.text).joined(separator: " "), "languages": langs, "textOnly": textOnly,
                       "speakers": session.project.speakers.enumerated().map { ["id": $0.offset, "name": $0.element] as [String: Any] }])
     }
 

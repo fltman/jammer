@@ -46,7 +46,23 @@ enum SpeechEngines {
     /// One Parakeet, so its model stays loaded between transcriptions.
     static let parakeet = ParakeetEngine(folder: store.folder, source: store.source)
 
-    enum Choice: String, CaseIterable { case auto, apple, parakeet, whisper }
+    enum Choice: String, CaseIterable {
+        case auto, apple, parakeet, whisper
+        /// OpenAI's file transcription: paid, the audio leaves the Mac, and the transcript has no word
+        /// times. Hidden (PROVIDERS.md, rule 3) until it has been tried with a real, paid request; "auto"
+        /// never chooses it.
+        case openai
+
+        /// What a user or an agent may ask for now.
+        @MainActor static var offered: [Choice] {
+            let hidden = AssistantModel.showHidden
+            return allCases.filter { $0 != .openai || hidden }
+        }
+        var paid: Bool { self == .openai }
+    }
+
+    /// The model for OpenAI, chosen from the provider's own list (`OpenAITranscription.models`); no id is written into the app.
+    static var openAIModel: String { UserDefaults.standard.string(forKey: "transcribe.openai.model") ?? "" }
 
     struct Unavailable: Error, LocalizedError {
         var reason: String
@@ -58,10 +74,16 @@ enum SpeechEngines {
 
     /// auto: KB-Whisper for Swedish when installed, else Parakeet for its 25 languages when
     /// installed, else Apple's recognisers.
-    static func engine(_ choice: Choice, for locale: Locale) throws -> any TranscriptionEngine {
+    static func engine(_ choice: Choice, for locale: Locale, model: String? = nil) throws -> any TranscriptionEngine {
         let lang = locale.language.languageCode?.identifier ?? ""
         let whereToInstall = "Install it under Jämmer › Settings › Models."
         switch choice {
+        case .openai:
+            guard AssistantModel.showHidden else { throw Unavailable(reason: "bad_request", message: "engine must be one of \(Choice.offered.map(\.rawValue).joined(separator: ", ")).") }
+            guard let key = Keychain.get("openai"), !key.isEmpty else { throw Unavailable(reason: "missing_key", message: "There is no OpenAI key. Add it in the assistant's settings.") }
+            let model = model ?? openAIModel
+            guard !model.isEmpty else { throw Unavailable(reason: "model_missing", message: "No OpenAI transcription model is chosen. Pass \"model\" with one of the provider's transcription models.") }
+            return OpenAITranscription(model: model, key: { Keychain.get("openai") })
         case .apple:
             return AppleSpeechEngine()
         case .whisper:

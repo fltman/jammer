@@ -278,6 +278,26 @@ struct TranscriptStepTests {
         #expect(bad.status == .failed && bad.reason == "not_found")
     }
 
+    @Test("A transcript without word times: words can be corrected and found, not cut")
+    func textOnly() throws {
+        var (s, words) = state()
+        // A file from before the marking reads as a transcript with word times.
+        let old = try JSONDecoder().decode(SourceTranscript.self, from: Data(#"{"sourceID":"\#(UUID().uuidString)","language":"sv-SE","engine":"x","words":[],"speakers":[]}"#.utf8))
+        #expect(old.textOnly == nil)
+        s.project.transcripts[0].textOnly = true
+        let before = s.project
+        let cut = run(&s, "delete_words", ["words": .array([.string(words[1].id.uuidString)])])
+        #expect(cut.status == .failed && cut.reason == "text_only" && (cut.error ?? "").contains("not the time of each word"), "\(cut.error ?? "")")
+        let byText = run(&s, "delete_words", ["text": .string("välkommen")])
+        #expect(byText.status == .failed && byText.reason == "text_only")
+        #expect(s.project == before)
+        #expect(throws: TranscriptError.textOnly) { try s.project.deleteWords([words[1].id]) }
+        // The text itself can still be put right, and the marking survives saving.
+        #expect(run(&s, "correct_word", ["word": .string(words[1].id.uuidString), "text": .string("samt")]).status == .done)
+        let again = try JSONDecoder().decode(Project.self, from: try JSONEncoder().encode(s.project))
+        #expect(again.transcripts[0].textOnly == true && again.transcriptText().contains("samt"))
+    }
+
     @Test("Text must be unambiguous unless occurrence or all is given")
     func byText() {
         var (s, words) = state()

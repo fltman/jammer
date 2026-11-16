@@ -36,14 +36,22 @@ public struct SourceTranscript: Codable, Hashable, Sendable {
     /// Sorted by start.
     public var words: [Word]
     public var speakers: [String]
+    /// True when the engine gave the text but not when each word was said (a cloud model that returns
+    /// only text). The words are then spread evenly over the stretch they were heard in: good for
+    /// reading, searching and correcting, not for cutting by word. Absent in files from before 2026-11-16.
+    public var textOnly: Bool?
 
-    public init(sourceID: UUID, language: String, engine: String, words: [Word], speakers: [String] = []) {
+    public init(sourceID: UUID, language: String, engine: String, words: [Word], speakers: [String] = [], textOnly: Bool? = nil) {
         self.sourceID = sourceID
         self.language = language
         self.engine = engine
         self.words = words.sorted { $0.start < $1.start }
         self.speakers = speakers
+        self.textOnly = textOnly
     }
+
+    /// Why an edit that needs to know when each word was said can't be done on this transcript.
+    public static let textOnlyReason = "This transcript has the text but not the time of each word (it came from a model that returns only text), so words can't be cut from the audio with it. Transcribe again with an engine on this Mac to edit by word."
 }
 
 /// A word as it plays on the timeline right now.
@@ -62,11 +70,14 @@ public struct PlacedWord: Hashable, Sendable {
 public enum TranscriptError: Error, LocalizedError, Equatable {
     case noWords
     case unknownWord
+    /// The transcript has no word times (`SourceTranscript.textOnly`).
+    case textOnly
 
     public var errorDescription: String? {
         switch self {
         case .noWords: "Select some words first."
         case .unknownWord: "That word isn't in the transcript."
+        case .textOnly: SourceTranscript.textOnlyReason
         }
     }
 }
@@ -153,7 +164,15 @@ extension Project {
     /// Text-based editing: removes the words from the timeline with ripple deletes,
     /// on every track, exactly as deleting those ranges by hand would.
     /// `bridge`: pauses up to this long between selected words go too.
+    /// Whether any of these words comes from a transcript without word times.
+    public func areTextOnly(_ ids: Set<UUID>) -> Bool {
+        transcripts.contains { $0.textOnly == true && $0.words.contains { ids.contains($0.id) } }
+    }
+
     public mutating func deleteWords(_ ids: Set<UUID>, bridge: Frame = 0) throws {
+        // The words of such a transcript are only spread over the stretch they were heard in: cutting
+        // by them would cut somewhere else than the word.
+        guard !areTextOnly(ids) else { throw TranscriptError.textOnly }
         let ranges = self.ranges(ofWords: ids, bridge: bridge)
         guard !ranges.isEmpty else { throw TranscriptError.noWords }
         // Back to front, so earlier ranges stay where they are.
