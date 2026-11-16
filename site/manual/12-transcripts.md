@@ -7,6 +7,8 @@ Jämmer can write down what's said and let you edit the audio by editing the tex
 1. Choose **View › Show Transcript** (⌥⌘T). The transcript panel opens under the timeline.
 2. Pick the language and click **Transcribe**. The status bar shows the progress.
 
+Every track is transcribed. A track of music gets "words" too (the recogniser hears speech where there is none), so don't be surprised by a few stray words there; they do no harm, and you can ignore them.
+
 Swedish works through Apple's dictation recognition, which downloads its language files the first time (a few hundred MB, managed by macOS). English, German, French, Spanish, Italian, Portuguese and many more languages are supported as well; if a language isn't available on your Mac, Jämmer says so. You can keep editing while it transcribes.
 
 ## Edit by text

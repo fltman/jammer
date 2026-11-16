@@ -65,10 +65,11 @@ public struct OperationSpec: Sendable, Identifiable {
 
     /// The operations an assistant with a small tool budget should get first ("core");
     /// the rest are "advanced" (SIBLINGS.md §3).
-    /// At most 15: when `duck` came in (2026-11-16), `echo` went to advanced, as the one least
-    /// central to editing speech.
+    /// At most 15: when `duck` came in (2026-11-16), `measure_loudness` went to advanced. A sibling
+    /// needs it least: normalize, loudness_preset and export each report the loudness they reached.
+    /// `gain` and `echo` stay core: they are the series' own example of one app asking another.
     public static let core: Set<String> = ["delete", "gain", "fade_in", "fade_out", "normalize", "loudness_preset", "delete_words",
-                                           "transcribe", "get_transcript", "restore", "measure_loudness", "export", "diarize",
+                                           "echo", "transcribe", "get_transcript", "restore", "export", "diarize",
                                            "level_speakers", "duck"]
     public var tier: String { Self.core.contains(name) ? "core" : "advanced" }
 

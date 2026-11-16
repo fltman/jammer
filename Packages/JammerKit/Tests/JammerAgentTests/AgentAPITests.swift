@@ -583,6 +583,9 @@ struct TierTests {
         let all = Operations.all + Operations.endpoints
         #expect((10...15).contains(OperationSpec.core.count))
         #expect(OperationSpec.core.isSubset(of: Set(all.map(\.name))))
+        // What a sibling's assistant gets when its tools don't all fit: "turn it up and add an echo" has to work.
+        let listed = Dictionary(AgentAPI.operations.compactMap { op in (op["name"] as? String).map { ($0, op["tier"] as? String ?? "") } }, uniquingKeysWith: { a, _ in a })
+        #expect(listed["gain"] == "core" && listed["echo"] == "core" && listed["duck"] == "core" && listed["measure_loudness"] == "advanced")
         #expect(AgentAPI.operations.allSatisfy { ["core", "advanced"].contains($0["tier"] as? String ?? "") })
     }
 }
