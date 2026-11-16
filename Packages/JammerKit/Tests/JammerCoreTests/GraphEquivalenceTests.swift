@@ -3,11 +3,11 @@ import Foundation
 import Testing
 @testable import JammerCore
 
-/// Every plan is to go through the mixer graph, and the older paths are to be removed (docs/MIXER.md).
-/// Before that: the same projects rendered both ways, and exactly how much they differ. Printed as a
-/// table (`GRAPH EQ …`) and asserted: bit for bit where that is so, and within a stated bound where it
-/// can't be (a plugin with memory is started at another place by the two paths).
-@Suite("Mixer: the graph against the older paths, project by project", .serialized)
+/// Every plan goes through the mixer graph. Until 2026-11-16 there were older paths beside it (the plain
+/// renderer, `renderRouted`, tracks' chains pulling for themselves); before they were removed, these
+/// projects were rendered both ways and were bit for bit the same (docs/MIXER.md; the commit tagged
+/// `before-graph-only` still has both). What the older paths gave is kept here as digests.
+@Suite("Mixer: every kind of project gives what it gave before the graph was the only path", .serialized)
 struct GraphEquivalenceTests {
     static let lowpass = PluginID("aufx/lpas/appl")!, limiter = PluginID("aufx/lmtr/appl")!
 
@@ -107,50 +107,39 @@ struct GraphEquivalenceTests {
         return (m, 10 * log10(max(e, 1e-30) / max(r, 1e-30)), n)
     }
 
-    @Test("Whole, in 512-frame blocks, and after seeks: the graph against the older path for each project")
-    func bothWays() throws {
-        var notExact: [String] = []
+    @Test("Each project gives the samples it gave by the older paths (by their recorded digests), the same in 512-frame blocks, and the same after seeks")
+    func asShippedBefore() throws {
         for (name, p, pool) in try Self.projects() {
             let hasPlugins = p.hasActiveInserts
-            func plan(_ graph: Bool) -> RenderPlan {
-                PlanCompiler.compile(p, pool: pool, inserts: hasPlugins ? InsertHost.makeBlocking(for: p) : nil, allInGraph: graph)
-            }
+            func plan() -> RenderPlan { PlanCompiler.compile(p, pool: pool, inserts: hasPlugins ? InsertHost.makeBlocking(for: p) : nil) }
             let n = Int(p.length)
-            let old = plan(false).render(from: 0, frames: n), new = plan(true).render(from: 0, frames: n)
-            // The graph against what shipped before, by its recorded digest.
+            let whole = plan().render(from: 0, frames: n)
             if let shipped = Self.shippedBefore[name] {
                 if !hasPlugins || Self.thisBuild == Self.shippedOnBuild {
-                    #expect(Self.digest(new) == shipped, "\(name): not the samples that shipped before")
+                    #expect(Self.digest(whole) == shipped, "\(name): not the samples that shipped before")
                 } else {
                     print("GRAPH EQ \(name): has Apple's plugins and this is another macOS build than the reference's; its digest is not held to")
                 }
             } else {
                 Issue.record("\(name) has no recorded digest")
             }
-            let whole = Self.worst(new, old)
-            // In blocks, through the graph: against the graph in one piece (its own consistency).
-            let blocky = plan(true)
+            let blocky = plan()
             var blocks: [Float] = []
             var at = 0
             while at < n { let k = min(512, n - at); blocks += blocky.render(from: Frame(at), frames: k); at += k }
-            let inBlocks = Self.worst(blocks, new)
-            // After seeks, through the graph: against the older path asked for the same stretches.
-            let a = plan(true), b = plan(false)
-            var seek = (max: Float(0), db: -300.0, differing: 0)
+            #expect(blocks == whole, "\(name): differs between blocks and one piece")
+            let seeking = plan()
             for (from, frames) in [(30_000, 4_000), (0, 3_000), (17_123, 2_048), (46_000, 2_000)] {
-                let w = Self.worst(a.render(from: Frame(from), frames: frames), b.render(from: Frame(from), frames: frames))
-                if w.max > seek.max { seek = w }
+                let got = seeking.render(from: Frame(from), frames: frames), want = Array(whole[(from * channelsOf(p))..<((from + frames) * channelsOf(p))])
+                if name == "master limiter, working" {
+                    // A limiter that is working doesn't know what it did before the run-in: after a seek it
+                    // is the unbroken run's to within a thousandth, not bit for bit (docs/MIXER.md, step 4).
+                    #expect(zip(got, want).allSatisfy { abs($0 - $1) < 1e-3 }, "\(name): after a seek to \(from)")
+                } else {
+                    #expect(got == want, "\(name): after a seek to \(from)")
+                }
             }
-            print(String(format: "GRAPH EQ %-38@ whole: %@   blocks: %@   seeks: %@", name as NSString,
-                         (whole.max == 0 ? "bit for bit" : String(format: "max %.1e (%.0f dB, %d samples)", whole.max, whole.db, whole.differing)) as NSString,
-                         (inBlocks.max == 0 ? "bit for bit" : String(format: "max %.1e", inBlocks.max)) as NSString,
-                         (seek.max == 0 ? "bit for bit" : String(format: "max %.1e (%.0f dB)", seek.max, seek.db)) as NSString))
-            if whole.max != 0 || seek.max != 0 { notExact.append(name) }
-            // What must hold whatever else: the graph is the same in blocks as in one piece.
-            #expect(inBlocks.max == 0, "\(name): the graph differs between blocks and one piece")
-            // And the two paths give the same samples: the condition for taking the older paths away.
-            #expect(whole.max == 0 && seek.max == 0, "\(name): whole \(whole.max) (\(whole.db) dB), seeks \(seek.max) (\(seek.db) dB)")
         }
-        print("GRAPH EQ not bit for bit: \(notExact.isEmpty ? "none" : notExact.joined(separator: ", "))")
     }
+    func channelsOf(_ p: Project) -> Int { p.channels }
 }

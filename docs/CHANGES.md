@@ -4,6 +4,7 @@ Not a list of commits: what behaves differently from before, for a user, an agen
 
 ## 2026-11-16
 
+- **The older render paths are removed**; the mixer graph is the only way a plan is rendered. No behaviour changes with the removal: the commit before it is tagged `before-graph-only`, and the tests hold every kind of project to what the older paths gave.
 - **Every plan now goes through the mixer graph** (`docs/MIXER.md`). The sound is the same, sample for sample (21 kinds of project compared, and the whole suite both ways). **What an agent reads changes**: in `GET …/mixer`, `totalLatencySamples` now includes the tracks' own plugins, and a track's `compensationSamples` is the wait added to it; before, both spoke of buses only. A document with a limiter on one track and nothing else used to say 0 and now says that limiter's look-ahead.
 
 - **File › Storage…**, the first place where Jämmer moves files away, built to the rule that the user's data is never removed:

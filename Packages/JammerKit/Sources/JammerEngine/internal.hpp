@@ -96,29 +96,20 @@ struct Chain {
 
     Chain(int32_t channels, int64_t preroll);
     ~Chain();
-    /// Writes `n` processed frames of `track` from `start` to `out` (interleaved, overwritten).
-    void process(const Plan &plan, int32_t track, Renderer &renderer, int64_t start, int64_t n, float *out);
-    /// For a chain on a bus: one quantum of interleaved audio through the units, in place. What comes
-    /// out is as late as the units make it (`latency` frames); the mixer graph lines the paths up.
+    /// One quantum of interleaved audio through the units, in place. What comes out is as late as the
+    /// units make it (`latency` frames); the mixer graph lines the paths up and hides the lateness.
     void stream(float *interleaved, const KeyFeed *keys = nullptr, size_t keyCount = 0);
     /// Starts the units afresh (a seek).
     void restart();
 
 private:
     std::mutex mutex_;
-    bool primed_ = false;
-    int64_t readPos_ = 0;   // timeline frame of the next output frame
-    int64_t inCursor_ = 0;  // timeline frame of the next input frame
-    int64_t discard_ = 0;   // output frames still to drop after a reset
     double sampleTime_ = 0;
-    std::vector<float> fifo_;  // interleaved, processed, from readPos_
-    size_t fifoHead_ = 0;      // frames consumed from fifo_
-    std::vector<float> interleaved_, a_, b_, key_, zeros_;
+    std::vector<float> a_, b_, key_, zeros_;
     const KeyFeed *keys_ = nullptr;
     size_t keyCount_ = 0;
     AudioBufferList *list_ = nullptr;
-    void reset(int64_t start);
-    void produce(const Plan &plan, int32_t track, Renderer &renderer);
+    void reset();
     /// Runs the units over the quantum in `a_` (planar), leaving the result in `a_`.
     void runUnits();
 };
@@ -194,7 +185,6 @@ private:
     /// With a key in the plan every strip is a node (tracks 0…, then buses), worked through in an order
     /// in which a key's source comes before the strip that listens to it. The tracks' chains then run as
     /// streams like the buses', and `nodeIn_` is how late each node's input is.
-    bool keyed_ = false;
     std::vector<int32_t> order_;
     std::vector<int64_t> nodeIn_;
     struct KeyBuffer {
@@ -232,9 +222,7 @@ struct Plan {
         int32_t from;
     };
     std::vector<Key> keys;
-    /// Every strip as a node in the mixer graph even without a key (the path all plans are to take
-    /// once it has been shown to give what the older paths give; see docs/MIXER.md).
-    bool allInGraph = false;
+
     /// With keys: every strip (a track is its index, a bus is the number of tracks plus its index),
     /// each after every strip it listens to or is fed by.
     std::vector<int32_t> nodeOrder;
@@ -263,9 +251,7 @@ public:
 private:
     int32_t channels_;
     std::vector<float> scratch_;
-    std::vector<float> track_;
-    std::vector<std::vector<float>> bus_;
-    void renderRouted(const Plan &plan, int64_t start, int64_t frames, float *out);
+
     friend class Graph;
     void mixClip(const Plan &plan, const Clip &c, float trackGain, int64_t start, int64_t frames, float *out);
 };

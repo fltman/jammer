@@ -1,5 +1,4 @@
-// The mixer when it has state: plugins on buses, a master that does something, or a sidechain key.
-// Delay compensation across every path. See Graph in internal.hpp.
+// The mixer: how every plan is rendered. Delay compensation across every path. See Graph in internal.hpp.
 
 #include "internal.hpp"
 
@@ -10,17 +9,15 @@ namespace jm {
 
 Graph::Graph(const Plan &plan) : channels_(plan.channels) {
     const size_t nt = plan.tracks.size(), nb = plan.buses.size();
-    keyed_ = !plan.keys.empty() || plan.allInGraph;
     busLatency.assign(nb, 0);
     for (size_t b = 0; b < nb; ++b) {
         if (!plan.buses[b].chain) continue;
         busLatency[b] = plan.buses[b].chain->latency;
         preroll_ = std::max(preroll_, plan.buses[b].chain->preroll);
     }
-    // With a key the tracks' chains run as streams here too, and need their run-in from here.
-    if (keyed_)
-        for (const Track &t : plan.tracks)
-            if (t.chain) preroll_ = std::max(preroll_, t.chain->preroll);
+    // The tracks' chains run as streams here too, and get their run-in from here.
+    for (const Track &t : plan.tracks)
+        if (t.chain) preroll_ = std::max(preroll_, t.chain->preroll);
     for (const auto &c : {plan.masterChain, plan.masterLimiter}) {
         if (!c) continue;
         masterLatency += c->latency;
@@ -56,17 +53,13 @@ Graph::Graph(const Plan &plan) : channels_(plan.channels) {
     for (size_t n = 0; n < keyBuffers_.size(); ++n)
         for (const KeyBuffer &kb : keyBuffers_[n]) feeds_[n].push_back(Chain::KeyFeed{kb.unit, kb.data.data()});
 
-    // The order the strips are worked through in. Without a key: the tracks, then the buses as finalize
-    // ordered them, exactly as before. With one: the order finalize found for all of them.
-    if (keyed_) {
-        order_ = plan.nodeOrder;
-    } else {
-        for (size_t t = 0; t < nt; ++t) order_.push_back(int32_t(t));
-        for (int32_t b : plan.busOrder) order_.push_back(int32_t(nt) + b);
-    }
+    // The order the strips are worked through in: the one finalize found, in which every strip comes
+    // after the strips that feed it or that it listens to (the tracks in their order, then the buses,
+    // wherever nothing forces another).
+    order_ = plan.nodeOrder;
     // How late the signal is where it arrives at each strip, and where it leaves: the longest path in.
-    // One pass in that order is enough. Without a key a track leaves on time: its own chain makes up
-    // for its plugins by itself. With one, a track's chain is a stream and makes the track late.
+    // One pass in that order is enough. A track's chain is a stream like a bus's, and makes the track
+    // as late as its plugins are.
     nodeIn_.assign(nt + nb, 0);
     std::vector<int64_t> out(nt + nb, 0);
     total = 0;
@@ -75,7 +68,7 @@ Graph::Graph(const Plan &plan) : channels_(plan.channels) {
         const size_t i = isBus ? size_t(n) - nt : size_t(n);
         int64_t own = 0;
         if (isBus) own = busLatency[i];
-        else if (keyed_ && plan.tracks[i].chain) own = plan.tracks[i].chain->latency;
+        else if (plan.tracks[i].chain) own = plan.tracks[i].chain->latency;
         out[size_t(n)] = nodeIn_[size_t(n)] + own;
         for (const Edge &e : isBus ? busEdges_[i] : trackEdges_[i]) {
             if (e.keyNode >= 0) nodeIn_[size_t(e.keyNode)] = std::max(nodeIn_[size_t(e.keyNode)], out[size_t(n)]);
@@ -99,7 +92,7 @@ Graph::Graph(const Plan &plan) : channels_(plan.channels) {
         for (Edge &e : busEdges_[b]) line(e, arrival(e) - out[nt + b]);
         busDelay[b] = busEdges_[b][0].delay;
     }
-    plain_ = keyed_ && !plan.routed && plan.keys.empty();
+    plain_ = !plan.routed && plan.keys.empty();
     if (plain_) {
         direct_.assign(size_t(kQuantum * channels_), 0.0f);
         directLine_.assign(size_t(total * channels_), 0.0f);
@@ -112,9 +105,8 @@ Graph::Graph(const Plan &plan) : channels_(plan.channels) {
 void Graph::reset(const Plan &plan, int64_t start) {
     for (const Bus &b : plan.buses)
         if (b.chain) b.chain->restart();
-    if (keyed_)
-        for (const Track &t : plan.tracks)
-            if (t.chain) t.chain->restart();
+    for (const Track &t : plan.tracks)
+        if (t.chain) t.chain->restart();
     if (plan.masterChain) plan.masterChain->restart();
     if (plan.masterLimiter) plan.masterLimiter->restart();
     for (auto &edges : trackEdges_)
@@ -210,15 +202,11 @@ void Graph::produce(const Plan &plan, Renderer &renderer) {
             if (track.mute) {
                 // A muted strip sends silence, so that its delay lines empty in step with the others.
                 std::fill(strip_.begin(), strip_.end(), 0.0f);
-            } else if (keyed_) {
-                // As a stream: the track's own audio, taken as much earlier as the node is late (so that it
-                // meets its keys), through its plugins with those keys.
+            } else {
+                // The track's own audio, taken as much earlier as the node is late (so that it meets its
+                // keys), through its plugins with those keys.
                 renderer.renderTrack(plan, int32_t(t), cursor_ - nodeIn_[t], q, strip_.data());
                 if (track.chain) track.chain->stream(strip_.data(), feeds_[t].data(), feeds_[t].size());
-            } else if (track.chain) {
-                track.chain->process(plan, int32_t(t), renderer, cursor_, q, strip_.data());
-            } else {
-                renderer.renderTrack(plan, int32_t(t), cursor_, q, strip_.data());
             }
             for (Edge &e : trackEdges_[t]) {
                 if (e.main || e.keyNode >= 0) send(e, strip_.data(), track.gain * track.panL, track.gain * track.panR, q);

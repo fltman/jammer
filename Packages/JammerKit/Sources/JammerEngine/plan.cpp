@@ -48,77 +48,13 @@ void Renderer::mixClip(const Plan &plan, const Clip &c, float trackGain, int64_t
     }
 }
 
-/// Adds `n` interleaved frames of `in` to `to`, times `gain`, with the pan's two gains on a stereo signal.
-static inline void addStrip(const float *in, float *to, int64_t n, int32_t channels, float gain, float panL, float panR) {
-    if (channels == 2) {
-        const float l = gain * panL, r = gain * panR;
-        for (int64_t i = 0; i < n; ++i) {
-            to[i * 2] += in[i * 2] * l;
-            to[i * 2 + 1] += in[i * 2 + 1] * r;
-        }
-    } else {
-        for (int64_t i = 0; i < n * channels; ++i) to[i] += in[i] * gain;
-    }
-}
-
-/// The mix through the buses: each track into its bus or the output, then each bus into the one it
-/// feeds, in the order finalize worked out.
-void Renderer::renderRouted(const Plan &plan, int64_t start, int64_t frames, float *out) {
-    const size_t samples = size_t(frames * channels_);
-    std::memset(out, 0, samples * sizeof(float));
-    bus_.resize(plan.buses.size());
-    for (auto &b : bus_) b.assign(samples, 0.0f);
-    track_.resize(samples);
-    for (size_t t = 0; t < plan.tracks.size(); ++t) {
-        const Track &track = plan.tracks[t];
-        if (track.mute) continue;
-        if (track.chain) track.chain->process(plan, int32_t(t), *this, start, frames, track_.data());
-        else renderTrack(plan, int32_t(t), start, frames, track_.data());
-        float *to = track.bus >= 0 && size_t(track.bus) < bus_.size() ? bus_[size_t(track.bus)].data() : out;
-        addStrip(track_.data(), to, frames, channels_, track.gain, track.panL, track.panR);
-        // Sends: the strip's own signal before the fader, or what the fader and pan make of it.
-        for (const Send &s : track.sends) {
-            if (s.bus < 0 || size_t(s.bus) >= bus_.size()) continue;
-            if (s.pre) addStrip(track_.data(), bus_[size_t(s.bus)].data(), frames, channels_, s.gain, 1.0f, 1.0f);
-            else addStrip(track_.data(), bus_[size_t(s.bus)].data(), frames, channels_, track.gain * s.gain, track.panL, track.panR);
-        }
-    }
-    for (int32_t b : plan.busOrder) {
-        const Bus &bus = plan.buses[size_t(b)];
-        if (bus.mute) continue;
-        float *to = bus.output >= 0 && size_t(bus.output) < bus_.size() ? bus_[size_t(bus.output)].data() : out;
-        addStrip(bus_[size_t(b)].data(), to, frames, channels_, bus.gain, bus.panL, bus.panR);
-        for (const Send &s : bus.sends) {
-            if (s.bus < 0 || size_t(s.bus) >= bus_.size() || s.bus == b) continue;
-            if (s.pre) addStrip(bus_[size_t(b)].data(), bus_[size_t(s.bus)].data(), frames, channels_, s.gain, 1.0f, 1.0f);
-            else addStrip(bus_[size_t(b)].data(), bus_[size_t(s.bus)].data(), frames, channels_, bus.gain * s.gain, bus.panL, bus.panR);
-        }
-    }
-}
-
+/// Every plan is rendered by its mixer graph (see Graph): finalize always makes one. (Until 2026-11-16
+/// there were three ways: a plain loop for plans that used nothing of the mixer, another for buses and
+/// pan, and the graph for plugins on buses and keys. The graph gives the samples the other two gave;
+/// see docs/MIXER.md and the tag before-graph-only.)
 void Renderer::render(const Plan &plan, int64_t start, int64_t frames, float *out) {
-    // With plugins on a bus the mixer keeps state (the units, the delay lines that line the paths up).
     if (plan.graph) { plan.graph->process(plan, *this, start, frames, out); return; }
-    if (plan.routed) { renderRouted(plan, start, frames, out); return; }
-    std::memset(out, 0, size_t(frames * channels_) * sizeof(float));
-    const int64_t end = start + frames;
-    for (const Clip &c : plan.clips) {
-        if (c.start >= end) break; // sorted by start
-        if (c.end() <= start) continue;
-        const Track &track = plan.tracks[size_t(c.track)];
-        if (track.mute) continue;
-        if (track.chain) continue;
-        mixClip(plan, c, track.gain, start, frames, out);
-    }
-    // Tracks with inserts run whenever they're audible, so tails ring past their clips.
-    for (size_t t = 0; t < plan.tracks.size(); ++t) {
-        const Track &track = plan.tracks[t];
-        if (track.mute || !track.chain) continue;
-        track_.resize(size_t(frames * channels_));
-        track.chain->process(plan, int32_t(t), *this, start, frames, track_.data());
-        const float g = track.gain;
-        for (int64_t i = 0; i < frames * channels_; ++i) out[i] += track_[size_t(i)] * g;
-    }
+    std::memset(out, 0, size_t(frames * channels_) * sizeof(float)); // a plan that was never finalized
 }
 
 void Renderer::renderTrack(const Plan &plan, int32_t track, int64_t start, int64_t frames, float *out) {
@@ -224,9 +160,7 @@ void jm_plan_add_key(jm_plan *plan, bool to_bus, int32_t to, int32_t unit, bool 
 
 int32_t jm_plan_key_count(const jm_plan *plan) { return int32_t(plan->ptr->keys.size()); }
 
-void jm_plan_set_all_in_graph(jm_plan *plan, bool all) {
-    if (!plan->ptr->finalized) plan->ptr->allInGraph = all;
-}
+
 
 void jm_plan_set_master(jm_plan *plan, float gain, jm_chain *chain, jm_chain *limiter) {
     Plan &p = *plan->ptr;
@@ -303,7 +237,7 @@ void jm_plan_finalize(jm_plan *plan) {
     };
     p.keys.erase(std::remove_if(p.keys.begin(), p.keys.end(), [&](const Plan::Key &k) { return !real(k); }), p.keys.end());
     p.nodeOrder.clear();
-    while (!p.keys.empty() || p.allInGraph) {
+    for (;;) {
         const size_t nodes = nt + nb;
         std::vector<std::vector<int32_t>> next(nodes);
         std::vector<int> waiting(nodes, 0);
@@ -342,9 +276,7 @@ void jm_plan_finalize(jm_plan *plan) {
         if (p.keys.empty()) break; // (can't be: routes and sends alone never loop here; they were cut above)
         p.keys.pop_back();
     }
-    bool stateful = p.masterChain || p.masterLimiter || p.masterGain != 1.0f || !p.keys.empty() || p.allInGraph;
-    for (const Bus &b : p.buses) stateful = stateful || b.chain;
-    if (stateful) p.graph = std::make_shared<Graph>(p);
+    p.graph = std::make_shared<Graph>(p);
     p.finalized = true;
 }
 

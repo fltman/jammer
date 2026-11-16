@@ -7,14 +7,15 @@ import Testing
 /// at every step of its history. Run with `JAMMER_REAL_PROJECTS` set to paths separated by ":" (project
 /// packages, folders of them, or a Final Cut timeline file). Every project is read from a copy.
 ///
-/// With the older render paths and the graph both in the engine (up to the commit tagged
-/// `before-graph-only`), it compares the two. And it keeps the comparison possible once the older paths
-/// are gone: `JAMMER_REAL_WRITE=<file>` writes a digest of every state's render (run it at the tag, where
-/// it writes what the OLDER paths give), and `JAMMER_REAL_CHECK=<file>` holds the present build to that
-/// file. So a document that turns up later, a user's or Anders's, can still be tried against what shipped.
-@Suite("Real projects: the graph against the older paths", .serialized, .enabled(if: ProcessInfo.processInfo.environment["JAMMER_REAL_PROJECTS"] != nil))
+/// `JAMMER_REAL_WRITE=<file>` writes a digest of every state's render, and `JAMMER_REAL_CHECK=<file>`
+/// holds this build to such a file. At the commit tagged `before-graph-only` the engine still had the
+/// older render paths, and the test there wrote what THEY gave: a reference written at that tag and
+/// checked here says whether a project sounds as it did before the graph was the only path
+/// (`docs/references/real-projects-before-graph-only.json` is that for the projects that were on the Mac
+/// then). So a document that turns up later, a user's or Anders's, can still be tried against what shipped.
+@Suite("Real projects: the same samples as a reference says", .serialized, .enabled(if: ProcessInfo.processInfo.environment["JAMMER_REAL_PROJECTS"] != nil))
 struct RealProjectTests {
-    @Test("Every project found, and every state in its history: the same samples both ways")
+    @Test("Every project found, and every state in its history: rendered, the same after a seek, and the same as the reference when one is given")
     func bothWays() throws {
         let given = (ProcessInfo.processInfo.environment["JAMMER_REAL_PROJECTS"] ?? "").split(separator: ":").map { URL(fileURLWithPath: String($0)) }
         let scratch = TempDir()
@@ -28,16 +29,16 @@ struct RealProjectTests {
         func compare(_ name: String, _ p: Project) {
             guard p.length > 0 else { return }
             let pool = SourcePool()
-            func plan(_ graph: Bool) -> RenderPlan {
-                PlanCompiler.compile(p, pool: pool, inserts: p.hasActiveInserts ? InsertHost.makeBlocking(for: p) : nil, allInGraph: graph)
-            }
+            func plan() -> RenderPlan { PlanCompiler.compile(p, pool: pool, inserts: p.hasActiveInserts ? InsertHost.makeBlocking(for: p) : nil) }
             // The whole project in one piece, and a stretch from the middle after a seek.
             let n = Int(min(p.length, Frame(p.sampleRate * 120)))
-            let a = plan(false).render(from: 0, frames: n), b = plan(true).render(from: 0, frames: n)
+            let a = plan().render(from: 0, frames: n), b = a
             let from = n / 3, some = min(n - from, 20_000)
-            let c = plan(false).render(from: Frame(from), frames: some), d = plan(true).render(from: Frame(from), frames: some)
+            let c = plan().render(from: Frame(from), frames: some), d = c
+            // After a seek, the same samples as in the whole render.
+            if c != Array(a[(from * p.channels)..<((from + some) * p.channels)]) { different.append("\(name) (a seek gives other samples than the whole)") }
             let silent = a.allSatisfy { $0 == 0 }
-            // The reference is of the older paths' render (a, c); it is checked against the graph's (b, d).
+            // What a reference file holds, and what is checked against one.
             written[name] = digest(a, c)
             if let reference {
                 if let was = reference[name] { checked += 1; if digest(b, d) != was { different.append("\(name) (not the reference's samples)") } } else { missing.append(name) }
@@ -49,7 +50,7 @@ struct RealProjectTests {
                 for i in 0..<min(a.count, b.count) { worst = max(worst, abs(a[i] - b[i])) }
                 different.append("\(name) (largest difference \(worst))")
             }
-            print("REAL \(name): \(p.tracks.count) tracks, \(p.tracks.reduce(0) { $0 + $1.clips.count }) clips, \(p.allInserts.count) plugins, \(p.buses.count) buses, \(String(format: "%.1f", Double(n) / p.sampleRate)) s\(silent ? ", SILENT (its audio couldn't be read)" : ""): \(a == b && c == d ? "bit for bit" : "DIFFERENT")")
+            print("REAL \(name): \(p.tracks.count) tracks, \(p.tracks.reduce(0) { $0 + $1.clips.count }) clips, \(p.allInserts.count) plugins, \(p.buses.count) buses, \(String(format: "%.1f", Double(n) / p.sampleRate)) s\(silent ? ", SILENT (its audio couldn't be read)" : ""): \(a == b && c == d ? "rendered" : "DIFFERENT")")
         }
         for url in given {
             var packages: [URL] = []
@@ -80,7 +81,7 @@ struct RealProjectTests {
                 } catch { unread.append("\(package.lastPathComponent): \(error.localizedDescription)") }
             }
         }
-        print("REAL \(compared) projects, \(states) states, \(frames) frames rendered each way; different: \(different.isEmpty ? "none" : different.joined(separator: "; ")); not read: \(unread.isEmpty ? "none" : unread.joined(separator: "; "))")
+        print("REAL \(compared) projects, \(states) states, \(frames) frames rendered; different: \(different.isEmpty ? "none" : different.joined(separator: "; ")); not read: \(unread.isEmpty ? "none" : unread.joined(separator: "; "))")
         if let path = env["JAMMER_REAL_WRITE"] {
             let e = JSONEncoder()
             e.outputFormatting = [.sortedKeys, .prettyPrinted]

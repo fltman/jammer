@@ -185,9 +185,9 @@ struct MixerKeyTests {
             jm_plan_finalize(plan)
             return plan
         }
-        // No key: the gate is a delay that the track's chain makes up for by itself; the plain mix.
+        // No key: the gate is a delay (30 + 100 frames with the unit before it) that the graph makes up for; the plain mix.
         let none = plan(key: false)
-        #expect(jm_plan_total_latency(none) == 0)
+        #expect(jm_plan_total_latency(none) == 130)
         #expect(MixerGraphTests.render(none) == MixerGraphTests.plain(a, k))
         jm_plan_release(none)
         // With the key: only the one frame differs from the plain mix, and by the gate's quarter.
