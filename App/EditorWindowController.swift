@@ -269,9 +269,31 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
     @objc func toggleAssistant(_ sender: Any?) {
         guard let split = window?.contentView as? NSSplitView, split.arrangedSubviews.count > 1 else { return }
         let view = split.arrangedSubviews[1]
-        view.isHidden.toggle()
+        // Shows the panel and puts the keyboard in its field; hides it only from there. So one command
+        // takes a keyboard or VoiceOver user to the field, wherever they were.
+        if view.isHidden {
+            view.isHidden = false
+            split.setPosition(split.frame.width - 320, ofDividerAt: 0)
+            assistant.focusRequest += 1
+        } else if !assistant.fieldFocused {
+            assistant.focusRequest += 1
+        } else {
+            view.isHidden = true
+            window?.makeFirstResponder(timeline)
+        }
         UserDefaults.standard.set(!view.isHidden, forKey: "assistant.visible")
-        if !view.isHidden { split.setPosition(split.frame.width - 320, ofDividerAt: 0) }
+    }
+
+    /// From the command palette: always to the field, never away from it.
+    @objc func askAssistant(_ sender: Any?) {
+        guard let split = window?.contentView as? NSSplitView, split.arrangedSubviews.count > 1 else { return }
+        let view = split.arrangedSubviews[1]
+        if view.isHidden {
+            view.isHidden = false
+            split.setPosition(split.frame.width - 320, ofDividerAt: 0)
+            UserDefaults.standard.set(true, forKey: "assistant.visible")
+        }
+        assistant.focusRequest += 1
     }
 
     @objc func toggleTranscript(_ sender: Any?) {
@@ -514,7 +536,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         }
         if item.action == #selector(toggleAssistant(_:)) {
             let hidden = ((window?.contentView as? NSSplitView)?.arrangedSubviews.last?.isHidden) ?? true
-            item.title = hidden ? "Show Assistant" : "Hide Assistant"
+            item.title = hidden ? "Show Assistant" : assistant.fieldFocused ? "Hide Assistant" : "Ask the Assistant"
             return true
         }
         if item.action == #selector(toggleTranscript(_:)) {

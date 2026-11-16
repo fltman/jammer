@@ -66,6 +66,33 @@ public enum AssistantCatalog {
             + macros
     }
 
+    /// Actions the small on-device model is told about only when the request has one of these words in it
+    /// (lowercased, Swedish and English). Every action in the list costs that model attention and context:
+    /// with 28 actions it planned 14 of 14 standard requests right; with all 37 in front of it, 10 of 14, and
+    /// some requests no longer fitted its context (measured 2026-11-16). Larger models get the whole list.
+    /// A new action goes either here, with its words, or into `onDeviceAlways` after the evaluation was run.
+    public static let onDeviceWhenNamed: [String: [String]] = [
+        "align_tracks": ["align", "sync", "synk", "linjera", "passa ihop"],
+        "correct_drift": ["drift", "glider", "driver isär", "out of sync", "ur synk"],
+        "debleed": ["bleed", "spill", "läck", "överhör"],
+        "detect_tempo": ["tempo", "bpm", "takt", "beat"],
+        "duck": ["duck", "under speech", "under the speech", "under the voice", "under talet", "under rösten", "musiken under", "music under", "sänk musiken", "lower the music"],
+        "level_speakers": ["speakers", "talarna", "lika högt", "equally loud", "same level", "samma nivå", "even out", "jämna"],
+        "loudness_preset": ["podcast", "podd", "spotify", "youtube", "apple", "broadcast", "ebu", "r128", "preset", "streaming", "sändning"],
+        "rename_speaker": ["rename", "döp", "byt namn", "kalla", "call speaker", "name speaker"],
+        "spectral_attenuate": ["frequenc", "frekvens", " hz", "khz", "band", "spectral", "spektral"],
+    ]
+
+    /// What the on-device model is given for this request: everything but the actions in
+    /// `onDeviceWhenNamed` that the request doesn't name. Sibling apps' actions are already chosen by name.
+    public static func forOnDevice(_ actions: [AssistantAction], goal: String) -> [AssistantAction] {
+        let text = " " + goal.lowercased() + " "
+        return actions.filter { a in
+            guard let words = onDeviceWhenNamed[a.name] else { return true }
+            return words.contains { text.contains($0) }
+        }
+    }
+
     /// One line per action: `- gain(db*, start, end): Changes the level…` (* = required).
     public static func catalogue(_ actions: [AssistantAction]) -> String {
         actions.map { a in
@@ -321,7 +348,9 @@ public enum PlanParser {
     public static func guardrail(_ goal: String) -> String? {
         let t = Project.tokens(goal)
         let text = " " + t.joined(separator: " ") + " "
-        let swedish = t.contains { ["och", "det", "ljudet", "gör", "ta", "bort", "fixa", "spela", "radera", "bättre", "lite"].contains($0) }
+        // The recogniser when the request is long enough for it, a few sure words and letters otherwise.
+        let swedish = ReplyGuard.language(of: goal).map { $0 == .swedish }
+            ?? (goal.lowercased().contains { "åäö".contains($0) } || t.contains { ["och", "det", "ljudet", "gör", "ta", "bort", "fixa", "spela", "radera", "bättre", "lite"].contains($0) })
         // Asking to record, not talking about a recording ("the recording is distorted").
         let recording = text.contains(" spela in ") || text.contains(" record a ") || text.contains(" record me ") || text.contains(" start recording ")
             || text.contains(" record new ") || text.contains(" ny inspelning ") || text.contains(" starta inspelning")

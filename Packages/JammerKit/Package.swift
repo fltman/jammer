@@ -72,7 +72,9 @@ let package = Package(
         .target(name: "JammerAgent", dependencies: ["JammerCore"]),
         .testTarget(name: "JammerEngineTests", dependencies: ["JammerEngine"]),
         .testTarget(name: "JammerCoreTests", dependencies: ["JammerCore", "JammerEngine"]),
-        .testTarget(name: "JammerAgentTests", dependencies: ["JammerAgent", "JammerCore"]),
+        // Refuses every request from a test to anything but this Mac; loaded before the tests run (+load).
+        .target(name: "TestNetGuard", path: "Tests/Support/TestNetGuard"),
+        .testTarget(name: "JammerAgentTests", dependencies: ["JammerAgent", "JammerCore", "TestNetGuard"]),
         .testTarget(name: "JammerAssistantTests", dependencies: ["JammerAssistant", "JammerAgent", "JammerCore"]),
         .testTarget(name: "JammerSpeechTests", dependencies: ["JammerSpeech", "JammerCore"]),
         .testTarget(name: "JammerAudioTests", dependencies: ["JammerAudio", "JammerCore", "JammerEngine"]),

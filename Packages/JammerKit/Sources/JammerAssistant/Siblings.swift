@@ -42,7 +42,7 @@ public enum SiblingDirectory {
         guard let u = URL(string: url) else { return nil }
         var req = URLRequest(url: u, timeoutInterval: timeout)
         req.setValue("jammer", forHTTPHeaderField: "X-Sibling")
-        guard let (data, resp) = try? await session.data(for: req), (resp as? HTTPURLResponse)?.statusCode == 200 else { return nil }
+        guard let (data, resp) = try? await KeyedRequest.data(for: req, session: session), (resp as? HTTPURLResponse)?.statusCode == 200 else { return nil }
         return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
     }
 
@@ -117,7 +117,7 @@ public enum SiblingDirectory {
         guard let doc = docs.first(where: { $0["frontmost"] as? Bool == true }) ?? docs.first, let id = doc["id"] as? String else {
             return "\(sibling.name) has no open document."
         }
-        guard let req = request(sibling, action, params, documentID: id), let (data, resp) = try? await session.data(for: req) else {
+        guard let req = request(sibling, action, params, documentID: id), let (data, resp) = try? await KeyedRequest.data(for: req, session: session) else {
             return "\(sibling.name) didn't answer."
         }
         let code = (resp as? HTTPURLResponse)?.statusCode ?? 0

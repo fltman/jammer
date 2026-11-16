@@ -30,6 +30,10 @@ struct AssistantEval {
         Case(goal: "lägg till en markör som heter Intro vid 5 sekunder", ops: ["add_marker"], params: ["add_marker": ["name": "Intro", "at": "5"]]),
         Case(goal: "reduce the background noise", ops: ["restore"], params: ["restore": ["kind": "denoise"]]),
         Case(goal: "hur högt är det, i LUFS?", ops: ["measure_loudness"]),
+        // Added 2026-11-16, from the app: the model said "The loudness is -16 LUFS" in front of the measured
+        // −18.0, and refused an English request in Swedish. The reply's figures and language are counted below.
+        Case(goal: "what is the loudness?", ops: ["measure_loudness"]),
+        Case(goal: "write a poem about the sea", ops: []),
     ] }
 
     /// The model under evaluation: the on-device one, or with `JAMMER_EVAL_PLANNER=ollama:<model>` a model
@@ -62,7 +66,7 @@ struct AssistantEval {
         let context = AssistantContext(project: p, selection: nil, playhead: 0)
         let planner = Self.planner
         let actions = AssistantCatalog.actions
-        var opsRight = 0, paramsRight = 0, paramsTotal = 0
+        var opsRight = 0, paramsRight = 0, paramsTotal = 0, invented = 0, wrongLanguage = 0
         var rows: [String] = []
         var seconds = 0.0
         for c in Self.cases(track2: p.tracks[1].id.uuidString) {
@@ -77,6 +81,10 @@ struct AssistantEval {
             let got = plan.steps.map(\.op)
             let ok = got == c.ops
             if ok { opsRight += 1 }
+            // The reply as the model wrote it (the app shows it only after ReplyGuard).
+            let faults = ReplyGuard.faults(plan, goal: c.goal, context: context)
+            if faults.inventedFigure { invented += 1; print("FIGURE OF ITS OWN: \(c.goal) → \(plan.reply)") }
+            if faults.wrongLanguage { wrongLanguage += 1; print("OTHER LANGUAGE: \(c.goal) → \(plan.reply)") }
             var paramNotes: [String] = []
             for (op, expected) in c.params {
                 guard let step = plan.steps.first(where: { $0.op == op }) else { paramsTotal += expected.count; continue }
@@ -90,7 +98,7 @@ struct AssistantEval {
             rows.append("| \(c.goal) | \(c.ops.joined(separator: ", ")) | \(shown.isEmpty ? "(none) " + plan.reply.prefix(60) : shown)\(plan.dropped.isEmpty ? "" : " [dropped: \(plan.dropped.joined(separator: ", "))]") | \(ok ? (paramNotes.isEmpty ? "✓" : "ops ✓, " + paramNotes.joined(separator: " ")) : "✗") |")
         }
         let n = Self.cases(track2: "").count
-        let summary = "Right actions in the right order: \(opsRight)/\(n). Right key values: \(paramsRight)/\(paramsTotal). Average \(String(format: "%.1f", seconds / Double(n))) s per request."
+        let summary = "Right actions in the right order: \(opsRight)/\(n). Right key values: \(paramsRight)/\(paramsTotal). Average \(String(format: "%.1f", seconds / Double(n))) s per request. Replies with a figure of the model's own (struck before showing): \(invented). Replies in another language than the request (replaced): \(wrongLanguage)."
         let table = "| Request | Expected | Planned | Result |\n|---|---|---|---|\n" + rows.joined(separator: "\n") + "\n\n" + summary + "\n"
         print(table)
         if let path = ProcessInfo.processInfo.environment["JAMMER_EVAL_REPORT"] { try table.write(toFile: path, atomically: true, encoding: .utf8) }

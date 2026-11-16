@@ -5,7 +5,7 @@
 #   scripts/eval-assistant.sh                     the on-device model (Apple)
 #   scripts/eval-assistant.sh ollama:qwen3:8b     a model already installed in Ollama on this Mac
 #
-# Three sets: the standard 14 requests and two hold-out sets (24 and 23), Swedish and English.
+# Three sets: the standard 16 requests and two hold-out sets (24 and 23), Swedish and English.
 # The reports go to build/eval/<model>/; the last line of each is the score. Nothing is
 # downloaded and nothing is paid for: only models on this Mac can be evaluated this way.
 # For comparison, docs/ASSISTANT.md has the on-device model's and qwen3:8b's results.
@@ -17,6 +17,13 @@ case "$model" in
   ollama:*) name="$(printf '%s' "$model" | tr ':/' '--')" ;;
   *) echo "eval-assistant: give nothing (the on-device model) or ollama:<model>." >&2; exit 64 ;;
 esac
+# A model in Ollama stays loaded (about 6 GB for an 8B model) until its timer runs out, and the Mac's own
+# model has been seen to fail right after such a run. So the model is unloaded when this ends, however it ends.
+unload() {
+  case "$model" in ollama:*) curl -s -m 20 -o /dev/null http://127.0.0.1:11434/api/generate -d "{\"model\":\"${model#ollama:}\",\"keep_alive\":0}" || true ;; esac
+}
+trap unload EXIT
+trap 'exit 130' INT TERM
 out="$root/build/eval/$name"
 mkdir -p "$out"
 cd "$root/Packages/JammerKit"

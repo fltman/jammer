@@ -6,12 +6,15 @@ import Testing
 
 /// A stand-in for a model server: answers by the end of the request's path, and keeps what it was asked.
 final class StandInServer: URLProtocol, @unchecked Sendable {
-    struct Asked { var path: String; var host: String; var body: [String: Any]; var headers: [String: String] }
+    struct Asked { var path: String; var host: String; var body: [String: Any]; var headers: [String: String]; var scheme = "" }
     private static let lock = NSLock()
     nonisolated(unsafe) private static var routes: [String: (Int, Data)] = [:]
     nonisolated(unsafe) private static var asked: [Asked] = []
+    /// Path ending → where the server says to go instead (HTTP 302), as a provider or a proxy might.
+    nonisolated(unsafe) private static var redirects: [String: String] = [:]
+    static func redirect(_ r: [String: String]) { lock.withLock { redirects = r } }
 
-    static func set(_ r: [String: (Int, String)]) { lock.withLock { routes = r.mapValues { ($0.0, Data($0.1.utf8)) }; asked = [] } }
+    static func set(_ r: [String: (Int, String)]) { lock.withLock { routes = r.mapValues { ($0.0, Data($0.1.utf8)) }; asked = []; redirects = [:] } }
     static var requests: [Asked] { lock.withLock { asked } }
     static var session: URLSession {
         let config = URLSessionConfiguration.ephemeral
@@ -31,8 +34,19 @@ final class StandInServer: URLProtocol, @unchecked Sendable {
         let url = request.url!
         let body = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
         let route = Self.lock.withLock { () -> (Int, Data)? in
-            Self.asked.append(Asked(path: url.path, host: "\(url.host() ?? ""):\(url.port ?? 0)", body: body, headers: request.allHTTPHeaderFields ?? [:]))
+            Self.asked.append(Asked(path: url.path, host: "\(url.host() ?? ""):\(url.port ?? 0)", body: body, headers: request.allHTTPHeaderFields ?? [:], scheme: url.scheme ?? ""))
             return Self.routes.first { url.path.hasSuffix($0.key) }?.value
+        }
+        // A redirect only from where the request first went, so that a followed one gets its answer.
+        if let to = Self.lock.withLock({ Self.redirects.first { url.path.hasSuffix($0.key) && !$0.value.hasPrefix("\(url.scheme ?? "")://\(url.host() ?? "-")\(url.port.map { ":\($0)" } ?? "")/") }?.value }), let target = URL(string: to) {
+            var next = request
+            next.url = target
+            let response = HTTPURLResponse(url: url, statusCode: 302, httpVersion: nil, headerFields: ["Location": to])!
+            client?.urlProtocol(self, wasRedirectedTo: next, redirectResponse: response)
+            // Not followed: the redirect itself is the answer.
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocolDidFinishLoading(self)
+            return
         }
         guard let route else {
             // No such server: what a connection that is refused looks like to the caller.

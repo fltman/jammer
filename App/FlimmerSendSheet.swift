@@ -1,5 +1,7 @@
 import AppKit
+import JammerAssistant
 import JammerAgent
+import JammerAssistant
 import JammerCore
 import SwiftUI
 
@@ -26,7 +28,7 @@ final class FlimmerSendModel {
     }
 
     static let transport: FlimmerSend.Transport = { request in
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await KeyedRequest.data(for: request, session: .shared)
         guard let http = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
         return (data, http)
     }

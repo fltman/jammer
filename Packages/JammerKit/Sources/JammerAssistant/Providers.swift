@@ -79,7 +79,7 @@ public enum ModelCatalog {
         var req = URLRequest(url: provider.endpoint.appending(path: "models"))
         req.timeoutInterval = 15
         CloudPlanner.authorize(&req, provider: provider, key: key)
-        let (data, response) = try await session.data(for: req)
+        let (data, response) = try await KeyedRequest.data(for: req, session: session)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else { throw AssistantError.provider(provider.name, status, String(decoding: data.prefix(600), as: UTF8.self)) }
         return parse(provider, data)
@@ -208,7 +208,7 @@ public struct CloudPlanner: AssistantPlanner {
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         Self.authorize(&req, provider: provider, key: key)
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
-        let (data, response) = try await session.data(for: req)
+        let (data, response) = try await KeyedRequest.data(for: req, session: session)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         // The provider's own words, with the status: nobody has made this request for real before the user does.
         guard (200..<300).contains(status) else { throw AssistantError.provider(provider.name, status, String(decoding: data.prefix(600), as: UTF8.self)) }

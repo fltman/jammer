@@ -57,7 +57,7 @@
 | ⌘0 | Zoom to Fit |
 | ⌘E | Zoom to Selection |
 | ⌥⌘T | Show or Hide Transcript |
-| ⌥⌘A | Show or Hide Assistant |
+| ⌥⌘A | Assistant: show it and put the cursor in its field; from the field, hide it |
 | ⌥⌘S | Spectrogram or Waveform |
 | ⌥⌘Y | Show History |
 | ⌃⌘F | Full Screen |

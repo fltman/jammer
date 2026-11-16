@@ -16,6 +16,56 @@ struct ProviderTests {
         CloudPlanner(provider: TextProvider.named(id)!, model: model, key: { key }, reasoningEffort: effort, session: StandInServer.session)
     }
 
+    @Test("A key never follows a redirect to another host, another port or down to http")
+    func redirects() async throws {
+        let (c, _) = context()
+        let models = #"{"data":[{"id":"some-model","capabilities":{"function_calling":true}}]}"#
+        for (id, name) in [("berget", "Berget"), ("grunden", "Grunden"), ("openai", "OpenAI"), ("anthropic", "Anthropic"), ("xai", "xAI"), ("google", "Google"), ("openrouter", "OpenRouter")] {
+            let provider = TextProvider.named(id)!
+            let home = provider.endpoint.host()!
+            for elsewhere in ["https://collector.example/v1", "http://\(home)/v1", "https://\(home):8443/v1"] {
+                StandInServer.set(["/models": (200, models), "/chat/completions": (200, "{}"), "/responses": (200, "{}"), "/messages": (200, "{}")])
+                StandInServer.redirect(["/models": elsewhere + "/models", "/chat/completions": elsewhere + "/chat/completions",
+                                        "/responses": elsewhere + "/responses", "/messages": elsewhere + "/messages"])
+                // The model list, with the key.
+                await #expect(throws: AssistantError.provider(name, 302, "")) { _ = try await ModelCatalog.list(provider, key: "sk-secret-123", session: StandInServer.session) }
+                // A request for a plan.
+                do {
+                    _ = try await planner(id).plan(goal: "sänk volymen 3 dB", context: c, history: [], actions: actions)
+                    Issue.record("\(id) followed a redirect to \(elsewhere)")
+                } catch {
+                    #expect(error.localizedDescription.contains("302"), "\(error.localizedDescription)")
+                }
+                // Asked twice, both times at the provider's own address: nothing went to the other one.
+                let asked = StandInServer.requests
+                #expect(asked.count == 2 && asked.allSatisfy { $0.host == "\(home):0" && $0.scheme == "https" }, "\(id) → \(elsewhere): \(asked.map(\.host))")
+            }
+        }
+        #expect(KeyedRequest.sameOrigin(URL(string: "https://api.berget.ai/v1/models"), URL(string: "https://api.berget.ai/v2/models")))
+        #expect(KeyedRequest.sameOrigin(URL(string: "https://api.berget.ai/v1"), URL(string: "https://API.berget.ai:443/x")))
+        for other in ["https://berget.ai/v1", "https://api.berget.ai.example/v1", "http://api.berget.ai/v1", "https://api.berget.ai:8443/v1", "https://collector.example/v1"] {
+            #expect(!KeyedRequest.sameOrigin(URL(string: "https://api.berget.ai/v1/models"), URL(string: other)), "\(other)")
+        }
+    }
+
+    /// A request that carries a key goes through KeyedRequest; a call that reaches URLSession directly
+    /// would follow redirects with the key in its headers.
+    @Test("No request in the sources that hold keys goes to URLSession directly")
+    func keyedCallsOnly() throws {
+        let sources = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().appending(path: "Sources")
+        var keyed = 0
+        for case let f as URL in FileManager.default.enumerator(at: sources, includingPropertiesForKeys: nil)! where f.pathExtension == "swift" {
+            let s = try String(contentsOf: f, encoding: .utf8)
+            let holdsKey = s.contains("forHTTPHeaderField: \"Authorization\"") || s.contains("forHTTPHeaderField: \"x-api-key\"") || f.path.contains("/JammerAssistant/")
+            guard holdsKey, f.lastPathComponent != "KeyedRequest.swift" else { continue }
+            keyed += 1
+            for call in ["session.data(for", "session.data(from", "session.upload(", "session.download(", "session.bytes(", "URLSession.shared.data", "dataTask(with"] {
+                #expect(!s.contains(call), "\(f.lastPathComponent) calls \(call)…) itself; use KeyedRequest.data(for:session:)")
+            }
+        }
+        #expect(keyed >= 4)
+    }
+
     @Test("One list: the seven providers by slug, three of them shown, none with a model id written in")
     func registry() {
         #expect(TextProvider.all.map(\.id) == ["openrouter", "berget", "grunden", "openai", "anthropic", "xai", "google"])

@@ -31,7 +31,7 @@ struct HoldoutEval {
         let tracks = p.tracks.map(\.id.uuidString)
         let context = AssistantContext(project: p, selection: nil, playhead: 0)
         let actions = AssistantCatalog.actions
-        var right = 0, valuesRight = 0, valuesTotal = 0
+        var right = 0, valuesRight = 0, valuesTotal = 0, invented = 0, wrongLanguage = 0
         var byKind: [String: (Int, Int)] = [:]
         var rows: [String] = []
         for c in set {
@@ -40,6 +40,9 @@ struct HoldoutEval {
             do { plan = try await AssistantEval.planner.plan(goal: c.goal, context: context, history: [], actions: actions) } catch { failure = error.localizedDescription }
             let got = plan.steps.map(\.op)
             let ok = failure == nil && got == c.ops
+            let faults = ReplyGuard.faults(plan, goal: c.goal, context: context)
+            if faults.inventedFigure { invented += 1; print("FIGURE OF ITS OWN: \(c.goal) → \(plan.reply)") }
+            if faults.wrongLanguage { wrongLanguage += 1; print("OTHER LANGUAGE: \(c.goal) → \(plan.reply)") }
             var notes: [String] = []
             for (op, expected) in c.params {
                 let step = plan.steps.first { $0.op == op }
@@ -56,7 +59,7 @@ struct HoldoutEval {
             rows.append("| \(c.kind) | \(c.goal) | \(c.ops.isEmpty ? "(no steps)" : c.ops.joined(separator: ", ")) | \(planned) | \(ok ? (notes.isEmpty ? "✓" : "ops ✓, " + notes.joined(separator: " ")) : "✗") |")
         }
         let kinds = ["task", "multi", "clarify", "refuse", "answer"].compactMap { k in byKind[k].map { "\(k) \($0.0)/\($0.1)" } }.joined(separator: ", ")
-        let summary = "Right actions: \(right)/\(set.count) (\(kinds)). Right values: \(valuesRight)/\(valuesTotal)."
+        let summary = "Right actions: \(right)/\(set.count) (\(kinds)). Right values: \(valuesRight)/\(valuesTotal). Replies with a figure of the model's own (struck before showing): \(invented). Replies in another language than the request (replaced): \(wrongLanguage)."
         let table = "| Kind | Request | Expected | Planned | Result |\n|---|---|---|---|---|\n" + rows.joined(separator: "\n") + "\n\n" + summary + "\n"
         print(table)
         if let path = ProcessInfo.processInfo.environment["JAMMER_EVAL_REPORT"] { try table.write(toFile: path, atomically: true, encoding: .utf8) }

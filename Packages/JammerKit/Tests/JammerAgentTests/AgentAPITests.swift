@@ -1,6 +1,7 @@
 import Foundation
 import JammerCore
 import Testing
+import TestNetGuard
 @testable import JammerAgent
 
 @Suite("Agent API")
@@ -621,6 +622,44 @@ struct InsertStepTests {
         #expect(r[0].status == .done && s.project.tracks[0].inserts.isEmpty)
         r = StepRunner.run([Step(op: "remove_insert", params: ["track": .string(track), "insert": .string(id)])], on: &s, measure: measure)
         #expect(r[0].reason == "not_found")
+    }
+}
+
+@Suite("Tests reach only this Mac")
+struct NetGuardTests {
+    @Test("A request to a public address is refused: shared session, default and ephemeral configurations")
+    func refused() async throws {
+        let url = URL(string: "https://\(JMNetGuardSelfTestHost)/x")!
+        let before = JMNetGuardRefused().count
+        for session in [URLSession.shared, URLSession(configuration: .default), URLSession(configuration: .ephemeral)] {
+            do {
+                _ = try await session.data(from: url)
+                Issue.record("the request went out")
+            } catch {
+                #expect(error.localizedDescription.contains("test network guard refused"), "\(error.localizedDescription)")
+            }
+        }
+        #expect(JMNetGuardRefused().count == before + 3)
+        // This Mac is let through to fail on its own (nothing listens on port 9).
+        do { _ = try await URLSession.shared.data(from: URL(string: "http://127.0.0.1:9/")!) } catch {
+            #expect(!error.localizedDescription.contains("network guard"))
+        }
+    }
+
+    /// A test's stand-in server takes the guard's place in its session, so it has to answer everything:
+    /// one that passes on a request it doesn't know would let that request out.
+    @Test("Every stand-in server in the tests answers every request")
+    func standInsAnswerAll() throws {
+        let tests = SourceRuleTests.app.deletingLastPathComponent().appending(path: "Packages/JammerKit/Tests")
+        var seen = 0
+        for case let f as URL in FileManager.default.enumerator(at: tests, includingPropertiesForKeys: nil)! where f.pathExtension == "swift" {
+            let s = try String(contentsOf: f, encoding: .utf8)
+            for line in s.split(separator: "\n") where line.contains("override class func " + "canInit(with") {
+                seen += 1
+                #expect(line.contains("{ true }"), "\(f.lastPathComponent): \(line.trimmingCharacters(in: .whitespaces))")
+            }
+        }
+        #expect(seen >= 3)
     }
 }
 

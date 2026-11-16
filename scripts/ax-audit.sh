@@ -36,34 +36,18 @@ open_audio() { post -H 'Content-Type: audio/wav' --data-binary @"$1" "$B/documen
 steps() { post -o /dev/null -H 'Content-Type: application/json' -d "{\"steps\":[$2]}" "$B/documents/$1/steps"; }
 wait_job() { for _ in {1..120}; do s=$(curl -s "$B/jobs/$1" | json "print(d['job']['status'])"); [[ $s == done || $s == failed ]] && break; sleep 1; done; }
 winpos() { osa "get {position, size} of (first window whose name contains \"$1\")" | tr -d ','; }
-# Puts a request in the assistant's field of the window named $1 and sends it. Focus is given through the
-# accessibility API (a click can be refused: a notification banner may cover the spot), with a click as
-# the second try, and nothing is typed unless the field really has the keyboard: keys that miss it land
-# on the timeline, where the space bar is Play.
+# Puts a request in the assistant's field of the window named $1 and sends it. The field gets the
+# keyboard from the app's own command (View › Show Assistant / Ask the Assistant, ⌥⌘A), which is also
+# how a keyboard or VoiceOver user gets there. Nothing is typed unless the field really has the
+# keyboard: keys that miss it land on the timeline, where the space bar is Play.
 focused() { osa 'get value of attribute "AXDescription" of (value of attribute "AXFocusedUIElement")'; }
 ask() {
-  front
-  osascript >/dev/null 2>&1 <<EOF
-tell application "System Events" to tell (first process whose unix id is $P)
-  repeat with e in (entire contents of (first window whose name contains "$1"))
-    try
-      set el to contents of e
-      if (value of attribute "AXDescription" of el) is "Ask the assistant" then
-        set value of attribute "AXFocused" of el to true
-        exit repeat
-      end if
-    end try
-  end repeat
-end tell
-EOF
-  sleep 0.4
+  raise "$1"
   if [[ "$(focused)" != "Ask the assistant" ]]; then
-    # Out of the way of whatever covers the spot (a notification banner sits at the screen's right edge).
-    osa "set position of (first window whose name contains \"$1\") to {20, 40}" >/dev/null
-    osa "set size of (first window whose name contains \"$1\") to {1000, 680}" >/dev/null; sleep 0.5
-    local pos=($(winpos "$1"))
-    # Twice: the first click on a window that isn't key only makes it key.
-    for _ in 1 2; do "$SP" --pid $P click $(( ${pos[1]} + ${pos[3]} - 150 )) $(( ${pos[2]} + ${pos[4]} - 18 )) >/dev/null; sleep 0.4; done
+    for title in "Ask the Assistant" "Show Assistant"; do
+      "$SM" --pid $P --check View "$title" >/dev/null 2>&1 && { "$SM" --pid $P View "$title" >/dev/null; break; }
+    done
+    sleep 0.6
   fi
   local focus="$(focused)"
   if [[ "$focus" != "Ask the assistant" ]]; then echo "NOT TYPED the assistant's field isn't focused (focus is on \"$focus\"): \"$2\""; return 1; fi
@@ -96,7 +80,7 @@ if [[ "${3:-}" == note ]]; then
   key 'key code 53'
   DOC=$(open_audio "$speech" Reading); sleep 1; raise Reading
   ask Reading "lower the volume by 3 dB" 3
-  audit "assistant with a note that nothing was sent" "Nothing was sent"
+  audit "assistant with a note that nothing was sent" "Note: Choose one of"
   echo "$states state read; $unnamed controls without a name; the app died $died time(s); $(( $(crashes) - crashes0 )) new crash report(s); $unread read(s) incomplete; $unfilled could not be filled."
   (( died == 0 && unnamed == 0 && unfilled == 0 && unread == 0 && $(crashes) == crashes0 )); exit
 fi

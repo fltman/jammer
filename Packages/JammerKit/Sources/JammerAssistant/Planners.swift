@@ -1,6 +1,7 @@
 import Foundation
 import FoundationModels
 import JammerAgent
+import JammerCore
 
 /// Apple's on-device model (Foundation Models): free, private, works offline. The plan
 /// comes back as structured output whose schema is built from the catalogue at run time,
@@ -40,6 +41,23 @@ public struct OnDevicePlanner: AssistantPlanner {
                      actions: [AssistantAction]) async throws -> AssistantPlan {
         if let why = Self.availability { throw AssistantError.unavailable(why) }
         if let reply = PlanParser.guardrail(goal) { return AssistantPlan(reply: reply, steps: []) }
+        // A list this model can hold (AssistantCatalog.onDeviceWhenNamed).
+        let fitted = AssistantCatalog.forOnDevice(actions, goal: goal)
+        do {
+            return try await respond(goal: goal, context: context, history: history, actions: fitted)
+        } catch LanguageModelSession.GenerationError.exceededContextWindowSize {
+            // The list and the answer together didn't fit. Once more with only the actions the request
+            // names in so many words, and without the earlier turns; if it names none, the error stands.
+            let words = Set(Project.tokens(goal).filter { $0.count >= 3 })
+            let named = fitted.filter { a in !words.isDisjoint(with: Project.tokens(a.name.replacingOccurrences(of: "_", with: " ") + " " + a.description)) }
+            let tooLong = AssistantError.unavailable("The model on this Mac couldn't fit this request and its answer. Say it another way, or choose another model in the assistant's settings.")
+            guard !named.isEmpty, named.count < fitted.count else { throw tooLong }
+            do { return try await respond(goal: goal, context: context, history: [], actions: named) }
+            catch LanguageModelSession.GenerationError.exceededContextWindowSize { throw tooLong }
+        }
+    }
+
+    private func respond(goal: String, context: AssistantContext, history: [(user: String, reply: String)], actions: [AssistantAction]) async throws -> AssistantPlan {
         let session = LanguageModelSession(instructions: AssistantPrompt.instructions(actions))
         let response = try await session.respond(to: AssistantPrompt.prompt(goal: goal, context: context, history: history),
                                                  schema: try Self.schema(actions),
@@ -130,7 +148,7 @@ public struct OpenRouterPlanner: AssistantPlanner {
         req.setValue("https://jammer.brattoo.com", forHTTPHeaderField: "HTTP-Referer")
         req.setValue("Jammer", forHTTPHeaderField: "X-Title")
         req.httpBody = try JSONSerialization.data(withJSONObject: requestBody(goal: goal, context: context, history: history, actions: actions))
-        let (data, response) = try await session.data(for: req)
+        let (data, response) = try await KeyedRequest.data(for: req, session: session)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else { throw AssistantError.http(status, String(decoding: data.prefix(300), as: UTF8.self)) }
         return PlanParser.augment(goal: goal, plan: try Self.decode(data, actions: actions, context: context))
@@ -204,7 +222,7 @@ public struct LocalServerPlanner: AssistantPlanner {
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.httpBody = try JSONSerialization.data(withJSONObject: requestBody(goal: goal, context: context, history: history, actions: actions))
         let data: Data, response: URLResponse
-        do { (data, response) = try await session.data(for: req) } catch {
+        do { (data, response) = try await KeyedRequest.data(for: req, session: session) } catch {
             throw AssistantError.local("The local model server at \(endpoint.host() ?? "127.0.0.1"):\(endpoint.port ?? 80) didn't answer (\(error.localizedDescription)).")
         }
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
@@ -267,7 +285,7 @@ public struct OllamaPlanner: AssistantPlanner {
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.httpBody = try JSONSerialization.data(withJSONObject: requestBody(goal: goal, context: c, history: history, actions: actions, thinks: caps.contains("thinking")))
         let data: Data, response: URLResponse
-        do { (data, response) = try await session.data(for: req) } catch {
+        do { (data, response) = try await KeyedRequest.data(for: req, session: session) } catch {
             throw AssistantError.local("Ollama didn't answer (\(error.localizedDescription)).")
         }
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
@@ -302,7 +320,7 @@ public enum Ollama {
     static func get(_ path: String, session: URLSession, timeout: TimeInterval = 3) async -> Data? {
         var req = URLRequest(url: base.appending(path: path))
         req.timeoutInterval = timeout
-        guard let (data, response) = try? await session.data(for: req), (response as? HTTPURLResponse)?.statusCode == 200 else { return nil }
+        guard let (data, response) = try? await KeyedRequest.data(for: req, session: session), (response as? HTTPURLResponse)?.statusCode == 200 else { return nil }
         return data
     }
 
@@ -326,7 +344,7 @@ public enum Ollama {
         req.timeoutInterval = 5
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.httpBody = try? JSONSerialization.data(withJSONObject: ["model": model])
-        guard let (data, response) = try? await session.data(for: req), (response as? HTTPURLResponse)?.statusCode == 200 else { return nil }
+        guard let (data, response) = try? await KeyedRequest.data(for: req, session: session), (response as? HTTPURLResponse)?.statusCode == 200 else { return nil }
         return ((try? JSONSerialization.jsonObject(with: data)) as? [String: Any])?["capabilities"] as? [String] ?? []
     }
 

@@ -13,6 +13,38 @@ The actions come from the same registry as the menus, ⌘K, the agent guide and 
 
 Tests run without keys against a mocked service and a scripted planner.
 
+## A measurement never comes from the model's own text
+
+Found in the app on 2026-11-16: asked "what is the loudness?", the on-device model planned `measure_loudness` and wrote "The loudness is -16 LUFS." in front of the measured −18.0. A model writes its reply before anything has been measured, so a figure it gives is one it made up.
+
+The rule (`JammerAssistant/ReplyGuard.swift`), for every planner, through `AssistantPlanner.answer`, which is what the app shows:
+
+- A plan made only of measuring actions (`measure_loudness`, `analyze_restoration`, `detect_tempo`, `analyze_rhythm`) is answered by Jämmer from the result. The model's sentence isn't shown at all.
+- In any other reply, a sentence with a number and a unit (LUFS, LU, dB, dBFS, dBTP, Hz, kHz, BPM, s, ms, minutes, %, …) is taken out unless that number stands in the request, in the document's description that the model was given, or in the plan's own values. "I'll normalize to −16 LUFS" stays when the request said −16; "the peak is at −1.2 dBTP" goes.
+- The reply follows the language of the request (Swedish or English, when both are long enough to tell). A reply in the other language is dropped when there is a plan to show, and replaced by Jämmer's own sentence in the request's language when there isn't.
+- The model's instructions are unchanged: they are the ones the evaluation results below were measured with, and the check, not the instructions, is what keeps a made-up figure off the screen.
+- Jämmer's own canned sentences (the clarifying question, the refusals) choose their language with the same recogniser; before, a Swedish request without one of eleven marker words was answered in English.
+
+`ReplyGuardTests` feeds made-up replies through a stand-in planner. Both evaluation sets count, for the reply as the model wrote it, how many had a figure of the model's own and how many were in the wrong language; the standard set got the two requests from the app ("what is the loudness?", "write a poem about the sea"), so it is 16 requests from 2026-11-16.
+
+## The on-device model's action list (2026-11-16)
+
+Running the sets again on 2026-11-16 showed that the on-device model had got worse without anyone measuring it: 10/14 on the standard set, where it was 14/14 on 2026-11-15. The same build of the model scores 13/14 on the code from 2026-11-15, so the cause is ours: the action list had grown from 28 actions (3 848 characters of instructions) to 37 (5 375), and some requests no longer fitted the model's context ("The session's transcript exceeded the model's context size").
+
+What was done: the on-device model is given the 28 actions it was measured with, and each of the nine newer ones (`align_tracks`, `correct_drift`, `debleed`, `detect_tempo`, `duck`, `level_speakers`, `loudness_preset`, `rename_speaker`, `spectral_attenuate`) only when the request names it in Swedish or English (`AssistantCatalog.onDeviceWhenNamed`). A test fails if the list grows without a decision. Models in Ollama and at providers get the whole list. When the context still overflows, the request is tried once more with only the actions it names; if that fails too, the user is told so in words.
+
+Measured after the change, on-device, 2026-11-16 (the standard set now has 16 requests):
+
+| Set | Before the change | After |
+|---|---|---|
+| Standard | 11/16 (10 of the original 14) | 13/16 (12 of the original 14) |
+| Hold-out 1 | 17/24 | 20/24 |
+| Hold-out 2 | 17/23 | 15/23 |
+
+Still wrong on the standard set: "ta bort alla ehm" (planned `delete_words` with a list instead of `remove_fillers`), "add an echo" (the context overflows even with `echo` as the only action: the model's own answer runs away), and "write a poem about the sea" (planned `measure_loudness` and `set_tempo` instead of refusing). So the model is not back at 14/14, hold-out 2 went down by two, and why 2026-11-15's code does better with the same model is not fully explained by the list alone. The results vary by a request or two between runs on a loaded Mac. qwen3:8b in Ollama, same day: 16/16, 19/24, 19/23, no figure of its own in any reply.
+
+A rule from this: the three sets are run (`scripts/eval-assistant.sh`) whenever an action is added or an action's description changes, not only when the assistant's own code does.
+
 ## How well the on-device model picks actions
 
 `JAMMER_ASSISTANT_EVAL=1 swift test --filter AssistantEval`: 14 fixed requests (Swedish and English) on a 60 s document with two speakers; a request counts as right when the planned actions are exactly the expected ones in order, and key values (level, kind, track, times, names, language) are checked separately.

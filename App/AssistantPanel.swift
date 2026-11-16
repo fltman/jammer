@@ -32,6 +32,10 @@ enum Keychain {
 @MainActor
 @Observable
 final class AssistantModel {
+    /// Raised by View › Show Assistant / Ask the Assistant (⌥⌘A): the field takes the keyboard.
+    var focusRequest = 0
+    /// Whether the field has the keyboard now (the command hides the panel only from there).
+    var fieldFocused = false
     struct Message: Identifiable {
         enum Role { case user, assistant, note }
         let id = UUID()
@@ -157,11 +161,13 @@ final class AssistantModel {
             do {
                 actions = await actions(for: goal)
                 let context = AssistantContext(project: session.project, selection: session.selection, playhead: session.playhead)
-                let plan = try await p.plan(goal: goal, context: context, history: history, actions: actions)
+                // `answer`, not `plan`: the model's sentence is checked before it is shown (ReplyGuard). A
+                // measurement is written by Jämmer from its result, never by the model.
+                let plan = try await p.answer(goal: goal, context: context, history: history, actions: actions)
                 history.append((goal, plan.reply))
                 var text = plan.reply
-                if let cost = plan.cost { text += String(format: " (cost $%.4f)", cost) }
-                messages.append(Message(role: .assistant, text: text.isEmpty ? "OK." : text))
+                if let cost = plan.cost { text += String(format: text.isEmpty ? "Cost $%.4f." : " (cost $%.4f)", cost) }
+                if !text.isEmpty { messages.append(Message(role: .assistant, text: text)) }
                 if !plan.dropped.isEmpty { messages.append(Message(role: .note, text: "Left out: " + plan.dropped.joined(separator: "; "))) }
                 guard !plan.steps.isEmpty else { return }
                 if plan.isDestructive(actions) {
@@ -431,6 +437,8 @@ struct AssistantView: View {
                     .accessibilityLabel("Ask the assistant")
                     .lineLimit(1...4)
                     .focused($focused)
+                    .onChange(of: model.focusRequest) { focused = true }
+                    .onChange(of: focused) { model.fieldFocused = focused }
                     .onSubmit { model.send() }
                 Button { model.send() } label: { Label("Send", systemImage: "arrow.up.circle.fill").labelStyle(.iconOnly) }
                     .buttonStyle(.borderless)

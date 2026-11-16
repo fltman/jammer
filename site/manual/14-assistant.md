@@ -6,7 +6,7 @@ Ask Jämmer in Swedish or English and it does the editing: "ta bort alla ehm och
 
 ## Open it
 
-**View › Show Assistant** (⌥⌘A), or **Ask the Assistant…** in the command palette (⌘K). The chat opens beside the timeline; type a request and press Return.
+**View › Show Assistant** (⌥⌘A), or **Ask the Assistant…** in the command palette (⌘K). The chat opens beside the timeline with the cursor in its field; type a request and press Return. With the chat open, ⌥⌘A takes you to the field from anywhere in the window (the menu item reads **Ask the Assistant**), and from the field it hides the chat (**Hide Assistant**).
 
 ## What happens
 
@@ -15,7 +15,8 @@ Ask Jämmer in Swedish or English and it does the editing: "ta bort alla ehm och
 - Under **What it does**, Jämmer says in numbers what the plan will do, worked out from the steps themselves rather than from the assistant's words: "Deletes 2.0 s of 3:12 at the end", "Removes 14 words (6.2 s)". If a plan would remove more than a fifth of the document, or deletes audio although you didn't ask to remove anything, it's outlined in orange with a warning, and Return cancels instead of running.
 - All the editing in a plan is **one undo step**. Transcribing and repairs run as their own steps in between (they take a moment; the status bar shows the progress).
 - Removing filler words needs a transcript; the assistant transcribes first if there isn't one.
-- Questions like "how loud is it?" are answered in the chat.
+- Questions like "how loud is it?" are answered in the chat. A measured value is always written by Jämmer from the measurement itself: the assistant chooses what to measure, and a sentence of its own with a figure it wasn't given (a level, a frequency, a length, a tempo) is taken out before it is shown.
+- The answer follows the language of your request, Swedish or English.
 
 ## Which model
 
