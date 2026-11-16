@@ -169,6 +169,20 @@ struct ReplyGuardTests {
         #expect(step("set_bus", [("name", "Music"), ("gainDB", "-6")])?.params == ["bus": .string(music.id.uuidString), "gainDB": .number(-6)])
         // With a bus given, `name` is the new name, as the step says.
         #expect(step("set_bus", [("bus", "Music"), ("name", "Songs")])?.params == ["bus": .string(music.id.uuidString), "name": .string("Songs")])
+        // What the on-device model really sends (2026-11-16): the bus's name as the argument's name.
+        #expect(step("set_bus", [("Music", "-6"), ("output", "Music")])?.params == ["bus": .string(music.id.uuidString), "gainDB": .number(-6)])
+        #expect(step("set_bus", [("Music", "muted")])?.params == ["bus": .string(music.id.uuidString), "muted": .bool(true)])
+        #expect(step("remove_bus", [("Music", "none")])?.params == ["bus": .string(music.id.uuidString)])
+        // "tysta bussen Music" came as a level of 0 and a removal: it is a mute, and the bus stays.
+        let tysta = AssistantPlan(reply: "", steps: [step("set_bus", [("Music", "0.0")])!, step("remove_bus", [("Music", "none")])!])
+        let muted = PlanParser.augment(goal: "tysta bussen Music", plan: tysta)
+        #expect(muted.steps.map(\.op) == ["set_bus"] && muted.steps[0].params == ["bus": .string(music.id.uuidString), "muted": .bool(true)])
+        // A removal that is asked for stays, and waits for a yes whatever the request says.
+        let gone = PlanParser.augment(goal: "remove the Music bus", plan: AssistantPlan(reply: "", steps: [step("remove_bus", [("bus", "Music")])!]))
+        #expect(gone.steps.map(\.op) == ["remove_bus"] && gone.needsConfirmation(goal: "remove the Music bus", actions: actions))
+        // A change to a bus with nothing to change is left out, and said.
+        let nothing = PlanParser.augment(goal: "do something with the Music bus", plan: AssistantPlan(reply: "", steps: [step("set_bus", [("bus", "Music")])!]))
+        #expect(nothing.steps.isEmpty && nothing.dropped.contains { $0.contains("nothing to change") })
         // No such bus: the step has no bus, and is left out when checked.
         let none = step("set_bus", [("bus", "Drums"), ("gainDB", "-6")])
         #expect(none?.params["bus"] == nil)

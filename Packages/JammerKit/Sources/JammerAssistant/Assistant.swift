@@ -33,7 +33,9 @@ public struct AssistantAction: Sendable {
 public enum AssistantCatalog {
     /// Steps and endpoints that remove or replace audio: the plan is shown before it runs.
     static let destructiveNames: Set<String> = ["delete", "cut", "crop", "silence", "delete_words", "paste", "insert_silence",
-                                                "echo", "restore", "remove_fillers", "remove_silences", "limit"]
+                                                "echo", "restore", "remove_fillers", "remove_silences", "limit",
+                                                // Taking a bus away takes its level, pan and sends with it: shown first, always.
+                                                "remove_bus"]
 
     public static let macros: [AssistantAction] = [
         AssistantAction(name: "remove_fillers", description: "Removes every filler word (eh, ehm, öh, um, uh…) from the audio. Transcribes first if needed.",
@@ -387,9 +389,23 @@ public enum PlanParser {
         // for add_bus's `name`). When exactly one required value is missing and exactly one value was given
         // under a name the action doesn't have, that value is the missing one.
         let known = Set(action.params.map(\.name))
+        var args = args
+        // The small model names the argument after the bus itself: {"Music": "-6"} for "set the Music bus
+        // to −6 dB", {"Music": "muted"}. An argument whose name is the name of exactly one bus is the target,
+        // and its value is the level when it is a number, or the mute when it says so.
+        if ["set_bus", "remove_bus"].contains(op), let context, !args.contains(where: { $0.0 == "bus" }),
+           let i = args.firstIndex(where: { !known.contains($0.0) && context.busID($0.0).map { $0 != "master" } == true }) {
+            let (busName, value) = args[i]
+            let v = value.trimmingCharacters(in: .whitespaces).lowercased()
+            args[i] = ("bus", busName)
+            if op == "set_bus" {
+                if ["muted", "mute", "true", "tyst", "tysta", "silent", "off"].contains(v), !args.contains(where: { $0.0 == "muted" }) { args.append(("muted", "true")) }
+                else if ["unmuted", "unmute", "false", "on"].contains(v), !args.contains(where: { $0.0 == "muted" }) { args.append(("muted", "false")) }
+                else if Double(v.replacingOccurrences(of: ",", with: ".").replacingOccurrences(of: "−", with: "-")) != nil, !args.contains(where: { $0.0 == "gainDB" }) { args.append(("gainDB", v)) }
+            }
+        }
         let missing = action.params.filter { p in p.required && !args.contains { $0.0 == p.name && !$0.1.trimmingCharacters(in: .whitespaces).isEmpty } }
         let strays = args.filter { !known.contains($0.0) && !$0.1.trimmingCharacters(in: .whitespaces).isEmpty }
-        var args = args
         // Kept narrow: never for an action that removes or replaces audio (there the right name is asked
         // for, and the step is left out without it), and only when the value is of the kind that is missing.
         func fits(_ value: String, _ kind: OperationSpec.Param.Kind) -> Bool {
@@ -452,6 +468,8 @@ public enum PlanParser {
         for (k, v) in AssistantCatalog.defaults[op] ?? [:] where params[k] == nil { params[k] = v }
         // "set the Music bus to −6 dB" often comes with the bus's name under `name`, which for set_bus means
         // "rename to". When no bus is given and `name` is the name of a bus that exists, that bus is the one meant.
+        // A bus sent to itself is not a route anyone asked for; the rest of the step stands.
+        if op == "set_bus", let b = params["bus"], params["output"] == b { params["output"] = nil }
         if ["set_bus", "remove_bus"].contains(op), params["bus"] == nil, let context, case .string(let n)? = params["name"], let id = context.busID(n), id != "master" {
             params["bus"] = .string(id)
             params["name"] = nil
@@ -521,6 +539,27 @@ public enum PlanParser {
         if out.steps.filter({ $0.op == "remove_fillers" }).count > 1 {
             var seen = false
             out.steps.removeAll { s in guard s.op == "remove_fillers" else { return false }; defer { seen = true }; return seen }
+        }
+        // A bus: "mute" and "tysta" mean mute. The small model answers them with a level of 0, which changes
+        // nothing, or with nothing at all; and now and then with taking the bus away as well, which nobody
+        // asked for when the request says mute and not remove.
+        let muteWords: Set<String> = ["mute", "tysta", "tyst", "silence", "stäng"], unmuteWords: Set<String> = ["unmute", "avtysta"]
+        let removeWords: Set<String> = ["remove", "delete", "radera", "bort"]
+        if !words.isDisjoint(with: muteWords.union(unmuteWords)) {
+            if words.isDisjoint(with: removeWords) { out.steps.removeAll { $0.op == "remove_bus" } }
+            out.steps = out.steps.map { step in
+                guard step.op == "set_bus", step.params["bus"] != nil, step.params["muted"] == nil else { return step }
+                var s = step
+                s.params["muted"] = .bool(words.isDisjoint(with: unmuteWords))
+                if s.params["gainDB"] == .number(0) { s.params["gainDB"] = nil }
+                return s
+            }
+        }
+        // A change to a bus that changes nothing is left out, so that the user is asked instead of told "done".
+        let empty = out.steps.filter { $0.op == "set_bus" && Set($0.params.keys).subtracting(["bus"]).isEmpty }
+        if !empty.isEmpty {
+            out.steps.removeAll { $0.op == "set_bus" && Set($0.params.keys).subtracting(["bus"]).isEmpty }
+            out.dropped.append("set_bus (nothing to change was given)")
         }
         let ops = Set(out.steps.map(\.op))
         if !words.isDisjoint(with: fillerKeys), !ops.contains("remove_fillers"), !ops.contains("delete_words") {
