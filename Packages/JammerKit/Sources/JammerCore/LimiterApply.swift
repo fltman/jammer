@@ -75,6 +75,7 @@ extension Project {
         for margin in Limiter.margins {
             for u in urls { try? FileManager.default.removeItem(at: u) }
             urls = targets.map { _ in media.appending(path: "\(UUID().uuidString.prefix(8)) limit.wav") }
+            for u in urls { MediaRegister.made(u, kind: "limit", in: media) }
             let writers = try urls.map { try WAVWriter(url: $0, options: .init(encoding: .float32, channels: ch, sampleRate: sampleRate)) }
             var limiter = try Limiter.Processor(settings, channels: ch, sampleRate: sampleRate, marginDB: margin)
             var after = Limiter.PeakMeter(channels: ch, sampleRate: sampleRate)

@@ -250,6 +250,8 @@ extension Project {
                 for i in 0..<r.count { out[i * channels + c] = y[i + Int(r.lowerBound - lo)] }
             }
             let url = media.appending(path: "\(UUID().uuidString.prefix(8)) spectral-\(action.rawValue).wav")
+            // Noted as made by Jämmer: only such a file can ever be offered for removal (MediaStorage).
+            MediaRegister.made(url, kind: "spectral", in: media)
             let w = try WAVWriter(url: url, options: .init(encoding: .float32, channels: channels, sampleRate: sampleRate))
             try w.write(out)
             try w.finish()

@@ -292,6 +292,8 @@ extension Project {
         let corrected = try Alignment.resample(raw, channels: channels, from: sampleRate, to: sampleRate * (1 + ppm / 1_000_000))
         try FileManager.default.createDirectory(at: media, withIntermediateDirectories: true)
         let url = media.appending(path: "\(UUID().uuidString.prefix(8)) drift.wav")
+        // Noted as made by Jämmer: only such a file can ever be offered for removal (MediaStorage).
+        MediaRegister.made(url, kind: "drift", in: media)
         let w = try WAVWriter(url: url, options: .init(encoding: .float32, channels: channels, sampleRate: sampleRate))
         try w.write(corrected)
         try w.finish()

@@ -705,6 +705,8 @@ struct StatusBar: View {
             Spacer()
             if !session.missingSources.isEmpty {
                 Label("\(session.missingSources.count) missing file(s)", systemImage: "exclamationmark.triangle").foregroundStyle(.orange)
+                    // Which, and, for one that Jämmer itself moved to the Trash, where to look.
+                    .help(session.missingSources.map { s in MediaStorage.trashedHint(for: s.path, media: MediaStore.folder) ?? "\(s.name) can't be found at \(s.path)." }.joined(separator: "\n"))
             }
             Button {
                 NSApp.sendAction(#selector(EditorWindowController.setTempo(_:)), to: nil, from: nil)

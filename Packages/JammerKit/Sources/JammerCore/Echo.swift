@@ -97,6 +97,8 @@ extension Project {
             solo.tracks[0].isMuted = false
             let plan = PlanCompiler.compile(solo, pool: pool)
             let url = media.appending(path: "\(UUID().uuidString.prefix(8)) echo.wav")
+            // Noted as made by Jämmer: only such a file can ever be offered for removal (MediaStorage).
+            MediaRegister.made(url, kind: "echo", in: media)
             let writer = try WAVWriter(url: url, options: .init(encoding: .float32, channels: ch, sampleRate: sampleRate))
             var lines = (0..<ch).map { _ in Echo.Line(echo, sampleRate: sampleRate) }
             let total = r.count + Int(extra)

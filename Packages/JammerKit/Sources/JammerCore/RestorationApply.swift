@@ -84,6 +84,8 @@ extension Restoration {
             let clip = p.tracks[t].clips[c]
             guard let src = p.source(clip.sourceID) else { continue }
             let url = media.appending(path: "\(UUID().uuidString.prefix(8)) \(settings.kind.rawValue).wav")
+            // Noted as made by Jämmer: only such a file can ever be offered for removal (MediaStorage).
+            MediaRegister.made(url, kind: settings.kind.rawValue, in: media)
             let segment = clip.sourceStart..<(clip.sourceStart + clip.length)
             let r = try render(settings, source: src, segment: segment, pool: pool, to: url) { f in
                 progress((doneFrames + f * Double(clip.length)) / max(1, totalFrames))

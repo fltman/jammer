@@ -239,6 +239,7 @@ extension Project {
             // Stems are streamed to files at 44.1 kHz stereo; converted afterwards when the project differs.
             let stamp = UUID().uuidString.prefix(8)
             let urls = names.map { media.appending(path: "\(stamp) \($0).wav") }
+            for u in urls { MediaRegister.made(u, kind: "stem", in: media) }
             let direct = native && channels == 2
             let writers = try urls.map { try WAVWriter(url: direct ? $0 : $0.appendingPathExtension("tmp"), options: .init(encoding: .float32, channels: 2, sampleRate: StemSeparator.sampleRate)) }
             try engine.separate(stereo, progress: { progress((Double(k) + $0) / Double(targets.count)) }) { s, block in try writers[s].write(block) }

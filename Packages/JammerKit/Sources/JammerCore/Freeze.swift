@@ -172,6 +172,8 @@ extension Project {
             try? FileManager.default.removeItem(at: url)
             throw error
         }
+        // Noted as made by Jämmer: only such a file can ever be offered for removal (MediaStorage).
+        MediaRegister.made(url, kind: "frozen", in: media)
         let source = SourceRef(name: "\(now.name) (frozen)", path: url.path, info: try AudioFileReader.info(at: url))
         var p = self
         p.sources.append(source)

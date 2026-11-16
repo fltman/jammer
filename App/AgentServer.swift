@@ -315,6 +315,23 @@ enum AgentRouter {
             if let unknown = body.keys.first(where: { $0 != "force" }) { throw APIError.badRequest("Unknown field \"\(unknown)\". plugins/scan takes: force.") }
             if let f = body["force"], !(f is Bool) { throw APIError.badRequest("force must be true or false.") }
             return .json(["job": JobRegistry.shared.startPluginScan(force: body["force"] as? Bool ?? false).json], status: 202)
+        case ["api", "v1", "storage"]:
+            // What takes room in the media folder and what of it could be let go. Reading only: an agent
+            // can see this, and there is no way for one to remove anything.
+            try only("GET")
+            let report = StorageScanner.report()
+            func group(_ g: MediaStorage.Group) -> [String: Any] {
+                ["bytes": report.bytes(g), "files": report.files.filter { $0.group == g }.map { f -> [String: Any] in
+                    var d: [String: Any] = ["name": f.name, "bytes": f.bytes]
+                    if let k = f.kind { d["kind"] = k }
+                    if let c = f.created { d["created"] = ISO8601DateFormatter().string(from: c) }
+                    if !f.projects.isEmpty { d["projects"] = f.projects.map { ($0 as NSString).lastPathComponent } }
+                    return d
+                }]
+            }
+            return .json(["storage": ["register": report.register, "canBeFreed": group(.canBeFreed), "inUse": group(.inUse), "unknown": group(.unknown), "notJammers": group(.unregistered),
+                                      "inTrash": report.trashed.map { ["name": $0.name, "bytes": $0.bytes, "when": ISO8601DateFormatter().string(from: $0.when)] as [String: Any] },
+                                      "note": "Reading only. Nothing is removed by itself and an agent can't remove anything: the user chooses in File › Storage…, and what is chosen goes to the Trash."] as [String: Any]])
         case ["api", "v1", "operations"]:
             try only("GET")
             return .json(["operations": AgentAPI.operations])

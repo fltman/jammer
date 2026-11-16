@@ -135,6 +135,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc func showAgentAccess(_ sender: Any?) { AgentSplash.show() }
+    @objc func showStorage(_ sender: Any?) { StorageWindow.show() }
 
     @objc func openAgentGuide(_ sender: Any?) {
         if let s = AgentServer.shared.guideURL, let url = URL(string: s) { NSWorkspace.shared.open(url) }
@@ -212,6 +213,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             item("Import Final Cut Pro XML…", #selector(AppDelegate.importTimeline(_:)), ""),
             item("Export Audio…", #selector(EditorWindowController.exportAudio(_:)), "e", [.command, .shift]),
             item("Batch…", #selector(AppDelegate.showBatch(_:)), "b", [.command, .option]),
+            item("Storage…", #selector(AppDelegate.showStorage(_:)), ""),
         ] + sendToFlimmerItems))
         main.addItem(submenu("Edit", [
             item("Undo", Selector(("undo:")), "z"),

@@ -209,6 +209,8 @@ extension Project {
             solo.tracks[0].inserts = []
             let plan = PlanCompiler.compile(solo, pool: pool)
             let url = media.appending(path: "\(UUID().uuidString.prefix(8)) duck.wav")
+            // Noted as made by Jämmer: only such a file can ever be offered for removal (MediaStorage).
+            MediaRegister.made(url, kind: "duck", in: media)
             let w = try WAVWriter(url: url, options: .init(encoding: .float32, channels: channels, sampleRate: sampleRate))
             let piece = Int(sampleRate * 10)
             var at = first

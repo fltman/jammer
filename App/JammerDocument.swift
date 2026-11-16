@@ -83,6 +83,8 @@ final class JammerDocument: NSDocument {
         session = s
         let wc = EditorWindowController(session: s)
         addWindowController(wc)
+        // Which of Jämmer's own files this document uses is noted as it opens (File › Storage…).
+        StorageScanner.note(s)
         if readFromPackage {
             // Once the window is up: audio the project names outside itself is asked about, not just read.
             DispatchQueue.main.async { [weak wc, weak s] in
@@ -303,6 +305,8 @@ final class JammerDocument: NSDocument {
                 }
                 self.pendingCopies = []
                 self.pendingCollected = nil
+                // Saved (also autosaved): where the document is kept is now known, and so is what it uses.
+                if error == nil, let s = self.session { StorageScanner.note(s) }
             }
             completionHandler(error)
         }

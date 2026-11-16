@@ -123,7 +123,11 @@ struct LoudnessMatchTests {
         // signal repeats every second, so its range is next to nothing both times; the figures are there).
         #expect(m.rangeBefore != nil && m.rangeAfter != nil && abs((m.rangeAfter ?? 9) - (after.range ?? 0)) < 0.001)
         // Only the last try's files are left.
-        #expect(try FileManager.default.contentsOfDirectory(atPath: media.path).count == 1 && q.length == p.length)
+        // One audio file (beside it, the register of what Jämmer has made there, which is not audio).
+        let made = try FileManager.default.contentsOfDirectory(atPath: media.path).filter { !$0.hasPrefix(".") }
+        #expect(made.count == 1 && q.length == p.length, "\(made)")
+        guard case .read(let register) = MediaRegister.state(media) else { Issue.record("the limited file isn't in the register"); return }
+        #expect(register.files[made[0]]?.kind == "limit")
         // Peaks that leave room: one gain as before, and the limiter isn't touched even when allowed.
         let (_, easy) = try #require(try p.matching(.ebuR128, range: all, limit: true, pool: pool, media: media, measure: Self.measure(pool)))
         #expect(!easy.limited && !easy.limitedByPeak && abs(easy.integratedAfter - -23) < 0.01)

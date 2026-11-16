@@ -247,6 +247,8 @@ final class EditorSession {
         }
         PluginStateTrust.noteMade(from: old, to: newProject)
         replace(with: newProject)
+        // A step that made a new file: this document is now known to use it (File › Storage…).
+        if newProject.sources.map(\.id) != old.sources.map(\.id) { StorageScanner.note(self) }
         // The history tree records the change; undo and redo move along it (a change after
         // an undo starts a branch rather than discarding the old future).
         let from = history?.current

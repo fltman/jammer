@@ -229,6 +229,8 @@ extension Project {
             let processedMono = stride(from: 0, to: out.count, by: channels).map { i in (0..<channels).reduce(Float(0)) { $0 + out[i + $1] } / Float(channels) }
             reductions.append(before - level(processedMono, where: othersOnly))
             let url = media.appending(path: "\(UUID().uuidString.prefix(8)) debleed.wav")
+            // Noted as made by Jämmer: only such a file can ever be offered for removal (MediaStorage).
+            MediaRegister.made(url, kind: "debleed", in: media)
             let w = try WAVWriter(url: url, options: .init(encoding: .float32, channels: channels, sampleRate: sampleRate))
             try w.write(Array(out[Int(first) * channels..<Int(end) * channels]))
             try w.finish()

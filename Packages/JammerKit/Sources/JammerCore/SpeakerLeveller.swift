@@ -248,6 +248,8 @@ extension Project {
                 for c in 0..<ch { out[i * ch + c] = raw[i * ch + c] * lin }
             }
             let url = media.appending(path: "\(UUID().uuidString.prefix(8)) levelled.wav")
+            // Noted as made by Jämmer: only such a file can ever be offered for removal (MediaStorage).
+            MediaRegister.made(url, kind: "levelled", in: media)
             let w = try WAVWriter(url: url, options: .init(encoding: .float32, channels: channels, sampleRate: sampleRate))
             try w.write(Array(out[Int(first) * ch..<Int(end) * ch]))
             try w.finish()
