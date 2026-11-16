@@ -426,6 +426,9 @@ final class EditorSession {
         playhead = end.playhead
         AppClipboard.content = end.clipboard
         if isPlaying, end.playhead != start.playhead { try? output.play(from: playhead) }
+        // What a step wants said with its result (automation that stayed where it was under a moved track):
+        // in the status line, where it happens.
+        if let warning = results.flatMap(\.warnings).first { status = warning }
         return results
     }
 

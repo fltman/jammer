@@ -3,9 +3,59 @@
 #include "internal.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 
 namespace jm {
+
+double Curve::dbAt(int64_t t) const {
+    const size_t i = size_t(std::upper_bound(frames.begin(), frames.end(), t) - frames.begin());
+    if (i == 0) return db.front();
+    if (i == frames.size()) return db.back();
+    const double a = db[i - 1], b = db[i];
+    return a + (b - a) * double(t - frames[i - 1]) / double(frames[i] - frames[i - 1]);
+}
+
+void Curve::apply(const float *in, float *out, int64_t at, int64_t n, int32_t channels) const {
+    auto gain = [](double d) { return d == 0.0 ? 1.0f : float(std::pow(10.0, d / 20.0)); };
+    int64_t pos = 0;
+    while (pos < n) {
+        const int64_t t0 = at + pos;
+        // The stretch between two points that t0 is in (or before the first, or after the last), and how
+        // steep the line is there. Where it is steep the pieces are shorter, so that a straight piece in
+        // amplitude never spans more than half a dB of the line: a power of two, at most kPiece.
+        const auto next = std::upper_bound(frames.begin(), frames.end(), t0);
+        const bool inside = next != frames.begin() && next != frames.end();
+        int64_t piece = kPiece;
+        if (inside) {
+            const size_t k = size_t(next - frames.begin());
+            const double perFrame = std::fabs(double(db[k]) - double(db[k - 1])) / double(frames[k] - frames[k - 1]);
+            while (piece > 1 && perFrame * double(piece) > 0.5) piece /= 2;
+        }
+        // The piece t0 is in: from a multiple of `piece` on the timeline (or the point before, if later) to
+        // the next multiple (or the next point, if sooner). Its two ends, and so every value in it, depend
+        // only on the timeline, never on where this call happens to begin.
+        const int64_t base = t0 >= 0 ? t0 / piece * piece : -((-t0 + piece - 1) / piece * piece);
+        int64_t a = base, b = base + piece;
+        if (next != frames.begin()) a = std::max(a, *(next - 1));
+        if (next != frames.end()) b = std::min(b, *next);
+        const int64_t end = std::min(at + n, b), len = end - t0;
+        const float ga = gain(dbAt(a)), gb = gain(dbAt(b));
+        const float *x = in + pos * channels;
+        float *y = out + pos * channels;
+        if (ga == gb) {
+            if (ga == 1.0f) { if (x != y) std::memcpy(y, x, size_t(len * channels) * sizeof(float)); }
+            else for (int64_t i = 0; i < len * channels; ++i) y[i] = x[i] * ga;
+        } else {
+            const float step = (gb - ga) / float(b - a);
+            for (int64_t i = 0; i < len; ++i) {
+                const float g = ga + step * float(t0 - a + i);
+                for (int32_t c = 0; c < channels; ++c) y[i * channels + c] = x[i * channels + c] * g;
+            }
+        }
+        pos += len;
+    }
+}
 
 Graph::Graph(const Plan &plan) : channels_(plan.channels) {
     const size_t nt = plan.tracks.size(), nb = plan.buses.size();
@@ -18,6 +68,7 @@ Graph::Graph(const Plan &plan) : channels_(plan.channels) {
     // The tracks' chains run as streams here too, and get their run-in from here.
     for (const Track &t : plan.tracks)
         if (t.chain) preroll_ = std::max(preroll_, t.chain->preroll);
+    if (plan.masterChain) masterChainLatency_ = plan.masterChain->latency;
     for (const auto &c : {plan.masterChain, plan.masterLimiter}) {
         if (!c) continue;
         masterLatency += c->latency;
@@ -61,7 +112,8 @@ Graph::Graph(const Plan &plan) : channels_(plan.channels) {
     // One pass in that order is enough. A track's chain is a stream like a bus's, and makes the track
     // as late as its plugins are.
     nodeIn_.assign(nt + nb, 0);
-    std::vector<int64_t> out(nt + nb, 0);
+    nodeOut_.assign(nt + nb, 0);
+    std::vector<int64_t> &out = nodeOut_;
     total = 0;
     for (int32_t n : order_) {
         const bool isBus = size_t(n) >= nt;
@@ -98,6 +150,7 @@ Graph::Graph(const Plan &plan) : channels_(plan.channels) {
         directLine_.assign(size_t(total * channels_), 0.0f);
     }
     strip_.assign(size_t(kQuantum * channels_), 0.0f);
+    faded_.assign(size_t(kQuantum * channels_), 0.0f);
     mix_.assign(size_t(kQuantum * channels_), 0.0f);
     bus_.assign(nb, std::vector<float>(size_t(kQuantum * channels_), 0.0f));
 }
@@ -176,7 +229,7 @@ void Graph::produce(const Plan &plan, Renderer &renderer) {
             if (c.start >= end) break;
             if (c.end() <= cursor_) continue;
             const Track &track = plan.tracks[size_t(c.track)];
-            if (track.mute || track.chain) continue;
+            if (track.mute || track.chain || !track.curve.empty()) continue;
             renderer.mixClip(plan, c, track.gain, cursor_, q, direct_.data());
         }
         if (total == 0) {
@@ -198,7 +251,7 @@ void Graph::produce(const Plan &plan, Renderer &renderer) {
             const size_t t = size_t(n);
             const Track &track = plan.tracks[t];
             // (In a plain plan the tracks without plugins are in the sum already.)
-            if (plain_ && !track.chain) continue;
+            if (plain_ && !track.chain && track.curve.empty()) continue;
             if (track.mute) {
                 // A muted strip sends silence, so that its delay lines empty in step with the others.
                 std::fill(strip_.begin(), strip_.end(), 0.0f);
@@ -208,10 +261,17 @@ void Graph::produce(const Plan &plan, Renderer &renderer) {
                 renderer.renderTrack(plan, int32_t(t), cursor_ - nodeIn_[t], q, strip_.data());
                 if (track.chain) track.chain->stream(strip_.data(), feeds_[t].data(), feeds_[t].size());
             }
+            // The fader's automation: read at the strip's own place on the timeline, which is the graph's
+            // time less how late the strip is where it leaves. A send before the fader doesn't have it.
+            const float *post = strip_.data();
+            if (!track.curve.empty() && !track.mute) {
+                track.curve.apply(strip_.data(), faded_.data(), cursor_ - nodeOut_[t], q, channels_);
+                post = faded_.data();
+            }
             for (Edge &e : trackEdges_[t]) {
-                if (e.main || e.keyNode >= 0) send(e, strip_.data(), track.gain * track.panL, track.gain * track.panR, q);
+                if (e.main || e.keyNode >= 0) send(e, post, track.gain * track.panL, track.gain * track.panR, q);
                 else if (e.pre) send(e, strip_.data(), e.gain, e.gain, q);
-                else send(e, strip_.data(), track.gain * e.gain * track.panL, track.gain * e.gain * track.panR, q);
+                else send(e, post, track.gain * e.gain * track.panL, track.gain * e.gain * track.panR, q);
             }
         } else {
             const size_t b = size_t(n) - nt;
@@ -221,10 +281,15 @@ void Graph::produce(const Plan &plan, Renderer &renderer) {
             if (bus.mute) std::memset(sum, 0, samples * sizeof(float));
             // Into a copy: an edge may add to a bus later in the order, never to this one.
             std::memcpy(strip_.data(), sum, samples * sizeof(float));
+            const float *post = strip_.data();
+            if (!bus.curve.empty() && !bus.mute) {
+                bus.curve.apply(strip_.data(), faded_.data(), cursor_ - nodeOut_[size_t(n)], q, channels_);
+                post = faded_.data();
+            }
             for (Edge &e : busEdges_[b]) {
-                if (e.main || e.keyNode >= 0) send(e, strip_.data(), bus.gain * bus.panL, bus.gain * bus.panR, q);
+                if (e.main || e.keyNode >= 0) send(e, post, bus.gain * bus.panL, bus.gain * bus.panR, q);
                 else if (e.pre) send(e, strip_.data(), e.gain, e.gain, q);
-                else send(e, strip_.data(), bus.gain * e.gain * bus.panL, bus.gain * e.gain * bus.panR, q);
+                else send(e, post, bus.gain * e.gain * bus.panL, bus.gain * e.gain * bus.panR, q);
             }
         }
     }
@@ -232,6 +297,7 @@ void Graph::produce(const Plan &plan, Renderer &renderer) {
     if (plan.masterChain) plan.masterChain->stream(mix_.data());
     if (plan.masterGain != 1.0f)
         for (float &x : mix_) x *= plan.masterGain;
+    if (!plan.masterCurve.empty()) plan.masterCurve.apply(mix_.data(), mix_.data(), cursor_ - total - masterChainLatency_, q, channels_);
     if (plan.masterLimiter) plan.masterLimiter->stream(mix_.data());
     cursor_ += q;
     const int64_t skip = std::min(discard_, q);

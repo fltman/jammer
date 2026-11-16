@@ -139,13 +139,13 @@ struct MixerTests {
         try back.setTrackRoute(p.tracks[1].id, pan: 0, output: .some(nil))
         try back.removeBus(bus.id)
         #expect(String(decoding: try JSONEncoder().encode(back), as: UTF8.self).contains("\"formatVersion\":1"))
-        let newer = Data(String(decoding: data, as: UTF8.self).replacingOccurrences(of: "\"formatVersion\":2", with: "\"formatVersion\":3").utf8)
+        let newer = Data(String(decoding: data, as: UTF8.self).replacingOccurrences(of: "\"formatVersion\":2", with: "\"formatVersion\":\(Project.newestFormatVersion + 1)").utf8)
         do { _ = try JSONDecoder().decode(Project.self, from: newer); Issue.record("opened") } catch {
-            #expect((error as? Project.NeedsNewer)?.version == 3 && error.localizedDescription.contains("newer Jämmer"))
+            #expect((error as? Project.NeedsNewer)?.version == Project.newestFormatVersion + 1 && error.localizedDescription.contains("newer Jämmer"))
         }
         // The same from a project package, which is how a file is opened: said before anything else is read.
         do { _ = try ProjectPackage.decodeChecked(newer); Issue.record("opened") } catch {
-            #expect(error.localizedDescription.contains("saved by a newer Jämmer (format 3)") && error.localizedDescription.contains("Open it in a newer Jämmer"))
+            #expect(error.localizedDescription.contains("saved by a newer Jämmer (format \(Project.newestFormatVersion + 1))") && error.localizedDescription.contains("Open it in a newer Jämmer"))
         }
         #expect(try ProjectPackage.decodeChecked(data).project == p)
     }

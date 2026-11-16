@@ -228,6 +228,15 @@ public enum PlanCompiler {
             for t in project.tracks { if let to = trackIndex[t.id] { keys(t.inserts, toBus: false, to: to) } }
             for b in project.buses { if let to = busIndex[b.id] { keys(b.inserts, toBus: true, to: to) } }
         }
+        // Automation of levels: each strip's enabled gain lane, as points on the timeline. Nothing is set
+        // for a strip without one, and the plan is then what it always was.
+        func curve(_ strip: UUID, kind: Int32, index: Int32) {
+            guard let c = project.gainCurve(of: strip) else { return }
+            jm_plan_set_gain_curve(plan, kind, index, c.frames, c.db, Int32(c.frames.count))
+        }
+        for t in project.tracks { if let i = trackIndex[t.id] { curve(t.id, kind: 0, index: i) } }
+        for b in project.buses { if let i = busIndex[b.id] { curve(b.id, kind: 1, index: i) } }
+        curve(Master.id, kind: 2, index: 0)
         // The master, when it does anything: its plugins (with a provider), its gain, its limiter last.
         let master = project.master
         if !master.isDefault {

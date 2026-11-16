@@ -35,6 +35,49 @@ struct MixerBaselineTests {
         }
     }
 
+    /// What automation costs: 64 stereo tracks with a level that moves all the time on every one of them
+    /// (a point every half second, 12 dB apart) and on the master, against the same tracks without lanes.
+    /// Each measured three times, in turn, so that a busy moment doesn't land on one of them only.
+    @Test func withAutomation() throws {
+        let rate = 48_000.0, seconds = 20, n = Int(rate) * 30, count = 64
+        let info = AudioFileInfo(container: .wav, sampleFormat: .float32, bigEndian: false, channels: 2, sampleRate: rate,
+                                 channelMask: nil, dataOffset: 0, frames: Int64(n), chunks: [], bext: nil, ixml: nil, markers: [])
+        let pool = SourcePool()
+        var made: Project?
+        for t in 0..<count {
+            let src = SourceRef(name: "s\(t)", path: "/dev/null", info: info)
+            pool.register(src.id, memory: (0..<(n * 2)).map { Float(0.01 * sin(Double($0 + t * 977) * 0.01)) }, channels: 2)
+            if made == nil { made = Project(source: src) } else { _ = made!.addTrack(source: src, name: "t\(t)") }
+        }
+        let plain = made!
+        var moving = plain
+        let points = (0...(seconds * 2 + 2)).map { AutomationPoint(frame: Frame(Double($0) * rate / 2), value: $0 % 2 == 0 ? 0 : -12) }
+        for t in moving.tracks { try moving.setAutomation(strip: t.id, points: points) }
+        try moving.setAutomation(strip: Master.id, points: points)
+        // The same lanes, but still: a point's worth of line at one level (what a lane costs when nothing moves).
+        var still = plain
+        for t in still.tracks { try still.setAutomation(strip: t.id, points: [AutomationPoint(frame: 0, value: -6), AutomationPoint(frame: Frame(n), value: -6)]) }
+        func measure(_ p: Project) -> (mean: Double, worst: Double) {
+            let plan = PlanCompiler.compile(p, pool: pool)
+            var worst = 0.0, total = 0.0
+            let blocks = seconds * Int(rate) / 512
+            for b in 0..<blocks {
+                let t0 = DispatchTime.now().uptimeNanoseconds
+                _ = plan.render(from: Frame(b * 512), frames: 512)
+                let dt = Double(DispatchTime.now().uptimeNanoseconds - t0) / 1e9
+                total += dt; worst = max(worst, dt)
+            }
+            return (total / Double(blocks) * 1000, worst * 1000)
+        }
+        var rows: [String: [(Double, Double)]] = [:]
+        for _ in 0..<3 { for (name, p) in [("no lanes", plain), ("a still lane on every track", still), ("a moving lane on every track and the master", moving)] { rows[name, default: []].append(measure(p)) } }
+        for name in ["no lanes", "a still lane on every track", "a moving lane on every track and the master"] {
+            let r = rows[name]!
+            print(String(format: "MIXER AUTOMATION 64 stereo tracks, %@: a 512-frame block takes %.3f ms on average (best of three %.3f), %.3f ms at worst (best of three %.3f)",
+                         name, r.map(\.0).reduce(0, +) / 3, r.map(\.0).min()!, r.map(\.1).max()!, r.map(\.1).min()!))
+        }
+    }
+
     /// The mixer carrying real plugins, on tracks and on buses (Apple's low-pass and peak limiter, in
     /// process): what a 512-frame block costs once it runs, and what the first block after a seek costs,
     /// which has the run-in of every chain and of the graph in it.

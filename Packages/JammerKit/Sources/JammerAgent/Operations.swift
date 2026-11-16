@@ -6,7 +6,8 @@ import JammerCore
 /// from this list, so they can't drift from what the app actually does.
 public struct OperationSpec: Sendable, Identifiable {
     public struct Param: Sendable {
-        public enum Kind: String, Sendable { case seconds, number, string, boolean, list, numbers }
+        /// `pairs`: a list of [a, b] pairs of numbers (automation points: seconds and value).
+        public enum Kind: String, Sendable { case seconds, number, string, boolean, list, numbers, pairs }
         public var name: String
         public var kind: Kind
         public var description: String
@@ -37,6 +38,7 @@ public struct OperationSpec: Sendable, Identifiable {
             case .boolean: d["type"] = "boolean"
             case .list: d["type"] = "array"; d["items"] = ["type": "string"]
             case .numbers: d["type"] = "array"; d["items"] = ["type": "number"]
+            case .pairs: d["type"] = "array"; d["items"] = ["type": "array", "items": ["type": "number"], "minItems": 2, "maxItems": 2] as [String: Any]
             }
             if let range, kind != .seconds || range.lowerBound != 0 { d["minimum"] = range.lowerBound }
             if let range { d["maximum"] = range.upperBound }
@@ -131,8 +133,29 @@ public enum Operations {
     static var sidechainOn: Bool { sidechainForThisTask ?? sidechain }
     static let keyParam = OperationSpec.Param("key", .string, "A sidechain key: the id of the track or bus the plugin listens to (its signal after the fader, in step with the audio), or \"none\" to take the key away. Only for a plugin with a sidechain input (reason no_key_input otherwise); a key that would be fed by what it controls is refused (routing_loop).")
 
+    /// Automation (`set_automation`, `clear_automation`). Off in a release until lanes are shown and drawn in
+    /// the window (docs/MIXER.md): what changes how a project sounds without being seen isn't shipped. A
+    /// build with it off doesn't know the steps; a project that has lanes is still played as it was saved.
+    nonisolated(unsafe) public static var automation = false
+    @TaskLocal public static var automationForThisTask: Bool?
+    public static var automationOn: Bool { automationForThisTask ?? automation }
+    static let automationSteps: [OperationSpec] = [
+        .init("set_automation", "Write Automation", "Writes automation for a level: points on the timeline that the level follows, in a straight line in dB from one to the next (before the first point the level is the first point's, after the last the last's). It is added to the fader, which stays where it is: 0 dB is no change. `points` replace the whole lane; with `start` and `end` they replace only the points inside that range and nothing outside it is touched. A point lands on its own sample, whatever plugins the strip has. Edits that close up or open the whole timeline (delete, paste, removed pauses) move the points with the sound; lining up or stretching one track doesn't, and the answer then carries a warning. Refused with the name of the field: a point after the document's end or outside `start`…`end`, a value outside −96 to 24, two points at one time. info has `points`, how many the lane now has.",
+              params: [.init("strip", .string, "The id of the track or bus, or \"master\".", required: true),
+                       .init("param", .string, "What the lane moves. Default gain.", options: ["gain"]),
+                       .init("points", .pairs, "The points: [[seconds, dB], …]. An empty list with `start` and `end` takes the points in that range away.", required: true, range: -96...24),
+                       .init("start", .seconds, "Start of the range to replace, in seconds. With `end`."),
+                       .init("end", .seconds, "End of the range to replace, in seconds. With `start`."),
+                       .init("enabled", .boolean, "False keeps the lane but stops it being heard; true brings it back.")]),
+        .init("clear_automation", "Clear Automation", "Takes the points of one lane away: all of them, or with `start` and `end` those inside that range. One strip and one lane at a time; nothing clears a whole project. info has `removed`.",
+              params: [.init("strip", .string, "The id of the track or bus, or \"master\".", required: true),
+                       .init("param", .string, "Which lane.", required: true, options: ["gain"]),
+                       .init("start", .seconds, "Start of the range to clear, in seconds. With `end`."),
+                       .init("end", .seconds, "End of the range to clear, in seconds. With `start`.")]),
+    ]
+
     public static var all: [OperationSpec] {
-        let list = all(freeform: spectralFreeform, clap: InsertUnits.external != nil)
+        let list = all(freeform: spectralFreeform, clap: InsertUnits.external != nil) + (automationOn ? automationSteps : [])
         guard sidechainOn else { return list }
         return list.map { op in
             guard op.name == "set_insert" else { return op }
@@ -509,6 +532,17 @@ public enum JSONValue: Sendable, Equatable {
         return n.count == a.count ? n : nil
     }
 
+    /// A list of [a, b] pairs of finite numbers.
+    public var pairs: [(Double, Double)]? {
+        guard case .array(let a) = self else { return nil }
+        var out: [(Double, Double)] = []
+        for item in a {
+            guard let n = item.numbers, n.count == 2, n[0].isFinite, n[1].isFinite else { return nil }
+            out.append((n[0], n[1]))
+        }
+        return out
+    }
+
     public var strings: [String]? {
         guard case .array(let a) = self else { return nil }
         let s = a.compactMap(\.string)
@@ -527,6 +561,8 @@ public struct EditState: Sendable {
     public var media: URL?
     /// Ids the current step made; moved into its result.
     public var made: [String: String] = [:]
+    /// Things the current step wants said with its result (it was done, and this goes with it).
+    public var warnings: [String] = []
 
     public init(project: Project, selection: Range<Frame>? = nil, playhead: Frame = 0, clipboard: ClipboardContent? = nil,
                 pool: SourcePool? = nil, media: URL? = nil) {
@@ -550,6 +586,9 @@ public struct StepResult: Sendable, Equatable {
     public var reason: String?
     /// Numbers that go with the reason, e.g. ["matches": 3].
     public var details: [String: Double] = [:]
+    /// What goes with a step that was done: something that stayed as it was although one might think it
+    /// followed (automation under a track that was moved).
+    public var warnings: [String] = []
     /// Ids of things the step made, e.g. ["insert": "…"].
     public var ids: [String: String] = [:]
 }
@@ -583,15 +622,28 @@ public enum StepRunner {
             }
             do {
                 state.made = [:]
+                state.warnings = []
                 let before = state.project
                 let info = try apply(step, to: &state, measure: measure)
+                // A track moved by itself (lined up, stretched) under automation that stays on the timeline:
+                // done, and said, so that nobody thinks the lane followed.
+                if movesOneTrack.contains(step.op) {
+                    for t in state.project.tracks {
+                        guard let was = before.tracks.first(where: { $0.id == t.id }), was.clips != t.clips else { continue }
+                        let points = state.project.lanes(of: t.id).reduce(0) { $0 + $1.points.count }
+                        if points > 0 { state.warnings.append("The automation on \(t.name) stays where it is on the timeline (\(points) point\(points == 1 ? "" : "s")): the track's sound moved under it, the lane didn't.") }
+                    }
+                }
                 // A frozen strip is a file of what it was: nothing may change what that file was made from.
                 if let name = before.frozenViolation(in: state.project) {
                     state.project = before
                     throw StepFailure("\(step.op): " + (FreezeError.frozen(name).errorDescription ?? ""), reason: "frozen")
                 }
-                results.append(StepResult(op: step.op, status: .done, info: info, ids: state.made))
+                var result = StepResult(op: step.op, status: .done, info: info, ids: state.made)
+                result.warnings = state.warnings
+                results.append(result)
                 state.made = [:]
+                state.warnings = []
             } catch {
                 let f = error as? StepFailure
                 results.append(StepResult(op: step.op, status: .failed, error: error.localizedDescription,
@@ -602,6 +654,33 @@ public enum StepRunner {
             }
         }
         return results
+    }
+
+    /// Steps that move one track's sound by itself, without closing or opening the whole timeline.
+    static let movesOneTrack: Set<String> = ["align_tracks", "correct_drift"]
+
+    /// What can only be checked against the document, before anything runs: for an agent's request this
+    /// is a 400 with the field's name, not a failed step. (Automation: a strip that is there, points
+    /// inside the document and inside the range given.)
+    public static func check(_ step: Step, against project: Project) throws {
+        guard ["set_automation", "clear_automation"].contains(step.op) else { return }
+        let p = step.params
+        let name = p["strip"]?.string ?? ""
+        guard name == "master" || UUID(uuidString: name).map({ id in project.tracks.contains { $0.id == id } || project.bus(id) != nil }) == true else {
+            throw StepFailure("\(step.op): \"strip\" is the id of a track or a bus, or \"master\"; there is none with id \(name).", reason: "not_found")
+        }
+        guard (p["start"] == nil) == (p["end"] == nil) else { throw StepFailure("\(step.op): \"start\" and \"end\" go together.") }
+        let end = project.seconds(project.length)
+        if let a = p["start"]?.double, let b = p["end"]?.double {
+            guard a <= b else { throw StepFailure("\(step.op): \"start\" is after \"end\".") }
+            guard b <= end + 1e-9 else { throw StepFailure("\(step.op): \"end\" is at \(b.plain) s, after the document's end (\(end.plain) s).") }
+        }
+        for (i, pair) in (p["points"]?.pairs ?? []).enumerated() {
+            guard pair.0 <= end + 1e-9 else { throw StepFailure("\(step.op): points[\(i)] is at \(pair.0.plain) s, after the document's end (\(end.plain) s).") }
+            if let a = p["start"]?.double, let b = p["end"]?.double, pair.0 < a - 1e-9 || pair.0 > b + 1e-9 {
+                throw StepFailure("\(step.op): points[\(i)] is at \(pair.0.plain) s, outside \"start\"…\"end\" (\(a.plain) to \(b.plain) s).")
+            }
+        }
     }
 
     /// Checks names and required params before anything runs.
@@ -632,6 +711,14 @@ public enum StepRunner {
                 guard value.strings != nil else { throw StepFailure("\(step.op): \"\(key)\" must be a list of strings.") }
             case .numbers:
                 guard let n = value.numbers, n.allSatisfy(\.isFinite) else { throw StepFailure("\(step.op): \"\(key)\" must be a list of numbers.") }
+            case .pairs:
+                guard let pairs = value.pairs else { throw StepFailure("\(step.op): \"\(key)\" must be a list of [seconds, value] pairs of numbers.") }
+                for (i, pair) in pairs.enumerated() {
+                    if pair.0 < 0 { throw StepFailure("\(step.op): \(key)[\(i)] is at \(pair.0.plain) s; a point can't be before the start.") }
+                    if let r = p.range, !r.contains(pair.1) {
+                        throw StepFailure("\(step.op): \(key)[\(i)] has the value \(pair.1.plain); it must be between \(r.lowerBound.formatted()) and \(r.upperBound.formatted()).")
+                    }
+                }
             }
         }
     }
@@ -924,6 +1011,28 @@ public enum StepRunner {
                 let count = s.project.tracks.filter { $0.vca == id }.count + s.project.buses.filter { $0.vca == id }.count
                 return ["members": Double(count), "gainDB": s.project.vca(id)?.gainDB ?? 0]
             } catch let e as Mixer.Failure { throw StepFailure("\(step.op): " + (e.errorDescription ?? ""), reason: e.reason) }
+        case "set_automation", "clear_automation":
+            guard Operations.automationOn else { throw StepFailure("\(step.op): this build has no automation.", reason: "not_available") }
+            do { try check(step, against: project) }
+            let strip = p["strip"]?.string == "master" ? Master.id : UUID(uuidString: p["strip"]?.string ?? "") ?? UUID()
+            let range: ClosedRange<Frame>? = frames("start").flatMap { a in frames("end").map { a...max(a, $0) } }
+            do {
+                if step.op == "clear_automation" {
+                    return ["removed": Double(try s.project.clearAutomation(strip: strip, param: .gain, range: range))]
+                }
+                var enabled: Bool?
+                if let v = p["enabled"], case .bool(let b) = v { enabled = b }
+                let points = (p["points"]?.pairs ?? []).map { AutomationPoint(frame: min(project.frames($0.0), project.length), value: $0.1) }
+                guard !points.isEmpty || range != nil || enabled != nil else { throw StepFailure("set_automation: no points were given. To take a lane away, use clear_automation.") }
+                if points.isEmpty, range == nil, let enabled {
+                    // Only switching the lane on or off.
+                    guard let lane = s.project.lane(strip: strip, param: .gain) else { throw StepFailure("set_automation: there is no gain lane on that strip to switch \(enabled ? "on" : "off").", reason: "not_found") }
+                    try s.project.setAutomation(strip: strip, points: lane.points, enabled: enabled)
+                } else {
+                    try s.project.setAutomation(strip: strip, points: points, range: range, enabled: enabled)
+                }
+                return ["points": Double(s.project.lane(strip: strip, param: .gain)?.points.count ?? 0)]
+            } catch let e as Automation.Failure { throw StepFailure("\(step.op): " + (e.errorDescription ?? ""), reason: e.reason) }
         case "set_master":
             var limiter: MasterLimiter?? = nil
             var on: Bool?
@@ -1253,4 +1362,10 @@ extension StepRunner {
             return [:]
         }
     }
+}
+
+extension Double {
+    /// The number as an agent reads it, the same on every Mac: no grouping, a point for the decimals
+    /// (`formatted()` writes 9 999 and 25,08 on a Swedish one).
+    var plain: String { self == rounded() && abs(self) < 1e15 ? String(Int64(self)) : String((self * 1_000_000).rounded() / 1_000_000) }
 }

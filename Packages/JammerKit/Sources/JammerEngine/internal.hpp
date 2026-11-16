@@ -121,9 +121,29 @@ struct Send {
     bool pre;
 };
 
+/// Automation of a level: points on the timeline (frame, dB), a straight line in dB between them, the
+/// first value before the first point and the last after the last. Part of the immutable plan. It is
+/// applied in pieces of at most `kPiece` frames (fewer where the line is steep: never more than half a
+/// dB of it in one piece) that lie on the timeline's own grid and end at the points, ramping linearly in
+/// amplitude inside a piece: so a point lands on its own frame, the level never steps, and what a frame
+/// is multiplied by depends only on where it is on the timeline, not on where a render started or how
+/// it was cut into blocks.
+struct Curve {
+    static constexpr int64_t kPiece = 64;
+    std::vector<int64_t> frames;
+    std::vector<float> db;
+    bool empty() const { return frames.empty(); }
+    double dbAt(int64_t t) const;
+    /// `n` interleaved frames of `in`, of which the first is timeline frame `at`, times the curve, to `out`
+    /// (which may be `in`).
+    void apply(const float *in, float *out, int64_t at, int64_t n, int32_t channels) const;
+};
+
 struct Track {
     float gain = 1.0f;
     bool mute = false;
+    /// Automation added to the fader, after the track's plugins; empty: none, and nothing is different.
+    Curve curve;
     std::shared_ptr<Chain> chain;
     std::vector<Send> sends;
     /// Where the track goes: a bus (its index), or -1 for the output. With pan: the gain of the left
@@ -136,6 +156,7 @@ struct Track {
 struct Bus {
     float gain = 1.0f;
     bool mute = false;
+    Curve curve;
     float panL = 1.0f, panR = 1.0f;
     int32_t output = -1;
     std::vector<Send> sends;
@@ -187,6 +208,11 @@ private:
     /// streams like the buses', and `nodeIn_` is how late each node's input is.
     std::vector<int32_t> order_;
     std::vector<int64_t> nodeIn_;
+    /// How late each node's signal is where it leaves the strip (after its plugins): what the graph's
+    /// time is ahead of the timeline there, which is where the strip's automation is read.
+    std::vector<int64_t> nodeOut_;
+    int64_t masterChainLatency_ = 0;
+    std::vector<float> faded_;
     struct KeyBuffer {
         int32_t unit;
         std::vector<float> data;
@@ -235,6 +261,8 @@ struct Plan {
     /// The master: the sum of everything → its plugins → its gain → its limiter, last of all.
     float masterGain = 1.0f;
     std::shared_ptr<Chain> masterChain, masterLimiter;
+    /// Automation of the master's level: after its plugins, with its gain, before the limiter.
+    Curve masterCurve;
     std::vector<Clip> clips; // sorted by start once finalized
     int64_t length = 0;
     bool finalized = false;

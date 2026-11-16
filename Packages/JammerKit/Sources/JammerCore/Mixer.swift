@@ -425,6 +425,7 @@ extension Project {
         buses = []
         master = Master()
         vcas = []
+        automation = []
         // (…and not from a frozen file either: the track's own sound, before its plugins, is what is wanted.)
         for t in tracks.indices { tracks[t].pan = 0; tracks[t].output = nil; tracks[t].sends = []; tracks[t].vca = nil; tracks[t].frozen = nil }
     }

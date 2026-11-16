@@ -176,6 +176,13 @@ int32_t jm_plan_key_count(const jm_plan *_Nonnull plan);
 /// and then runs through `limiter` (or null), last of all. Both chains are retained. What they add in
 /// latency is part of `jm_plan_total_latency` and is hidden like the rest. Before finalize.
 void jm_plan_set_master(jm_plan *_Nonnull plan, float gain, jm_chain *_Nullable chain, jm_chain *_Nullable limiter);
+/// Automation of a level, added to the fader: `count` points (timeline frame, dB), the frames strictly
+/// rising. A straight line in dB between points; the first value before the first, the last after the
+/// last. `kind`: 0 a track, 1 a bus (`index` is its index), 2 the master. Read at the strip's own place
+/// on the timeline whatever plugins come before it, and applied without steps (see Curve). A send before
+/// the fader doesn't have it. A curve whose frames don't rise or whose values aren't numbers is not used
+/// at all. Without a curve nothing is different from a plan that never had one. Before finalize.
+void jm_plan_set_gain_curve(jm_plan *_Nonnull plan, int32_t kind, int32_t index, const int64_t *_Nonnull frames, const float *_Nonnull db, int32_t count);
 int64_t jm_plan_master_latency(const jm_plan *_Nonnull plan);
 
 // MARK: Engine

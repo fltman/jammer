@@ -487,6 +487,21 @@ enum AgentRouter {
             case ["mixer"]:
                 try only("GET")
                 return .json(["mixer": mixerJSON(session.project, plan: session.plan, session: session)])
+            case ["automation"]:
+                // The value of a lane at a time, and the strip's whole level there: so that what was written can
+                // be checked without rendering.
+                try only("GET")
+                let p = session.project
+                let name = r.query["strip"] ?? ""
+                guard let strip = name == "master" ? Master.id : UUID(uuidString: name), let at = Double(r.query["at"] ?? ""), at.isFinite, at >= 0 else {
+                    throw APIError.badRequest("Add ?strip=<track or bus id, or master>&at=<seconds>.")
+                }
+                guard (r.query["param"] ?? "gain") == "gain" else { throw APIError.badRequest("\"param\" is gain; nothing else is automated yet.") }
+                guard let level = p.level(of: strip, at: p.frames(at)) else { throw APIError(404, "not_found", "There is no track or bus with id \(name).") }
+                func r2(_ v: Double) -> Double { (v * 100).rounded() / 100 }
+                return .json(["automation": ["strip": name, "param": "gain", "at": at, "value": level.automationDB.map { r2($0) as Any } ?? NSNull(),
+                                             "faderDB": r2(level.faderDB), "levelDB": r2(level.totalDB), "muted": level.muted,
+                                             "note": "value is the lane's (null: no lane, or it is switched off); faderDB is the fader with its VCA group; levelDB is both together."] as [String: Any]])
             case ["tracks"]:
                 try only("GET", "POST")
                 if r.method == "GET" { return .json(["tracks": session.project.tracks.map { trackJSON(session, $0) }]) }
@@ -667,25 +682,32 @@ enum AgentRouter {
         func frozen(_ f: Frozen?) -> Any {
             f.map { ["start": (p.seconds($0.start) * 1_000).rounded() / 1_000, "seconds": (p.seconds($0.length) * 1_000).rounded() / 1_000] as [String: Any] } ?? NSNull()
         }
+        // Automation: every lane of a strip, with its points in seconds. [] for a strip without any.
+        func lanes(_ strip: UUID) -> [[String: Any]] {
+            p.lanes(of: strip).map { l in
+                ["param": l.param.rawValue, "shape": l.shape.rawValue, "enabled": l.enabled,
+                 "points": l.points.map { [(p.seconds($0.frame) * 100_000).rounded() / 100_000, $0.value] }]
+            }
+        }
         let vcas = p.vcas.map { v -> [String: Any] in
             ["id": v.id.uuidString, "name": v.name, "gainDB": v.gainDB, "muted": v.isMuted,
              "members": ["tracks": p.tracks.filter { $0.vca == v.id }.map(\.id.uuidString), "buses": p.buses.filter { $0.vca == v.id }.map(\.id.uuidString)]]
         }
         let tracks = p.tracks.map { t -> [String: Any] in
             ["id": t.id.uuidString, "name": t.name, "gainDB": t.gainDB, "pan": t.pan, "muted": t.isMuted, "output": to(t.output), "sends": sends(t.sends),
-             "vca": t.vca?.uuidString ?? NSNull(), "heard": heard(t.gainDB, t.isMuted, t.vca), "frozen": frozen(t.frozen),
+             "vca": t.vca?.uuidString ?? NSNull(), "heard": heard(t.gainDB, t.isMuted, t.vca), "frozen": frozen(t.frozen), "automation": lanes(t.id),
              "latencySamples": t.frozen == nil ? own(t.inserts) : 0, "compensationSamples": plan.compensation(bus: false, index: p.tracks.firstIndex { $0.id == t.id } ?? 0)]
         }
         let buses = p.buses.map { b -> [String: Any] in
             ["id": b.id.uuidString, "name": b.name, "gainDB": b.gainDB, "pan": b.pan, "muted": b.isMuted, "output": to(b.output), "sends": sends(b.sends),
-             "vca": b.vca?.uuidString ?? NSNull(), "heard": heard(b.gainDB, b.isMuted, b.vca), "frozen": frozen(b.frozen),
+             "vca": b.vca?.uuidString ?? NSNull(), "heard": heard(b.gainDB, b.isMuted, b.vca), "frozen": frozen(b.frozen), "automation": lanes(b.id),
              "inserts": plugins(b.inserts), "latencySamples": b.frozen == nil ? own(b.inserts) : 0, "compensationSamples": plan.compensation(bus: true, index: p.buses.firstIndex { $0.id == b.id } ?? 0),
              "inputs": ["tracks": p.tracks.filter { $0.output == b.id }.map(\.id.uuidString), "buses": p.buses.filter { $0.output == b.id }.map(\.id.uuidString)]]
         }
         // The master: what its plugins and its limiter add is in `latencySamples`, and in the total.
         let limiter: Any = p.master.limiter.map { ["ceilingDB": $0.ceilingDB, "releaseMs": $0.releaseMs, "lookaheadMs": $0.lookaheadMs,
                                                     "guarantee": "exports"] as [String: Any] } ?? NSNull()
-        let master: [String: Any] = ["gainDB": p.master.gainDB, "inserts": plugins(p.master.inserts), "limiter": limiter, "latencySamples": plan.masterLatency]
+        let master: [String: Any] = ["gainDB": p.master.gainDB, "inserts": plugins(p.master.inserts), "limiter": limiter, "latencySamples": plan.masterLatency, "automation": lanes(Master.id)]
         return ["tracks": tracks, "buses": buses, "vcas": vcas, "master": master, "solo": soloJSON(session), "usesMixer": p.usesMixer, "panAvailable": p.channels == 2, "totalLatencySamples": plan.totalLatency,
                 "limits": ["buses": Mixer.maxBuses, "sendsPerStrip": Mixer.maxSends, "gainDB": [Mixer.gainRange.lowerBound, Mixer.gainRange.upperBound], "pan": [-1, 1]]]
     }
@@ -862,6 +884,13 @@ enum AgentRouter {
 
     private static func steps(_ session: EditorSession, _ r: AgentAPI.Request) async throws -> Response {
         let (steps, _) = try AgentAPI.parseSteps(r.body)
+        // What can only be checked against the document (a point after its end): a 400 with the field's
+        // name before anything runs, like every other bad value.
+        for (i, step) in steps.enumerated() {
+            do { try StepRunner.check(step, against: session.project) } catch {
+                throw APIError(400, "bad_request", "Step \(i): \(error.localizedDescription)", step: i)
+            }
+        }
         let results = await session.run(steps, action: steps.count == 1 ? (Operations.named(steps[0].op)?.title ?? "Agent Edit") : "Agent Edits")
         let list: [[String: Any]] = results.enumerated().map { i, res in
             var d: [String: Any] = ["index": i, "op": res.op, "status": res.status.rawValue]
@@ -871,6 +900,7 @@ enum AgentRouter {
                 for (k, v) in res.ids { info[k] = v }
                 d["info"] = info
             }
+            if !res.warnings.isEmpty { d["warnings"] = res.warnings }
             return d
         }
         if let failed = results.firstIndex(where: { $0.status == .failed }) {

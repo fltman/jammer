@@ -14,7 +14,7 @@
 #
 # Start it without sound, without restored windows and without keys, under the GUI lock, and stop it by
 # its pid:
-#   env -u OPENROUTER_API_KEY <path>/Contents/MacOS/Jammer -silentOutput YES -ApplePersistenceIgnoreState YES
+#   env -u OPENROUTER_API_KEY <path>/Contents/MacOS/Jammer -silentOutput YES -ApplePersistenceIgnoreState YES -ai.noKeychain YES
 # It takes the first free port of 9003, 9301–9319; GET /api/v1/status says app.bundleID, port and pid,
 # so a visitor can see that it is talking to the copy it started.
 set -euo pipefail

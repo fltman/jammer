@@ -10,7 +10,19 @@ enum Keychain {
     /// The app's bundle id, so debug builds keep their keys apart (com.brattoo.jammer.debug).
     static let service = Bundle.main.bundleIdentifier ?? "com.brattoo.jammer"
 
+    #if DEBUG
+    /// `-ai.noKeychain YES` (Debug builds only): keys are held in memory and the Keychain is never touched.
+    /// A test copy has another signature than the app that saved a real key, and macOS then asks for the
+    /// Keychain's password before the window comes up; every test and guest start uses this.
+    static let memoryOnly = UserDefaults.standard.bool(forKey: "ai.noKeychain")
+    nonisolated(unsafe) static var memory: [String: String] = [:]
+    static let memoryLock = NSLock()
+    #endif
+
     static func get(_ account: String) -> String? {
+        #if DEBUG
+        if memoryOnly { return memoryLock.withLock { memory[account] } }
+        #endif
         let q: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,
                                 kSecAttrAccount as String: account, kSecReturnData as String: true]
         var out: CFTypeRef?
@@ -19,6 +31,9 @@ enum Keychain {
     }
 
     static func set(_ account: String, _ value: String?) {
+        #if DEBUG
+        if memoryOnly { memoryLock.withLock { memory[account] = (value?.isEmpty ?? true) ? nil : value }; return }
+        #endif
         let q: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: account]
         SecItemDelete(q as CFDictionary)
         guard let value, !value.isEmpty else { return }

@@ -170,6 +170,24 @@ void jm_plan_set_master(jm_plan *plan, float gain, jm_chain *chain, jm_chain *li
     p.masterLimiter = limiter ? limiter->ptr : nullptr;
 }
 
+void jm_plan_set_gain_curve(jm_plan *plan, int32_t kind, int32_t index, const int64_t *frames, const float *db, int32_t count) {
+    Plan &p = *plan->ptr;
+    if (p.finalized || count <= 0 || !frames || !db) return;
+    Curve *c = nullptr;
+    if (kind == 0 && index >= 0 && size_t(index) < p.tracks.size()) c = &p.tracks[size_t(index)].curve;
+    else if (kind == 1 && index >= 0 && size_t(index) < p.buses.size()) c = &p.buses[size_t(index)].curve;
+    else if (kind == 2) c = &p.masterCurve;
+    if (!c) return;
+    c->frames.clear();
+    c->db.clear();
+    // Kept only where the frames strictly rise and the values are numbers; a curve that isn't so is not half used.
+    for (int32_t i = 0; i < count; ++i) {
+        if ((i > 0 && frames[i] <= frames[i - 1]) || !std::isfinite(db[i])) { c->frames.clear(); c->db.clear(); return; }
+        c->frames.push_back(frames[i]);
+        c->db.push_back(db[i]);
+    }
+}
+
 int64_t jm_plan_total_latency(const jm_plan *plan) { return plan->ptr->graph ? plan->ptr->graph->total + plan->ptr->graph->masterLatency : 0; }
 int64_t jm_plan_master_latency(const jm_plan *plan) { return plan->ptr->graph ? plan->ptr->graph->masterLatency : 0; }
 

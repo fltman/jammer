@@ -76,12 +76,18 @@ extension Project {
             e.outputFormatting = [.sortedKeys]
             return (try? e.encode(value)).map { String(decoding: $0, as: UTF8.self) } ?? "?"
         }
+        // A strip's automation is part of what it sends on (after its fader), never of what it is before it.
+        // (Nothing is added for a strip without lanes, so what was frozen before there was automation stays good.)
+        func lanes(_ id: UUID) -> String {
+            let l = self.lanes(of: id).filter(\.enabled)
+            return l.isEmpty ? "" : ",automation:\(encoded(l))"
+        }
         func keys(_ inserts: [Insert], _ seen: inout Set<UUID>) -> String {
             inserts.filter { !$0.bypass }.compactMap(\.key).map { signal(of: $0, afterFader: true, seen: &seen) ?? "gone" }.joined(separator: ";")
         }
         if let t = tracks.first(where: { $0.id == id }) {
             var s = "track{clips:\(encoded(t.clips)),inserts:\(encoded(t.inserts)),keys:[\(keys(t.inserts, &seen))]"
-            if afterFader { let h = heard(gainDB: t.gainDB, muted: t.isMuted, vca: t.vca); s += ",fader:\(h.gainDB),\(h.muted),\(t.pan)" }
+            if afterFader { let h = heard(gainDB: t.gainDB, muted: t.isMuted, vca: t.vca); s += ",fader:\(h.gainDB),\(h.muted),\(t.pan)" + lanes(id) }
             return s + "}"
         }
         if let b = bus(id) {
@@ -95,7 +101,7 @@ extension Project {
                 for send in other.sends where send.to == id { inputs.append("send:\(send.gainDB),\(send.pre):" + (signal(of: other.id, afterFader: !send.pre, seen: &seen) ?? "")) }
             }
             var s = "bus{inserts:\(encoded(b.inserts)),keys:[\(keys(b.inserts, &seen))],in:[\(inputs.joined(separator: "|"))]"
-            if afterFader { let h = heard(gainDB: b.gainDB, muted: b.isMuted, vca: b.vca); s += ",fader:\(h.gainDB),\(h.muted),\(b.pan)" }
+            if afterFader { let h = heard(gainDB: b.gainDB, muted: b.isMuted, vca: b.vca); s += ",fader:\(h.gainDB),\(h.muted),\(b.pan)" + lanes(id) }
             return s + "}"
         }
         return nil
@@ -120,6 +126,8 @@ extension Project {
     func freezeContext(for strip: UUID) -> Project? {
         var p = self
         p.master = Master()
+        // The strip's own lanes come after the frozen file, like its fader; the master's are not in it either.
+        p.automation.removeAll { $0.strip == strip || $0.strip == Master.id }
         let sink = Bus(id: Self.frozenSink, name: "sink", isMuted: true)
         if let t = p.tracks.firstIndex(where: { $0.id == strip }) {
             p.tracks[t].gainDB = 0; p.tracks[t].pan = 0; p.tracks[t].isMuted = false

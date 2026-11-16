@@ -61,6 +61,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Sidechain keys are in debug builds only until a real plugin with a sidechain input has been
         // through them (docs/RELEASE.md, rehearsal item 7).
         Operations.sidechain = true
+        // Automation is in debug builds only until lanes are shown and drawn in the window (docs/MIXER.md):
+        // what changes how a project sounds without being seen isn't shipped.
+        Operations.automation = true
         #endif
         NSApp.mainMenu = buildMenu()
         // Our own "open documents" handler: AppKit hands document-based apps' opens straight

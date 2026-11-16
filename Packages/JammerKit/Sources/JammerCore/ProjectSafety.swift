@@ -39,6 +39,36 @@ public enum ProjectSafety {
         guard p.buses.count <= Mixer.maxBuses else { throw tooMany(p.buses.count, "buses", Mixer.maxBuses) }
 
         var notes: [String] = []
+        // Automation: before the mixer is looked at, because what a frozen strip was made from includes the
+        // lanes of what feeds it. A lane on a strip that isn't there, of a sort this build doesn't play, a
+        // twin of another lane, or with nothing usable in it, is left out; values that aren't levels are
+        // brought into range; points out of order are sorted, two at one frame become one, points outside
+        // the timeline's horizon go, and a lane with more points than Jämmer writes is cut to that. Said.
+        if !p.automation.isEmpty {
+            let strips = Set(p.tracks.map(\.id)).union(p.buses.map(\.id)).union([Master.id])
+            var kept: [AutomationLane] = [], left = 0, mended = 0
+            var seenLanes = Set<String>()
+            let horizon = Self.horizon(p.sampleRate)
+            for lane in p.automation.prefix(4_096) {
+                guard strips.contains(lane.strip), lane.param == .gain, lane.to == nil, lane.shape == .linear,
+                      seenLanes.insert("\(lane.strip)|\(lane.param.rawValue)").inserted else { left += 1; continue }
+                var l = lane
+                var at = Set<Frame>()
+                l.points = lane.points.prefix(Automation.maxPoints * 4)
+                    .filter { $0.value.isFinite && $0.frame >= 0 && $0.frame <= horizon }
+                    .sorted { $0.frame < $1.frame }
+                    .filter { at.insert($0.frame).inserted }
+                    .prefix(Automation.maxPoints)
+                    .map { AutomationPoint(frame: $0.frame, value: min(Automation.gainRange.upperBound, max(Automation.gainRange.lowerBound, $0.value))) }
+                if l.points.isEmpty { left += 1; continue }
+                if l.points != lane.points { mended += 1 }
+                kept.append(l)
+            }
+            left += max(0, p.automation.count - 4_096)
+            p.automation = kept
+            if left > 0 { notes.append("\(left) automation lane\(left == 1 ? "" : "s") in the project \(left == 1 ? "was" : "were") for a track or bus that isn't there, of a kind this Jämmer doesn't play, or had no usable points, and \(left == 1 ? "was" : "were") left out: \(left == 1 ? "that level is" : "those levels are") the fader's.") }
+            if mended > 0 { notes.append("\(mended) automation lane\(mended == 1 ? "" : "s") had points that were out of order, doubled, outside the timeline or not levels; \(mended == 1 ? "it was" : "they were") put right. Listen before you export.") }
+        }
         // The mixer: buses with two of the same id, routes to buses that aren't there, loops, and values
         // that are not levels or pans. What can be put right is put right and said; a loop is cut where it closes.
         do {

@@ -27,6 +27,7 @@ struct MixerSheet: View {
                                    group: t.vca.flatMap { project.vca($0) },
                                    soloed: session.solo.contains(t.id), solo: { toggleSolo(t.id, $0) },
                                    frozen: t.frozen != nil, freeze: { toggleFreeze(t.id, t.name, $0) },
+                                   automation: MixerStrip.automationText(project.lanes(of: t.id)),
                                    destinations: project.buses.map { ($0.id, $0.name) },
                                    sends: t.sends, sendTargets: project.buses.map { ($0.id, $0.name) },
                                    change: { session.perform("set_track", ["track": .string(t.id.uuidString)].merging($0) { $1 }) },
@@ -39,6 +40,7 @@ struct MixerSheet: View {
                                    group: b.vca.flatMap { project.vca($0) },
                                    soloed: session.solo.contains(b.id), solo: { toggleSolo(b.id, $0) },
                                    frozen: b.frozen != nil, freeze: { toggleFreeze(b.id, b.name, $0) },
+                                   automation: MixerStrip.automationText(project.lanes(of: b.id)),
                                    // A bus can go to any bus that doesn't lead back to it.
                                    destinations: project.buses.filter { $0.id != b.id && !leadsBack(from: $0.id, to: b.id) }.map { ($0.id, $0.name) },
                                    sends: b.sends, sendTargets: project.buses.filter { $0.id != b.id && !leadsBack(from: $0.id, to: b.id) }.map { ($0.id, $0.name) },
@@ -67,7 +69,7 @@ struct MixerSheet: View {
             }
             // Outside the list that scrolls: the master and what its limiter promises are always in view.
             Text("Master").font(.headline)
-            MasterStrip(master: project.master, change: { session.perform("set_master", $0) })
+            MasterStrip(master: project.master, automation: MixerStrip.automationText(project.lanes(of: Master.id)), change: { session.perform("set_master", $0) })
             HStack {
                 TextField("Name of a new bus or VCA group", text: $newBus)
                     .accessibilityLabel("Name of a new bus or VCA group")
@@ -101,6 +103,7 @@ struct MixerSheet: View {
         // A strip in a group has a line under it saying what is heard.
         let grouped = project.tracks.filter { $0.vca != nil }.count + project.buses.filter { $0.vca != nil }.count
             + project.tracks.filter { $0.frozen != nil }.count + project.buses.filter { $0.frozen != nil }.count
+            + project.tracks.filter { !project.lanes(of: $0.id).isEmpty }.count + project.buses.filter { !project.lanes(of: $0.id).isEmpty }.count
         return CGFloat(3 * 34 + rows * 34 + grouped * 16 + (project.buses.isEmpty ? 24 : 0) + (project.vcas.isEmpty ? 44 : 0) + 8)
     }
 
@@ -192,6 +195,8 @@ private struct VCAStrip: View {
 /// The master: everything goes through it last. Its level, and the limiter after everything else.
 private struct MasterStrip: View {
     let master: Master
+    /// Said when the master's level is automated (the lane isn't drawn anywhere yet).
+    let automation: String?
     let change: ([String: JSONValue]) -> Void
     @State private var level = 0.0
     @State private var ceiling = -1.0
@@ -229,6 +234,10 @@ private struct MasterStrip: View {
                 Spacer(minLength: 0)
             }
             .frame(height: 28)
+            if let automation {
+                Text(automation).font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("mixer.master.automation")
+            }
             // Said where it is switched on: what the limiter promises, and for what.
             if master.limiter != nil {
                 Text("The limiter comes after everything else. An exported file is measured and held under the ceiling; playback has one pass and can go a little over.")
@@ -258,6 +267,8 @@ private struct MixerStrip: View {
     let solo: (Bool) -> Void
     let frozen: Bool
     let freeze: (Bool) -> Void
+    /// Said when the strip's level is automated: until lanes are drawn in the window, this line is where it shows.
+    let automation: String?
     let destinations: [(UUID, String)]
     let sends: [Send]
     let sendTargets: [(UUID, String)]
@@ -269,6 +280,13 @@ private struct MixerStrip: View {
     @State private var dragging = false
 
     static func levelText(_ db: Double) -> String { String(format: "%+.1f dB", db).replacingOccurrences(of: "-", with: "−") }
+    /// What a strip's lanes are, in words: the slider beside it is then not the whole level.
+    static func automationText(_ lanes: [AutomationLane]) -> String? {
+        guard let lane = lanes.first(where: { $0.param == .gain }) else { return nil }
+        let n = lane.points.count, values = lane.points.map(\.value)
+        let span = values.min() == values.max() ? levelText(values[0]) : "\(levelText(values.min()!)) to \(levelText(values.max()!))"
+        return "Automation: \(n) point\(n == 1 ? "" : "s") on the level, \(span), added to the fader" + (lane.enabled ? "" : " (switched off)")
+    }
     static func panText(_ p: Double) -> String { p == 0 ? "Centre" : "\(Int((abs(p) * 100).rounded())) % \(p < 0 ? "left" : "right")" }
 
     /// What is heard when the strip is in a group: the slider is the strip's own level, and this says
@@ -288,6 +306,12 @@ private struct MixerStrip: View {
                     .font(.caption).foregroundStyle(.secondary)
                     .lineLimit(1).padding(.leading, 160).frame(height: 16)
                     .accessibilityIdentifier("mixer.strip.frozen.note")
+            }
+            if let automation {
+                Text(automation)
+                    .font(.caption).foregroundStyle(.orange)
+                    .lineLimit(1).padding(.leading, 160).frame(height: 16)
+                    .accessibilityIdentifier("mixer.strip.automation")
             }
             if let group {
                 Text(Self.heardText(own: gainDB, muted: muted, group: group))

@@ -259,7 +259,10 @@ public struct Project: Codable, Equatable, Sendable {
     /// What a project that uses the mixer is saved as. An app that only knows format 1 refuses it and
     /// says a newer Jämmer is needed, instead of playing every track straight to the output.
     public static let mixerFormatVersion = 2
-    public static let newestFormatVersion = 2
+    /// What a project with automation is saved as: an app that doesn't know automation refuses it,
+    /// instead of opening it without its lanes and playing other levels than were saved.
+    public static let automationFormatVersion = 3
+    public static let newestFormatVersion = 3
 
     public struct NeedsNewer: Error, LocalizedError, Equatable {
         public var version: Int
@@ -273,6 +276,8 @@ public struct Project: Codable, Equatable, Sendable {
     public var master = Master()
     /// VCA groups: one level and one mute for the strips that belong to each.
     public var vcas: [VCA] = []
+    /// Automation lanes (see `AutomationLane`). None: every level is its fader, as before.
+    public var automation: [AutomationLane] = []
     public var sampleRate: Double
     public var channels: Int
     public var tracks: [Track]
@@ -320,11 +325,11 @@ public struct Project: Codable, Equatable, Sendable {
         self.transcripts = transcripts
     }
 
-    private enum CodingKeys: String, CodingKey { case formatVersion, sampleRate, channels, tracks, markers, sources, tempo, transcripts, speakers, speakerTurns, imported, buses, master, vcas }
+    private enum CodingKeys: String, CodingKey { case formatVersion, sampleRate, channels, tracks, markers, sources, tempo, transcripts, speakers, speakerTurns, imported, buses, master, vcas, automation }
 
     public func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
-        try c.encode(usesMixer ? Self.mixerFormatVersion : Self.formatVersion, forKey: .formatVersion)
+        try c.encode(usesAutomation ? Self.automationFormatVersion : usesMixer ? Self.mixerFormatVersion : Self.formatVersion, forKey: .formatVersion)
         try c.encode(sampleRate, forKey: .sampleRate)
         try c.encode(channels, forKey: .channels)
         try c.encode(tracks, forKey: .tracks)
@@ -338,6 +343,7 @@ public struct Project: Codable, Equatable, Sendable {
         if !buses.isEmpty { try c.encode(buses, forKey: .buses) }
         if !master.isDefault { try c.encode(master, forKey: .master) }
         if !vcas.isEmpty { try c.encode(vcas, forKey: .vcas) }
+        if usesAutomation { try c.encode(liveLanes, forKey: .automation) }
     }
 
     public init(from decoder: Decoder) throws {
@@ -350,6 +356,7 @@ public struct Project: Codable, Equatable, Sendable {
         buses = try c.decodeIfPresent([Bus].self, forKey: .buses) ?? []
         master = try c.decodeIfPresent(Master.self, forKey: .master) ?? Master()
         vcas = try c.decodeIfPresent([VCA].self, forKey: .vcas) ?? []
+        automation = try c.decodeIfPresent([AutomationLane].self, forKey: .automation) ?? []
         sampleRate = try c.decode(Double.self, forKey: .sampleRate)
         channels = try c.decode(Int.self, forKey: .channels)
         tracks = try c.decode([Track].self, forKey: .tracks)
@@ -425,6 +432,8 @@ public struct Project: Codable, Equatable, Sendable {
                 return m
             }
             tempo.delete(range)
+            // Automation belongs to the timeline: when every track closes up, every lane does too.
+            automation = automation.map { $0.closing(range) }
         }
     }
 
@@ -461,6 +470,7 @@ public struct Project: Codable, Equatable, Sendable {
         }
         for j in markers.indices where markers[j].position >= t { markers[j].position += length }
         tempo.insertGap(at: t, length: length)
+        automation = automation.map { $0.opening(at: t, length: length) }
     }
 
     /// Inserts copied audio at `t`, pushing what follows to the right.

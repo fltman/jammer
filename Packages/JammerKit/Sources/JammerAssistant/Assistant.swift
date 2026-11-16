@@ -108,7 +108,7 @@ public enum AssistantCatalog {
 
     /// Plugin steps need track and insert ids and weren't in the measured action set.
     /// (Buses are named to the model by name, and `set_bus` and `remove_bus` take the name. Sends are not offered yet.)
-    public static let stepsNotForAssistant: Set<String> = ["add_insert", "set_insert", "remove_insert", "spectral_edit", "set_track", "set_group"]
+    public static let stepsNotForAssistant: Set<String> = ["add_insert", "set_insert", "remove_insert", "spectral_edit", "set_track", "set_group", "set_automation", "clear_automation"]
 
     /// Own actions: every step (but the above), the useful endpoints, and the macros.
     public static var actions: [AssistantAction] {
@@ -475,6 +475,7 @@ public enum PlanParser {
                     || (kind == .seconds && v.contains(":") && v.split(separator: ":").allSatisfy { Double($0) != nil })
             case .boolean: return ["true", "false", "yes", "no", "ja", "nej", "0", "1"].contains(v.lowercased())
             case .numbers: return !v.isEmpty && v.split(separator: ",").allSatisfy { Double($0.trimmingCharacters(in: .whitespaces)) != nil }
+            case .pairs: return false
             case .string, .list: return true
             }
         }
@@ -503,6 +504,8 @@ public enum PlanParser {
                 let n = value.split(separator: ",").compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }
                 if n.isEmpty { continue }
                 params[name] = .array(n.map { .number($0) })
+            case .pairs:
+                continue   // (automation points: not an assistant action yet)
             case .list:
                 var items = value.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
                 if name == "tracks", let context { items = items.compactMap { context.trackID($0) } }

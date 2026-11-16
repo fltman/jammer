@@ -24,7 +24,9 @@ restore=()
 # (debug builds; see EditorSession). A check that really needs sound in the room asks for it: JAMMER_SOUND=1.
 quiet=(-silentOutput YES)
 [[ -n "${JAMMER_SOUND:-}" ]] && quiet=()
-env -u OPENROUTER_API_KEY ${=JAMMER_WRAP:-} "$app" $restore $quiet ${=JAMMER_ARGS:-} >"${JAMMER_LOG:-/dev/null}" 2>&1 &
+# A test copy never touches the Keychain (keys are held in memory, debug builds): a copy with another
+# signature than the app that saved a real key would otherwise wait on macOS's password question.
+env -u OPENROUTER_API_KEY ${=JAMMER_WRAP:-} "$app" $restore $quiet -ai.noKeychain YES ${=JAMMER_ARGS:-} >"${JAMMER_LOG:-/dev/null}" 2>&1 &
 pid=$!
 # On the way out the test copy is stopped, and (unless the check is about restoration) the windows it
 # would bring back next time are forgotten: the debug copy's saved state, nothing of the real app's.

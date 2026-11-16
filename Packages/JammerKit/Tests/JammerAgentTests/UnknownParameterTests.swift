@@ -17,6 +17,7 @@ struct UnknownParameterTests {
         case .boolean: .bool(true)
         case .list: .array([.string("x")])
         case .numbers: .array([.number(1)])
+        case .pairs: .array([.array([.number(0), .number(p.range?.lowerBound ?? 0)])])
         }
     }
 
