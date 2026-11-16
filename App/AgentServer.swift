@@ -255,7 +255,7 @@ enum AgentRouter {
         case ["api", "v1", "status"]:
             try only("GET")
             return .json(["app": AgentAPI.appInfo(version: appVersion, bundleID: Bundle.main.bundleIdentifier),
-                          "api": AgentAPI.version, "port": Int(port), "agentFolders": AgentFolders.urls.count,
+                          "api": AgentAPI.version, "port": Int(port), "pid": Int(ProcessInfo.processInfo.processIdentifier), "agentFolders": AgentFolders.urls.count,
                           "documents": AgentRegistry.shared.sessions.map(summary),
                           "jobs": JobRegistry.shared.running.map(\.json)])
         case let p where p.count == 4 && Array(p.prefix(3)) == ["api", "v1", "jobs"]:
@@ -703,7 +703,7 @@ enum AgentRouter {
     /// What the last scan for VST 3 and CLAP plugins found and what it couldn't use.
     static func scanJSON(_ c: PluginCatalogue) -> [String: Any] {
         ["state": HostedPluginsController.scanning ? "running" : "idle", "found": c.plugins.count,
-         "failed": c.failed.map { ["name": $0.name, "format": $0.format.rawValue, "reason": $0.reason] as [String: Any] }]
+         "failed": c.failed.map { ["name": $0.name, "format": $0.format.rawValue, "reason": $0.reason, "kept": $0.kept] as [String: Any] }]
     }
 
     private static func json(_ r: AgentAPI.Request) throws -> [String: Any] {

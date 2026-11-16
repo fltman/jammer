@@ -4,6 +4,10 @@ Not a list of commits: what behaves differently from before, for a user, an agen
 
 ## 2026-11-16
 
+- **The plugin scanner could call a good plugin invalid on a busy Mac**, and the catalogue kept that until the bundle changed. Cause: the helper's answer was read both by a background handler and by the caller, and the verdict could be taken between the handler's read and its storing ("0 bytes out, exit 0"). Shown by slowing the handler (6 of 6 probes of a good plugin "invalid"); not reproduced by load alone in 60 probes. Now one reader per pipe and the verdict waits for both (the same slowing: 6 of 6 found; 80 of 80 under load).
+  - Verdicts are kept apart: `invalid` only when the helper itself says the bundle isn't a plugin; no answer at all is `scan_failed` (new); `timed_out` as before. `timed_out` and `scan_failed` are tried again at every scan (a plugin that really hangs now costs its time limit at every scan).
+  - A plugin an earlier scan found stays listed through a failed scan, with `kept: true` in `scan.failed`; a crash or "not a plugin" replaces it only when it comes twice running.
+
 - **A name Jämmer doesn't know is refused, never skipped** (SIBLINGS.md §3). 400 `bad_request` with the name and what the call takes; nothing is done. What the walk through found, all of it silent before:
   - Steps already refused unknown parameters (from the registry). A field beside `op` and `params` in a step was ignored: now refused.
   - **Every query parameter on every endpoint** was ignored when unknown (`GET …/analysis?brightness=3` answered 200): now refused, from one table of what each route takes (`RouteParameters.swift`), which the registry's endpoints add their parameters to.

@@ -23,8 +23,13 @@ public enum ProbeOutcome: Sendable, Equatable {
     /// The helper died while the bundle was loaded (the signal, e.g. 6 for abort, 11 for a bad access).
     case crashed(signal: Int32)
     case timedOut
-    /// Loaded without incident but isn't a usable plugin of that format.
+    /// The helper loaded the bundle and said it isn't a usable plugin of that format. A verdict about
+    /// the bundle.
     case invalid(String)
+    /// No answer got through: the helper is missing or couldn't be started, it ended without saying
+    /// anything that can be read, or with a status that isn't one of its own. Says nothing about the
+    /// plugin; the bundle is tried again at the next scan.
+    case unanswered(String)
 
     public var failure: String? {
         switch self {
@@ -32,6 +37,17 @@ public enum ProbeOutcome: Sendable, Equatable {
         case .crashed: "crashed"
         case .timedOut: "timed_out"
         case .invalid: "invalid"
+        case .unanswered: "scan_failed"
+        }
+    }
+
+    /// Reasons that are about the scan and not about the plugin: tried again at every scan.
+    public static let retried: Set<String> = ["timed_out", "scan_failed"]
+    public var detail: String? {
+        switch self {
+        case .found, .timedOut: nil
+        case .crashed(let signal): "signal \(signal)"
+        case .invalid(let why), .unanswered(let why): why
         }
     }
 }
@@ -61,9 +77,9 @@ public struct PluginScanner: Sendable {
 
     /// Loads one bundle in the helper. Never throws and never blocks longer than `timeout` (plus a moment to kill).
     public func probe(_ bundle: URL, format: PluginFormat) -> ProbeOutcome {
-        guard FileManager.default.isExecutableFile(atPath: probe.path) else { return .invalid("The scanner helper is missing.") }
+        guard FileManager.default.isExecutableFile(atPath: probe.path) else { return .unanswered("The scanner helper is missing.") }
         // Without the confinement there is no scan: third-party code isn't loaded unconfined.
-        guard FileManager.default.isExecutableFile(atPath: Confinement.sandboxExec) else { return .invalid("This Mac has no sandbox-exec, so plugins can't be scanned safely.") }
+        guard FileManager.default.isExecutableFile(atPath: Confinement.sandboxExec) else { return .unanswered("This Mac has no sandbox-exec, so plugins can't be scanned safely.") }
         let process = Process()
         process.executableURL = URL(fileURLWithPath: Confinement.sandboxExec)
         process.arguments = ["-p", profile(for: bundle), probe.path, format.rawValue, bundle.path]
@@ -75,15 +91,31 @@ public struct PluginScanner: Sendable {
         process.environment = ["PATH": "/usr/bin:/bin", "HOME": NSHomeDirectory(), "TMPDIR": NSTemporaryDirectory()]
         let done = DispatchSemaphore(value: 0)
         process.terminationHandler = { _ in done.signal() }
-        // Read while it runs, so a chatty plugin can't fill the pipe and stall itself.
+        // Read while it runs, so a chatty plugin can't fill the pipe and stall itself. One reader per
+        // pipe, each reading to the end and saying when it is there: the verdict below is not taken
+        // until both have stored everything. (Before 2026-11-16 a handler read in the background while
+        // the caller also read after the exit, and on a busy Mac the verdict could be taken between the
+        // handler's read and its storing: a good plugin then gave "0 bytes" and was called invalid.)
         let collected = Collected()
-        out.fileHandleForReading.readabilityHandler = { h in collected.append(h.availableData, to: \.out) }
-        err.fileHandleForReading.readabilityHandler = { h in collected.append(h.availableData, to: \.err) }
-        defer {
-            out.fileHandleForReading.readabilityHandler = nil
-            err.fileHandleForReading.readabilityHandler = nil
+        let readers = DispatchGroup()
+        func read(_ pipe: Pipe, into key: ReferenceWritableKeyPath<Collected, Data>) {
+            readers.enter()
+            let handle = pipe.fileHandleForReading
+            Thread.detachNewThread {
+                while true {
+                    let chunk = handle.availableData
+                    if chunk.isEmpty { break }   // the end: every writer has closed it
+                    collected.append(chunk, to: key)
+                }
+                readers.leave()
+            }
         }
-        do { try process.run() } catch { return .invalid("The scanner helper couldn't be started: \(error.localizedDescription)") }
+        do { try process.run() } catch { return .unanswered("The scanner helper couldn't be started: \(error.localizedDescription)") }
+        // Our own copies of the writing ends are closed, or the readers would never see the end.
+        try? out.fileHandleForWriting.close()
+        try? err.fileHandleForWriting.close()
+        read(out, into: \.out)
+        read(err, into: \.err)
         if done.wait(timeout: .now() + timeout) == .timedOut {
             // It hangs: ask, then insist. SIGKILL can't be ignored.
             process.terminate()
@@ -93,13 +125,17 @@ public struct PluginScanner: Sendable {
             }
             return .timedOut
         }
-        collected.append(out.fileHandleForReading.readDataToEndOfFile(), to: \.out)
-        collected.append(err.fileHandleForReading.readDataToEndOfFile(), to: \.err)
         if process.terminationReason == .uncaughtSignal { return .crashed(signal: process.terminationStatus) }
+        // The helper is gone, so its ends of the pipes are closed and the readers finish at once. A
+        // plugin that left a child of its own holding a pipe open is not waited for longer than this.
+        let complete = readers.wait(timeout: .now() + 5) == .success
         let (stdout, stderr) = collected.take()
+        let said = String(decoding: stderr, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+        // The helper's own way of saying "this isn't a plugin": status 2 and the reason. That is a
+        // verdict about the bundle. Any other status is the scan not getting an answer.
+        if process.terminationStatus == Self.notAPlugin { return .invalid(said.isEmpty ? "The helper found no plugin in the bundle." : String(said.prefix(200))) }
         guard process.terminationStatus == 0 else {
-            let why = String(decoding: stderr, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
-            return .invalid(why.isEmpty ? "The helper exited with \(process.terminationStatus)." : String(why.prefix(200)))
+            return .unanswered("The helper ended with status \(process.terminationStatus)\(said.isEmpty ? "" : ": " + String(said.prefix(200)))")
         }
         struct Answer: Decodable {
             struct P: Decodable { var id: String; var name: String?; var vendor: String?; var version: String?; var features: [String]? }
@@ -108,7 +144,8 @@ public struct PluginScanner: Sendable {
         // What a plugin prints is data, never trusted further than its shape.
         guard let line = String(decoding: stdout, as: UTF8.self).split(separator: "\n").last(where: { $0.hasPrefix("{") }),
               let answer = try? JSONDecoder().decode(Answer.self, from: Data(line.utf8)) else {
-            return .invalid("The helper's answer couldn't be read.")
+            // It ended well and there is nothing to read as an answer: not something a plugin did.
+            return .unanswered("The helper's answer couldn't be read (\(stdout.count) bytes out, \(stderr.count) bytes of errors\(complete ? "" : ", its output was still open")).")
         }
         guard !answer.plugins.isEmpty else { return .invalid("The bundle has no plugins.") }
         return .found(answer.plugins.map {
@@ -116,6 +153,9 @@ public struct PluginScanner: Sendable {
                           version: String(($0.version ?? "").prefix(64)), features: ($0.features ?? []).prefix(32).map { String($0.prefix(64)) }, bundle: bundle.path)
         })
     }
+
+    /// The status the helper ends with when it loaded the bundle and it isn't a plugin (see PluginProbe).
+    static let notAPlugin: Int32 = 2
 
     final class Collected: @unchecked Sendable {
         private let lock = NSLock()

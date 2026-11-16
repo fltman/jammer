@@ -89,7 +89,10 @@ struct PluginsSheet: View {
                 }
                 ForEach(failed, id: \.name) { f in
                     HStack {
-                        Text(f.reason == "blocked" ? "\(f.name) is switched off: it failed while it was in use." : "\(f.name) couldn't be used (\(f.reason == "timed_out" ? "it didn't answer" : f.reason)).")
+                        Text(f.reason == "blocked" ? "\(f.name) is switched off: it failed while it was in use."
+                             : f.kept ? "\(f.name) is still listed from an earlier scan; the last scan of it didn't succeed (\(f.reason == "timed_out" ? "it didn't answer in time" : f.reason == "scan_failed" ? "the scanner got no answer" : f.reason)). It will be tried again."
+                             : ["timed_out", "scan_failed"].contains(f.reason) ? "\(f.name) couldn't be scanned (\(f.reason == "timed_out" ? "it didn't answer in time" : "the scanner got no answer")). It will be tried again at the next scan."
+                             : "\(f.name) couldn't be used (\(f.reason)).")
                             .font(.callout).foregroundStyle(.orange)
                         Spacer()
                         if f.reason == "blocked", let key = HostedPlugins.current().blocked.first(where: { k in HostedPlugins.current().entries.flatMap(\.plugins).contains { PluginCatalogue.key($0) == k && $0.name == f.name } }) {

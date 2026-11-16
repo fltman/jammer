@@ -266,7 +266,41 @@ struct ScannerTests {
         // Megabytes of output before the answer: still read, and the answer is the last line.
         #expect(scanner.probe(try TestPlugins.build("Chatty", flag: "CHATTY", in: dir), format: .clap).failure == nil)
         #expect(scanner.probe(dir.appending(path: "nothing-here.clap"), format: .clap).failure == "invalid")
-        #expect(PluginScanner(probe: dir.appending(path: "no-helper")).probe(empty, format: .clap).failure == "invalid")
+        // No helper to ask is not a verdict about the bundle: the scan failed, and says so.
+        #expect(PluginScanner(probe: dir.appending(path: "no-helper")).probe(empty, format: .clap).failure == "scan_failed")
+    }
+
+    /// What the scanner says about a good plugin while the Mac is busy (`JAMMER_SCAN_STRESS=1`): every
+    /// core kept spinning, and the same bundle probed again and again, several at a time. Prints each
+    /// answer that wasn't "found", with what the helper gave.
+    @Test("Under load a good plugin is still found, or the scan says it ran out of time: never that the plugin is invalid",
+          .enabled(if: ProcessInfo.processInfo.environment["JAMMER_SCAN_STRESS"] != nil))
+    func underLoad() throws {
+        let dir = try folder()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let bundle = try TestPlugins.build("Good", in: dir)
+        let stop = ManagedAtomicFlag()
+        for _ in 0..<(ProcessInfo.processInfo.activeProcessorCount * 2) {
+            Thread.detachNewThread { var x = 1.0; while !stop.isSet { for _ in 0..<100_000 { x = x * 1.0000001 + 1e-9 }; if x > 1e300 { x = 1 } } }
+        }
+        defer { stop.set() }
+        let scanner = PluginScanner(probe: TestPlugins.probe, timeout: 20)
+        let tally = Tally()
+        let rounds = Int(ProcessInfo.processInfo.environment["JAMMER_SCAN_STRESS"] ?? "") ?? 40
+        DispatchQueue.concurrentPerform(iterations: rounds) { i in
+            let t0 = Date()
+            let outcome = scanner.probe(bundle, format: .clap)
+            let took = Date().timeIntervalSince(t0)
+            switch outcome {
+            case .found: tally.add("found", took)
+            case .timedOut: tally.add("timed_out", took); print(String(format: "SCAN STRESS %d: timed out after %.1f s", i, took))
+            case .crashed(let signal): tally.add("crashed", took); print(String(format: "SCAN STRESS %d: crashed, signal %d, after %.1f s", i, signal, took))
+            case .invalid(let why): tally.add("invalid", took); print(String(format: "SCAN STRESS %d: invalid after %.1f s: %@", i, took, why as NSString))
+            case .unanswered(let why): tally.add("scan_failed", took); print(String(format: "SCAN STRESS %d: no answer after %.1f s: %@", i, took, why as NSString))
+            }
+        }
+        print("SCAN STRESS \(rounds) probes of a good plugin, \(ProcessInfo.processInfo.activeProcessorCount * 2) spinning threads: \(tally.summary)")
+        #expect(tally.count("found") == rounds, "\(tally.summary)")
     }
 
     @Test("The catalogue remembers each bundle: only new and changed ones are loaded again, failures stay failures, a blocked plugin is listed apart")
@@ -283,13 +317,16 @@ struct ScannerTests {
         let scanner = PluginScanner(probe: TestPlugins.probe, timeout: 6)
         var c = PluginCatalogue()
         #expect(c.scan(with: scanner, folders: [.clap: [clap]]) == 3)
-        #expect(c.plugins.map(\.id) == ["com.brattoo.test.Good"])
+        // What the helper gave for each bundle, so that a wrong verdict says why.
+        let said = c.entries.map { "\(URL(fileURLWithPath: $0.bundle).lastPathComponent): \($0.failure ?? "found") \($0.detail ?? "")" }.joined(separator: " | ")
+        #expect(c.plugins.map(\.id) == ["com.brattoo.test.Good"], "\(said)")
         #expect(Set(c.failed.map { "\($0.name) \($0.reason)" }) == ["Bad crashed", "Stuck timed_out"])
-        // Saved and read back; nothing has changed, so nothing is loaded.
+        // Saved and read back. Nothing has changed, so the good one and the one that crashed are not loaded
+        // again; the one that ran out of time is, every scan: running out of time says nothing about a plugin.
         let file = dir.appending(path: "store/plugins.json")
         try c.save(file)
         var again = PluginCatalogue.load(file)
-        #expect(again == c && again.scan(with: scanner, folders: [.clap: [clap]]) == 0 && again == c)
+        #expect(again == c && again.scan(with: scanner, folders: [.clap: [clap]]) == 1 && again == c)
         // A bundle that changed is loaded again; one that is gone is dropped; force loads everything.
         try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSinceNow: 60)], ofItemAtPath: good.path)
         try FileManager.default.removeItem(at: clap.appending(path: "Stuck.clap"))
@@ -300,6 +337,24 @@ struct ScannerTests {
         #expect(again.plugins.isEmpty && again.plugin("clap:com.brattoo.test.Good") == nil && again.failed.contains(.init(name: "Test \"Good\"", format: .clap, reason: "blocked")))
         again.blocked.removeAll()
         #expect(again.plugin("clap:com.brattoo.test.Good")?.bundle.hasSuffix("CLAP/Vendor/Good.clap") == true)
+        // One failed scan doesn't take a good plugin away. The helper gone (no answer at all): the plugin
+        // stays, the failure is noted beside it as kept, and it is tried again at every scan.
+        let noHelper = PluginScanner(probe: dir.appending(path: "no-helper"))
+        var kept = again
+        #expect(kept.scan(with: noHelper, folders: [.clap: [clap]], force: true) == 2)
+        #expect(kept.plugins.map(\.id) == ["com.brattoo.test.Good"])
+        #expect(kept.failed.contains(.init(name: "Good", format: .clap, reason: "scan_failed", kept: true)), "\(kept.failed)")
+        #expect(kept.scan(with: noHelper, folders: [.clap: [clap]]) >= 1 && kept.plugins.count == 1)
+        // The helper back: found again, and the note is gone.
+        #expect(kept.scan(with: scanner, folders: [.clap: [clap]]) >= 1 && kept.plugins.count == 1 && !kept.failed.contains { $0.kept })
+        // A verdict about the plugin itself (here: the bundle now crashes the helper) takes the good one's
+        // place only when it has come twice running.
+        try FileManager.default.removeItem(at: good)
+        _ = try TestPlugins.build("Good", flag: "CRASH", in: clap.appending(path: "Vendor"))
+        #expect(kept.scan(with: scanner, folders: [.clap: [clap]]) >= 1)
+        #expect(kept.plugins.count == 1 && kept.failed.contains(.init(name: "Good", format: .clap, reason: "crashed", kept: true)), "\(kept.failed)")
+        #expect(kept.scan(with: scanner, folders: [.clap: [clap]]) >= 1)
+        #expect(kept.plugins.isEmpty && kept.failed.contains(.init(name: "Good", format: .clap, reason: "crashed")), "\(kept.failed)")
         // A missing or broken file is an empty catalogue, not an error.
         #expect(PluginCatalogue.load(dir.appending(path: "none.json")) == PluginCatalogue())
     }
@@ -327,4 +382,19 @@ struct ScannerTests {
         #expect(c.scan(with: scanner, folders: [.vst3: [dir.appending(path: "V")], .clap: [dir.appending(path: "C")]]) == 2)
         #expect(Set(c.plugins.map(PluginCatalogue.key)) == ["vst3:A0A1A2A3A4A5A6A7A8A9AAABACADAEAF", "clap:com.brattoo.test.Other"])
     }
+}
+
+final class ManagedAtomicFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = false
+    var isSet: Bool { lock.withLock { value } }
+    func set() { lock.withLock { value = true } }
+}
+
+final class Tally: @unchecked Sendable {
+    private let lock = NSLock()
+    private var counts: [String: Int] = [:], slowest: [String: Double] = [:]
+    func add(_ what: String, _ seconds: Double) { lock.withLock { counts[what, default: 0] += 1; slowest[what] = max(slowest[what] ?? 0, seconds) } }
+    func count(_ what: String) -> Int { lock.withLock { counts[what] ?? 0 } }
+    var summary: String { lock.withLock { counts.keys.sorted().map { String(format: "%@ %d (slowest %.1f s)", $0, counts[$0]!, slowest[$0]!) }.joined(separator: ", ") } }
 }

@@ -1,25 +1,46 @@
 import Foundation
 
 /// What a scan found, kept between launches: per bundle and modification date, so only new
-/// and changed bundles are loaded again, and a bundle that crashed or hung isn't tried again
-/// until it changes (or the user asks).
+/// and changed bundles are loaded again, and a bundle that crashed the helper or isn't a plugin isn't
+/// tried again until it changes (or the user asks). A scan that got no answer (out of time, or the
+/// helper said nothing) is no verdict: that bundle is tried again at every scan, and a plugin that an
+/// earlier scan found stays listed meanwhile.
 public struct PluginCatalogue: Codable, Sendable, Equatable {
     public struct Entry: Codable, Sendable, Equatable {
         public var bundle: String
         public var format: PluginFormat
         public var modified: Date
         public var plugins: [ScannedPlugin]
-        /// "crashed", "timed_out" or "invalid" when the bundle gave nothing.
+        /// "crashed", "timed_out", "scan_failed" or "invalid" when the bundle gave nothing.
         public var failure: String?
         public var detail: String?
+        /// For a bundle that is listed from an earlier, good scan: what the latest scan of it came to
+        /// instead, and how many scans in a row have failed. One failed scan doesn't take a plugin away.
+        public var scanFailure: String?
+        public var scanDetail: String?
+        public var failedScans: Int?
+
+        public init(bundle: String, format: PluginFormat, modified: Date, plugins: [ScannedPlugin], failure: String? = nil, detail: String? = nil) {
+            self.bundle = bundle
+            self.format = format
+            self.modified = modified
+            self.plugins = plugins
+            self.failure = failure
+            self.detail = detail
+        }
     }
 
     public struct Failure: Sendable, Equatable {
         public var name: String
         public var format: PluginFormat
-        /// "crashed", "timed_out", "invalid", or "blocked" (switched off after it took Jämmer down).
+        /// "crashed", "timed_out", "scan_failed", "invalid", or "blocked" (switched off after it took Jämmer down).
         public var reason: String
+        /// True when the plugin is still listed from an earlier scan that went well.
+        public var kept = false
     }
+
+    /// A verdict about the plugin itself replaces a good one only when it has come this many scans running.
+    public static let scansBeforeAVerdictSticks = 2
 
     public var entries: [Entry] = []
     /// Plugin ids ("clap:…", "vst3:…") switched off after a crash while they were in use.
@@ -34,7 +55,7 @@ public struct PluginCatalogue: Codable, Sendable, Equatable {
     public var plugins: [ScannedPlugin] { entries.flatMap(\.plugins).filter { !blocked.contains(Self.key($0)) } }
 
     public var failed: [Failure] {
-        entries.compactMap { e in e.failure.map { Failure(name: URL(fileURLWithPath: e.bundle).deletingPathExtension().lastPathComponent, format: e.format, reason: $0) } }
+        entries.compactMap { e in (e.failure ?? e.scanFailure).map { Failure(name: URL(fileURLWithPath: e.bundle).deletingPathExtension().lastPathComponent, format: e.format, reason: $0, kept: e.failure == nil) } }
             + entries.flatMap(\.plugins).filter { blocked.contains(Self.key($0)) }.map { Failure(name: $0.name, format: $0.format, reason: "blocked") }
     }
 
@@ -70,15 +91,35 @@ public struct PluginCatalogue: Codable, Sendable, Equatable {
                 if let old = known[url.path] { next.append(old) }
                 continue
             }
-            if !force, let old = known[url.path], old.modified == modified, old.format == format {
+            // What is known is kept, except where the last scan didn't get an answer (out of time, or the
+            // helper said nothing): that says nothing about the plugin and is tried again every time.
+            if !force, let old = known[url.path], old.modified == modified, old.format == format,
+               !(old.failure.map(ProbeOutcome.retried.contains) ?? false), old.scanFailure == nil {
                 next.append(old)
             } else {
                 probed += 1
-                switch scanner.probe(url, format: format) {
-                case .found(let plugins): next.append(Entry(bundle: url.path, format: format, modified: modified, plugins: plugins))
-                case .crashed(let signal): next.append(Entry(bundle: url.path, format: format, modified: modified, plugins: [], failure: "crashed", detail: "signal \(signal)"))
-                case .timedOut: next.append(Entry(bundle: url.path, format: format, modified: modified, plugins: [], failure: "timed_out"))
-                case .invalid(let why): next.append(Entry(bundle: url.path, format: format, modified: modified, plugins: [], failure: "invalid", detail: why))
+                let outcome = scanner.probe(url, format: format)
+                if case .found(let plugins) = outcome {
+                    next.append(Entry(bundle: url.path, format: format, modified: modified, plugins: plugins))
+                } else if let reason = outcome.failure {
+                    // A plugin that has been read as good isn't lost to one failed scan: it stays listed, the
+                    // failure is noted beside it, and it is scanned again next time. A verdict about the
+                    // plugin itself (it crashed the helper, it isn't a plugin) takes its place when it comes
+                    // twice running; running out of time never does.
+                    if let old = known[url.path], old.format == format, !old.plugins.isEmpty {
+                        let failures = (old.failedScans ?? 0) + 1
+                        if !ProbeOutcome.retried.contains(reason), failures >= Self.scansBeforeAVerdictSticks {
+                            next.append(Entry(bundle: url.path, format: format, modified: modified, plugins: [], failure: reason, detail: outcome.detail))
+                        } else {
+                            var kept = old
+                            kept.scanFailure = reason
+                            kept.scanDetail = outcome.detail
+                            kept.failedScans = failures
+                            next.append(kept)
+                        }
+                    } else {
+                        next.append(Entry(bundle: url.path, format: format, modified: modified, plugins: [], failure: reason, detail: outcome.detail))
+                    }
                 }
             }
             progress(Double(i + 1) / Double(found.count))
