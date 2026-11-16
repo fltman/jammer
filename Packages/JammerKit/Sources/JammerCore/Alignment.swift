@@ -293,7 +293,7 @@ extension Project {
         let w = try WAVWriter(url: url, options: .init(encoding: .float32, channels: channels, sampleRate: sampleRate))
         try w.write(corrected)
         try w.finish()
-        let src = SourceRef(name: "\(tracks[t].name) (drift corrected)", path: url.path, info: try AudioFileReader.info(at: url))
+        let src = SourceRef(name: "\(tracks[t].name) (drift corrected)", path: url.path, info: try AudioFileReader.info(at: url)).withRepairs(repairsCarried(by: tracks[t]))
         var p = self
         p.sources.append(src)
         // Words and speaker turns go to the new file, stretched like the audio.

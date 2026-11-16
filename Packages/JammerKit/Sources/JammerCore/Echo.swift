@@ -118,7 +118,7 @@ extension Project {
             }
             try writer.finish()
             let info = try AudioFileReader.info(at: url)
-            let src = SourceRef(name: "\(self.tracks[t].name) (echo)", path: url.path, info: info)
+            let src = SourceRef(name: "\(self.tracks[t].name) (echo)", path: url.path, info: info).withRepairs(repairsCarried(by: self.tracks[t]))
             p.sources.append(src)
             // Replace the track's clips in the range (and its tail) with the bounced clip.
             let span = r.lowerBound..<(r.upperBound + extra)

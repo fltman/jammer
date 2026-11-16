@@ -817,7 +817,9 @@ enum AgentRouter {
         ["hum": a.hum.map { ["frequency": $0.frequency, "prominenceDB": ($0.prominence * 10).rounded() / 10] as [String: Any] } ?? NSNull(),
          "clipping": ["runs": a.clippedRuns, "samples": a.clippedSamples, "level": (Double(a.clipLevel) * 10_000).rounded() / 10_000],
          "clicks": ["count": a.clicks],
-         "reverb": ["rt60": a.rt60.map { ($0 * 100).rounded() / 100 as Any } ?? NSNull(), "present": a.reverberant] as [String: Any],
+         "reverb": (a.reverbUnknown.map { ["rt60": NSNull(), "present": NSNull(), "unknown": $0] as [String: Any] }
+                    ?? ["rt60": a.rt60.map { ($0 * 100).rounded() / 100 as Any } ?? NSNull(), "present": a.reverberant] as [String: Any]),
+         "noiseFloor": a.noiseFloor.map { ["dBFS": ($0.level * 10).rounded() / 10, "pauseSeconds": ($0.seconds * 100).rounded() / 100] as [String: Any] } ?? NSNull(),
          "examinedSeconds": (a.examined * 100).rounded() / 100, "sampled": a.sampled]
     }
 

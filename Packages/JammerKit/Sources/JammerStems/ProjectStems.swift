@@ -266,7 +266,7 @@ extension Project {
                     try w.write(x); try w.finish()
                     try? FileManager.default.removeItem(at: tmp)
                 }
-                let src = SourceRef(name: "\(tracks[t].name) (\(name))", path: urls[s].path, info: try AudioFileReader.info(at: urls[s]))
+                let src = SourceRef(name: "\(tracks[t].name) (\(name))", path: urls[s].path, info: try AudioFileReader.info(at: urls[s])).withRepairs(repairsCarried(by: tracks[t]))
                 p.sources.append(src)
                 var track = Track(name: "\(tracks[t].name) – \(name.prefix(1).uppercased() + name.dropFirst())",
                                   clips: [Clip(sourceID: src.id, start: first, length: min(end - first, src.info.frames))], gainDB: tracks[t].gainDB, isMuted: tracks[t].isMuted)

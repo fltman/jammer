@@ -12,8 +12,8 @@
   },
   {
    "file": "site/manual/13-restoration.md",
-   "on": " The reverb figure is roughly how long a sound takes to die away; under 0.3 s there is little to gain from Reduce Reverb.",
-   "off": " The reverb figure is roughly how long a sound takes to die away."
+   "on": "- **The reverb figure** is roughly how long a sound takes to die away; under 0.3 s there is little to gain from Reduce Reverb.",
+   "off": "- **The reverb figure** is roughly how long a sound takes to die away."
   }
  ],
  "spectral_freeform": [

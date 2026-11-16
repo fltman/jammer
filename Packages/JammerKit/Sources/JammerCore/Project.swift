@@ -15,6 +15,15 @@ public struct SourceRef: Codable, Hashable, Sendable, Identifiable {
     public var originalPath: String?
     /// Set when the file lives inside the project package ("Media/…"); `path` is then rebuilt on open.
     public var packagePath: String?
+    /// The repairs this audio has been through ("dehum", "denoise"…), when Jämmer made the file
+    /// from another: some measurements can't be trusted on repaired sound, and say so.
+    public var repairs: [String]?
+
+    public func withRepairs(_ r: [String]?) -> SourceRef {
+        var s = self
+        s.repairs = r.flatMap { $0.isEmpty ? nil : Array($0.prefix(64)) }
+        return s
+    }
 
     public init(id: UUID = UUID(), name: String, path: String, bookmark: Data? = nil, info: AudioFileInfo, originalPath: String? = nil) {
         self.id = id
@@ -304,6 +313,13 @@ public struct Project: Codable, Equatable, Sendable {
     public func seconds(_ frames: Frame) -> Double { Double(frames) / sampleRate }
 
     /// Bar, beat and tick at `frame`.
+    /// The repairs behind what `track` plays, for a file that is about to be made from it.
+    public func repairsCarried(by track: Track) -> [String]? {
+        var seen: [String] = []
+        for clip in track.clips { for r in source(clip.sourceID)?.repairs ?? [] where !seen.contains(r) { seen.append(r) } }
+        return seen.isEmpty ? nil : seen
+    }
+
     public func musicalPosition(at frame: Frame) -> MusicalPosition { tempo.position(at: frame, sampleRate: sampleRate) }
     /// The first frame at or after a bar, beat and tick.
     public func frame(at position: MusicalPosition) throws -> Frame { try tempo.frame(at: position, sampleRate: sampleRate) }

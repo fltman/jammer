@@ -230,7 +230,7 @@ extension Project {
             let w = try WAVWriter(url: url, options: .init(encoding: .float32, channels: channels, sampleRate: sampleRate))
             try w.write(Array(out[Int(first) * channels..<Int(end) * channels]))
             try w.finish()
-            let src = SourceRef(name: "\(tracks[t].name) (de-bled)", path: url.path, info: try AudioFileReader.info(at: url))
+            let src = SourceRef(name: "\(tracks[t].name) (de-bled)", path: url.path, info: try AudioFileReader.info(at: url)).withRepairs(repairsCarried(by: tracks[t]))
             p.sources.append(src)
             let mine = words.filter { $0.track == t }.map { w -> Word in var w2 = w.word; w2.start = w.start - first; w2.end = w.end - first; return w2 }
             if !mine.isEmpty { p.setTranscript(SourceTranscript(sourceID: src.id, language: transcripts.first?.language ?? "und", engine: "carried", words: mine)) }

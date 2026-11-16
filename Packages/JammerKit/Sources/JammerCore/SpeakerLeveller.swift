@@ -249,7 +249,7 @@ extension Project {
             let w = try WAVWriter(url: url, options: .init(encoding: .float32, channels: channels, sampleRate: sampleRate))
             try w.write(Array(out[Int(first) * ch..<Int(end) * ch]))
             try w.finish()
-            let src = SourceRef(name: "\(tracks[t].name) (levelled)", path: url.path, info: try AudioFileReader.info(at: url))
+            let src = SourceRef(name: "\(tracks[t].name) (levelled)", path: url.path, info: try AudioFileReader.info(at: url)).withRepairs(repairsCarried(by: tracks[t]))
             p.sources.append(src)
             let ws = words.filter { $0.track == t }.map { w -> Word in var w2 = w.word; w2.start = w.start - first; w2.end = w.end - first; return w2 }
             if !ws.isEmpty { p.setTranscript(SourceTranscript(sourceID: src.id, language: transcripts.first?.language ?? "und", engine: "carried", words: ws)) }

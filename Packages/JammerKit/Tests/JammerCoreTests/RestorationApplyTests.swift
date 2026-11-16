@@ -30,6 +30,32 @@ struct RestorationApplyTests {
         return plan.render(from: 0, frames: Int(plan.length))
     }
 
+    @Test("After hum or noise removal the reverberation time is unknown, with the reason, and stays so through later files and a save")
+    func reverbUnknownAfterRepair() throws {
+        let dir = TempDir()
+        let (p, pool, _) = try setup(dir)
+        #expect(Restoration.analyze(p, range: 0..<p.length, pool: pool).reverbUnknown == nil)
+        let range: Range<Frame> = 48_000..<144_000
+        let (q, _) = try Restoration.apply(.init(kind: .dehum), to: p, range: range, pool: pool, media: dir.file("Media"))
+        #expect(q.sources.compactMap(\.repairs) == [["dehum"]])
+        let a = Restoration.analyze(q, range: 0..<q.length, pool: pool)
+        #expect(a.rt60 == nil && a.reverbUnknown == "after_noise_reduction" && !a.reverberant)
+        // Only where the repaired sound is: a stretch that is still the original is measured as before.
+        #expect(Restoration.analyze(q, range: 0..<40_000, pool: pool).reverbUnknown == nil)
+        // A repair that doesn't leave tails of its own doesn't make it unknown…
+        let (c, _) = try Restoration.apply(.init(kind: .declick), to: p, range: range, pool: pool, media: dir.file("Media"))
+        #expect(c.sources.compactMap(\.repairs) == [["declick"]] && Restoration.analyze(c, range: 0..<c.length, pool: pool).reverbUnknown == nil)
+        // …and one on top of the hum removal keeps what is under it.
+        let (d, _) = try Restoration.apply(.init(kind: .declick), to: q, range: range, pool: pool, media: dir.file("Media"))
+        #expect(d.sources.compactMap(\.repairs) == [["dehum", "declick"]])
+        #expect(d.repairsCarried(by: d.tracks[0]) == ["dehum", "declick"])
+        #expect(Restoration.analyze(d, range: 0..<d.length, pool: pool).reverbUnknown == "after_noise_reduction")
+        // It is part of the project: there after a save and open, absent in projects saved before it existed.
+        let back = try ProjectPackage.decode(try ProjectPackage.encode(d))
+        #expect(back.sources.compactMap(\.repairs) == [["dehum", "declick"]])
+        #expect(try ProjectPackage.decode(try ProjectPackage.encode(p)).sources.allSatisfy { $0.repairs == nil })
+    }
+
     @Test("De-hum on a range: new source there, hum gone, the rest bit-exact, words kept, undo is the old value")
     func dehumRange() throws {
         let dir = TempDir()

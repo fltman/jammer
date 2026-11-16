@@ -169,7 +169,7 @@ extension Project {
             let w = try WAVWriter(url: url, options: .init(encoding: .float32, channels: channels, sampleRate: sampleRate))
             try w.write(out)
             try w.finish()
-            let src = SourceRef(name: "\(self.tracks[t].name) (attenuated)", path: url.path, info: try AudioFileReader.info(at: url))
+            let src = SourceRef(name: "\(self.tracks[t].name) (attenuated)", path: url.path, info: try AudioFileReader.info(at: url)).withRepairs(repairsCarried(by: self.tracks[t]))
             p.sources.append(src)
             p.tracks[t].clips = p.tracks[t].clips.flatMap { c -> [Clip] in
                 var parts: [Clip] = []

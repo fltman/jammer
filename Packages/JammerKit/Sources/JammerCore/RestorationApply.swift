@@ -95,6 +95,7 @@ extension Restoration {
             report.clicks += r.clicks
             let info = try AudioFileReader.info(at: url)
             let newSource = SourceRef(name: "\(src.name) (\(settings.kind.rawValue))", path: url.path, info: info, originalPath: src.originalPath ?? src.path)
+                .withRepairs((src.repairs ?? []) + [settings.kind.rawValue])
             p.sources.append(newSource)
             // The words heard in that stretch move to the new file, same ids.
             if let tr = p.transcripts.first(where: { $0.sourceID == src.id }) {
@@ -226,6 +227,12 @@ extension Restoration {
         public var clicks: Int
         /// Reverberation time in seconds, roughly, when the audio has enough decays to tell.
         public var rt60: Double?
+        /// Why there is no reverberation time, when the reason is the audio and not the lack of pauses:
+        /// "after_noise_reduction" for sound that has been through `denoise` or `dehum`, whose own
+        /// tails after each word read as a room (docs/RESTORATION.md).
+        public var reverbUnknown: String?
+        /// The level in the pauses, when there are pauses to measure it in.
+        public var noiseFloor: NoiseFloor?
         /// Seconds actually examined (long ranges are sampled).
         public var examined: Double
         public var sampled: Bool
@@ -279,6 +286,16 @@ extension Restoration {
         // The middle of what the windows say; a window without enough decays says nothing.
         let times = mixes.compactMap { estimateRT60($0, sampleRate: sr) }.sorted()
         a.rt60 = times.isEmpty ? nil : times[times.count / 2]
+        let repaired = project.tracks.filter { tracks?.contains($0.id) ?? true }.flatMap(\.clips)
+            .filter { $0.start < range.upperBound && $0.start + $0.length > range.lowerBound }
+            .contains { clip in (project.source(clip.sourceID)?.repairs ?? []).contains { $0 == Kind.denoise.rawValue || $0 == Kind.dehum.rawValue } }
+        if repaired {
+            a.rt60 = nil
+            a.reverbUnknown = "after_noise_reduction"
+        }
+        // The same for the noise floor, over the pause time of all the windows that had pauses.
+        let floors = mixes.compactMap { noiseFloor($0, sampleRate: sr) }.sorted { $0.level < $1.level }
+        a.noiseFloor = floors.isEmpty ? nil : NoiseFloor(level: floors[floors.count / 2].level, seconds: floors.reduce(0) { $0 + $1.seconds })
         return a
     }
 

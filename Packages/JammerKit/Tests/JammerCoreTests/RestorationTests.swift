@@ -24,6 +24,112 @@ struct RestorationTests {
         }
     }
 
+    /// A voice as a voice is made: pitch pulses (110 Hz, a little unsteady) through two resonances,
+    /// in words with pauses. Its pulses are sharp, which is what a click detector must not count.
+    func pulsedVoice(seconds: Double) -> [Float] {
+        let n = Int(sr * seconds)
+        var x = [Double](repeating: 0, count: n)
+        var at = 0.0, seed: UInt64 = 5
+        while Int(at) < n {
+            let t = at / sr
+            // A word swells and fades over 60 ms; it doesn't start at full strength.
+            let w = t.truncatingRemainder(dividingBy: 1.3)
+            if w < 0.9 { x[Int(at)] = min(1, min(w, 0.9 - w) / 0.06) }
+            seed = seed &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+            at += sr / 110 * (1 + Double(Int32(truncatingIfNeeded: seed >> 32)) / 2_147_483_648 * 0.02)
+        }
+        for (f, r) in [(700.0, 0.985), (1_200.0, 0.98)] {
+            let c = 2 * r * cos(2 * .pi * f / sr)
+            var y1 = 0.0, y2 = 0.0
+            for i in 0..<n { let y = x[i] + c * y1 - r * r * y2; y2 = y1; y1 = y; x[i] = y }
+        }
+        // And the breath every voice has: noise 65 dB under its peaks.
+        let peak = x.map(abs).max() ?? 1
+        return x.map { v in
+            seed = seed &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+            return Float(v / peak * 0.5 + Double(Int32(truncatingIfNeeded: seed >> 32)) / 2_147_483_648 * 0.0003)
+        }
+    }
+
+    @Test("Clicks are counted, a voice's own pulses are not, wherever the stretch starts", arguments: [0, 1_000, 2_000, 3_000])
+    func clicksNotPulses(offset: Int) {
+        let clean = Array(pulsedVoice(seconds: 12)[offset...])
+        // Without the comparison against the block's own peaks, the pulses read as clicks by the hundred.
+        let old = Restoration.detectClicks(clean, peaks: 0).count
+        #expect(old > 20, "\(old)")
+        #expect(Restoration.detectClicks(clean).isEmpty)
+        // Ten clicks of one to three samples, each the size of the voice's RMS: all found, nothing else.
+        var x = clean
+        let level = Float(rms(clean[...]))
+        let at = (0..<10).map { 30_011 + $0 * 48_017 }
+        for (k, p) in at.enumerated() { for j in 0...(k % 3) { x[p + j] += level * (j % 2 == 0 ? 1 : -1) } }
+        let found = Restoration.detectClicks(x)
+        #expect(at.allSatisfy { p in found.contains { $0.lowerBound <= p + 3 && $0.upperBound >= p } } && found.count == at.count, "\(found.count) found")
+    }
+
+    @Test("Click detection on the test recordings, as a table (calibration, not a check)", .enabled(if: ProcessInfo.processInfo.environment["JAMMER_CLICK_TABLE"] != nil))
+    func clickTable() throws {
+        for name in ["Kitchen take", "Episode 7", "Daniel", "Flo", "Church hall", "Booth", "Demo song", "interview"] {
+            let url = URL(fileURLWithPath: "$JAMMER_TEST_MEDIA/site/\(name).wav")
+            guard let info = try? AudioFileReader.info(at: url) else { continue }
+            let raw = SourcePool().read(SourceRef(name: name, path: url.path, info: info), from: 0, count: Int(min(info.frames, Int64(info.sampleRate * 30))))
+            let ch = info.channels
+            let x = (0..<(raw.count / ch)).map { i in (0..<ch).reduce(Float(0)) { $0 + raw[i * ch + $1] } / Float(ch) }
+            // Twenty clicks of one to three samples, a second apart, each `amp` times the recording's RMS.
+            let rmsX = rms(x[...])
+            var row = ""
+            for peaks in [0.0, 3, 4, 5, 6] {
+                let falseHits = [0, 1_000, 2_000, 3_000].map { Restoration.detectClicks(Array(x[$0...]), peaks: peaks).count }
+                var cell = " peaks \(peaks): false \(falseHits)"
+                for amp in [1.0, 3, 10] {
+                    var y = x
+                    let at = (0..<20).map { 30_011 + $0 * 48_017 }.filter { $0 + 3 < y.count }
+                    for (k, p) in at.enumerated() { for j in 0...(k % 3) { y[p + j] += Float(amp * rmsX) * (j % 2 == 0 ? 1 : -1) } }
+                    let found = Restoration.detectClicks(y, peaks: peaks)
+                    let hit = at.filter { p in found.contains { $0.lowerBound <= p + 3 && $0.upperBound >= p } }.count
+                    cell += " | ×\(Int(amp)) found \(hit)/\(at.count) of \(found.count)"
+                }
+                row += "\n   " + cell
+            }
+            print("CLICKTABLE", name, row)
+        }
+    }
+
+    /// Words with pauses between them: bursts of the test voice's tones, each 0.6 s with 0.5 s of nothing after.
+    func words(seconds: Double) -> [Float] {
+        (0..<Int(sr * seconds)).map { i in
+            let t = Double(i) / sr, inWord = t.truncatingRemainder(dividingBy: 1.1)
+            guard inWord < 0.6 else { return 0 }
+            let edge = min(1, min(inWord, 0.6 - inWord) / 0.02)
+            return Float(edge * (0.3 * sin(2 * .pi * 220 * t) + 0.15 * sin(2 * .pi * 445 * t) + 0.08 * sin(2 * .pi * 1_310 * t)))
+        }
+    }
+
+    @Test("The noise floor is the level of the noise that was put there, and nothing is reported where there are no pauses", arguments: [-45.0, -55, -65, -75])
+    func noiseFloor(level: Double) {
+        let speech = words(seconds: 20)
+        var x: UInt64 = 11
+        // White noise at a known RMS: uniform in ±a has RMS a/√3.
+        let a = pow(10, level / 20) * 3.0.squareRoot()
+        let noise = (0..<speech.count).map { _ -> Float in
+            x = x &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+            return Float(Double(Int32(truncatingIfNeeded: x >> 32)) / 2_147_483_648 * a)
+        }
+        #expect(abs(db(rms(noise[...])) - level) < 0.05)
+        let floor = Restoration.noiseFloor(zip(speech, noise).map { $0 + $1 }, sampleRate: sr)
+        #expect(floor != nil && abs(floor!.level - level) < 1, "\(String(describing: floor)) for \(level)")
+        #expect((floor?.seconds ?? 0) > 5)
+        // Speech that is silent between its words was gated or edited: there is no room noise to report.
+        #expect(Restoration.noiseFloor(speech, sampleRate: sr) == nil)
+        // Noise alone, a steady tone, or half a second of anything: nothing to call a pause.
+        #expect(Restoration.noiseFloor(noise, sampleRate: sr) == nil)
+        #expect(Restoration.noiseFloor((0..<Int(sr * 5)).map { Float(0.3 * sin(2 * .pi * 220 * Double($0) / sr)) }, sampleRate: sr) == nil)
+        #expect(Restoration.noiseFloor(Array(zip(speech, noise).map { $0 + $1 }.prefix(Int(sr * 0.5))), sampleRate: sr) == nil)
+        // The swaying test voice dips towards its own noise 2.3 times a second, never for long enough
+        // to be a pause: measured in those dips the floor would read several dB over.
+        #expect(Restoration.noiseFloor(voice(seconds: 10), sampleRate: sr) == nil)
+    }
+
     func rms(_ x: ArraySlice<Float>) -> Double { (x.reduce(0) { $0 + Double($1) * Double($1) } / Double(max(1, x.count))).squareRoot() }
     func db(_ v: Double) -> Double { 20 * log10(max(v, 1e-12)) }
     func level(_ x: [Float], _ f: Double) -> Double { 10 * log10(max(Restoration.goertzel(x, f, sr), 1e-30)) }
@@ -97,7 +203,7 @@ struct RestorationTests {
         // No false alarms on the clean signal.
         #expect(Restoration.detectClicks(clean).isEmpty)
         #expect(Restoration.declick(x, amount: 0).output == x)
-        golden("declick", y, "ca7e2fca71ba6e04")
+        golden("declick", y, "03846fd38f842cb2")
     }
 
     @Test("Amount blends between the input and the full repair")

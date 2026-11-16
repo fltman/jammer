@@ -24,7 +24,28 @@ extension Restoration {
         guard x.count > Int(sampleRate / 2) else { return nil }
         // At most 20 s is plenty.
         let n = min(x.count, Int(sampleRate * 20))
-        let s = Array(x[0..<n])
+        // Everything looked at lies under 250 Hz, and the search asks for the power of some thousand
+        // frequencies: so it runs on the signal low-passed (windowed sinc, 300 Hz) and thinned to
+        // about 1 kHz, which is the same question on a fortieth of the samples.
+        let factor = max(1, Int(sampleRate / 1_000))
+        var s = Array(x[0..<n])
+        var sampleRate = sampleRate
+        if factor > 1 {
+            let taps = factor * 16 + 1, mid = Double(taps - 1) / 2, cutoff = 300 / sampleRate
+            var h = (0..<taps).map { i -> Float in
+                let t = Double(i) - mid
+                let sinc = t == 0 ? 2 * cutoff : sin(2 * .pi * cutoff * t) / (.pi * t)
+                return Float(sinc * (0.42 - 0.5 * cos(2 * .pi * Double(i) / Double(taps - 1)) + 0.08 * cos(4 * .pi * Double(i) / Double(taps - 1))))
+            }
+            let sum = h.reduce(0, +)
+            h = h.map { $0 / sum }
+            let count = (s.count - taps) / factor + 1
+            guard count > 500 else { return nil }
+            var thinned = [Float](repeating: 0, count: count)
+            vDSP_desamp(s, vDSP_Stride(factor), h, &thinned, vDSP_Length(count), vDSP_Length(taps))
+            s = thinned
+            sampleRate /= Double(factor)
+        }
         func score(_ f0: Double) -> (on: Double, off: Double) {
             var on = 0.0, off = 0.0
             for k in 1...4 {
@@ -190,20 +211,44 @@ extension Restoration {
     /// Finds short impulses: where the AR prediction error jumps far above its
     /// usual size (median absolute deviation), in blocks of `block` samples.
     public static func detectClicks(_ x: [Float], sensitivity: Double = 1, order: Int = 20, block: Int = 4_096,
-                                    maxLength: Int = 96) -> [Range<Int>] {
+                                    maxLength: Int = 96, peaks: Double = 5) -> [Range<Int>] {
         guard x.count > order * 4 else { return [] }
         var flagged: [Int] = []
         var start = 0
         while start < x.count {
             let end = min(x.count, start + block)
-            let lo = max(0, start - order)
-            let seg = Array(x[lo..<end])
+            // Judged with half a block of what comes before and after, so a word that begins at the
+            // edge of a block is seen with the rest of its pulses; flagged only inside the block.
+            let lo = max(0, start - max(order, block / 2)), hi = min(x.count, end + block / 2)
+            let seg = Array(x[lo..<hi])
             if seg.count > order * 4, let a = arCoefficients(seg, order: order, exclude: []) {
                 let e = predictionError(seg, a)
                 let body = Array(e[order...]).map(abs).sorted()
                 let mad = max(body[body.count / 2], 1e-7)
-                let threshold = mad * 12 / sensitivity
-                for n in max(order, start - lo)..<seg.count where abs(e[n]) > threshold { flagged.append(n + lo) }
+                // Far over the usual error, and over the block's own peaks too. A voice's pitch pulses and
+                // a note's attack are large in this error as well, but there are many of them: wide ones
+                // fill more than 1 % of a block (so: `peaks` times what 1 % of its samples exceed), and
+                // sharp ones come several to a block (so: 0.6 × `peaks` times its fifth-largest separate
+                // peak). A click is a few samples, and alone.
+                var threshold = mad * 12
+                if peaks > 0 {
+                    // The fifth-largest separate peak: five passes for the largest value not within 32
+                    // samples of one already taken (a sort of the whole block costs more than the rest).
+                    var mags = e[order...].map(abs)
+                    var fifth = 0.0
+                    for _ in 0..<5 {
+                        var top = 0.0
+                        var index: vDSP_Length = 0
+                        vDSP_maxviD(mags, 1, &top, &index, vDSP_Length(mags.count))
+                        let best = Int(index)
+                        fifth = max(0, top)
+                        for i in max(0, best - 31)...min(mags.count - 1, best + 31) { mags[i] = -1 }
+                    }
+                    let wide = body[body.count * 99 / 100] * peaks, sharp = fifth * peaks * 0.6
+                    threshold = max(threshold, wide, sharp)
+                }
+                threshold /= sensitivity
+                for n in max(order, start - lo)..<(end - lo) where abs(e[n]) > threshold { flagged.append(n + lo) }
             }
             start = end
         }

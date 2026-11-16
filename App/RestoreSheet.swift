@@ -46,7 +46,9 @@ final class RestoreModel {
         parts.append(a.hum.map { String(format: "Hum at %.2f Hz (%.0f dB above its surroundings)", $0.frequency, $0.prominence) } ?? "No mains hum")
         parts.append(a.clippedRuns > 0 ? "\(a.clippedRuns) clipped stretch\(a.clippedRuns == 1 ? "" : "es")" : "no clipping")
         parts.append(a.clicks > 0 ? "\(a.clicks) click\(a.clicks == 1 ? "" : "s")" : "no clicks")
-        parts.append(a.rt60.map { String(format: a.reverberant ? "reverb about %.1f s" : "little reverb (%.1f s)", $0) } ?? "reverb not measurable")
+        parts.append(a.rt60.map { String(format: a.reverberant ? "reverb about %.1f s" : "little reverb (%.1f s)", $0) }
+                     ?? (a.reverbUnknown != nil ? "reverb not measurable after noise or hum removal" : "reverb not measurable"))
+        if let n = a.noiseFloor { parts.append("noise floor \(n.level < 0 ? "−" : "")\(Int(abs(n.level).rounded())) dBFS") }
         findings = parts.joined(separator: " · ") + (a.sampled ? " (sampled)" : "")
     }
 
@@ -132,6 +134,7 @@ struct RestoreSheet: View {
             .labelsHidden()
             Text(model.rangeText).font(.callout).foregroundStyle(.secondary)
             Text(model.findings).font(.callout).foregroundStyle(Theme.neonColor)
+                .lineLimit(3).fixedSize(horizontal: false, vertical: true)
             Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 10) {
                 GridRow {
                     Text("Amount")
