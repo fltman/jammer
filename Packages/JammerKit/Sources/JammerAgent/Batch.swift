@@ -172,7 +172,7 @@ public struct BatchResult: Sendable, Equatable {
     }
     public var outputs: [String] = []
     /// Per output, in the same order: the integrated loudness of what was written (LUFS), and
-    /// whether a loudness step stopped short of its target because of the peaks (no limiter yet).
+    /// whether a loudness step stopped short of its target because of the peaks (the step was run without `limit`).
     public var loudness: [Double?] = []
     public var limitedByPeak: [Bool] = []
     /// Per output: the gain put in before a lossy encoder so the file as delivered meets the

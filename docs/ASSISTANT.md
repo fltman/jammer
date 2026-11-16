@@ -68,7 +68,7 @@ Hold-out 3, baseline 2026-11-16, on-device: 18/29 (task 14/22, multi 1/2, clarif
 
 When a change is made because of something set 3 showed, it becomes a regression set and a new one is written first.
 
-**After `limit` was added (2026-11-16).** The on-device model is given it only when the request names it (limit, ceiling, tak, true peak); it waits for a yes like everything that replaces audio. The sets run again, on-device: standard 17/18, holdout1 21/24, holdout2 17/23, holdout3 18/29. Before it: standard 17/18, holdout1 21/24, holdout2 17/23, holdout3 18/29.
+**After `limit` was added (2026-11-16).** The on-device model is given it only when the request names it (limit, ceiling, tak, true peak); it waits for a yes like everything that replaces audio. The sets run again, on-device: standard 17/18, holdout1 21/24, holdout2 17/23, holdout3 18/29. Before it: standard 17/18, holdout1 21/24, holdout2 17/23, holdout3 18/29. Run again the same day after `loudness_preset` got `limit` and a new description: the same four figures.
 
 ## A change nobody asked for waits for a yes
 

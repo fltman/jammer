@@ -35,9 +35,38 @@ Phase 3, part 1. What is built is said here with the numbers it was measured to;
 
 **In the app** (2026-11-16), on an 8 s test mix with a true peak of +1.58 dBTP: the sheet read through the accessibility API (ceiling field named, no unnamed controls); Limit with −1 gave −1.05 dBTP, "at most 2.6 dB taken off, over 3.6 s" in the status bar, one new clip on the track, and Edit › Undo Limit brought +1.58 back; a ceiling typed as "-3,5" gave −3.55; a ceiling of 5 was refused with "The ceiling has to be a number from −20 to 0 dBTP. Nothing was changed".
 
+## A loudness preset with the limiter, built 2026-11-16
+
+`loudness_preset` with `"limit": true`, **Audio › Loudness Preset With Limiter** in the app. Default is unchanged: one gain, stopping where the true peak would pass the preset's ceiling. With `limit`, and only when the peaks are in the way, the gain goes all the way to the target and the limiter holds the peaks at the ceiling; limiting takes a little loudness back, so the gain is corrected and the pass repeated, at most three times, until the result is within 0.1 LU (`Project.matching`). The earlier tries' files are removed.
+
+The answer says what it cost: `limited`, `reductionMaxDB`, `limitedSeconds`, and the loudness range before and after (`rangeBeforeLU`, `rangeAfterLU`), so that nobody squashes a recording to a target without it showing.
+
+Tested on 20 s that are quiet on average with a 5 ms burst at −2 dBFS every second, target −14 LUFS: without the limiter the result is far short and `limitedByPeak` is 1; with it, −14.0 ± 0.1 LUFS as measured again afterwards, true peak at or under −1.0, more than 3 dB taken off the bursts. Where the peaks leave room (the same material to −23 LUFS) the limiter isn't used even when allowed.
+
+## Measured against ACX's requirements, built 2026-11-16
+
+`GET …/analysis/acx`, **Audio › Check Against ACX Requirements…**. Measures, changes nothing, and never says "approved".
+
+The requirements are quoted from ACX's article "ACX Audio Submission Requirements", https://help.acx.com/s/article/acx-audio-submission-requirements, article date 15 April 2026, read on 16 November 2026 (`JammerCore/ACX.swift` has the figures, the wording and the dates; they change only with a new reading):
+
+| Name | ACX's words | Jämmer's measure |
+|---|---|---|
+| `rms` | "Each file needs to fall between the specific volume range of -23dB and -18dB RMS" | Plain RMS of all samples, channels together, unweighted (`LoudnessResult.rms`; a full-scale sine reads −3.01). ACX gives no method. |
+| `peak` | "Each file must have peak values no higher than -3dB" | Sample peak and true peak both at or under −3; the note says which decided. ACX says "peak" and "dB". |
+| `noiseFloor` | "Each file must have a noise floor no higher than -60dB RMS" | RMS of the pauses (`Restoration.noiseFloor`). ACX gives no method. `pass` is null when there is no pause to measure in. |
+| `format` | "Each file must be a 192 kbps or higher CBR, 44.1kHz MP3" | At 44.1 kHz the document is encoded to a 192 kbps constant-bit-rate MP3 and the levels are measured on that file as it decodes. At another rate this fails and says that sample-rate conversion is missing; the levels are then measured on the mix (`measuredOn`). |
+| `channels` | "All files must be in the same channel format (all mono or all stereo)" | Shown; `pass` null (it is about the files together). |
+| `length` | "Each file must be no longer than 120 minutes" | The document's length. |
+| `roomTone` | "Room tone spacing must not exceed 5 seconds" (1–5 s recommended at each end) | The stretch at each end under −45 dBFS. |
+| `narration` | "Your submitted audiobook must be narrated by a human unless otherwise authorized" | Not measured; `pass` null. |
+
+Not found on ACX's page, and so not claimed: how RMS and the noise floor are to be measured, and a file size limit.
+
+**Against an outside reference** (ffmpeg `astats`): a 48 kHz test file reads RMS −22.6 dB and peak −7.4 dB here, −22.55 and −7.41 in ffmpeg. The same speech at 44.1 kHz reads −19.55 dB RMS as a WAV in ffmpeg and −19.8 as the 192 kbps MP3 decoded here: the encoder takes about a quarter of a dB, which is why the check is made on the encoded file.
+
+**In the app** (2026-11-16): a 44.1 kHz mono chapter measured on the MP3 with every measured line met; a 48 kHz document with `format` failing and the rest measured on the mix; the sheet read through the accessibility API; the document not marked as edited by the check.
+
 ## Not built yet
 
-- `loudness_preset` with `limit` (reach the target when the peaks hold it back, and say what dynamics it cost).
-- The `acx` check against ACX's published requirements.
 - Sample-rate conversion on export (r8brain-free-src, MIT; to be fetched only when Anders has said yes) and dither when the bit depth goes down.
-- The limiter as a live insert comes with the mixer, after its realtime measurements.
+- The limiter as a live insert comes with the mixer, after its realtime measurements. With the mixer its place is on the master bus, after everything; today it comes before the tracks' plugins and says so (`beforePlugins`).

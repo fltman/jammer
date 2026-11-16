@@ -14,9 +14,13 @@ public struct LoudnessResult: Codable, Sendable, Equatable {
     /// Highest inter-sample peak (oversampled), dBTP.
     public var truePeak: Double
     public var duration: Double
+    /// Plain RMS level of all samples of all channels together, unweighted, dB relative to full scale
+    /// (a full-scale sine reads −3.01). nil for silence, and in results from before 2026-11-16.
+    public var rms: Double?
 
     public init(integrated: Double?, range: Double?, maxMomentary: Double?, maxShortTerm: Double?,
-                samplePeak: Double, truePeak: Double, duration: Double) {
+                samplePeak: Double, truePeak: Double, duration: Double, rms: Double? = nil) {
+        self.rms = rms
         self.integrated = integrated
         self.range = range
         self.maxMomentary = maxMomentary
@@ -29,7 +33,7 @@ public struct LoudnessResult: Codable, Sendable, Equatable {
     public var json: [String: Any] {
         func r(_ v: Double?) -> Any { v.map { $0.isFinite ? ($0 * 100).rounded() / 100 : -999 } ?? NSNull() }
         return ["integratedLUFS": r(integrated), "rangeLU": r(range), "maxMomentaryLUFS": r(maxMomentary),
-                "maxShortTermLUFS": r(maxShortTerm), "samplePeakDBFS": r(samplePeak), "truePeakDBTP": r(truePeak),
+                "maxShortTermLUFS": r(maxShortTerm), "samplePeakDBFS": r(samplePeak), "truePeakDBTP": r(truePeak), "rmsDB": r(rms),
                 "duration": (duration * 1000).rounded() / 1000]
     }
 }
@@ -49,6 +53,8 @@ public struct LoudnessMeter {
     private var subEnergies: [Double] = []
     private var frames: Int64 = 0
     private var samplePeak: Float = 0
+    private var squares = 0.0
+    private var samples = 0
     private var truePeak = TruePeak(channels: 1, sampleRate: 48_000)
     private var scratchF: [Float] = []
     private var scratchD: [Double] = []
@@ -106,6 +112,10 @@ public struct LoudnessMeter {
         var peak: Float = 0
         vDSP_maxmgv(base, 1, &peak, vDSP_Length(interleaved.count))
         samplePeak = max(samplePeak, peak)
+        var energy: Float = 0
+        vDSP_svesq(base, 1, &energy, vDSP_Length(n * channels))
+        squares += Double(energy)
+        samples += n * channels
         truePeak.process(interleaved)
 
         // K-weight each channel over the whole block, then sum squares per sub-block.
@@ -188,7 +198,8 @@ public struct LoudnessMeter {
         return LoudnessResult(integrated: integrated, range: range,
                               maxMomentary: momentary.max().map(Self.lufs), maxShortTerm: shortTerm.max().map(Self.lufs),
                               samplePeak: 20 * log10(Double(samplePeak)), truePeak: 20 * log10(Double(max(samplePeak, truePeak.peak))),
-                              duration: Double(frames) / sampleRate)
+                              duration: Double(frames) / sampleRate,
+                              rms: samples > 0 && squares > 0 ? 10 * log10(squares / Double(samples)) : nil)
     }
 }
 

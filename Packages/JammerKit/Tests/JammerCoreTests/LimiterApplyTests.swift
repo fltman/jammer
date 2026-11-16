@@ -85,3 +85,60 @@ struct LimiterApplyTests {
         #expect((try? FileManager.default.contentsOfDirectory(atPath: media.path))?.isEmpty ?? true)
     }
 }
+
+@Suite("A loudness preset with the limiter")
+struct LoudnessMatchTests {
+    /// 20 s: a steady tone at −26 dBFS with a loud burst (−2 dBFS) for 5 ms every second: quiet on
+    /// average, with peaks that stop a plain gain far short of −14 LUFS.
+    static func document() -> (Project, SourcePool) {
+        let n = 48_000 * 20
+        let info = AudioFileInfo(container: .wav, sampleFormat: .float32, bigEndian: false, channels: 2, sampleRate: 48_000,
+                                 channelMask: nil, dataOffset: 0, frames: Int64(n), chunks: [], bext: nil, ixml: nil, markers: [])
+        let a = SourceRef(name: "peaky", path: "/dev/null", info: info)
+        let pool = SourcePool()
+        pool.register(a.id, memory: (0..<n).flatMap { i -> [Float] in
+            let amp = i % 48_000 < 240 ? 0.79 : 0.05
+            let v = Float(amp * sin(Double(i) * 0.13))
+            return [v, v]
+        }, channels: 2)
+        return (Project(source: a), pool)
+    }
+    static func measure(_ pool: SourcePool) -> (Project, Range<Frame>) -> LoudnessResult {
+        { p, r in LoudnessMeter.measure(PlanCompiler.compile(p, pool: pool), r) }
+    }
+
+    @Test("Without the limiter the peaks stop it short; with it the target is reached, the ceiling holds, and the cost is said")
+    func reaches() throws {
+        let (p, pool) = Self.document()
+        let media = FileManager.default.temporaryDirectory.appending(path: "jammer-match-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: media) }
+        let all = 0..<p.length
+        let (_, plain) = try #require(try p.matching(.spotify, range: all, limit: false, pool: pool, media: media, measure: Self.measure(pool)))
+        #expect(plain.limitedByPeak && !plain.limited && plain.integratedAfter < -15 && plain.truePeakAfter <= -0.99)
+        let (q, m) = try #require(try p.matching(.spotify, range: all, limit: true, pool: pool, media: media, measure: Self.measure(pool)))
+        let after = Self.measure(pool)(q, all)
+        #expect(m.limited && !m.limitedByPeak && abs(m.integratedAfter - -14) <= 0.1 && abs((after.integrated ?? 0) - -14) <= 0.1, "\(m)")
+        #expect(after.truePeak <= -1.0 && m.truePeakAfter <= -1.0 && m.reductionMaxDB > 3 && m.limitedSeconds > 1)
+        // What it took is in the answer: the reduction, and the loudness range before and after (this
+        // signal repeats every second, so its range is next to nothing both times; the figures are there).
+        #expect(m.rangeBefore != nil && m.rangeAfter != nil && abs((m.rangeAfter ?? 9) - (after.range ?? 0)) < 0.001)
+        // Only the last try's files are left.
+        #expect(try FileManager.default.contentsOfDirectory(atPath: media.path).count == 1 && q.length == p.length)
+        // Peaks that leave room: one gain as before, and the limiter isn't touched even when allowed.
+        let (_, easy) = try #require(try p.matching(.ebuR128, range: all, limit: true, pool: pool, media: media, measure: Self.measure(pool)))
+        #expect(!easy.limited && !easy.limitedByPeak && abs(easy.integratedAfter - -23) < 0.01)
+    }
+
+    @Test("RMS: a full-scale sine reads −3.01 dB, half scale −9.03, silence nothing")
+    func rms() {
+        func rms(_ amp: Double) -> Double? {
+            var m = LoudnessMeter(sampleRate: 48_000, channels: 2)
+            m.process((0..<48_000).flatMap { i -> [Float] in let v = Float(amp * sin(2 * .pi * 1_000 * Double(i) / 48_000)); return [v, v] })
+            return m.result.rms
+        }
+        #expect(abs((rms(1) ?? 0) - -3.0103) < 0.001 && abs((rms(0.5) ?? 0) - -9.0309) < 0.001 && rms(0) == nil)
+        // Results saved before the figure existed still read.
+        let old = try? JSONDecoder().decode(LoudnessResult.self, from: Data(#"{"integrated":-16,"range":3,"samplePeak":-1,"truePeak":-1,"duration":2}"#.utf8))
+        #expect(old != nil && old?.rms == nil)
+    }
+}

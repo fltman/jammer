@@ -392,8 +392,11 @@ final class EditorSession {
                 status = String(format: "Limited: true peak now %.2f dBTP, at most %.1f dB taken off, over %.1f s.", after, cut, secs)
                     + (info["beforePlugins"] == 1 ? " The tracks' plugins come after it." : "")
             } else if let info = r.first?.info, let after = info["integratedAfter"], let target = info["target"] {
-                status = info["limitedByPeak"] == 1
-                    ? String(format: "Reached %.1f instead of %.0f LUFS: the peaks held it back (no limiter yet).", after, target)
+                status = info["limited"] == 1
+                    ? String(format: "%@: %.1f LUFS. The limiter took at most %.1f dB off the peaks, over %.1f s.", title, after, info["reductionMaxDB"] ?? 0, info["limitedSeconds"] ?? 0)
+                        + (info["limitedByPeak"] == 1 ? String(format: " The target was %.0f.", target) : "")
+                    : info["limitedByPeak"] == 1
+                    ? String(format: "Reached %.1f instead of %.0f LUFS: the peaks held it back. Loudness Preset With Limiter reaches it.", after, target)
                     : String(format: "%@: %.1f LUFS (%+.2f dB)", title, after, info["gainDB"] ?? 0)
             } else if op == "detect_tempo", let info = r.first?.info, let bpm = info["bpm"] {
                 let shown = bpm == bpm.rounded() ? String(format: "%.0f", bpm) : String(format: "%.2f", bpm)
@@ -516,6 +519,42 @@ final class EditorSession {
         let result = await Task.detached(priority: .userInitiated) { LoudnessMeter.measure(plan, r) }.value
         if range == nil, tracks == nil { lastAnalysis = result }
         return result
+    }
+
+    /// The document measured for ACX's requirements: the mix, its pauses, its ends, and, when the document
+    /// is at 44.1 kHz, the MP3 it would be handed in as (192 kbps, constant bit rate), decoded again.
+    func acxMeasured() async -> ACX.Measured {
+        let mix = await analyze()
+        let p = project, pool = pool
+        let (floor, head, tail) = await Task.detached(priority: .userInitiated) { () -> (Restoration.NoiseFloor?, Double, Double) in
+            let a = Restoration.analyze(p, range: 0..<p.length, pool: pool)
+            let quiet = p.silences(minLength: p.frames(0.05), threshold: -45, pool: pool)
+            let head = quiet.first.map { $0.lowerBound == 0 ? p.seconds(Frame($0.count)) : 0 } ?? 0
+            let tail = quiet.last.map { $0.upperBound >= p.length ? p.seconds(Frame($0.count)) : 0 } ?? 0
+            return (a.noiseFloor, head, tail)
+        }.value
+        var m = ACX.Measured(mix: mix, noiseFloor: floor?.level, noiseSeconds: floor?.seconds ?? 0, channels: p.channels, sampleRate: p.sampleRate,
+                             seconds: p.seconds(p.length), head: head, tail: tail)
+        guard p.sampleRate == ACX.sampleRate else {
+            m.encodedReason = String(format: "the document is %.1f kHz, and an MP3 at 44.1 kHz needs sample-rate conversion, which Jämmer doesn't have yet", p.sampleRate / 1_000)
+            return m
+        }
+        let dir = FileManager.default.temporaryDirectory.appending(path: "jammer-acx-\(UUID().uuidString.prefix(8))")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let file = dir.appending(path: "check.mp3")
+        do {
+            _ = try await export(to: file, options: .init(encoded: EncodedExportOptions(format: .mp3, bitRate: ACX.minBitRate), chapters: false))
+            if let measured = await Task.detached(priority: .userInitiated, operation: { EncodedWriter.measureWritten(file, scratch: dir) }).value {
+                m.encoded = measured
+                m.encodedBitRate = ACX.minBitRate
+            } else {
+                m.encodedReason = "the MP3 couldn't be read back on this Mac"
+            }
+        } catch {
+            m.encodedReason = "the MP3 couldn't be made (\(error.localizedDescription))"
+        }
+        return m
     }
 
     struct ExportOptions: Sendable {

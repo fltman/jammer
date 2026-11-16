@@ -232,8 +232,9 @@ public enum Operations {
         .init("remove_insert", "Remove Plugin", "Takes a plugin off a track.",
               params: [.init("track", .string, "Track id.", required: true),
                        .init("insert", .string, "Insert id (or its name when that's unique on the track).", required: true)]),
-        .init("loudness_preset", "Loudness Preset", "Brings the range (the whole document without a range or selection) to a delivery target in one step. Without a limiter, the gain stops where the true peak would pass the ceiling; info.limitedByPeak is then 1 and integratedAfter shows what was reached.",
-              params: [.init("preset", .string, "The target.", required: true, options: LoudnessPreset.allCases.map(\.rawValue)), start, end]),
+        .init("loudness_preset", "Loudness Preset", "Brings the range (the whole document without a range or selection) to a delivery target in one step. Without `limit`, it is one gain that stops where the true peak would pass the ceiling; info.limitedByPeak is then 1 and integratedAfter shows what was reached. With `limit`, the limiter holds the peaks at the ceiling so the target is reached, and the answer says what that took.",
+              params: [.init("preset", .string, "The target.", required: true, options: LoudnessPreset.allCases.map(\.rawValue)), start, end,
+                       .init("limit", .boolean, "Use the limiter to reach the target when the peaks would stop the gain short of it. Default false: one gain, never over the ceiling. With it, the answer says what the limiter took (`reductionMaxDB`, `limitedSeconds`, `rangeBeforeLU`, `rangeAfterLU`).")]),
         .init("add_marker", "Add Marker", "Adds a marker, or a region when `duration` is given.",
               params: [.init("at", .seconds, "Position in seconds. Defaults to the selection start, else the playhead."),
                        .init("name", .string, "Marker name.", required: true),
@@ -796,12 +797,25 @@ public enum StepRunner {
         case "loudness_preset":
             let r = try range(wholeIfNone: true); try checkInside(r)
             guard let preset = LoudnessPreset(rawValue: p["preset"]?.string ?? "") else { throw StepFailure("loudness_preset: unknown preset.") }
-            let m = measure(s.project, r)
-            guard let plan = preset.plan(for: m) else { throw StepFailure("loudness_preset: the range is silent, so there's nothing to match.") }
-            try s.project.changeGain(r, by: plan.gainDB)
+            let limit = p["limit"].map { $0 == .bool(true) } ?? false
+            if limit, s.pool == nil || s.media == nil { throw StepFailure("loudness_preset with limit needs the app to render audio.") }
+            let matched: (Project, LoudnessMatch)?
+            do { matched = try s.project.matching(preset, range: r, limit: limit, pool: s.pool, media: s.media, measure: measure) } catch let e as LimiterError {
+                throw StepFailure("loudness_preset: " + (e.errorDescription ?? "the limiter failed."), reason: "ceiling_not_met")
+            }
+            guard let (project, m) = matched else { throw StepFailure("loudness_preset: the range is silent, so there's nothing to match.") }
+            s.project = project
             func r2(_ v: Double) -> Double { (v * 100).rounded() / 100 }
-            return ["gainDB": plan.gainDB, "integratedBefore": r2(m.integrated ?? 0), "integratedAfter": r2(plan.integratedAfter),
-                    "truePeakAfter": r2(plan.truePeakAfter), "target": preset.integrated, "limitedByPeak": plan.limitedByPeak ? 1 : 0]
+            var info = ["gainDB": m.gainDB, "integratedBefore": r2(m.integratedBefore), "integratedAfter": r2(m.integratedAfter),
+                        "truePeakAfter": r2(m.truePeakAfter), "target": preset.integrated, "limitedByPeak": m.limitedByPeak ? 1 : 0, "limited": m.limited ? 1 : 0]
+            if m.limited {
+                // What reaching the target cost: how much the limiter took off, and the loudness range before and after.
+                info["reductionMaxDB"] = r2(m.reductionMaxDB)
+                info["limitedSeconds"] = r2(m.limitedSeconds)
+                if let a = m.rangeBefore { info["rangeBeforeLU"] = r2(a) }
+                if let b = m.rangeAfter { info["rangeAfterLU"] = r2(b) }
+            }
+            return info
         case "add_marker":
             let at = min(frames("at") ?? s.selection?.lowerBound ?? s.playhead, project.length)
             s.project.addMarker(at: at, length: frames("duration") ?? 0, name: p["name"]?.string ?? "Marker")

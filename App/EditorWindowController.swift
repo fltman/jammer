@@ -384,6 +384,24 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
     /// Audio › Duck Under Speech…: the user ticks the tracks to lower (music, atmosphere); the others
     /// decide when. A guess is ticked in advance (the tracks with the fewest words per second, when
     /// there is a transcript), but it is only a guess: transcribing music gives words too.
+    /// Audio › Check Against ACX Requirements…: measures, changes nothing, and says what was measured against what.
+    @objc func checkACX(_ sender: Any?) {
+        guard let window else { return }
+        session.status = "Measuring against ACX's requirements…"
+        Task { [session] in
+            let rows = ACX.requirements(await session.acxMeasured())
+            session.status = nil
+            let failed = rows.filter { $0.pass == false }
+            let alert = NSAlert()
+            alert.messageText = failed.isEmpty ? "No measured requirement failed" : "\(failed.count) requirement\(failed.count == 1 ? "" : "s") not met"
+            alert.informativeText = rows.map { r in
+                "\(r.pass == true ? "✓ Met" : r.pass == false ? "✗ Not met" : "– Not judged"): \(r.required).\nMeasured: \(r.measured).\(r.note.map { "\n" + $0 } ?? "")"
+            }.joined(separator: "\n\n") + "\n\n\(ACX.wording)\n\(ACX.source)"
+            alert.addButton(withTitle: "OK")
+            _ = await alert.beginSheetModal(for: window)
+        }
+    }
+
     /// Audio › Limit Peaks…: the ceiling is asked for; the selection, or the whole document, is limited.
     @objc func limitPeaks(_ sender: Any?) {
         guard let window else { return }

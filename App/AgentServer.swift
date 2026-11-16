@@ -482,6 +482,14 @@ enum AgentRouter {
             case ["analysis", "restoration"]:
                 try only("GET")
                 return try await restorationAnalysis(session, r)
+            case ["analysis", "acx"]:
+                try only("GET")
+                let m = await session.acxMeasured()
+                let rows = ACX.requirements(m)
+                // A measurement against published requirements, with their source and date: never an approval.
+                return .json(["acx": ["statement": ACX.wording, "source": ACX.source, "articleDate": ACX.articleDate, "readOn": ACX.readOn,
+                                      "requirements": rows.map(\.json), "failed": rows.filter { $0.pass == false }.map(\.name),
+                                      "measuredOn": m.encoded != nil ? "mp3" : "mix"] as [String: Any]])
             case ["export"]:
                 try only("POST")
                 return try await export(session, r)

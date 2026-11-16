@@ -73,3 +73,12 @@ Untick "Show at launch" on the splash. Help › Agent Access shows it again.
 ## How do I uninstall Jämmer?
 
 Quit Jämmer and move it to the Trash. To remove everything else, also delete `~/Library/Application Support/Jammer` (decoded audio, repaired files and downloaded models), `~/Library/Caches/com.brattoo.jammer` (waveform caches) and `~/Library/Preferences/com.brattoo.jammer.plist`. If you saved an OpenRouter key, remove the "com.brattoo.jammer" item in Keychain Access.
+
+## Can it keep the peaks under a ceiling?
+
+Yes. **Audio › Limit Peaks…** holds the true peak at or under the ceiling you give (−1 dBTP by default), with the same gain on every track so the balance stays, and leaves everything that needs no limiting exactly as it was. **Audio › Loudness Preset With Limiter** uses it to reach a loudness target when a few peaks would otherwise stop the gain short. Both say what they took off, and one undo takes it back.
+
+## Can it check an audiobook chapter for ACX?
+
+It can measure one. **Audio › Check Against ACX Requirements…** measures the document against the audio requirements ACX publishes (level, peak, noise floor, format, length, room tone at the ends), with ACX's own wording next to what was measured, and changes nothing. It doesn't approve a file: only ACX does, and ACX asks for more than a meter can see. The file has to be at 44.1 kHz to be checked as the MP3 ACX wants; Jämmer can't convert the sample rate yet.
+
