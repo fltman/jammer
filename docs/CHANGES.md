@@ -4,6 +4,15 @@ Not a list of commits: what behaves differently from before, for a user, an agen
 
 ## 2026-11-16
 
+- **A name Jämmer doesn't know is refused, never skipped** (SIBLINGS.md §3). 400 `bad_request` with the name and what the call takes; nothing is done. What the walk through found, all of it silent before:
+  - Steps already refused unknown parameters (from the registry). A field beside `op` and `params` in a step was ignored: now refused.
+  - **Every query parameter on every endpoint** was ignored when unknown (`GET …/analysis?brightness=3` answered 200): now refused, from one table of what each route takes (`RouteParameters.swift`), which the registry's endpoints add their parameters to.
+  - JSON bodies of `export`, `transcribe`, `separate`, `diarize`, `play`, `solo`, `plugins/scan`, document and track creation, and the `/steps` body itself ignored unknown fields: now refused. `restore`, `restore/preview`, `batch` and `import/fcpxml` already refused them at the top level.
+  - `batch`: unknown fields inside `export`, beside `op` and `params` in a job, and unknown parameters of a job were ignored: now refused. `export` that isn't an object was read as "no export settings": now refused.
+  - The assistant, calling a sibling or one of Jämmer's own endpoints, sent names the schema doesn't have: now the call isn't made and the plan says why.
+  - `rationale` (a string) is accepted everywhere and used for nothing, and is in every published schema. Every schema is closed (it already was); `restore`'s settings per kind are published under `x-byType` on `kind`.
+  - A caller that sent a misspelt or invented name and got 200 before gets 400 now. Glimmer's waveform request (`GET …/waveform?width=`) is unaffected, and the cover flow was run once against Glimmer's build 11afa8b.
+
 - **Sidechain keys, debug builds only** (`docs/MIXER.md`, step 6): `set_insert` `key`; `key`, `hasKeyInput`, `keyRefusal` on listed inserts. A release build has none of it. A project whose plugin has a key is format 2.
 
 - **Solo** as a way of listening: `POST …/solo`, `solo` in `GET …/mixer`, a Solo box on every strip. Not saved, not undone, and no export or measurement changes. The mixer sheet is wider (1070 points).

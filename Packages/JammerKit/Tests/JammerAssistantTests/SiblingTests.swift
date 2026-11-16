@@ -56,6 +56,21 @@ struct SiblingToolTests {
         #expect(FakeSiblings.requests.allSatisfy { $0.value(forHTTPHeaderField: "X-Sibling") == "jammer" })
     }
 
+    @Test("A sibling's schema is closed to us: a name it doesn't have is not sent to see what happens; rationale is")
+    func closed() async throws {
+        let found = await SiblingDirectory.discover(session: session)
+        let flimmer = try #require(found.first { $0.slug == "flimmer" })
+        let plan = AssistantPlan(reply: "", steps: [
+            PlannedStep(op: "canvas.addNote", params: ["text": .string("hello"), "at": .number(5)]),
+            PlannedStep(op: "canvas.addNote", params: ["text": .string("hello"), "colour": .string("red")]),
+            PlannedStep(op: "canvas.addNote", params: ["text": .string("hello"), "rationale": .string("a note for the editor")]),
+            PlannedStep(op: "export_audio", params: ["format": .string("wav"), "bitDepth": .number(16)]),
+        ])
+        let checked = PlanParser.validate(plan, actions: flimmer.actions)
+        #expect(checked.steps.count == 2 && checked.steps.allSatisfy { $0.op == "canvas.addNote" && $0.params["colour"] == nil })
+        #expect(checked.dropped.count == 2 && checked.dropped[0].contains("has no parameter \"colour\"") && checked.dropped[1].contains("has no parameter \"bitDepth\""), "\(checked.dropped)")
+    }
+
     @Test("Calls go to the frontmost document: endpoints by call, steps through /steps")
     func calls() async throws {
         let s = session

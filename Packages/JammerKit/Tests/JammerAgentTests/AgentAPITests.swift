@@ -644,7 +644,7 @@ struct EndpointListTests {
         // The restore schema and the body parser accept exactly the same fields.
         let schema = restore["params"] as! [String: Any]
         let properties = schema["properties"] as! [String: [String: Any]]
-        #expect(Set(properties.filter { $0.value["x-in"] == nil }.keys) == RestoreRequest.keys)
+        #expect(Set(properties.filter { $0.value["x-in"] == nil }.keys) == RestoreRequest.keys.union([AgentAPI.rationale]))
         #expect(properties["id"]?["x-in"] as? String == "path" && (schema["required"] as! [String]).contains("id"))
         let aProps = (analysis["params"] as! [String: Any])["properties"] as! [String: [String: Any]]
         #expect(aProps["start"]?["x-in"] as? String == "query" && aProps["id"]?["x-in"] as? String == "path")

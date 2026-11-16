@@ -6,7 +6,7 @@ import JammerCore
 /// anything is opened as audio.
 public enum TimelineImport {
     public static func check(_ body: [String: Any], policy: FolderPolicy?) throws -> FCPXMLImport.Timeline {
-        if let unknown = body.keys.first(where: { $0 != "path" }) {
+        if let unknown = body.keys.first(where: { $0 != "path" && $0 != AgentAPI.rationale }) {
             throw BatchError("bad_request", "Unknown field \"\(unknown)\". import/fcpxml takes: path.")
         }
         guard let path = body["path"] as? String, path.hasPrefix("/") else {

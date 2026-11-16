@@ -12,9 +12,10 @@ public struct RestoreRequest: Sendable, Equatable {
     public var tracks: [UUID]?
 
     static let keys: Set<String> = ["kind", "amount", "start", "end", "tracks", "humFrequency", "sensitivity"]
+    static var fields: Set<String> { keys }
 
     public static func parse(_ body: [String: Any]) throws(AgentAPI.APIError) -> RestoreRequest {
-        if let unknown = body.keys.first(where: { !keys.contains($0) }) {
+        if let unknown = body.keys.first(where: { !keys.contains($0) && $0 != AgentAPI.rationale }) {
             throw .badRequest("Unknown field \"\(unknown)\". restore takes: \(keys.sorted().joined(separator: ", ")).")
         }
         guard let k = body["kind"] as? String else {

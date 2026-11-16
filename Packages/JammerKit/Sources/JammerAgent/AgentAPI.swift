@@ -235,10 +235,15 @@ public enum AgentAPI {
             guard let spec = Operations.named(op) else {
                 throw APIError(404, "not_found", "Step \(i): unknown op \"\(op)\". GET /api/v1/operations lists them.", step: i)
             }
+            // A step is its op and its params; anything else beside them would be something the caller
+            // thinks was used.
+            if let stray = (item as? [String: Any])?.keys.sorted().first(where: { !["op", "params", rationale].contains($0) }) {
+                throw APIError(400, "bad_request", "Step \(i) has no field \"\(stray)\" (did you mean it inside \"params\"?). A step takes: op, params.", step: i)
+            }
             var params: [String: JSONValue] = [:]
             if let p = dict["params"] {
                 guard let pd = p as? [String: Any] else { throw APIError(400, "bad_request", "Step \(i): \"params\" must be an object.", step: i) }
-                for (k, v) in pd {
+                for (k, v) in pd where k != rationale {
                     guard let jv = JSONValue(v) else { throw APIError(400, "bad_request", "Step \(i): \"\(k)\" must be a number, string or boolean.", step: i) }
                     params[k] = jv
                 }
@@ -416,6 +421,8 @@ public enum AgentAPI {
         Ranges: most operations take `start` and `end` in seconds. Without them they act on the selection (`select`, `select_all`); `gain` and `normalize` act on everything when there's no range and no selection. Edits work on all tracks at once, like a waveform editor.
 
         ## Errors
+
+        A name Jämmer doesn't know is refused, never skipped: a parameter of a step, a field beside `op` and `params`, a field in a JSON body, a query parameter. The answer is 400 `bad_request` with the name and what the call does take, and nothing is done (in `/steps`, no step runs). So a 2xx answer means every value you sent was used. The schemas in `/api/v1/operations` are closed (`"additionalProperties": false`). One name is accepted everywhere and used for nothing: `rationale`, a string saying why you make the call.
 
         Errors are JSON: `{"error": {"code": "…", "message": "…"}}`. A failed step also gives its index: `{"error": {"code": "step_failed", "message": "…", "step": 1}}`.
 

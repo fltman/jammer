@@ -238,6 +238,8 @@ enum AgentRouter {
                 session.status = "Requested by \(siblingNames[sib] ?? sib)"
             }
         }
+        // A name the route doesn't take, in the query or in a JSON body, is refused before anything is done.
+        try AgentAPI.checkParameters(method: r.method, path: s, query: Array(r.query.keys), body: r.body)
         func only(_ methods: String...) throws {
             guard methods.contains(r.method) else {
                 throw APIError(405, "method_not_allowed", "\(r.method) isn't allowed here; use \(methods.joined(separator: " or ")).")

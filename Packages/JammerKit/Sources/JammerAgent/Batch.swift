@@ -95,9 +95,12 @@ public struct BatchRequest: Sendable {
     }
 
     /// From an API body. With `policy`, every path must lie in a folder the user allowed.
+    static let fields: Set<String> = ["files", "folder", "steps", "jobs", "export", "output", "suffix", "overwrite", "allowPaid"]
+    static let exportFields: Set<String> = ["format", "bitDepth", "bitRate", "chapters", "compensate", "sampleRate", "targetLUFS"]
+
     public static func parse(_ body: [String: Any], policy: FolderPolicy?) throws -> BatchRequest {
-        let known: Set<String> = ["files", "folder", "steps", "jobs", "export", "output", "suffix", "overwrite", "allowPaid"]
-        if let k = body.keys.first(where: { !known.contains($0) }) { throw BatchError("bad_request", "Unknown field \"\(k)\". batch takes: \(known.sorted().joined(separator: ", ")).") }
+        let known = fields
+        if let k = body.keys.first(where: { !known.contains($0) && $0 != AgentAPI.rationale }) { throw BatchError("bad_request", "Unknown field \"\(k)\". batch takes: \(known.sorted().joined(separator: ", ")).") }
         func checked(_ path: String, _ what: String) throws -> URL {
             guard path.hasPrefix("/") else { throw BatchError("bad_request", "\(what) must be an absolute path.") }
             let url = FolderPolicy.canonical(path)
@@ -127,11 +130,22 @@ public struct BatchRequest: Sendable {
         var jobs: [JobStep] = []
         for item in (body["jobs"] as? [[String: Any]]) ?? [] {
             guard let op = item["op"] as? String, jobOps.contains(op) else { throw BatchError("bad_request", "jobs take op \(jobOps.sorted().joined(separator: ", ")).") }
+            // A job says what it is and with what, and nothing else; and only what that job takes.
+            if let k = item.keys.sorted().first(where: { !["op", "params"].contains($0) }) { throw BatchError("bad_request", "A job has no field \"\(k)\". It takes: op, params.") }
+            let takes = Operations.endpoints.first { $0.name == op }.map { Set($0.params.map(\.name)) }
             var params: [String: JSONValue] = [:]
-            for (k, v) in (item["params"] as? [String: Any]) ?? [:] { if let j = JSONValue(v) { params[k] = j } }
+            for (k, v) in (item["params"] as? [String: Any]) ?? [:] {
+                if let takes, !takes.contains(k), k != AgentAPI.rationale { throw BatchError("bad_request", "The job \(op) has no parameter \"\(k)\". It takes: \(takes.sorted().joined(separator: ", ")).") }
+                guard let j = JSONValue(v) else { throw BatchError("bad_request", "The job \(op): \"\(k)\" must be a number, string, boolean or list.") }
+                if k != AgentAPI.rationale { params[k] = j }
+            }
             jobs.append(JobStep(op: op, params: params))
         }
+        if let given = body["export"], !(given is [String: Any]) { throw BatchError("bad_request", "export must be an object.") }
         let e = (body["export"] as? [String: Any]) ?? [:]
+        if let k = e.keys.sorted().first(where: { !exportFields.contains($0) }) {
+            throw BatchError("bad_request", "export has no field \"\(k)\". It takes: \(exportFields.sorted().joined(separator: ", ")).")
+        }
         guard let format = ExportFormat(rawValue: (e["format"] as? String) ?? "wav"), ExportFormat.available.contains(format) else {
             throw BatchError("bad_request", "export.format must be one of \(ExportFormat.available.map(\.rawValue).joined(separator: ", ")).")
         }

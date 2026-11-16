@@ -595,6 +595,11 @@ public enum PlanParser {
             } else if let missing = a.params.first(where: { $0.required && s.params[$0.name] == nil }) {
                 out.dropped.append("\(s.op) (needs \(missing.name))")
                 continue
+            } else if let strange = s.params.keys.sorted().first(where: { name in name != AgentAPI.rationale && !a.params.contains { $0.name == name } }) {
+                // An endpoint of ours, or a sibling's operation: its schema is closed. A name it doesn't
+                // have is not sent to see what happens; the call isn't made (SIBLINGS.md §3).
+                out.dropped.append("\(s.op) (has no parameter \"\(strange)\"; it takes: \(a.params.map(\.name).sorted().joined(separator: ", ")))")
+                continue
             }
             out.steps.append(s)
         }

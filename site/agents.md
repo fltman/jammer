@@ -120,6 +120,8 @@ Ranges: most operations take `start` and `end` in seconds. Without them they act
 
 ## Errors
 
+A name Jämmer doesn't know is refused, never skipped: a parameter of a step, a field beside `op` and `params`, a field in a JSON body, a query parameter. The answer is 400 `bad_request` with the name and what the call does take, and nothing is done (in `/steps`, no step runs). So a 2xx answer means every value you sent was used. The schemas in `/api/v1/operations` are closed (`"additionalProperties": false`). One name is accepted everywhere and used for nothing: `rationale`, a string saying why you make the call.
+
 Errors are JSON: `{"error": {"code": "…", "message": "…"}}`. A failed step also gives its index: `{"error": {"code": "step_failed", "message": "…", "step": 1}}`.
 
 | Status | Code | Meaning |

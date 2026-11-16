@@ -305,11 +305,19 @@ public final class PluginInstance: InsertUnit, @unchecked Sendable {
 
     deinit { jm_unit_release(unit) }
 
+    /// Whether the component is there: in the component manager's list, or, for one registered a moment
+    /// ago (the list hears of those a little late), in the component registry itself.
+    static func isInstalled(_ plugin: PluginID) -> Bool {
+        if AVAudioUnitComponentManager.shared().components(matching: plugin.componentDescription).first != nil { return true }
+        var description = plugin.componentDescription
+        return AudioComponentFindNext(nil, &description) != nil
+    }
+
     /// Instantiates and initializes `plugin` for non-interleaved float at `sampleRate`.
     /// In-process unless `outOfProcess` (safe mode).
     public static func make(_ plugin: PluginID, channels: Int, sampleRate: Double, state: Data? = nil,
                             outOfProcess: Bool = false) async throws -> PluginInstance {
-        guard AVAudioUnitComponentManager.shared().components(matching: plugin.componentDescription).first != nil else {
+        guard isInstalled(plugin) else {
             throw PluginError.notFound("No Audio Unit \(plugin) is installed.")
         }
         let av: AVAudioUnit
@@ -334,7 +342,7 @@ public final class PluginInstance: InsertUnit, @unchecked Sendable {
     public static func makeBlocking(_ plugin: PluginID, channels: Int, sampleRate: Double, state: Data? = nil,
                                     outOfProcess: Bool = false) throws -> PluginInstance {
         dispatchPrecondition(condition: .notOnQueue(.main))
-        guard AVAudioUnitComponentManager.shared().components(matching: plugin.componentDescription).first != nil else {
+        guard isInstalled(plugin) else {
             throw PluginError.notFound("No Audio Unit \(plugin) is installed.")
         }
         final class Box: @unchecked Sendable { var unit: AVAudioUnit?; var error: Error? }

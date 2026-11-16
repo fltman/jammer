@@ -85,6 +85,15 @@ public struct OperationSpec: Sendable, Identifiable {
     public var schema: [String: Any] {
         var props: [String: Any] = [:]
         for p in allParams { props[p.name] = p.schema }
+        // Settings that depend on a sort are published per sort on the property that carries the sort
+        // (SIBLINGS.md §3): a closed schema each, with ranges and defaults. An extension key, not oneOf,
+        // which tool-calling services reject; it is not part of what a model is given as a tool.
+        if params.contains(where: { $0.name == "kind" }), params.contains(where: { $0.name == "humFrequency" }), var kind = props["kind"] as? [String: Any] {
+            kind["x-byType"] = Operations.restoreByType
+            props["kind"] = kind
+        }
+        // Accepted on everything and used for nothing: where a model says why it makes the call.
+        props[AgentAPI.rationale] = ["type": "string", "description": "Optional: why you are making this call. Accepted and ignored."]
         return ["type": "object", "properties": props, "required": allParams.filter(\.required).map(\.name), "additionalProperties": false]
     }
 
@@ -338,6 +347,18 @@ public enum Operations {
     /// Work that has an endpoint of its own (jobs, analysis, listening), described the same
     /// way so agents and assistants see one list. Not valid in `steps`.
     /// Computed: the kinds depend on what the app registered (reverb reduction can be left out of a build).
+    /// What each repair takes besides where and on which tracks: `amount` for all of them, and the one
+    /// or two that belong to that repair alone (the parser refuses them with any other kind).
+    static var restoreByType: [String: Any] {
+        var out: [String: Any] = [:]
+        for kind in Restoration.availableKinds {
+            var props: [String: Any] = ["amount": ["type": "number", "minimum": 0, "maximum": 1, "default": Double(kind.defaultAmount)] as [String: Any]]
+            if kind == .dehum { props["humFrequency"] = ["type": "number", "minimum": 20, "maximum": 400, "description": "Without it 50 or 60 Hz is found."] as [String: Any] }
+            if kind == .declick { props["sensitivity"] = ["type": "number", "minimum": 0.1, "maximum": 10, "default": 1] as [String: Any] }
+            out[kind.rawValue] = ["type": "object", "properties": props, "additionalProperties": false] as [String: Any]
+        }
+        return out
+    }
     static var restoreParams: [OperationSpec.Param] { [
         .init("kind", .string, "The repair.", required: true, options: Restoration.availableKinds.map(\.rawValue)),
         .init("amount", .number, "Blend between the original (0) and the full repair (1). Default 1" + (Restoration.dereverber != nil ? "; for dereverb 0.7." : "."), range: 0...1),
@@ -574,7 +595,7 @@ public enum StepRunner {
         for p in spec.params where p.required && step.params[p.name] == nil {
             throw StepFailure("\(step.op) needs \"\(p.name)\".")
         }
-        for (key, value) in step.params {
+        for (key, value) in step.params where key != AgentAPI.rationale {
             guard let p = spec.params.first(where: { $0.name == key }) else {
                 throw StepFailure("\(step.op) has no parameter \"\(key)\". It takes: \(spec.params.map(\.name).joined(separator: ", ")).")
             }
