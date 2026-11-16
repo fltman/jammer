@@ -101,7 +101,12 @@ public enum AudioImporter {
         // By what it says of itself first, so a long file is refused before any of it is written…
         let claimed = Double(max(0, file.length)) * rate / input.sampleRate * Double(channels) * 4
         guard claimed <= Double(limit) else { throw tooLarge(claimed) }
-        guard let output = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: rate,
+        // Another rate than the document's: the file is decoded at its own rate and converted by the app's one
+        // converter (r8brain, registered at SampleRateConversion), the same that exports use. Without it
+        // (a build that leaves it out) the system's converter does both, as it did before 2026-11-16.
+        let stream = input.sampleRate != rate ? try SampleRateConversion.factory?(input.sampleRate, rate, channels) : nil
+        let decodeRate = stream == nil ? rate : input.sampleRate
+        guard let output = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: decodeRate,
                                          channels: AVAudioChannelCount(channels), interleaved: true) else {
             throw AudioFileError.unsupported("Unsupported channel layout in \(url.lastPathComponent).")
         }
@@ -119,7 +124,7 @@ public enum AudioImporter {
         converter.sampleRateConverterAlgorithm = AVSampleRateConverterAlgorithm_Mastering
         let chunk: AVAudioFrameCount = 32_768
         guard let inBuf = AVAudioPCMBuffer(pcmFormat: input, frameCapacity: chunk) else { throw AudioFileError.unsupported("Out of memory.") }
-        let outCapacity = AVAudioFrameCount(Double(chunk) * rate / input.sampleRate) + 1_024
+        let outCapacity = AVAudioFrameCount(Double(chunk) * decodeRate / input.sampleRate) + 1_024
         guard let outBuf = AVAudioPCMBuffer(pcmFormat: output, frameCapacity: outCapacity) else { throw AudioFileError.unsupported("Out of memory.") }
         let total = max(1, Double(file.length))
         final class State: @unchecked Sendable { var done = false; var error: Error? }
@@ -158,13 +163,22 @@ public enum AudioImporter {
             }
             if outBuf.frameLength > 0, let data = outBuf.floatChannelData {
                 // …and by what actually comes out, since the header can say less than there is.
-                written += Int64(outBuf.frameLength) * Int64(channels) * 4
-                guard written <= limit else { throw tooLarge(Double(written)) }
-                try writer.write(UnsafeBufferPointer(start: data[0], count: Int(outBuf.frameLength) * channels))
+                let block = UnsafeBufferPointer(start: data[0], count: Int(outBuf.frameLength) * channels)
+                if let stream {
+                    let converted = stream.process(Array(block))
+                    written += Int64(converted.count) * 4
+                    guard written <= limit else { throw tooLarge(Double(written)) }
+                    try writer.write(converted)
+                } else {
+                    written += Int64(block.count) * 4
+                    guard written <= limit else { throw tooLarge(Double(written)) }
+                    try writer.write(block)
+                }
             }
             progress(min(1, Double(file.framePosition) / total))
             if status == .endOfStream || status == .error { break }
         }
+        if let stream { try writer.write(stream.finish()) }
         try writer.finish()
         finished = true
         return (dest, Double(max(0, file.length)) / input.sampleRate)

@@ -90,8 +90,8 @@ if hasR8Brain {
     package.targets += [
         // The one translation unit that includes r8brain's headers (header-only, with its Ooura FFT).
         .target(name: "JammerResampleC", cxxSettings: [.headerSearchPath("../../Vendor/r8brain"), .unsafeFlags(["-w"])]),
-        .target(name: "JammerResample", dependencies: ["JammerResampleC"]),
-        .testTarget(name: "JammerResampleTests", dependencies: ["JammerResample", "JammerCore"]),
+        .target(name: "JammerResample", dependencies: ["JammerResampleC", "JammerCore"]),
+        .testTarget(name: "JammerResampleTests", dependencies: ["JammerResample", "JammerCore", "JammerAgent"]),
     ]
 }
 

@@ -1,4 +1,5 @@
 import Foundation
+import JammerCore
 import JammerResampleC
 
 /// Sample rate conversion for exports, with r8brain-free-src (see docs/LICENSES.md and docs/MASTERING.md
@@ -11,7 +12,15 @@ public final class Resampler {
     }
 
     /// The rates an export may ask for.
-    public static let rates: [Double] = [8_000, 11_025, 16_000, 22_050, 32_000, 44_100, 48_000, 88_200, 96_000, 176_400, 192_000]
+    public static var rates: [Double] { SampleRateConversion.rates }
+
+    /// Makes this converter the one the app converts with (`SampleRateConversion.factory`). Called once at launch.
+    public static func register() {
+        SampleRateConversion.factory = { from, to, channels in
+            let r = try Resampler(from: from, to: to, channels: channels)
+            return ({ r.process($0) }, { r.finish() })
+        }
+    }
     public static var version: String { String(cString: jr_version()) }
 
     public let from: Double, to: Double, channels: Int

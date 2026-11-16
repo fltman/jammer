@@ -1,7 +1,6 @@
 import AppKit
 import JammerAgent
 import JammerCore
-import JammerResample
 import JammerPlugins
 import JammerStems
 import Network
@@ -1060,8 +1059,8 @@ enum AgentRouter {
         // Another sample rate for the file than the document's: only the rates the converter is offered at.
         var sampleRate: Double?
         if let v = obj["sampleRate"] {
-            guard let n = v as? NSNumber, CFGetTypeID(n) != CFBooleanGetTypeID(), Resampler.rates.contains(n.doubleValue) else {
-                throw APIError.badRequest("sampleRate must be one of \(Resampler.rates.map { String(Int($0)) }.joined(separator: ", ")).")
+            guard let n = v as? NSNumber, CFGetTypeID(n) != CFBooleanGetTypeID(), SampleRateConversion.rates.contains(n.doubleValue) else {
+                throw APIError.badRequest("sampleRate must be one of \(SampleRateConversion.ratesList).")
             }
             if format == .opus, n.doubleValue != 48_000 { throw APIError.badRequest("opus is always written at 48000 Hz; leave sampleRate out or give 48000.") }
             sampleRate = n.doubleValue

@@ -5,6 +5,7 @@ import AppKit
 import JammerAgent
 import JammerAudio
 import JammerCore
+import JammerResample
 import JammerDenoise
 import JammerDiarize
 import JammerMP3
@@ -94,6 +95,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         #endif
         // Tempo and beats: the system's own analysis, on this Mac.
         MusicRhythm.register()
+        // The one sample rate converter (exports, batch, imports at another rate).
+        Resampler.register()
         // MP3 through LAME, a separate dynamic framework (LGPL).
         MP3Writer.register()
         // Diarisation: the Community-1 model, fetched from the user's model source on first use.

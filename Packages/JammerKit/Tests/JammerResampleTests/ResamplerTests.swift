@@ -1,10 +1,12 @@
 import Foundation
 import Testing
+import JammerAgent
+import JammerCore
 @testable import JammerResample
 
 /// The converter against what it should do to signals whose answer is known. A sine stays a sine of the
 /// same frequency and level; a tone above the new rate's half must be gone, not folded back; nothing moves.
-@Suite("Sample rate conversion")
+@Suite("Sample rate conversion", .serialized)
 struct ResamplerTests {
     static func sine(_ hz: Double, rate: Double, seconds: Double, amp: Double = 0.5) -> [Float] {
         (0..<Int(rate * seconds)).map { Float(amp * sin(2 * .pi * hz * Double($0) / rate)) }
@@ -178,5 +180,79 @@ struct ResamplerTests {
             let y = try Resampler.convert(Self.sine(hz, rate: 48_000, seconds: 2), channels: 1, from: 48_000, to: 44_100)
             print("RESAMPLE FIGURE 48000→44100 \(Int(hz)) Hz (over the new half rate): \(String(format: "%.1f", Self.rmsDB(Self.middle(y, rate: 44_100)) - 10 * log10(0.125))) dB")
         }
+    }
+
+    /// Importing a file at another rate than the document's used the system's converter until 2026-11-16
+    /// and uses this one since. The same file through both: the same length, and the same audio within
+    /// −90 dB for a signal under 18 kHz. (Projects made before point at files that were already
+    /// converted, and those are not touched.)
+    @Test("An import at another rate: the same result as the system's converter gave, within −90 dB", .serialized)
+    func importAgrees() throws {
+        let dir = FileManager.default.temporaryDirectory.appending(path: "jammer-import-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir); SampleRateConversion.factory = nil }
+        let n = 44_100 * 3
+        var x = [Float](repeating: 0, count: n * 2)
+        for (k, hz) in stride(from: 110.0, to: 18_000, by: 937).enumerated() {
+            for i in 0..<n { let v = Float(0.02 * sin(2 * .pi * hz * Double(i) / 44_100 + Double(k))); x[i * 2] += v; x[i * 2 + 1] += v * 0.5 }
+        }
+        let file = dir.appending(path: "in.wav")
+        let w = try WAVWriter(url: file, options: .init(encoding: .float32, channels: 2, sampleRate: 44_100))
+        try w.write(x); try w.finish()
+        func imported() throws -> [Float] {
+            let r = try AudioImporter.importFile(file, sampleRate: 48_000, mediaFolder: dir.appending(path: UUID().uuidString))
+            #expect(r.source.info.sampleRate == 48_000 && r.source.info.channels == 2)
+            return SourcePool().read(r.source, from: 0, count: Int(r.source.info.frames))
+        }
+        SampleRateConversion.factory = nil
+        let system = try imported()
+        Resampler.register()
+        let ours = try imported()
+        #expect(ours.count == 48_000 * 3 * 2 && abs(system.count - ours.count) <= 2 * 2, "\(system.count) \(ours.count)")
+        let m = min(system.count, ours.count), a = 48_000, b = m - 48_000
+        let diff = zip(system[a..<b], ours[a..<b]).map { $0 - $1 }
+        let level = Self.rmsDB(diff[...]) - Self.rmsDB(ours[a..<b])
+        print("RESAMPLE IMPORT system converter vs r8brain: \(system.count / 2) and \(ours.count / 2) frames, difference \(String(format: "%.1f", level)) dB")
+        #expect(level < -90)
+        // The same rate: no converter is asked, and the audio is the file's.
+        let same = try AudioImporter.importFile(file, sampleRate: 44_100, mediaFolder: dir.appending(path: "same"))
+        #expect(SourcePool().read(same.source, from: 0, count: n) == x)
+    }
+
+    @Test("Batch export at another sample rate: the same field and the same refusals as a single export", .serialized)
+    func batch() async throws {
+        let dir = FileManager.default.temporaryDirectory.appending(path: "jammer-batch-rate-\(UUID().uuidString)").resolvingSymlinksInPath()
+        try FileManager.default.createDirectory(at: dir.appending(path: "in"), withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir); SampleRateConversion.factory = nil }
+        let file = dir.appending(path: "in/talk.wav")
+        let w = try WAVWriter(url: file, options: .init(encoding: .int24, channels: 2, sampleRate: 48_000, markers: [FileMarker(position: 48_000, length: 0, name: "One second")]))
+        try w.write(Self.sine(997, rate: 48_000, seconds: 2).flatMap { [$0, $0] }); try w.finish()
+        let policy = FolderPolicy(allowed: [dir])
+        func body(_ export: [String: Any], out: String) -> [String: Any] { ["files": [file.path], "output": dir.appending(path: out).path, "export": export] }
+        // Without the converter in the build it is refused before anything runs.
+        SampleRateConversion.factory = nil
+        #expect(throws: BatchError.self) { try BatchRequest.parse(body(["format": "wav", "sampleRate": 44_100], out: "x"), policy: policy) }
+        Resampler.register()
+        #expect(throws: BatchError.self) { try BatchRequest.parse(body(["format": "wav", "sampleRate": 44_000], out: "x"), policy: policy) }
+        #expect(throws: BatchError.self) { try BatchRequest.parse(body(["format": "wav", "sampleRate": true], out: "x"), policy: policy) }
+        #expect(throws: BatchError.self) { try BatchRequest.parse(body(["format": "opus", "sampleRate": 44_100], out: "x"), policy: policy) }
+        let result = await BatchRunner.run(try BatchRequest.parse(body(["format": "wav", "bitDepth": 24, "sampleRate": 44_100], out: "out"), policy: policy), media: dir.appending(path: "media"))
+        #expect(result.failed.isEmpty, "\(result.failed)")
+        let out = try #require(try FileManager.default.contentsOfDirectory(at: dir.appending(path: "out"), includingPropertiesForKeys: nil).first { $0.pathExtension == "wav" })
+        let info = try AudioFileReader.info(at: out)
+        #expect(info.sampleRate == 44_100 && info.frames == 88_200 && info.channels == 2)
+        // The marker moved with the audio, and the tone is the same tone.
+        #expect(info.markers.first?.position == 44_100 && info.markers.first?.name == "One second")
+        let y = SourcePool().read(SourceRef(name: "o", path: out.path, info: info), from: 0, count: 88_200)
+        let t = Self.tone(Self.middle(stride(from: 0, to: y.count, by: 2).map { y[$0] }, rate: 44_100), hz: 997, rate: 44_100)
+        #expect(abs(20 * log10(t.amp / 0.5)) < 0.01 && t.residualDB < -100, "\(t)")
+        // Nothing left behind in the output folder but the file.
+        #expect(try FileManager.default.contentsOfDirectory(atPath: dir.appending(path: "out").path).filter { !$0.hasPrefix(".DS") }.count == 1)
+        // The same rate as the file: no conversion, and the audio is the source's, bit for bit.
+        let same = await BatchRunner.run(try BatchRequest.parse(body(["format": "wav", "bitDepth": 24, "sampleRate": 48_000], out: "same"), policy: policy), media: dir.appending(path: "media"))
+        #expect(same.failed.isEmpty)
+        let s = try #require(try FileManager.default.contentsOfDirectory(at: dir.appending(path: "same"), includingPropertiesForKeys: nil).first { $0.pathExtension == "wav" })
+        let sInfo = try AudioFileReader.info(at: s), fInfo = try AudioFileReader.info(at: file)
+        #expect(SourcePool().read(SourceRef(name: "s", path: s.path, info: sInfo), from: 0, count: 96_000) == SourcePool().read(SourceRef(name: "f", path: file.path, info: fInfo), from: 0, count: 96_000))
     }
 }

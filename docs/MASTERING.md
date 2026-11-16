@@ -104,7 +104,7 @@ The converter is r8brain-free-src 7.7 by Aleksey Vaneev of Voxengo (MIT), one co
 
 **In the app** (2026-11-16), a 48 kHz stereo document of 25.08 s: WAV 24-bit at 44.1 kHz, FLAC at 96 kHz, MP3 192 kbps and AAC at 44.1 kHz, and WAV 16-bit at 16 kHz with dither all came out at the rate asked, the right length, with `X-Jammer-Sample-Rate` saying so (and `X-Jammer-Dither: tpdf` on the last); 44 000 Hz was refused with the list of rates, and Opus at 44.1 kHz with "opus is always written at 48000 Hz". The 44.1 kHz WAV against ffmpeg's own conversion of the 48 kHz export of the same speech: same number of frames, difference −79 dB. (That is real speech with content up to the band edge, where the two converters' filters differ, compared through 24-bit files; the band-limited comparison above is the measure of agreement.) The ACX check on the 48 kHz document was then measured on the converted MP3, with `format` met.
 
-**Not done:** a sample rate in the batch export; conversion of imported files to the document's rate uses the earlier path and has not been moved to this converter.
+**Also through this converter since the same day:** the batch export (`export.sampleRate`, the same field and the same refusals) and the import of a file at another rate than the document's (the same file through the system's converter and through this one: same length, difference −145.4 dB; `docs/CHANGES.md` says what changed and what is still on the system's converter). The converter registers at `SampleRateConversion` in the core, so there is one place a rate changes.
 
 ## Not built yet
 

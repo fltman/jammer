@@ -27,6 +27,8 @@ A recipe is a small JSON file in `~/Library/Application Support/Jammer/Recipes`,
 
 `jobs` can be `restore`, `transcribe`, `diarize` and `separate`; `steps` are the editing commands (see [the guide](../agents.md#operations)).
 
+A batch run by an agent can also write the files at another sample rate than their own, with `"sampleRate"` in `"export"` (for example `{"format": "mp3", "bitRate": 192000, "sampleRate": 44100}`); the recipes in the window keep each file's own rate.
+
 ## Agents and folders
 
 An agent can run batches too, but only inside folders you've allowed: **Jämmer › Settings… › Agents › Folders agents may use**. The list starts empty, so until you add a folder an agent can't read or write any file by its path. See [Agents](07-agents.md).

@@ -2,7 +2,6 @@ import AppKit
 import JammerAgent
 import JammerAudio
 import JammerCore
-import JammerResample
 import JammerEngine
 import Observation
 
@@ -641,20 +640,10 @@ final class EditorSession {
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             scratch = dir
             let file = dir.appending(path: "converted.wav")
-            let from = project.sampleRate, channels = project.channels, total = Double(asked.count)
+            let from = project.sampleRate, channels = project.channels
             try UploadStore.checkSpace(for: Int64(Double(asked.count) * to / from) * Int64(channels) * 4, at: dir)
-            let converted = try await Task.detached(priority: .userInitiated) { () -> SourceRef in
-                let converter = try Resampler(from: from, to: to, channels: channels)
-                let writer = try WAVWriter(url: file, options: .init(encoding: .float32, channels: channels, sampleRate: to))
-                var done = 0.0
-                try mixed.render(asked) { block in
-                    try writer.write(converter.process(Array(block)))
-                    done += Double(block.count / channels)
-                    progress(done / total * 0.5)
-                }
-                try writer.write(converter.finish())
-                try writer.finish()
-                return SourceRef(name: "converted", path: file.path, info: try AudioFileReader.info(at: file))
+            let converted = try await Task.detached(priority: .userInitiated) {
+                try SampleRateConversion.render(mixed, range: asked, to: to, into: file) { progress($0 * 0.5) }
             }.value
             project = Project(source: converted)
             pool = SourcePool()

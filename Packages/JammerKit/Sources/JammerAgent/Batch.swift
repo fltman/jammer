@@ -61,6 +61,8 @@ public struct BatchRequest: Sendable {
     /// The loudness the files are delivered at, when the request gives one (`export.targetLUFS`)
     /// or ends its steps with a loudness preset. With it, mp3 and aac are measured after
     /// encoding and corrected (`LoudnessDelivery`), unless `compensate` is false.
+    /// The files' sample rate when it is to differ from each source's own (`export.sampleRate`).
+    public var sampleRate: Double?
     public var loudnessTarget: LoudnessDelivery.Target?
     public var compensate = true
 
@@ -158,10 +160,18 @@ public struct BatchRequest: Sendable {
             guard let b = c as? Bool else { throw BatchError("bad_request", "export.compensate must be true or false.") }
             request.compensate = b
         }
+        if let v = e["sampleRate"] {
+            guard let n = v as? NSNumber, CFGetTypeID(n) != CFBooleanGetTypeID(), SampleRateConversion.rates.contains(n.doubleValue) else {
+                throw BatchError("bad_request", "export.sampleRate must be one of \(SampleRateConversion.ratesList).")
+            }
+            if format == .opus, n.doubleValue != 48_000 { throw BatchError("bad_request", "opus is always written at 48000 Hz; leave export.sampleRate out or give 48000.") }
+            guard SampleRateConversion.factory != nil else { throw BatchError("bad_request", "Sample rate conversion isn't available in this build.") }
+            request.sampleRate = n.doubleValue
+        }
         try request.checkSources()
         return request
     }
-    static let exportKeys: Set<String> = ["format", "bitDepth", "bitRate", "chapters", "targetLUFS", "compensate"]
+    static let exportKeys: Set<String> = ["format", "bitDepth", "bitRate", "chapters", "targetLUFS", "compensate", "sampleRate"]
 }
 
 public struct BatchResult: Sendable, Equatable {
@@ -259,26 +269,40 @@ public enum BatchRunner {
 
     static func export(_ project: Project, pool: SourcePool, to url: URL, request: BatchRequest) throws {
         guard project.length > 0 else { throw BatchError("empty", "Nothing is left to export.") }
-        let plan = PlanCompiler.mixBlocking(project, pool: pool)
-        let range: Range<Frame> = 0..<project.length
+        let original = project
+        var project = project
+        var plan = PlanCompiler.mixBlocking(project, pool: pool)
+        var range: Range<Frame> = 0..<project.length
         // Written under another name first, so a failed export never leaves half a file where a good one was.
         let tmp = url.deletingLastPathComponent().appending(path: ".\(UUID().uuidString.prefix(8)).\(url.pathExtension)")
         defer { try? FileManager.default.removeItem(at: tmp) }
+        // Another sample rate: the mix converted once, and the file made from that. Markers move with it; chapters are in seconds.
+        let converted = url.deletingLastPathComponent().appending(path: ".\(UUID().uuidString.prefix(8)).converted.wav")
+        defer { try? FileManager.default.removeItem(at: converted) }
+        if let rate = request.sampleRate, rate != project.sampleRate {
+            let scale = rate / project.sampleRate
+            var p = Project(source: try SampleRateConversion.render(plan, range: range, to: rate, into: converted))
+            p.markers = original.markers.map { m in var m = m; m.position = Frame((Double(m.position) * scale).rounded()); m.length = Frame((Double(m.length) * scale).rounded()); return m }
+            p.transcripts = []
+            project = p
+            plan = PlanCompiler.compile(p, pool: SourcePool())
+            range = 0..<p.length
+        }
         if request.export.format == .wav {
             var o = WAVWriter.Options(encoding: request.export.bitDepth == 16 ? .int16 : (request.export.bitDepth == 32 ? .float32 : .int24),
                                       channels: project.channels, sampleRate: project.sampleRate)
             o.markers = project.markers.map { FileMarker(position: $0.position, length: $0.length, name: $0.cueLabel) }
-            o.bext = project.sources.first?.info.bext
-            o.ixml = project.sources.first?.info.ixml
+            o.bext = original.sources.first?.info.bext
+            o.ixml = original.sources.first?.info.ixml
             let w = try WAVWriter(url: tmp, options: o)
             try plan.render(range) { try w.write($0) }
             try w.finish()
         } else {
             var o = request.export
             if request.chapters {
-                let chapters = project.chapters(in: range)
+                let chapters = original.chapters(in: 0..<original.length)
                 if o.format == .mp3 { o.id3 = ChapterFormats.id3Tag(chapters, title: url.deletingPathExtension().lastPathComponent) } else { o.chapters = chapters }
-                o.language = project.transcripts.first?.language
+                o.language = original.transcripts.first?.language
             }
             try EncodedWriter.export(plan, range: range, to: tmp, options: o)
         }
