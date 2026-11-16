@@ -87,7 +87,7 @@ Opening a document answers `201 Created`. To send the audio inside JSON instead:
 | GET | `/api/v1/uploads/{id}` | How many bytes have arrived. |
 | DELETE | `/api/v1/uploads/{id}` | Throws an upload away. |
 
-Document ids are stable while the window is open. A document a sibling app handed over to edit (SIBLINGS.md §6) has `"linkedFile": {"name", "format", "requester"}` in the document list; the user saves it back with ⌘S, and the API never writes that file. `GET /api/v1/documents` also lists documents the user opened.
+Document ids are stable while the window is open. A document a sibling app handed over to edit (SIBLINGS.md §6) has `"linkedFile": {"name", "format", "requester", "available"}` in the document list; the user saves it back with ⌘S, and the API never writes that file. `available` is `false`, with `reason` in words, when the file can no longer be reached or written (it was removed, made read-only, or replaced by another kind of file); the document is then still open with the edit in it. `GET /api/v1/documents` also lists documents the user opened.
 
 ### Big files
 

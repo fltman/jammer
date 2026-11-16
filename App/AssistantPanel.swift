@@ -143,6 +143,12 @@ final class AssistantModel {
         busy = true
         Task {
             defer { busy = false }
+            // A source other than the Mac's own model needs a model chosen there: without one the
+            // request is not quietly answered by another model than the one the settings name.
+            if source != "device", model.isEmpty {
+                messages.append(Message(role: .note, text: "Choose one of \(sourceName)'s models in the assistant's settings (the gear) first. Nothing was sent."))
+                return
+            }
             let p = planner
             // A paid model: the price first, and only on a yes.
             if p.paid {

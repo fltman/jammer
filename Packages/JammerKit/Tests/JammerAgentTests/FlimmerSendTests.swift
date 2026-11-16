@@ -21,6 +21,8 @@ final class PretendFlimmer: @unchecked Sendable {
     var puts = 0
     /// Fails the n:th PUT, as a connection that drops would.
     var failPut: Int?
+    /// Seconds each chunk takes to arrive, for the test that backs out in the middle of an upload.
+    var putDelay = 0.0
     var signedIn = true, viewer = false, hasEndpoint = true
     var undoSteps: [String] = []
     var seenHeaders: [[String: String]] = []
@@ -84,6 +86,7 @@ final class PretendFlimmer: @unchecked Sendable {
             uploads[id] = Upload(name: name, data: body, seconds: seconds)
             return answer(201, ["upload": ["id": id, "name": name, "bytes": body.count]], r)
         case ("PUT", let p) where p.hasPrefix("/api/v1/uploads/"):
+            if putDelay > 0 { Thread.sleep(forTimeInterval: putDelay) }
             puts += 1
             let id = String(p.dropFirst("/api/v1/uploads/".count))
             guard var u = uploads[id], u.open else { return fail(404, "not_found", r) }
@@ -451,8 +454,11 @@ struct FlimmerSendTests {
         let dropped = await failure { _ = try await FlimmerSend.prepare(p, mode: .mix, client: c, render: render(pool)) }
         #expect(dropped != nil && f.uploads.isEmpty && f.puts == 5 && f.undoSteps.isEmpty)
         // The user backs out in the middle (the task is cancelled): the same.
+        // Each chunk takes a moment, so the cancellation lands in the middle however busy the machine is
+        // (without it, a loaded test run could see all 29 chunks through before the test got to cancel).
         f.failPut = nil
         f.puts = 0
+        f.putDelay = 0.01
         let task = Task { try await FlimmerSend.prepare(p, mode: .mix, client: c, render: render(pool)) }
         while f.lock.withLock({ f.puts }) < 3 { try await Task.sleep(for: .milliseconds(1)) }
         task.cancel()
