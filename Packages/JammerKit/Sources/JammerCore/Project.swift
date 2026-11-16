@@ -138,6 +138,9 @@ public struct Track: Codable, Hashable, Sendable, Identifiable {
     /// Tracks that belong together (the stems of one separated track) share a group id.
     public var group: UUID?
     public var origin: Origin?
+    /// Set by `duck`: what the track played before it was ducked, so ducking again starts from
+    /// that and not from the ducked sound. Only meant while the track still plays the ducked file.
+    public var ducked: DuckOrigin?
 
     public init(id: UUID = UUID(), name: String, clips: [Clip] = [], gainDB: Double = 0, isMuted: Bool = false, inserts: [Insert] = []) {
         self.id = id
@@ -148,7 +151,7 @@ public struct Track: Codable, Hashable, Sendable, Identifiable {
         self.inserts = inserts
     }
 
-    private enum CodingKeys: String, CodingKey { case id, name, clips, gainDB, isMuted, inserts, group, origin }
+    private enum CodingKeys: String, CodingKey { case id, name, clips, gainDB, isMuted, inserts, group, origin, ducked }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -160,6 +163,7 @@ public struct Track: Codable, Hashable, Sendable, Identifiable {
         inserts = try c.decodeIfPresent([Insert].self, forKey: .inserts) ?? []
         group = try c.decodeIfPresent(UUID.self, forKey: .group)
         origin = try c.decodeIfPresent(Origin.self, forKey: .origin)
+        ducked = try c.decodeIfPresent(DuckOrigin.self, forKey: .ducked)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -172,6 +176,7 @@ public struct Track: Codable, Hashable, Sendable, Identifiable {
         if !inserts.isEmpty { try c.encode(inserts, forKey: .inserts) }
         try c.encodeIfPresent(group, forKey: .group)
         try c.encodeIfPresent(origin, forKey: .origin)
+        try c.encodeIfPresent(ducked, forKey: .ducked)
     }
 
     public var end: Frame { clips.map(\.end).max() ?? 0 }
@@ -312,7 +317,6 @@ public struct Project: Codable, Equatable, Sendable {
     public func frames(_ seconds: Double) -> Frame { Frame((seconds * sampleRate).rounded()) }
     public func seconds(_ frames: Frame) -> Double { Double(frames) / sampleRate }
 
-    /// Bar, beat and tick at `frame`.
     /// The repairs behind what `track` plays, for a file that is about to be made from it.
     public func repairsCarried(by track: Track) -> [String]? {
         var seen: [String] = []
@@ -320,6 +324,7 @@ public struct Project: Codable, Equatable, Sendable {
         return seen.isEmpty ? nil : seen
     }
 
+    /// Bar, beat and tick at `frame`.
     public func musicalPosition(at frame: Frame) -> MusicalPosition { tempo.position(at: frame, sampleRate: sampleRate) }
     /// The first frame at or after a bar, beat and tick.
     public func frame(at position: MusicalPosition) throws -> Frame { try tempo.frame(at: position, sampleRate: sampleRate) }
@@ -488,7 +493,9 @@ public struct Project: Codable, Equatable, Sendable {
 
     /// Removes sources no clip uses.
     public mutating func pruneSources() {
-        let used = Set(tracks.flatMap { $0.clips.map(\.sourceID) })
+        // What a track played before it was ducked is kept for as long as it plays the ducked file.
+        for t in tracks.indices where tracks[t].ducked != nil && tracks[t].clips != [tracks[t].ducked!.bounce] { tracks[t].ducked = nil }
+        let used = Set(tracks.flatMap { $0.clips.map(\.sourceID) + ($0.ducked?.clips.map(\.sourceID) ?? []) })
         sources.removeAll { !used.contains($0.id) }
         transcripts.removeAll { !used.contains($0.sourceID) }
         speakerTurns.removeAll { !used.contains($0.sourceID) }

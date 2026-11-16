@@ -413,6 +413,49 @@ struct SiblingTests {
         #expect(r[0].status == .failed)
     }
 
+    @Test("duck through steps: lowers one track under the other, says how, refuses in words, and is a core operation")
+    func duckThroughSteps() throws {
+        let n = 48_000 * 6
+        // Speech: a tone from 2 s to 4 s. Music: a tone all the way.
+        let speech = (0..<n).flatMap { i -> [Float] in let v = i >= 96_000 && i < 192_000 ? Float(0.1 * sin(Double(i) * 0.04)) : 0; return [v, v] }
+        let music = (0..<n).flatMap { i -> [Float] in let v = Float(0.25 * sin(Double(i) * 0.06)); return [v, v] }
+        let info = AudioFileInfo(container: .wav, sampleFormat: .float32, bigEndian: false, channels: 2, sampleRate: 48_000,
+                                 channelMask: nil, dataOffset: 0, frames: Int64(n), chunks: [], bext: nil, ixml: nil, markers: [])
+        let a = SourceRef(name: "speech", path: "/dev/null", info: info), b = SourceRef(name: "music", path: "/dev/null", info: info)
+        let pool = SourcePool()
+        pool.register(a.id, memory: speech, channels: 2)
+        pool.register(b.id, memory: music, channels: 2)
+        var project = Project(source: a)
+        let musicTrack = project.addTrack(source: b, name: "Music")
+        let speechTrack = project.tracks[0].id
+        let media = FileManager.default.temporaryDirectory.appending(path: "jammer-duck-step-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: media) }
+        let quiet: StepRunner.Measure = { _, _ in LoudnessResult(integrated: nil, range: nil, maxMomentary: nil, maxShortTerm: nil, samplePeak: 0, truePeak: 0, duration: 0) }
+        func run(_ params: [String: JSONValue], on p: Project) -> (StepResult, Project) {
+            var s = EditState(project: p, pool: pool, media: media)
+            let r = StepRunner.run([Step(op: "duck", params: params)], on: &s, measure: quiet)
+            return (r[0], s.project)
+        }
+        let (r, q) = run(["tracks": .array([.string(musicTrack.id.uuidString)]), "amount": .number(-10)], on: project)
+        #expect(r.status == .done && r.info["tracks"] == 1 && r.info["regions"] == 1 && r.info["replaced"] == 0 && r.ids["trigger"] == "level")
+        var solo = q
+        solo.tracks = [q.tracks[1]]
+        let out = PlanCompiler.compile(solo, pool: pool).render(from: 0, frames: n)
+        #expect(abs(20 * log10(Double(out[144_000 * 2 + 20] / music[144_000 * 2 + 20])) + 10) < 0.01 && out[0..<(48_000 * 2)] == music[0..<(48_000 * 2)])
+        // Again: in place of the first, not on top of it.
+        let (r2, _) = run(["tracks": .array([.string(musicTrack.id.uuidString)])], on: q)
+        #expect(r2.status == .done && r2.info["replaced"] == 1)
+        // Refusals, each with its reason, and nothing changed.
+        let (both, same) = run(["tracks": .array([.string(musicTrack.id.uuidString)]), "under": .array([.string(musicTrack.id.uuidString)])], on: project)
+        #expect(both.status == .failed && both.reason == "bad_request" && same == project && (both.error ?? "").contains("under"))
+        #expect(run(["tracks": .array([.string("nope")])], on: project).0.reason == "not_found")
+        #expect(run(["tracks": .array([.string(musicTrack.id.uuidString)]), "threshold": .number(-10)], on: project).0.reason == "no_speech")
+        #expect(run(["tracks": .array([.string(speechTrack.uuidString), .string(musicTrack.id.uuidString)])], on: project).0.reason == "needs_tracks")
+        #expect(run(["tracks": .array([])], on: project).0.status == .failed && run([:], on: project).0.status == .failed)
+        #expect(run(["tracks": .array([.string(musicTrack.id.uuidString)]), "amount": .number(3)], on: project).0.status == .failed)
+        #expect(Operations.named("duck")?.tier == "core")
+    }
+
     @Test("echo through steps, as a sibling would call it")
     func echoThroughSteps() throws {
         let signal = (0..<96_000).map { $0 % 9_600 == 0 ? Float(0.5) : 0 }

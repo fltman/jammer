@@ -46,6 +46,10 @@ WAV (16-bit, 24-bit or 32-bit float, with optional dither, keeping Broadcast Wav
 
 No. Edits are stored in the project and played from the originals; repairs and effects play from new files beside them. Opening a WAV creates a new untitled project, so saving never overwrites the WAV. The one exception is deliberate: a clip that Flimmer hands over to edit is saved back into that same file when you press ⌘S.
 
+## Can I put music under speech?
+
+Yes. Add the music as a track of its own (**File › Import Tracks…**), then **Audio › Duck Under Speech…** and tick the music: it goes down 12 dB while someone speaks and comes up in the pauses. The ducked track is a new file and Undo brings the old sound back. It isn't live, so if you cut the speech afterwards, duck again. See [Speakers](manual/16-speakers.md).
+
 ## Can I use my plugins?
 
 Yes: Audio Unit effects (AUv2 and AUv3) can be put on any track. They run inside Jämmer; with **Safe mode** on (Audio › Plugins…) they run in macOS's separate plugin host process instead. CLAP and VST plugins aren't supported yet.

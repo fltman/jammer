@@ -52,7 +52,11 @@ final class JammerDocument: NSDocument {
         if readFromPackage {
             // Once the window is up: audio the project names outside itself is asked about, not just read.
             DispatchQueue.main.async { [weak wc, weak s] in
-                if let w = wc?.window, let s { s.askAboutFilesOutside(in: w) }
+                if let w = wc?.window, let s {
+                    s.askAboutFilesOutside(in: w)
+                    // And settings it brings for plugins are not loaded into them unasked.
+                    s.askAboutPluginSettings(in: w)
+                }
             }
         }
         AgentRegistry.shared.register(s)

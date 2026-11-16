@@ -61,6 +61,17 @@ public enum ProjectSafety {
                 kept.append(c)
             }
             p.tracks[t].clips = kept
+            // What the track played before a ducking is used again by the next one: it has to pass the
+            // same checks, and be what this track still plays, or it is forgotten.
+            if let o = p.tracks[t].ducked {
+                let sound = o.clips.count <= 10_000 && o.clips.allSatisfy { c in
+                    guard let have = frames[c.sourceID] else { return false }
+                    return c.start >= 0 && c.start <= horizon && c.sourceStart >= 0 && c.sourceStart < have && c.length > 0
+                        && c.length <= have - c.sourceStart && c.gainDB.isFinite && abs(c.gainDB) <= 200
+                        && c.fadeIn >= 0 && c.fadeIn <= c.length && c.fadeOut >= 0 && c.fadeOut <= c.length
+                }
+                if !sound || kept != [o.bounce] { p.tracks[t].ducked = nil }
+            }
         }
         if dropped > 0 { notes.append("\(dropped) clip\(dropped == 1 ? "" : "s") pointed outside \(dropped == 1 ? "its" : "their") audio or the timeline and \(dropped == 1 ? "was" : "were") left out.") }
         let markers = p.markers.count

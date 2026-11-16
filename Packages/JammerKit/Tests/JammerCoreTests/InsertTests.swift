@@ -135,6 +135,57 @@ struct InsertTests {
         #expect(abs(v - 1_234) < 0.01)
     }
 
+    /// The settings this suite's gate withholds. Other tests' settings never match (the cutoff is this test's own).
+    static let held = Held()
+    final class Held: @unchecked Sendable {
+        private let lock = NSLock()
+        private var states: Set<Data> = []
+        func set(_ s: Set<Data>) { lock.withLock { states = s } }
+        func contains(_ d: Data) -> Bool { lock.withLock { states.contains(d) } }
+    }
+
+    @Test("Settings that haven't been allowed are not loaded into a plugin: not at the start, not into a running one, until they are allowed")
+    func withheldSettings() async throws {
+        let dir = TempDir()
+        var (p, pool) = try project(dir)
+        let dry = PlanCompiler.compile(p, pool: pool).render(from: 0, frames: Int(p.length))
+        // Settings as a project from elsewhere would bring them: a low-pass at 317.5 Hz.
+        let maker = try await PluginInstance.make(Self.lowpass, channels: 2, sampleRate: sr)
+        try maker.set("global.0", to: 317.5)
+        let foreign = try #require(maker.captureState())
+        try maker.set("global.0", to: 9_871.5)
+        let own = try #require(maker.captureState())
+        InsertUnits.withheld = { _, state in Self.held.contains(state) }
+        Self.held.set([foreign])
+        defer { Self.held.set([]) }
+        p.tracks[0].inserts = [Insert(plugin: Self.lowpass, name: "AULowpass", state: foreign)]
+        let id = p.tracks[0].inserts[0].id
+        // Not started; the reason is there for the app and for agents; the track plays without it.
+        let host = await InsertHost.make(for: p)
+        #expect(host.instance(id) == nil && host.failure(id) == .withheld("AULowpass") && host.failure(id)?.reason == "plugin_settings_withheld")
+        #expect(PlanCompiler.compile(p, pool: pool, inserts: host).render(from: 0, frames: Int(p.length)) == dry)
+        #expect(InsertHost.makeBlocking(for: p).failure(id) != nil)
+        await #expect(throws: PluginError.withheld(Self.lowpass.description)) { try await InsertUnits.make(Self.lowpass, channels: 2, sampleRate: 48_000, state: foreign) }
+        // Asked again, still no. Allowed: it starts, with those settings.
+        #expect(await host.sync(p) == false && host.instance(id) == nil)
+        Self.held.set([])
+        #expect(await host.sync(p) == true)
+        let unit = try #require(host.instance(id))
+        #expect(abs((unit.parameters.first { $0.identifier == "global.0" }?.value ?? 0) - 317.5) < 0.01 && host.failure(id) == nil)
+        #expect(PlanCompiler.compile(p, pool: pool, inserts: host).render(from: 0, frames: Int(p.length)) != dry)
+        // A running plugin isn't handed settings that aren't allowed either: it is stopped instead.
+        var q = p
+        q.tracks[0].inserts[0].state = own
+        #expect(await host.sync(q) == true && host.instance(id) != nil)
+        Self.held.set([foreign])
+        #expect(await host.sync(p) == true && host.instance(id) == nil && host.failure(id) == .withheld("AULowpass"))
+        // Settings made here (or no settings at all) are never in question.
+        #expect(await host.sync(q) == true && host.instance(id) != nil)
+        var plain = p
+        plain.tracks[0].inserts = [Insert(plugin: Self.lowpass, name: "AULowpass")]
+        #expect(await InsertHost.make(for: plain).instance(plain.tracks[0].inserts[0].id) != nil)
+    }
+
     @Test("A unit that isn't installed fails with plugin_not_found")
     func missing() async throws {
         await #expect(throws: PluginError.self) { try await PluginInstance.make(PluginID("aufx/zzzz/zzzz")!, channels: 2, sampleRate: 48_000) }

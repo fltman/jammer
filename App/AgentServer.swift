@@ -354,9 +354,11 @@ enum AgentRouter {
             case ["analysis"]:
                 try only("GET")
                 let range = try queryRange(r, session)
-                let result = await session.analyze(range)
+                let only = try namedTracks(session, (r.query["tracks"] ?? r.query["track"])?.split(separator: ",").map(String.init))
+                let result = await session.analyze(range, tracks: only)
                 var body = result.json
                 if let range { body["start"] = seconds(session, range.lowerBound); body["end"] = seconds(session, range.upperBound) }
+                if let only { body["tracks"] = session.project.tracks.filter { only.contains($0.id) }.map(\.id.uuidString) }
                 return .json(["analysis": body])
             case ["waveform"]:
                 try only("GET")
@@ -536,6 +538,7 @@ enum AgentRouter {
         if let live = session.inserts.instance(i.id) {
             unit = live
         } else {
+            if let failure = session.inserts.failure(i.id), case .withheld = failure { throw APIError.unprocessable(failure.reason, failure.localizedDescription) }
             do {
                 unit = try await InsertUnits.make(i.plugin, channels: session.project.channels, sampleRate: session.project.sampleRate,
                                                      state: i.state, outOfProcess: EditorSession.pluginSafeMode)
@@ -699,12 +702,27 @@ enum AgentRouter {
 
     /// Adds a track from audio sent like POST /documents (bytes, base64 JSON or upload).
     private static func addTrack(_ session: EditorSession, _ r: AgentAPI.Request) async throws -> Response {
+        // Where and how loud, in the same undo step (checked before the audio is taken in): ?at= seconds on the timeline, ?gainDB= the track's gain.
+        var at: Frame = 0, gain = 0.0
+        if let raw = r.query["at"] {
+            guard let v = Double(raw), v.isFinite, v >= 0, v <= 86_400 * 7 else { throw APIError.badRequest("at must be seconds from the start, 0 or more.") }
+            at = session.project.frames(v)
+        }
+        if let raw = r.query["gainDB"] {
+            guard let v = Double(raw), v.isFinite, (-96...24).contains(v) else { throw APIError.badRequest("gainDB must be between -96 and 24.") }
+            gain = v
+        }
         // A track plays at the document's sample rate, so audio at another rate is converted on the way in.
         let (source, warning) = try await importedSource(r, sampleRate: session.project.sampleRate)
         var p = session.project
         let track = p.addTrack(source: source, name: r.query["name"] ?? source.name)
+        if let t = p.tracks.firstIndex(where: { $0.id == track.id }) {
+            p.tracks[t].gainDB = gain
+            for c in p.tracks[t].clips.indices { p.tracks[t].clips[c].start += at }
+        }
         session.commit(p, action: "Add Track")
-        var answer: [String: Any] = ["track": ["id": track.id.uuidString, "name": track.name], "document": detail(session)]
+        var answer: [String: Any] = ["track": ["id": track.id.uuidString, "name": track.name, "gainDB": gain, "at": seconds(session, at)] as [String: Any],
+                                     "document": detail(session)]
         if let warning {
             answer["warning"] = warning
             session.status = warning
@@ -910,8 +928,24 @@ enum AgentRouter {
                                    "note": "Each column is [min, max] of the samples (−1…1) it covers.", "tracks": tracks]])
     }
 
+    /// The tracks a request names: nil when it names none, 404 for an id that isn't a track of the document.
+    private static func namedTracks(_ session: EditorSession, _ ids: [String]?) throws -> Set<UUID>? {
+        guard let ids else { return nil }
+        guard !ids.isEmpty else { throw APIError.badRequest("tracks must name at least one track.") }
+        var out = Set<UUID>()
+        for raw in ids {
+            guard let id = UUID(uuidString: raw.trimmingCharacters(in: .whitespaces)), session.project.tracks.contains(where: { $0.id == id }) else {
+                throw APIError.notFound("No track with id \(raw).")
+            }
+            out.insert(id)
+        }
+        return out
+    }
+
     private static func export(_ session: EditorSession, _ r: AgentAPI.Request) async throws -> Response {
         let obj = try json(r)
+        if let t = obj["tracks"], !(t is [String]) { throw APIError.badRequest("tracks must be a list of track ids.") }
+        let only = try namedTracks(session, obj["tracks"] as? [String])
         let formatName = (obj["format"] as? String ?? "wav").lowercased()
         guard let format = ExportFormat(rawValue: formatName), ExportFormat.available.contains(format) else {
             throw APIError.badRequest("format must be one of \(ExportFormat.available.map(\.rawValue).joined(separator: ", ")).")
@@ -968,7 +1002,8 @@ enum AgentRouter {
                 throw APIError.badRequest("targetLUFS is for mp3, aac and opus, where the encoder changes the loudness. Set the level of a \(format.rawValue) with loudness_preset or normalize.")
             }
             target = .init(integrated: n.doubleValue)
-        } else if !format.isLossless {
+        } else if !format.isLossless, only == nil {
+            // The preset was for the whole mix, not for some of its tracks.
             target = session.deliveryTarget
         }
         if let c = obj["compensate"] {
@@ -985,7 +1020,7 @@ enum AgentRouter {
         try UploadStore.checkSpace(for: bytes, at: tmp.deletingLastPathComponent())
         defer { try? FileManager.default.removeItem(at: tmp) }
         let delivery = try await session.export(to: tmp, options: .init(encoding: encoding, range: range, dither: obj["dither"] as? Bool ?? false, encoded: encoded,
-                                                                        chapters: obj["chapters"] as? Bool ?? true, loudness: target))
+                                                                        chapters: obj["chapters"] as? Bool ?? true, loudness: target, tracks: only))
         var headers = ["Content-Disposition": "attachment; filename=\"\(asciiName(session.name)).\(format.fileExtension)\""]
         if let d = delivery, let target {
             // What the file measures when decoded again, and what was added before the encoder to get there.

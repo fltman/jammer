@@ -32,3 +32,11 @@ A plugin that isn't installed on this Mac (a document from another computer) is 
 ## For agents
 
 The agent API can list the installed plugins, add and remove them, set parameters and bypass, and read a plugin's parameters with their ranges. It can't open plugin windows. See [the guide](../agents.md#plugins).
+
+## A project from someone else with plugin settings
+
+A project saves each plugin's settings, and settings are data that the plugin reads. Settings made in your own Jämmer are simply loaded. When a project brings settings that weren't made here (a project someone sent you, or your own from another Mac), Jämmer asks first: "This project wants to load settings into …", with the plugins listed.
+
+- **Open Without Them** is the safe answer for a project you don't know: those plugins aren't started, and their tracks play without them. Nothing in the project is changed.
+- **Load Settings** starts the plugins with the project's settings, and doesn't ask about those settings again.
+

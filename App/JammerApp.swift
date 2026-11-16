@@ -84,6 +84,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let model = Bundle.main.url(forResource: "DeepFilterNet3_onnx", withExtension: "tar.gz"), let d = try? Denoiser(modelPath: model) {
             d.register()
         }
+        // Saved plugin settings a project brings from elsewhere are asked about before they are loaded.
+        PluginStateTrust.install()
         #if JAMMER_CLAP
         // CLAP: found by a scan in a helper process, run in helper processes. A build can leave it
         // out (Config/Features.xcconfig), and releases do until it has been tried in a signed build.
@@ -227,6 +229,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                        op("Ride Each Speaker's Level", "level_speakers", ["mode": .string("dynamic")])]),
             submenu("Remove Bleed", [op("Gate Each Track Outside Its Speaker", "debleed", ["method": .string("gate")]),
                                      op("Cancel the Other Tracks' Leak", "debleed", ["method": .string("cancel")])]),
+            item("Duck Under Speech…", #selector(EditorWindowController.duckUnderSpeech(_:))),
             .separator(),
             item("Measure Loudness", #selector(EditorWindowController.analyzeLoudness(_:)), "l", [.command, .option]),
             item("Add Marker", #selector(EditorWindowController.addMarker(_:)), "m", [.command, .option]),

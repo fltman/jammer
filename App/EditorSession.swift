@@ -166,6 +166,7 @@ final class EditorSession {
     func commit(_ newProject: Project, action: String) {
         let old = project
         guard newProject != old else { return }
+        PluginStateTrust.noteMade(from: old, to: newProject)
         replace(with: newProject)
         // The history tree records the change; undo and redo move along it (a change after
         // an undo starts a branch rather than discarding the old future).
@@ -359,6 +360,10 @@ final class EditorSession {
                 status = info["limitedByPeak"] == 1
                     ? String(format: "Reached %.1f instead of %.0f LUFS: the peaks held it back (no limiter yet).", after, target)
                     : String(format: "%@: %.1f LUFS (%+.2f dB)", title, after, info["gainDB"] ?? 0)
+            } else if op == "duck", let info = r.first?.info, let regions = info["regions"] {
+                let n = Int(regions), by = params["amount"]?.double ?? -12
+                status = "Ducked under \(n) passage\(n == 1 ? "" : "s") of speech, \(by < 0 ? "−" : "")\(abs(by).formatted(.number.precision(.fractionLength(0...1)))) dB"
+                    + (info["replaced"] ?? 0 > 0 ? " (in place of the earlier ducking)" : "") + "."
             } else if let gain = r.first?.info["gainDB"] {
                 status = String(format: "%@: %+.2f dB", title, gain)
             } else {
@@ -457,11 +462,21 @@ final class EditorSession {
 
     // MARK: Analysis and export
 
-    func analyze(_ range: Range<Frame>? = nil) async -> LoudnessResult {
-        let plan = await PlanCompiler.mix(project, pool: pool, outOfProcess: Self.pluginSafeMode)
+    /// The project with only `tracks` in it, as they sound (gain, fades, effects), over the same
+    /// timeline. A track that is named plays even if it is muted: it was asked for.
+    func alone(_ tracks: Set<UUID>?) -> Project {
+        guard let tracks else { return project }
+        var p = project
+        p.tracks = p.tracks.filter { tracks.contains($0.id) }
+        for i in p.tracks.indices { p.tracks[i].isMuted = false }
+        return p
+    }
+
+    func analyze(_ range: Range<Frame>? = nil, tracks: Set<UUID>? = nil) async -> LoudnessResult {
+        let plan = await PlanCompiler.mix(alone(tracks), pool: pool, outOfProcess: Self.pluginSafeMode)
         let r = range ?? 0..<project.length
         let result = await Task.detached(priority: .userInitiated) { LoudnessMeter.measure(plan, r) }.value
-        if range == nil { lastAnalysis = result }
+        if range == nil, tracks == nil { lastAnalysis = result }
         return result
     }
 
@@ -478,6 +493,8 @@ final class EditorSession {
         /// Lossy formats: measure the file as written and correct the gain before the encoder
         /// until it meets this (at most two corrections, never past the ceiling).
         var loudness: LoudnessDelivery.Target?
+        /// Only these tracks (see `alone`); the file still covers the whole timeline, so stems line up.
+        var tracks: Set<UUID>?
     }
 
     /// The target of a loudness preset, while the document is still as that preset left it:
@@ -493,7 +510,7 @@ final class EditorSession {
     @discardableResult
     func export(to url: URL, options: ExportOptions, progress: @escaping @Sendable (Double) -> Void = { _ in }) async throws -> LoudnessDelivery? {
         // Units of its own: playback keeps going untouched while this renders.
-        let plan = await PlanCompiler.mix(project, pool: pool, outOfProcess: Self.pluginSafeMode)
+        let plan = await PlanCompiler.mix(alone(options.tracks), pool: pool, outOfProcess: Self.pluginSafeMode)
         let range = options.range ?? 0..<project.length
         guard !range.isEmpty else { throw EditError.emptyRange }
         let chapters = project.chapters(in: range)

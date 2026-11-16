@@ -130,6 +130,8 @@ public enum PluginError: Error, LocalizedError, Equatable {
     case unknownParameter(String)
     case outOfRange(String)
     case unknownPreset(String)
+    /// The plugin's saved settings came with a project and the user hasn't allowed them (the plugin's name).
+    case withheld(String)
 
     public var reason: String {
         switch self {
@@ -138,12 +140,14 @@ public enum PluginError: Error, LocalizedError, Equatable {
         case .failed: "plugin_failed"
         case .unknownParameter, .unknownPreset: "not_found"
         case .outOfRange: "out_of_range"
+        case .withheld: "plugin_settings_withheld"
         }
     }
 
     public var errorDescription: String? {
         switch self {
         case .notFound(let m), .unsupportedFormat(let m), .failed(let m), .unknownParameter(let m), .outOfRange(let m), .unknownPreset(let m): m
+        case .withheld(let name): "\(name) wasn't started: its settings came with this project, and the user hasn't allowed them to be loaded into the plugin. The track plays without it."
         }
     }
 }
@@ -230,6 +234,15 @@ public enum InsertUnits {
     /// build hosts only Audio Units.
     nonisolated(unsafe) public static var external: (@Sendable (_ plugin: PluginID, _ channels: Int, _ sampleRate: Double, _ state: Data?) throws -> any InsertUnit)?
 
+    /// Saved plugin settings are bytes handed to someone else's code. The ones a project brings with
+    /// it from elsewhere aren't loaded until the user has said yes; the app says which those are here.
+    /// nil: every state is loaded (tests, tools).
+    nonisolated(unsafe) public static var withheld: (@Sendable (_ plugin: PluginID, _ state: Data) -> Bool)?
+
+    static func check(_ plugin: PluginID, _ state: Data?) throws {
+        if let state, let withheld, withheld(plugin, state) { throw PluginError.withheld(plugin.description) }
+    }
+
     static func makeExternal(_ plugin: PluginID, channels: Int, sampleRate: Double, state: Data?) throws -> any InsertUnit {
         guard let external else { throw PluginError.notFound("This build can't run \(plugin.format.rawValue.uppercased()) plugins.") }
         do { return try external(plugin, channels, sampleRate, state) } catch let e as PluginError { throw e } catch {
@@ -239,6 +252,7 @@ public enum InsertUnits {
 
     /// A running unit for `plugin` at the project's rate and channel count.
     public static func make(_ plugin: PluginID, channels: Int, sampleRate: Double, state: Data? = nil, outOfProcess: Bool = false) async throws -> any InsertUnit {
+        try check(plugin, state)
         if plugin.format != .au {
             // Starting a helper process can take a moment: not on the caller's thread.
             return try await Task.detached(priority: .userInitiated) { try makeExternal(plugin, channels: channels, sampleRate: sampleRate, state: state) }.value
@@ -248,6 +262,7 @@ public enum InsertUnits {
 
     /// The same, waiting on this thread (background only).
     public static func makeBlocking(_ plugin: PluginID, channels: Int, sampleRate: Double, state: Data? = nil, outOfProcess: Bool = false) throws -> any InsertUnit {
+        try check(plugin, state)
         if plugin.format != .au { return try makeExternal(plugin, channels: channels, sampleRate: sampleRate, state: state) }
         return try PluginInstance.makeBlocking(plugin, channels: channels, sampleRate: sampleRate, state: state, outOfProcess: outOfProcess)
     }
@@ -491,6 +506,13 @@ public final class InsertHost: ChainProvider, @unchecked Sendable {
             let existing = lock.withLock { entries[insert.id] }
             if let existing {
                 guard existing.applied != insert.state else { continue }
+                // Settings that haven't been allowed aren't handed to a running plugin either (a step
+                // back in a project's own history can ask for them): the unit goes, the reason stays.
+                if let s = insert.state, InsertUnits.withheld?(insert.plugin, s) == true {
+                    lock.withLock { entries[insert.id] = nil; failed[insert.id] = .withheld(insert.name) }
+                    changed = true
+                    continue
+                }
                 do {
                     if let s = insert.state { try existing.instance.apply(s) }
                     lock.withLock { entries[insert.id]?.applied = insert.state }
@@ -500,7 +522,16 @@ public final class InsertHost: ChainProvider, @unchecked Sendable {
                 } catch {}
                 continue
             }
-            if lock.withLock({ failed[insert.id] }) != nil { continue }
+            if let f = lock.withLock({ failed[insert.id] }) {
+                // Withheld settings are tried again once they are allowed; other failures stay failures.
+                guard case .withheld = f, !(insert.state.map { InsertUnits.withheld?(insert.plugin, $0) ?? false } ?? false) else { continue }
+                lock.withLock { failed[insert.id] = nil }
+            }
+            if let s = insert.state, InsertUnits.withheld?(insert.plugin, s) == true {
+                lock.withLock { failed[insert.id] = .withheld(insert.name) }
+                changed = true
+                continue
+            }
             do {
                 let instance = try await InsertUnits.make(insert.plugin, channels: channels, sampleRate: sampleRate,
                                                           state: insert.state, outOfProcess: outOfProcess)

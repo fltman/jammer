@@ -65,9 +65,11 @@ public struct OperationSpec: Sendable, Identifiable {
 
     /// The operations an assistant with a small tool budget should get first ("core");
     /// the rest are "advanced" (SIBLINGS.md §3).
+    /// At most 15: when `duck` came in (2026-11-16), `echo` went to advanced, as the one least
+    /// central to editing speech.
     public static let core: Set<String> = ["delete", "gain", "fade_in", "fade_out", "normalize", "loudness_preset", "delete_words",
-                                           "echo", "transcribe", "get_transcript", "restore", "measure_loudness", "export", "diarize",
-                                           "level_speakers"]
+                                           "transcribe", "get_transcript", "restore", "measure_loudness", "export", "diarize",
+                                           "level_speakers", "duck"]
     public var tier: String { Self.core.contains(name) ? "core" : "advanced" }
 
     /// Every parameter including the document id in the path, for endpoints; GET parameters go in the query.
@@ -187,6 +189,17 @@ public enum Operations {
                        .init("tracks", .list, "Track ids. Default: every track (gate: those with speakers)."),
                        .init("amount", .number, "gate: dB outside the turns. Default -18.", range: -40...0),
                        .init("maxDelay", .number, "cancel: ms of spread around the found delay (the room or codec). Default 30.", range: 5...100)]),
+        .init("duck", "Duck Under Speech", "Lowers tracks (music, atmosphere) while there is speech on other tracks and lets them up in the pauses. Where the speech is comes from the speakers' turns when the controlling tracks have them (diarize first for the surest result), otherwise from their level (threshold). Each ducked track plays from a new file; outside the ducked stretches and their ramps the sound is untouched, and the original is one undo away. It isn't live: if the speech is moved or cut afterwards, run it again. Run again on a track that still plays its ducked file, it replaces the earlier ducking (it starts from the sound before it); stack: true ducks on top instead. A track that was edited after it was ducked is ducked as it is. info: tracks, regions (stretches held down), duckedSeconds, replaced (tracks whose earlier ducking was replaced), trigger (turns or level).",
+              params: [.init("tracks", .list, "Track ids to lower.", required: true),
+                       .init("under", .list, "Track ids whose speech decides. Default: every other unmuted track. Must not name a track that is in tracks."),
+                       .init("amount", .number, "dB while there is speech. Default -12.", range: -40...0),
+                       .init("threshold", .number, "LUFS (momentary) over which the deciding tracks count as speech, when they have no speaker turns. Default -40.", range: -70 ... -10),
+                       .init("attack", .number, "ms to go down. Default 150.", range: 5...2_000),
+                       .init("release", .number, "ms to come up. Default 600.", range: 50...5_000),
+                       .init("hold", .number, "ms to stay down after the speech stops, so short pauses don't pump. Default 400.", range: 0...5_000),
+                       .init("lookahead", .number, "ms before the speech that it starts going down. Default: the attack, so it is down when the first word comes.", range: 0...2_000),
+                       .init("stack", .boolean, "True to duck on top of an earlier ducking instead of replacing it."),
+                       start, end]),
         .init("set_track", "Change Track", "Changes one track: its gain, mute or name.",
               params: [.init("track", .string, "Track id.", required: true),
                        .init("gainDB", .number, "The track's gain in dB: the new value, not a change to the old one.", range: -96...24),
@@ -313,7 +326,7 @@ public enum Operations {
         .init("get_chapters", "Read Chapters", "The markers as Podcasting 2.0 chapters (JSON, version 1.2.0), optionally over start and end.",
               params: [start, end], edits: false, call: ("GET", "/api/v1/documents/{id}/chapters")),
         .init("measure_loudness", "Measure Loudness", "Integrated LUFS, loudness range, max momentary and short-term, sample and true peak.",
-              params: [start, end], edits: false, call: ("GET", "/api/v1/documents/{id}/analysis")),
+              params: [start, end, .init("tracks", .list, "Only these tracks, as they sound without the others (query: comma-separated).")], edits: false, call: ("GET", "/api/v1/documents/{id}/analysis")),
         .init("analyze_restoration", "Find Problems", "Looks for mains hum, clipping and clicks without changing anything.",
               params: [start, end, .init("tracks", .list, "Track ids (query: comma-separated).")], edits: false,
               call: ("GET", "/api/v1/documents/{id}/analysis/restoration")),
@@ -324,6 +337,7 @@ public enum Operations {
                        .init("bitDepth", .number, "wav 16, 24 or 32 (float); aiff, flac and alac 16 or 24. Default 24.", options: nil, range: 16...32),
                        .init("bitRate", .number, "aac (64000–320000, default 192000), mp3 (64000–320000, default 160000) and opus (16000–256000, default 96000), bits per second.", range: 16_000...320_000),
                        start, end, .init("dither", .boolean, "TPDF dither when writing 16 or 24-bit wav."),
+                       .init("tracks", .list, "Only these tracks, as they sound without the others; the file still covers the whole timeline."),
                        .init("chapters", .boolean, "Write the markers as chapters (default true): ID3 chapters in mp3, a chapter track in aac and alac, CHAPTERxxx comments in opus. wav keeps markers as cue points; aiff and flac have no chapters."),
                        .init("targetLUFS", .number, "mp3, aac and opus: deliver the file at this integrated loudness. The file is measured as written and the gain before the encoder corrected (at most two more encodes, never past −1 dBTP). Without it, the target is the loudness preset the document was last brought to, if nothing changed since.", range: -40 ... -5),
                        .init("compensate", .boolean, "false: encode once and leave the loudness as it comes out. Default true when there is a target.")],
@@ -690,6 +704,34 @@ public enum StepRunner {
                 return ["tracks": Double(report.tracks), "reductionDB": report.reductionDB]
             } catch let e as DebleedError {
                 throw StepFailure("debleed: \(e.localizedDescription)", reason: e.reason)
+            }
+        case "duck":
+            guard let pool = s.pool, let media = s.media else { throw StepFailure("duck needs the app.") }
+            func ids(_ key: String) throws -> [UUID]? {
+                guard let raw = p[key]?.strings else { return nil }
+                return try raw.map {
+                    guard let id = UUID(uuidString: $0) else { throw StepFailure("duck: no track with id \($0).", reason: "not_found") }
+                    return id
+                }
+            }
+            guard let wanted = try ids("tracks"), !wanted.isEmpty else { throw StepFailure("duck: tracks must name at least one track.") }
+            var settings = Ducking.Settings()
+            settings.amountDB = p["amount"]?.double ?? settings.amountDB
+            settings.threshold = p["threshold"]?.double ?? settings.threshold
+            settings.attackMs = p["attack"]?.double ?? settings.attackMs
+            settings.releaseMs = p["release"]?.double ?? settings.releaseMs
+            settings.holdMs = p["hold"]?.double ?? settings.holdMs
+            settings.lookaheadMs = p["lookahead"]?.double
+            if case .bool(let v)? = p["stack"] { settings.stack = v }
+            // The given range, else the selection, else everything.
+            let limit: Range<Frame>? = (p["start"] != nil || p["end"] != nil || !(s.selection?.isEmpty ?? true)) ? try range(wholeIfNone: true) : nil
+            do {
+                let (q, report) = try s.project.ducking(tracks: wanted, under: try ids("under"), settings: settings, range: limit, pool: pool, media: media)
+                s.project = q
+                s.made["trigger"] = report.trigger
+                return ["tracks": Double(report.tracks), "regions": Double(report.regions), "duckedSeconds": report.duckedSeconds, "replaced": Double(report.replaced)]
+            } catch let e as DuckError {
+                throw StepFailure("duck: \(e.localizedDescription)", reason: e.reason)
             }
         case "set_track":
             guard let id = UUID(uuidString: p["track"]?.string ?? ""), let t = project.tracks.firstIndex(where: { $0.id == id }) else {

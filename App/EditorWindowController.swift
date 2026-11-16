@@ -353,6 +353,52 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         session.perform(item.op, item.params)
     }
 
+    /// Audio › Duck Under Speech…: the user ticks the tracks to lower (music, atmosphere); the others
+    /// decide when. A guess is ticked in advance (the tracks with the fewest words per second, when
+    /// there is a transcript), but it is only a guess: transcribing music gives words too.
+    @objc func duckUnderSpeech(_ sender: Any?) {
+        guard let window else { return }
+        let p = session.project
+        let sounding = p.tracks.filter { !$0.isMuted && !$0.clips.isEmpty }
+        guard sounding.count >= 2 else {
+            session.status = "Ducking needs two tracks with sound: one to lower and one to lower it under."
+            NSSound.beep()
+            return
+        }
+        var words: [UUID: Double] = [:]
+        for w in p.placedWords() { words[p.tracks[w.track].id, default: 0] += 1 }
+        let density = sounding.map { t in (words[t.id] ?? 0) / max(1, p.seconds(t.clips.reduce(0) { $0 + $1.length })) }
+        let most = density.max() ?? 0
+        let alert = NSAlert()
+        alert.messageText = "Duck Under Speech"
+        alert.informativeText = "Tick the tracks to lower (music, atmosphere). They go down 12 dB while there is speech on the other tracks and come up in the pauses. Each ticked track gets a new file; Undo brings the old sound back."
+        let boxes = zip(sounding, density).map { t, d -> NSButton in
+            let b = NSButton(checkboxWithTitle: t.name, target: nil, action: nil)
+            b.state = most > 0 && d < most / 2 ? .on : .off
+            return b
+        }
+        let stack = NSStackView(views: boxes)
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 6
+        stack.frame = NSRect(x: 0, y: 0, width: 320, height: CGFloat(boxes.count) * 24)
+        alert.accessoryView = stack
+        alert.addButton(withTitle: "Duck")
+        alert.addButton(withTitle: "Cancel")
+        alert.beginSheetModal(for: window) { [session] answer in
+            MainActor.assumeIsolated {
+                guard answer == .alertFirstButtonReturn else { return }
+                let lower = zip(sounding, boxes).filter { $0.1.state == .on }.map(\.0), under = zip(sounding, boxes).filter { $0.1.state == .off }.map(\.0)
+                guard !lower.isEmpty, !under.isEmpty else {
+                    session.status = lower.isEmpty ? "No track was ticked, so nothing was ducked." : "Every track was ticked: at least one has to be left to duck under."
+                    NSSound.beep()
+                    return
+                }
+                session.perform("duck", ["tracks": .array(lower.map { .string($0.id.uuidString) }), "under": .array(under.map { .string($0.id.uuidString) })])
+            }
+        }
+    }
+
     @objc func addMarker(_ sender: Any?) {
         let n = session.project.markers.count + 1
         session.perform("add_marker", ["name": .string("Marker \(n)")])

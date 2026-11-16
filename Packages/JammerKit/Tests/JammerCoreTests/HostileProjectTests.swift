@@ -291,7 +291,7 @@ struct HostileProjectTests {
 
     /// Writes a few packages for trying in the app by hand (JAMMER_WRITE_PACKAGES=<folder>).
     @Test("Packages for trying in the app", .enabled(if: ProcessInfo.processInfo.environment["JAMMER_WRITE_PACKAGES"] != nil))
-    func writePackages() throws {
+    func writePackages() async throws {
         let dir = URL(fileURLWithPath: ProcessInfo.processInfo.environment["JAMMER_WRITE_PACKAGES"]!)
         try? FileManager.default.removeItem(at: dir)
         try FileManager.default.createDirectory(at: dir.appending(path: "elsewhere"), withIntermediateDirectories: true)
@@ -320,5 +320,12 @@ struct HostileProjectTests {
         // Damaged.
         try FileManager.default.createDirectory(at: dir.appending(path: "Broken.jammer"), withIntermediateDirectories: true)
         try Data("{\"formatVersion\": 1, \"tracks\": [".utf8).write(to: dir.appending(path: "Broken.jammer/project.json"))
+        // Honest audio, and settings for a plugin (Apple's low-pass, turned down to 60 Hz) that weren't made in the app that opens it.
+        let (pkg, plain) = try package(in: dir, name: "Settings.jammer")
+        let unit = try await PluginInstance.make(PluginID("aufx/lpas/appl")!, channels: plain.channels, sampleRate: plain.sampleRate)
+        try unit.set("global.0", to: 60)
+        var withPlugin = plain
+        withPlugin.tracks[0].inserts = [Insert(plugin: PluginID("aufx/lpas/appl")!, name: "AULowpass", state: unit.captureState())]
+        try ProjectPackage.encode(withPlugin).write(to: pkg.appending(path: "project.json"))
     }
 }

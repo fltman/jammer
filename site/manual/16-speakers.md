@@ -35,3 +35,19 @@ On a multitrack recording each microphone also hears the others. **Audio › Rem
 In our tests gate lowered the bleed by more than 15 dB and cancel by 16 dB (remote, 180 ms late) to 29 dB (same room), with the speakers' own voices unchanged. Both are one undo step; the processed tracks play from new files and the originals stay as they were.
 
 **Ride Each Speaker's Level** goes further: when one person drifts (leans back from the mic, gets tired, gets excited), it follows them over time, measuring their loudness over a few seconds of their own speech and nudging it back to the target. Because Jämmer has the whole recording, it looks ahead: a sentence that starts louder after a long pause is already at the right level from its first word, and pauses are never turned up, so the background doesn't swell in the silences. The rhythm within a sentence is kept. In our test a speaker who dropped 8 dB halfway through came out within 0.2 LU of the target in both halves. The levelled tracks play from new files; the originals stay, one undo away.
+
+## Music under speech (ducking)
+
+![A speech track above a music track after ducking: the music is held low under the speech, through the short pauses too, and swells in the one long pause](../screens/ducking.webp)
+
+**Audio › Duck Under Speech…** lowers music or atmosphere while someone is speaking and lets it come up in the pauses. Tick the tracks to lower; the tracks you leave unticked decide when. (When there's a transcript, Jämmer ticks its guess for you, but check it: a transcription finds "words" in music too.)
+
+- The ticked tracks go down **12 dB**. They start going down just before the first word (so the word isn't drowned), stay down through pauses shorter than 0.4 s (so the music doesn't pump between sentences), and come back up over 0.6 s.
+- Where the speech is comes from the **speakers' turns** when you've found the speakers on those tracks, and otherwise from how loud the tracks are.
+- Each ducked track plays from a **new file**. Outside the lowered stretches it is the same sound, sample for sample, and **Undo** brings the old sound back.
+- It isn't live. If you move or cut the speech afterwards, duck again: on a track that hasn't been edited since, the new ducking **replaces** the old one rather than adding to it.
+
+An agent can set the amount, the times and the threshold, and limit it to a range (the `duck` step).
+
+Tried on synthetic material with speech at known times (the level under the speech is the amount to within 0.1 dB, the ramps are the lengths asked for, and nothing outside them changes) and in the app on a spoken podcast intro with music under it.
+
