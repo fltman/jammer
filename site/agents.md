@@ -528,6 +528,19 @@ Changes how a word is spelled in the transcript. The audio doesn't change.
 | `word` | string | **Required.** The word's id. |
 | `text` | string | **Required.** The corrected text. |
 
+### `limit`
+
+A true-peak limiter on the range (the whole document without a range or selection): the peaks of the chosen tracks together are held at or under the ceiling, with one gain for all of them so their balance stays. Bounced into a new file per track, sample for sample where the old audio was; where nothing needed limiting the audio is the same bit for bit, the original files are untouched and one undo brings them back. Refused when the peak is already under the ceiling. The answer says the ceiling used, the true peak before and after, the largest reduction and for how long it limited.
+
+| Param | Type | Description |
+|---|---|---|
+| `ceiling` | number | The true peak to stay at or under, in dBTP, −20 to 0. Default −1. |
+| `release` | number | How fast the gain comes back, in milliseconds, 1–2000. Default 100. |
+| `lookahead` | number | How far ahead a peak is seen, in milliseconds, 0.5–20. Default 5. |
+| `start` | seconds | Range start in seconds. With `end`, overrides the selection. |
+| `end` | seconds | Range end in seconds. |
+| `tracks` | list | Track ids to limit together. Default: every track. |
+
 ### `echo`
 
 Adds a feedback echo to the range (the whole document without a range or selection), bounced into a new file per track; the original audio is untouched and one undo brings it back. With `tail`, the document grows after the range so the echoes ring out.

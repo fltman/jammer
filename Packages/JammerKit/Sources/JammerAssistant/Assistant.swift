@@ -33,7 +33,7 @@ public struct AssistantAction: Sendable {
 public enum AssistantCatalog {
     /// Steps and endpoints that remove or replace audio: the plan is shown before it runs.
     static let destructiveNames: Set<String> = ["delete", "cut", "crop", "silence", "delete_words", "paste", "insert_silence",
-                                                "echo", "restore", "remove_fillers", "remove_silences"]
+                                                "echo", "restore", "remove_fillers", "remove_silences", "limit"]
 
     public static let macros: [AssistantAction] = [
         AssistantAction(name: "remove_fillers", description: "Removes every filler word (eh, ehm, öh, um, uh…) from the audio. Transcribes first if needed.",
@@ -123,6 +123,7 @@ public enum AssistantCatalog {
         "loudness_preset": ["podcast", "podd", "spotify", "youtube", "apple", "broadcast", "ebu", "r128", "preset", "streaming", "sändning"],
         "rename_speaker": ["rename", "döp", "byt namn", "kalla", "call speaker", "name speaker"],
         "spectral_attenuate": ["frequenc", "frekvens", " hz", "khz", "band", "spectral", "spektral"],
+        "limit": ["limit", "ceiling", "begräns", "tak ", "taket", "true peak", "dbtp", "peaks under", "toppar under", "topparna under"],
     ]
 
     /// What the on-device model is given for this request: everything but the actions in

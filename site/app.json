@@ -35,7 +35,7 @@
     },
     {
       "title": "Loudness for where it's going",
-      "text": "Presets for Apple Podcasts, Spotify, YouTube, EBU R 128 and ATSC A/85, measured to ITU-R BS.1770 and tested against the EBU signals. Export WAV, FLAC, AAC, MP3 and Opus with chapters from your markers.",
+      "text": "Presets for Apple Podcasts, Spotify, YouTube, EBU R 128 and ATSC A/85, measured to ITU-R BS.1770 and tested against the EBU signals. A true-peak limiter holds the peaks under the ceiling you set, with the balance between tracks kept. Export WAV, FLAC, AAC, MP3 and Opus with chapters from your markers.",
       "screen": "screens/export.webp"
     },
     {

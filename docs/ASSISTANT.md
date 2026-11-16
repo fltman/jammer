@@ -68,6 +68,8 @@ Hold-out 3, baseline 2026-11-16, on-device: 18/29 (task 14/22, multi 1/2, clarif
 
 When a change is made because of something set 3 showed, it becomes a regression set and a new one is written first.
 
+**After `limit` was added (2026-11-16).** The on-device model is given it only when the request names it (limit, ceiling, tak, true peak); it waits for a yes like everything that replaces audio. The sets run again, on-device: standard 17/18, holdout1 21/24, holdout2 17/23, holdout3 18/29. Before it: standard 17/18, holdout1 21/24, holdout2 17/23, holdout3 18/29.
+
 ## A change nobody asked for waits for a yes
 
 A plan that removes or replaces audio has always been shown first. From 2026-11-16 so is any step that changes the document when the request doesn't name its action (`AssistantPlan.unasked`, `AssistantCatalog.spokenAs`: the Swedish and English words for each action). "Write a poem about the sea" answered with `set_tempo` is shown with a note that it wasn't asked for, and nothing is done until Run. Measurements, and moving the playhead or the selection, change nothing and run as before. An action without words in the table always waits. The standard set has three requests that ask for nothing Jämmer does (a poem, a joke, the time), and counts plans that would have changed the document without a yes: 0 for every planner measured.

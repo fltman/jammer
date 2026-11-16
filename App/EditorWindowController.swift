@@ -384,6 +384,40 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
     /// Audio › Duck Under Speech…: the user ticks the tracks to lower (music, atmosphere); the others
     /// decide when. A guess is ticked in advance (the tracks with the fewest words per second, when
     /// there is a transcript), but it is only a guess: transcribing music gives words too.
+    /// Audio › Limit Peaks…: the ceiling is asked for; the selection, or the whole document, is limited.
+    @objc func limitPeaks(_ sender: Any?) {
+        guard let window else { return }
+        let alert = NSAlert()
+        alert.messageText = "Limit Peaks"
+        alert.informativeText = "Holds the true peak of \(session.selection == nil ? "the document" : "the selection") at or under the ceiling. All tracks get the same gain, so their balance stays. Where nothing needs limiting the audio is left exactly as it is, and one undo takes it back."
+        let field = NSTextField(string: "-1")
+        field.alignment = .right
+        field.setAccessibilityLabel("Ceiling in dBTP")
+        let unit = NSTextField(labelWithString: "dBTP (−20 to 0)")
+        let row = NSStackView(views: [NSTextField(labelWithString: "Ceiling"), field, unit])
+        row.orientation = .horizontal
+        row.spacing = 8
+        field.widthAnchor.constraint(equalToConstant: 60).isActive = true
+        row.frame = NSRect(x: 0, y: 0, width: 300, height: 26)
+        alert.accessoryView = row
+        alert.addButton(withTitle: "Limit")
+        alert.addButton(withTitle: "Cancel")
+        alert.window.initialFirstResponder = field
+        alert.beginSheetModal(for: window) { [session] answer in
+            MainActor.assumeIsolated {
+                guard answer == .alertFirstButtonReturn else { return }
+                // A comma is a decimal point to half the world, and a typographic minus is a minus.
+                let typed = field.stringValue.replacingOccurrences(of: ",", with: ".").replacingOccurrences(of: "−", with: "-").trimmingCharacters(in: .whitespaces)
+                guard let ceiling = Double(typed), Limiter.ceilingRange.contains(ceiling) else {
+                    session.status = "The ceiling has to be a number from −20 to 0 dBTP. Nothing was changed."
+                    NSSound.beep()
+                    return
+                }
+                session.perform("limit", ["ceiling": .number(ceiling)])
+            }
+        }
+    }
+
     @objc func duckUnderSpeech(_ sender: Any?) {
         guard let window else { return }
         let p = session.project

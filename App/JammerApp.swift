@@ -233,6 +233,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             submenu("Remove Bleed", [op("Gate Each Track Outside Its Speaker", "debleed", ["method": .string("gate")]),
                                      op("Cancel the Other Tracks' Leak", "debleed", ["method": .string("cancel")])]),
             item("Duck Under Speech…", #selector(EditorWindowController.duckUnderSpeech(_:))),
+            item("Limit Peaks…", #selector(EditorWindowController.limitPeaks(_:))),
             .separator(),
             item("Measure Loudness", #selector(EditorWindowController.analyzeLoudness(_:)), "l", [.command, .option]),
             item("Add Marker", #selector(EditorWindowController.addMarker(_:)), "m", [.command, .option]),

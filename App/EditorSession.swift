@@ -388,6 +388,9 @@ final class EditorSession {
                     : op == "duck" && failed.reason == "no_speech" ? "No speech was found to duck under, so nothing was changed."
                     : failed.error
                 NSSound.beep()
+            } else if op == "limit", let info = r.first?.info, let after = info["truePeakAfter"], let cut = info["reductionMaxDB"], let secs = info["limitedSeconds"] {
+                status = String(format: "Limited: true peak now %.1f dBTP, at most %.1f dB taken off, over %.1f s.", after, cut, secs)
+                    + (info["beforePlugins"] == 1 ? " The tracks' plugins come after it." : "")
             } else if let info = r.first?.info, let after = info["integratedAfter"], let target = info["target"] {
                 status = info["limitedByPeak"] == 1
                     ? String(format: "Reached %.1f instead of %.0f LUFS: the peaks held it back (no limiter yet).", after, target)

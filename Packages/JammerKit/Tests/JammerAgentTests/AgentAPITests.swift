@@ -441,6 +441,35 @@ struct SiblingTests {
         #expect(r[0].status == .failed)
     }
 
+    @Test("limit through steps: the answer says what it did, a second run is refused, wild values never reach the filter")
+    func limitThroughSteps() throws {
+        let n = 48_000 * 3
+        let info = AudioFileInfo(container: .wav, sampleFormat: .float32, bigEndian: false, channels: 2, sampleRate: 48_000,
+                                 channelMask: nil, dataOffset: 0, frames: Int64(n), chunks: [], bext: nil, ixml: nil, markers: [])
+        let a = SourceRef(name: "loud", path: "/dev/null", info: info)
+        let pool = SourcePool()
+        pool.register(a.id, memory: (0..<n).flatMap { i -> [Float] in let v = Float(0.98 * sin(Double(i) * 0.05)); return [v, v] }, channels: 2)
+        let media = FileManager.default.temporaryDirectory.appending(path: "jammer-limit-steps-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: media) }
+        var s = EditState(project: Project(source: a), pool: pool, media: media)
+        let quiet: StepRunner.Measure = { _, _ in LoudnessResult(integrated: nil, range: nil, maxMomentary: nil, maxShortTerm: nil, samplePeak: 0, truePeak: 0, duration: 0) }
+        let r = StepRunner.run([Step(op: "limit", params: ["ceiling": .number(-3)])], on: &s, measure: quiet)[0]
+        #expect(r.status == .done, "\(r.error ?? "")")
+        #expect(r.info["ceiling"] == -3 && (r.info["truePeakAfter"] ?? 0) <= -3 && (r.info["truePeakBefore"] ?? -9) > -1 && r.info["latencySamples"] == 0)
+        #expect((r.info["reductionMaxDB"] ?? 0) > 2.5 && (r.info["limitedSeconds"] ?? 0) > 2.9 && r.info["tracks"] == 1 && r.info["beforePlugins"] == 0)
+        // Again with the same ceiling: nothing to do, said so, and the document is as it was.
+        let before = s.project
+        let again = StepRunner.run([Step(op: "limit", params: ["ceiling": .number(-3)])], on: &s, measure: quiet)[0]
+        #expect(again.status == .failed && again.reason == "nothing_to_do" && (again.error ?? "").contains("Nothing was changed") && s.project == before)
+        // Out of range is refused before anything runs (the schema's ranges), and a track that isn't there is not found.
+        for bad: [String: JSONValue] in [["ceiling": .number(3)], ["ceiling": .number(-100)], ["release": .number(0)], ["lookahead": .number(500)], ["release": .number(.infinity)]] {
+            #expect(throws: (any Error).self) { try StepRunner.validate(Step(op: "limit", params: bad)) }
+        }
+        let missing = StepRunner.run([Step(op: "limit", params: ["tracks": .array([.string(UUID().uuidString)])])], on: &s, measure: quiet)[0]
+        #expect(missing.status == .failed && missing.reason == "not_found")
+        #expect(Operations.named("limit")?.tier == "advanced")
+    }
+
     @Test("duck through steps: lowers one track under the other, says how, refuses in words, and is a core operation")
     func duckThroughSteps() throws {
         let n = 48_000 * 6

@@ -259,6 +259,12 @@ public enum Operations {
         .init("correct_word", "Correct Word", "Changes how a word is spelled in the transcript. The audio doesn't change.",
               params: [.init("word", .string, "The word's id.", required: true),
                        .init("text", .string, "The corrected text.", required: true)]),
+        .init("limit", "Limit", "A true-peak limiter on the range (the whole document without a range or selection): the peaks of the chosen tracks together are held at or under the ceiling, with one gain for all of them so their balance stays. Bounced into a new file per track, sample for sample where the old audio was; where nothing needed limiting the audio is the same bit for bit, the original files are untouched and one undo brings them back. Refused when the peak is already under the ceiling. The answer says the ceiling used, the true peak before and after, the largest reduction and for how long it limited.",
+              params: [.init("ceiling", .number, "The true peak to stay at or under, in dBTP, −20 to 0. Default −1.", range: -20...0),
+                       .init("release", .number, "How fast the gain comes back, in milliseconds, 1–2000. Default 100.", range: 1...2_000),
+                       .init("lookahead", .number, "How far ahead a peak is seen, in milliseconds, 0.5–20. Default 5.", range: 0.5...20),
+                       start, end,
+                       .init("tracks", .list, "Track ids to limit together. Default: every track.")]),
         .init("echo", "Echo", "Adds a feedback echo to the range (the whole document without a range or selection), bounced into a new file per track; the original audio is untouched and one undo brings it back. With `tail`, the document grows after the range so the echoes ring out.",
               params: [.init("delay", .seconds, "Time between repeats in seconds, 0.02–2.", required: true, range: 0.02...2),
                        .init("feedback", .number, "How much of each repeat comes back, 0–0.95. Default 0.4.", range: 0...0.95),
@@ -849,6 +855,36 @@ public enum StepRunner {
             guard !text.isEmpty else { throw StepFailure("correct_word: text can't be empty. Use delete_words to remove a word.") }
             do { try s.project.correctWord(id, to: text) } catch {
                 throw StepFailure("correct_word: no word with id \(id.uuidString).", reason: "not_found")
+            }
+        case "limit":
+            guard let pool = s.pool, let media = s.media else { throw StepFailure("limit needs the app to render audio.") }
+            let r = try range(wholeIfNone: true); try checkInside(r)
+            var tracks: Set<UUID>?
+            if let ids = p["tracks"]?.strings {
+                var set = Set<UUID>()
+                for t in ids {
+                    guard let id = UUID(uuidString: t), project.tracks.contains(where: { $0.id == id }) else {
+                        throw StepFailure("limit: no track with id \(t).", reason: "not_found")
+                    }
+                    set.insert(id)
+                }
+                tracks = set
+            }
+            let settings = Limiter(ceilingDB: p["ceiling"]?.double ?? -1, releaseMs: p["release"]?.double ?? 100, lookaheadMs: p["lookahead"]?.double ?? 5)
+            do {
+                let (limited, report) = try s.project.limiting(settings, range: r, tracks: tracks, pool: pool, media: media)
+                s.project = limited
+                func r2(_ v: Double) -> Double { (v * 100).rounded() / 100 }
+                // The limiter adds no delay: the new files lie sample for sample where the old audio was.
+                return ["ceiling": report.ceilingDB, "truePeakBefore": r2(report.truePeakBeforeDB), "truePeakAfter": r2(report.truePeakAfterDB),
+                        "reductionMaxDB": r2(report.reductionMaxDB), "limitedSeconds": r2(report.limitedSeconds), "tracks": Double(report.tracks),
+                        "latencySamples": 0, "beforePlugins": report.beforePlugins ? 1 : 0]
+            } catch let e as LimiterError {
+                switch e {
+                case .nothingToDo(let m): throw StepFailure("limit: " + m, reason: "nothing_to_do")
+                case .badValue(let m): throw StepFailure("limit: " + m, reason: "bad_request")
+                case .ceilingNotMet(let m): throw StepFailure("limit: " + m, reason: "ceiling_not_met")
+                }
             }
         case "echo":
             guard let pool = s.pool, let media = s.media else { throw StepFailure("echo needs the app to render audio.") }
