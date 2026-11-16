@@ -16,7 +16,8 @@ struct AgentSplashView: View {
                 Image(nsImage: NSApp.applicationIconImage)
                     .resizable()
                     .frame(width: 72, height: 72)
-                    .shadow(color: Theme.neonColor.opacity(0.5), radius: 18)
+                    // The light behind the icon breathes; the icon stands still.
+                    .background(PulsingGlow().frame(width: 132, height: 132).allowsHitTesting(false))
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(verbatim: "Jämmer").font(.largeTitle.bold())
@@ -114,6 +115,8 @@ enum AgentSplash {
         let w = SplashPanel(contentRect: .zero, styleMask: [.titled, .closable, .fullSizeContentView], backing: .buffered, defer: false)
         w.titlebarAppearsTransparent = true
         w.titleVisibility = .hidden
+        // Not drawn, but what the window is called to VoiceOver and in the Window menu.
+        w.title = "Welcome to Jämmer"
         w.isMovableByWindowBackground = true
         w.appearance = NSAppearance(named: .darkAqua)
         w.backgroundColor = Theme.ink

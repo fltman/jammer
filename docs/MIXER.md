@@ -35,7 +35,10 @@ Phase 3, part 2. The sketch as the coordinator approved it on 2026-11-16, with t
 - Exports: the file is measured as written (`EncodedWriter.measureWritten`) and written again at margins 0.1, 0.2, 0.4, 0.8, 1.5, 3 dB until it holds; otherwise `MasterCeilingError`, no file, 422 `ceiling_not_met`. The same in a batch (`BatchTests.masterLimiter`).
 - In the app, a mix turned up to +11 dBTP, ceiling −3, each file also measured with ffmpeg's ebur128: WAV 24 bit −3.10 (ffmpeg −3.0), 16 bit with dither −3.10, at 44.1 kHz −3.00, MP3 128k −3.04 at margin 0.2, AAC 96k −3.10 at margin 0.8, master at +12 dB −3.10. Played through it quietly with no gaps counted. The Limiter box found by its accessibility id and clicked: the limiter went off in the model. The sheet looked at as a picture: the note about what the limiter promises was cut off by the scrolling list, so the master now sits under the list.
 - Hostile files: an absurd master level is brought into range; a limiter with impossible values is left off, and said.
-- Not tried: an export that can't be held (the limiter held every one), so `ceiling_not_met` has only been seen as words in a test. `set_master` is not offered to the assistant yet.
+- The export that can't be held never happens with a working limiter, so it was provoked once: a debug build started with `-masterMeasureOffsetDB 60` reads every file 60 dB hotter than it is. Through the app's API: 422, `reason: "ceiling_not_met"`, the measured peak and what to do in the message, no file and nothing left in the temporary folder. Not seen: the same words in the window after File › Export (it is the same error's text).
+- After a seek the limiter's output is the unbroken run's to within 1e-3, not bit for bit: what it did before the run-in is not known to it. That is for playback; an export always runs from its own start, in one stream.
+- The Plugins sheet on a bus, as a picture (a debug build opens it on a strip with `-pluginsStrip <name>`): the picker says "Speech (bus)" and the bus's plugin is listed with its switch, Edit and bin.
+- `set_master` is not offered to the assistant yet.
 
 Not built: VCAs, sidechain keys, freeze, solo.
 

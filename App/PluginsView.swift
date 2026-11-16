@@ -30,7 +30,13 @@ struct PluginsSheet: View {
             // The master is offered once the document has a mixer; before that a plugin on the one track is the same thing.
             + (session.project.usesMixer ? [Strip(id: Master.id, name: "Master", inserts: session.project.master.inserts, isBus: true)] : [])
     }
-    private var track: Strip? { strips.first { $0.id == trackID } ?? strips.first }
+    private var track: Strip? {
+        #if DEBUG
+        // A debug build started with `-pluginsStrip <name>` opens the sheet on that strip (for a picture).
+        if trackID == nil, let name = UserDefaults.standard.string(forKey: "pluginsStrip"), let s = strips.first(where: { $0.name == name }) { return s }
+        #endif
+        return strips.first { $0.id == trackID } ?? strips.first
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {

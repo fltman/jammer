@@ -4,6 +4,8 @@ Not a list of commits: what behaves differently from before, for a user, an agen
 
 ## 2026-11-16
 
+- **The light behind the icon on the start screen breathes** (one breath in four seconds). It stands still with Reduce Motion, while any document plays, and when the window is covered or the app is in the background; with it in front the app idles at 0.0 % of a core. The start screen's window is now called "Welcome to Jämmer" to VoiceOver.
+
 - **The master strip** (`docs/MIXER.md`, step 4): `set_master`, plugins on `track: "master"`, `master` in `GET …/mixer`. With its limiter on, an export measures its file and renders again until the ceiling holds, answers `X-Jammer-Master-Limiter`, and fails with 422 `ceiling_not_met` and no file when it can't. A project whose master does something is format 2.
 
 - **`underruns`** in a document's summary and in the answer to `stop`: gaps heard since playback started. Read only.

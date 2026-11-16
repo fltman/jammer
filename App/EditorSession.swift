@@ -468,6 +468,7 @@ final class EditorSession {
             underrunsAtStart = output.underruns
             try output.play(from: start)
             isPlaying = true
+            NotificationCenter.default.post(name: PulsingGlow.transportChanged, object: nil)
             playhead = start
             startTimer()
         } catch {
@@ -478,6 +479,7 @@ final class EditorSession {
     func stop() {
         output.stop()
         isPlaying = false
+        NotificationCenter.default.post(name: PulsingGlow.transportChanged, object: nil)
         playhead = output.playhead
         timer?.invalidate()
         timer = nil
@@ -649,6 +651,11 @@ final class EditorSession {
                 throw MasterCeilingError(ceilingDB: ceiling, truePeakDB: nil)
             }
             peak = measured.truePeak
+            #if DEBUG
+            // A debug build started with `-masterMeasureOffsetDB` reads every file that much hotter than it
+            // is, so that the export that can't be held, which a working limiter never gives, can be seen.
+            peak += UserDefaults.standard.double(forKey: "masterMeasureOffsetDB")
+            #endif
             if peak <= ceiling {
                 lastExportLimiter = (ceiling, peak, margin)
                 return delivery
