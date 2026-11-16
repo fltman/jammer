@@ -61,6 +61,22 @@ enum SpeechEngines {
         var paid: Bool { self == .openai }
     }
 
+    /// The key, from the Keychain. A debug build started with `-openaiTestKey` and `-openaiEndpoint` on
+    /// this Mac uses those instead, so the whole flow can be tried against a stand-in server without a
+    /// key and without a request to the provider; a release build has neither argument.
+    static var openAIKey: String? {
+        #if DEBUG
+        if openAIEndpoint != OpenAITranscription.defaultEndpoint, let k = UserDefaults.standard.string(forKey: "openaiTestKey"), !k.isEmpty { return k }
+        #endif
+        return Keychain.get("openai")
+    }
+    static var openAIEndpoint: URL {
+        #if DEBUG
+        if let s = UserDefaults.standard.string(forKey: "openaiEndpoint"), let u = URL(string: s), u.host() == "127.0.0.1" { return u }
+        #endif
+        return OpenAITranscription.defaultEndpoint
+    }
+
     /// The model for OpenAI, chosen from the provider's own list (`OpenAITranscription.models`); no id is written into the app.
     static var openAIModel: String { UserDefaults.standard.string(forKey: "transcribe.openai.model") ?? "" }
 
@@ -80,10 +96,10 @@ enum SpeechEngines {
         switch choice {
         case .openai:
             guard AssistantModel.showHidden else { throw Unavailable(reason: "bad_request", message: "engine must be one of \(Choice.offered.map(\.rawValue).joined(separator: ", ")).") }
-            guard let key = Keychain.get("openai"), !key.isEmpty else { throw Unavailable(reason: "missing_key", message: "There is no OpenAI key. Add it in the assistant's settings.") }
+            guard let key = openAIKey, !key.isEmpty else { throw Unavailable(reason: "missing_key", message: "There is no OpenAI key. Add it in the assistant's settings.") }
             let model = model ?? openAIModel
             guard !model.isEmpty else { throw Unavailable(reason: "model_missing", message: "No OpenAI transcription model is chosen. Pass \"model\" with one of the provider's transcription models.") }
-            return OpenAITranscription(model: model, key: { Keychain.get("openai") })
+            return OpenAITranscription(endpoint: openAIEndpoint, model: model, key: { key })
         case .apple:
             return AppleSpeechEngine()
         case .whisper:

@@ -205,6 +205,19 @@ public enum AgentAPI {
         return nil
     }
 
+    /// A word as `GET …/transcript` gives it. A word nobody knows the time of (`Word.untimed`) has `start`
+    /// and `end` null and `"untimed": true`: its place in the project is a spread, and a number here would
+    /// be read as a time.
+    public static func wordJSON(_ w: PlacedWord, seconds: (Frame) -> Double) -> [String: Any] {
+        let untimed = w.word.untimed == true
+        var d: [String: Any] = ["id": w.word.id.uuidString, "text": w.word.text, "partial": w.isPartial,
+                                "start": untimed ? NSNull() : seconds(w.start) as Any, "end": untimed ? NSNull() : seconds(w.end) as Any]
+        if untimed { d["untimed"] = true }
+        d["confidence"] = w.word.confidence.map { ($0 * 100).rounded() / 100 } ?? NSNull()
+        d["speaker"] = w.word.speaker ?? NSNull()
+        return d
+    }
+
     /// Parses `{"steps": [{"op", "params"}], "allowPaid": false}`, checking ops and params before anything runs.
     public static func parseSteps(_ body: Data) throws(APIError) -> (steps: [Step], allowPaid: Bool) {
         guard let obj = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any] else {

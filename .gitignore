@@ -13,3 +13,4 @@ research/
 *.pem
 # Built from pinned sources by scripts/build-*.sh
 Packages/JammerKit/Vendor/
+.claude/worktrees/

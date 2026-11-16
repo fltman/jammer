@@ -13,14 +13,20 @@ public struct Word: Codable, Hashable, Sendable, Identifiable {
     public var confidence: Double?
     /// Index into the transcript's speakers, once diarised.
     public var speaker: Int?
+    /// True when nobody knows when the word was said: it came from a model that returns only text, and
+    /// `start` and `end` only spread it over the stretch it was heard in. The mark sits on the word so
+    /// that it follows the word into every bounced file. Nothing that shows, exports or cuts by a word's
+    /// time may use such a word's. Absent in files from before 2026-11-16.
+    public var untimed: Bool?
 
-    public init(id: UUID = UUID(), text: String, start: Frame, end: Frame, confidence: Double? = nil, speaker: Int? = nil) {
+    public init(id: UUID = UUID(), text: String, start: Frame, end: Frame, confidence: Double? = nil, speaker: Int? = nil, untimed: Bool? = nil) {
         self.id = id
         self.text = text
         self.start = start
         self.end = end
         self.confidence = confidence
         self.speaker = speaker
+        self.untimed = untimed
     }
 
     public var range: Range<Frame> { start..<max(start, end) }
@@ -166,7 +172,7 @@ extension Project {
     /// `bridge`: pauses up to this long between selected words go too.
     /// Whether any of these words comes from a transcript without word times.
     public func areTextOnly(_ ids: Set<UUID>) -> Bool {
-        transcripts.contains { $0.textOnly == true && $0.words.contains { ids.contains($0.id) } }
+        transcripts.contains { t in t.words.contains { ids.contains($0.id) && ($0.untimed == true || t.textOnly == true) } }
     }
 
     public mutating func deleteWords(_ ids: Set<UUID>, bridge: Frame = 0) throws {

@@ -101,7 +101,7 @@ public struct OpenAITranscription: TranscriptionEngine {
             let a = range.lowerBound + Frame(Double(range.count) * Double(done) / Double(total))
             done += t.count
             let b = range.lowerBound + Frame(Double(range.count) * Double(done) / Double(total))
-            out.append(Word(text: t, start: a, end: max(a + 1, b)))
+            out.append(Word(text: t, start: a, end: max(a + 1, b), untimed: true))
         }
         return out
     }

@@ -285,6 +285,13 @@ struct TranscriptStepTests {
         let old = try JSONDecoder().decode(SourceTranscript.self, from: Data(#"{"sourceID":"\#(UUID().uuidString)","language":"sv-SE","engine":"x","words":[],"speakers":[]}"#.utf8))
         #expect(old.textOnly == nil)
         s.project.transcripts[0].textOnly = true
+        for i in s.project.transcripts[0].words.indices { s.project.transcripts[0].words[i].untimed = true }
+        // Out through the API: no number that could be read as a time.
+        let placed = s.project.placedWords()
+        let json = AgentAPI.wordJSON(placed[1]) { Double($0) / 48_000 }
+        #expect(json["start"] is NSNull && json["end"] is NSNull && json["untimed"] as? Bool == true && json["text"] as? String == placed[1].word.text)
+        var timed = placed[1]; timed.word.untimed = nil
+        #expect(AgentAPI.wordJSON(timed) { Double($0) / 48_000 }["start"] is Double && AgentAPI.wordJSON(timed) { _ in 0 }["untimed"] == nil)
         let before = s.project
         let cut = run(&s, "delete_words", ["words": .array([.string(words[1].id.uuidString)])])
         #expect(cut.status == .failed && cut.reason == "text_only" && (cut.error ?? "").contains("not the time of each word"), "\(cut.error ?? "")")

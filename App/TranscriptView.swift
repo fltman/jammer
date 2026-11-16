@@ -1,6 +1,7 @@
 import AppKit
 import JammerAgent
 import JammerCore
+import JammerSpeech
 import Observation
 
 extension NSAttributedString.Key {
@@ -18,6 +19,8 @@ final class TranscriptPanel: NSView, NSTextViewDelegate {
     private let scroll = NSScrollView()
     private let empty = NSTextField(wrappingLabelWithString: "")
     private let language = NSPopUpButton()
+    /// Where the transcribing is done. Shown only while the paid route is being tried out (hidden providers on).
+    private let engine = NSPopUpButton()
     private let transcribeButton = NSButton(title: "Transcribe", target: nil, action: nil)
     private let progress = NSProgressIndicator()
     private var placed: [PlacedWord] = []
@@ -59,7 +62,14 @@ final class TranscriptPanel: NSView, NSTextViewDelegate {
         progress.isIndeterminate = false
         progress.isHidden = true
         progress.widthAnchor.constraint(equalToConstant: 120).isActive = true
-        let header = NSStackView(views: [title, NSView(), progress, language, transcribeButton])
+        engine.addItem(withTitle: "On this Mac")
+        engine.lastItem?.representedObject = SpeechEngines.Choice.auto.rawValue
+        engine.addItem(withTitle: "OpenAI (your key, paid)")
+        engine.lastItem?.representedObject = SpeechEngines.Choice.openai.rawValue
+        engine.controlSize = .small
+        engine.setAccessibilityLabel("Transcription engine")
+        engine.isHidden = !SpeechEngines.Choice.offered.contains(.openai)
+        let header = NSStackView(views: [title, NSView(), progress, engine, language, transcribeButton])
         header.orientation = .horizontal
         header.edgeInsets = NSEdgeInsets(top: 6, left: 14, bottom: 6, right: 14)
         header.setHuggingPriority(.required, for: .vertical)
@@ -252,7 +262,68 @@ final class TranscriptPanel: NSView, NSTextViewDelegate {
     @objc func transcribe(_ sender: Any?) {
         let code = language.selectedItem?.representedObject as? String ?? "sv-SE"
         UserDefaults.standard.set(code, forKey: "transcript.language")
+        if !engine.isHidden, engine.selectedItem?.representedObject as? String == SpeechEngines.Choice.openai.rawValue {
+            Task { await transcribeAtOpenAI(Locale(identifier: code)) }
+            return
+        }
         _ = JobRegistry.shared.startTranscription(session, locale: Locale(identifier: code), replace: !session.project.transcripts.isEmpty)
+        refresh()
+    }
+
+    /// The paid route: what leaves the Mac and who charges for it is said first, and nothing is sent
+    /// before the user has chosen a model from the provider's own list and clicked Send.
+    private func transcribeAtOpenAI(_ locale: Locale) async {
+        func say(_ title: String, _ text: String) {
+            let a = NSAlert()
+            a.messageText = title
+            a.informativeText = text
+            if let w = window { a.beginSheetModal(for: w) } else { a.runModal() }
+        }
+        guard let key = SpeechEngines.openAIKey, !key.isEmpty else {
+            say("There is no OpenAI key", "Add your OpenAI key in the assistant's settings (the gear in the assistant panel, under OpenAI). Nothing was sent.")
+            return
+        }
+        let models: [String]
+        do { models = try await OpenAITranscription.models(endpoint: SpeechEngines.openAIEndpoint, key: key) } catch {
+            say("OpenAI's list of models couldn't be read", "\(error.localizedDescription) Nothing was sent.")
+            return
+        }
+        guard !models.isEmpty else {
+            say("OpenAI lists no transcription model for this key", "Nothing was sent.")
+            return
+        }
+        // What goes: the whole of each file the document plays from that has no transcript yet (or all of them, when transcribing again).
+        let p = session.project
+        let replace = !p.transcripts.isEmpty
+        let used = Set(p.tracks.flatMap { $0.clips.map(\.sourceID) })
+        let todo = p.sources.filter { s in used.contains(s.id) && (replace || !p.transcripts.contains { $0.sourceID == s.id }) }
+        let seconds = todo.reduce(0.0) { $0 + Double($1.info.frames) / $1.info.sampleRate }
+        let pieces = todo.reduce(0) { $0 + max(1, Int((Double($1.info.frames) / $1.info.sampleRate / 600).rounded(.up))) }
+        let length = seconds >= 3600 ? String(format: "%d h %d min", Int(seconds) / 3600, Int(seconds) % 3600 / 60) : String(format: "%d min %d s", Int(seconds) / 60, Int(seconds) % 60)
+
+        let pick = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 300, height: 26))
+        pick.addItems(withTitles: models)
+        pick.setAccessibilityLabel("OpenAI model")
+        if let last = models.firstIndex(of: SpeechEngines.openAIModel) { pick.selectItem(at: last) }
+        let alert = NSAlert()
+        alert.messageText = "Send the audio to OpenAI?"
+        alert.informativeText = """
+        \(todo.count == 1 ? "The file" : "The \(todo.count) files") this document plays from (\(length) in all, the whole of each file, not only the parts on the timeline) will be uploaded to OpenAI in \(pieces) piece\(pieces == 1 ? "" : "s") and transcribed there.
+
+        OpenAI charges your account for it by its own price list for the model you choose; Jämmer can't read that price list and doesn't guess the cost.
+
+        The transcript comes back as text without the time of each word. You can read, search and correct it; you can't delete words or filler words from the audio with it.
+
+        Jämmer hasn't been able to read OpenAI's terms for what it does with uploaded audio. Read them at OpenAI before sending anything that isn't yours to share.
+        """
+        alert.accessoryView = pick
+        alert.addButton(withTitle: "Send")
+        alert.addButton(withTitle: "Cancel")
+        let answer: NSApplication.ModalResponse
+        if let w = window { answer = await alert.beginSheetModal(for: w) } else { answer = alert.runModal() }
+        guard answer == .alertFirstButtonReturn, let model = pick.titleOfSelectedItem else { return }
+        UserDefaults.standard.set(model, forKey: "transcribe.openai.model")
+        _ = JobRegistry.shared.startTranscription(session, locale: locale, replace: replace, engine: .openai, model: model)
         refresh()
     }
 }

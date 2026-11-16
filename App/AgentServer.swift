@@ -764,17 +764,11 @@ enum AgentRouter {
     private static func transcript(_ session: EditorSession, _ r: AgentAPI.Request) throws -> Response {
         let range = try queryRange(r, session)
         let placed = session.project.placedWords(in: range)
-        let words = placed.map { w -> [String: Any] in
-            var d: [String: Any] = ["id": w.word.id.uuidString, "text": w.word.text,
-                                    "start": seconds(session, w.start), "end": seconds(session, w.end), "partial": w.isPartial]
-            d["confidence"] = w.word.confidence.map { ($0 * 100).rounded() / 100 } ?? NSNull()
-            d["speaker"] = w.word.speaker ?? NSNull()
-            return d
-        }
+        let words = placed.map { AgentAPI.wordJSON($0) { seconds(session, $0) } }
         let langs = Set(session.project.transcripts.map(\.language)).sorted()
         // True when a transcript here has the text but no word times: its words' start and end are
         // spread evenly, and delete_words and remove_fillers answer 422 text_only.
-        let textOnly = session.project.transcripts.contains { $0.textOnly == true }
+        let textOnly = placed.contains { $0.word.untimed == true }
         return .json(["words": words, "text": placed.map(\.word.text).joined(separator: " "), "languages": langs, "textOnly": textOnly,
                       "speakers": session.project.speakers.enumerated().map { ["id": $0.offset, "name": $0.element] as [String: Any] }])
     }
