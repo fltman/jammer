@@ -118,6 +118,18 @@ struct ReplyGuardTests {
         #expect(PlanParser.augment(goal: "delete the pause in the first 12 seconds", plan: named).steps.map(\.op) == ["delete"])
     }
 
+    @Test("A plan that only moves the playhead, for a request that asks for nothing of the kind, is no plan")
+    func viewOnly() async throws {
+        let planner = SayingPlanner(reply: "", steps: [PlannedStep(op: "set_playhead", params: ["at": .number(0)])])
+        let poem = try await planner.answer(goal: "write a poem about the sea", context: Self.context, history: [], actions: AssistantCatalog.actions)
+        #expect(poem.steps.isEmpty && poem.reply.hasPrefix("I can't do that as asked."))
+        let asked = try await planner.answer(goal: "go to the start", context: Self.context, history: [], actions: AssistantCatalog.actions)
+        #expect(asked.steps.map(\.op) == ["set_playhead"])
+        // Beside a real step it stays: it may be how the model set the place for it.
+        let both = SayingPlanner(reply: "", steps: [PlannedStep(op: "set_playhead", params: ["at": .number(5)]), PlannedStep(op: "add_marker", params: ["name": .string("A")])])
+        #expect(try await both.answer(goal: "put a marker called A here", context: Self.context, history: [], actions: AssistantCatalog.actions).steps.count == 2)
+    }
+
     @Test("The reply follows the language of the request")
     func language() async throws {
         let swedish = "Jag kan inte skriva en dikt om havet eftersom du inte specificerade något att göra med ljudet."

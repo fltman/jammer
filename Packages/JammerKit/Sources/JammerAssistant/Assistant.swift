@@ -76,6 +76,17 @@ public enum AssistantCatalog {
         return w
     }()
 
+    /// How a request names the steps that only move the playhead or the selection. One of these that the
+    /// request doesn't name is left out of the plan: it changes nothing, and "Done (1 step)" after "write a
+    /// poem about the sea" is not an answer.
+    public static let viewOnly: [String: [String]] = [
+        "select": ["select", "markera", "välj", "choose", "from ", "från ", "between", "mellan", "first", "last", "första", "sista"],
+        "select_all": ["select", "markera", "välj", "all", "everything", "allt", "hela"],
+        "deselect": ["deselect", "avmarkera", "unselect", "clear the selection", "ingen markering"],
+        "set_playhead": ["playhead", "spelhuvud", "go to", "gå till", "jump", "hoppa", "move to", "flytta", "start", "början", "beginning", "end", "slutet", "rewind", "spola", " at ", " vid "],
+        "copy": ["copy", "kopier"],
+    ]
+
     /// Values the assistant fills in when the model leaves out a required one.
     static let defaults: [String: [String: JSONValue]] = [
         "normalize": ["target": .string("loudness")],

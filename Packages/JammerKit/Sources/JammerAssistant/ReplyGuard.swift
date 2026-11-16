@@ -84,7 +84,12 @@ public enum ReplyGuard {
     /// - in the language of the request, or Jämmer's own words in that language.
     public static func checked(_ plan: AssistantPlan, goal: String, context: AssistantContext) -> AssistantPlan {
         var out = plan
-        if !plan.steps.isEmpty, plan.steps.allSatisfy({ measuring.contains($0.op) }) {
+        // A plan that only moves the playhead or the selection, for a request that asks for neither, is no plan.
+        let text = " " + goal.lowercased() + " "
+        if !plan.steps.isEmpty, plan.steps.allSatisfy({ s in AssistantCatalog.viewOnly[s.op].map { words in !words.contains { text.contains($0) } } ?? false }) {
+            out.steps = []
+        }
+        if !out.steps.isEmpty, out.steps.allSatisfy({ measuring.contains($0.op) }) {
             out.reply = ""
             return out
         }
