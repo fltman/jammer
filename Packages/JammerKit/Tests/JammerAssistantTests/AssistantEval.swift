@@ -32,6 +32,15 @@ struct AssistantEval {
         Case(goal: "hur högt är det, i LUFS?", ops: ["measure_loudness"]),
     ] }
 
+    /// The model under evaluation: the on-device one, or with `JAMMER_EVAL_PLANNER=ollama:<model>` a model
+    /// on this Mac's Ollama (one that is already installed there; nothing is fetched).
+    static var planner: any AssistantPlanner {
+        if let p = ProcessInfo.processInfo.environment["JAMMER_EVAL_PLANNER"], p.hasPrefix("ollama:") {
+            return OllamaPlanner(model: String(p.dropFirst("ollama:".count)))
+        }
+        return OnDevicePlanner()
+    }
+
     static func text(_ v: JSONValue?) -> String {
         switch v {
         case .number(let d): d == d.rounded() ? String(Int(d)) : String(d)
@@ -51,7 +60,7 @@ struct AssistantEval {
         p.sources.append(b)
         p.tracks.append(Track(name: "Erik", clips: [Clip(sourceID: b.id, start: 0, length: 48_000 * 60)]))
         let context = AssistantContext(project: p, selection: nil, playhead: 0)
-        let planner = OnDevicePlanner()
+        let planner = Self.planner
         let actions = AssistantCatalog.actions
         var opsRight = 0, paramsRight = 0, paramsTotal = 0
         var rows: [String] = []

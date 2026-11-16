@@ -37,7 +37,7 @@ struct HoldoutEval {
         for c in set {
             var plan = AssistantPlan(reply: "", steps: [])
             var failure: String?
-            do { plan = try await OnDevicePlanner().plan(goal: c.goal, context: context, history: [], actions: actions) } catch { failure = error.localizedDescription }
+            do { plan = try await AssistantEval.planner.plan(goal: c.goal, context: context, history: [], actions: actions) } catch { failure = error.localizedDescription }
             let got = plan.steps.map(\.op)
             let ok = failure == nil && got == c.ops
             var notes: [String] = []

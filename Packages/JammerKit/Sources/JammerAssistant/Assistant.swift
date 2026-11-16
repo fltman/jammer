@@ -160,6 +160,8 @@ public protocol AssistantPlanner: Sendable {
 
 public enum AssistantError: Error, LocalizedError, Equatable {
     case unavailable(String)
+    /// A model server on this Mac (Ollama, MLX) that can't do it, in words that stand on their own.
+    case local(String)
     case noKey
     case http(Int, String)
     case badResponse
@@ -167,6 +169,7 @@ public enum AssistantError: Error, LocalizedError, Equatable {
     public var errorDescription: String? {
         switch self {
         case .unavailable(let why): "The on-device model isn't available: \(why)"
+        case .local(let why): why
         case .noKey: "Add your OpenRouter key in Settings to use a cloud model."
         case .http(let c, let m): "The model service answered \(c): \(m)"
         case .badResponse: "The model's answer couldn't be read."
@@ -242,6 +245,23 @@ public enum PlanParser {
             out.append(s)
         }
         return out
+    }
+
+    /// The same for arguments that came as JSON (a model that calls tools): each is read as the text a
+    /// person would have written, so "2" or 2 for a track, "1:30" for a time and "podcast" for a preset
+    /// are understood the same way whichever model said them.
+    public static func typed(op: String, json: [String: JSONValue], why: String, actions: [AssistantAction],
+                             context: AssistantContext? = nil) -> PlannedStep? {
+        func text(_ v: JSONValue) -> String {
+            switch v {
+            case .number(let d): d == d.rounded() && abs(d) < 1e15 ? String(Int(d)) : String(d)
+            case .string(let s): s
+            case .bool(let b): b ? "true" : "false"
+            case .array(let a): a.map(text).joined(separator: ",")
+            case .null: ""
+            }
+        }
+        return typed(op: op, args: json.sorted { $0.key < $1.key }.map { ($0.key, text($0.value)) }, why: why, actions: actions, context: context)
     }
 
     public static func typed(op: String, args: [(String, String)], why: String, actions: [AssistantAction],

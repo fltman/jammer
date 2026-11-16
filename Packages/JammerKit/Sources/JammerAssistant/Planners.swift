@@ -85,6 +85,13 @@ public struct OpenRouterPlanner: AssistantPlanner {
     public var id: String { "openrouter:\(model)" }
     public var paid: Bool { true }
 
+    /// One tool call as a step. Jämmer's own operations go through the same reading of values as the
+    /// on-device model's answers (track numbers to ids, clock times, ranges); a sibling's are passed as they came.
+    static func step(_ action: AssistantAction, _ params: [String: JSONValue], _ context: AssistantContext?) -> PlannedStep {
+        if case .sibling = action.kind { return PlannedStep(op: action.name, params: params, why: "") }
+        return PlanParser.typed(op: action.name, json: params, why: "", actions: [action], context: context) ?? PlannedStep(op: action.name, params: params, why: "")
+    }
+
     /// Tool names allowed by the providers: ^[a-zA-Z0-9_-]{1,64}$.
     public static func toolName(_ action: AssistantAction) -> String {
         let raw: String
@@ -126,10 +133,10 @@ public struct OpenRouterPlanner: AssistantPlanner {
         let (data, response) = try await session.data(for: req)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else { throw AssistantError.http(status, String(decoding: data.prefix(300), as: UTF8.self)) }
-        return PlanParser.augment(goal: goal, plan: try Self.decode(data, actions: actions))
+        return PlanParser.augment(goal: goal, plan: try Self.decode(data, actions: actions, context: context))
     }
 
-    static func decode(_ data: Data, actions: [AssistantAction]) throws -> AssistantPlan {
+    static func decode(_ data: Data, actions: [AssistantAction], context: AssistantContext? = nil) throws -> AssistantPlan {
         struct Raw: Decodable {
             struct Call: Decodable { struct F: Decodable { var name: String; var arguments: String }; var function: F }
             struct Msg: Decodable { var content: String?; var tool_calls: [Call]? }
@@ -145,9 +152,186 @@ public struct OpenRouterPlanner: AssistantPlanner {
             let obj = (try? JSONSerialization.jsonObject(with: Data(call.function.arguments.utf8))) as? [String: Any] ?? [:]
             var params: [String: JSONValue] = [:]
             for (k, v) in obj { if let j = JSONValue(v) { params[k] = j } }
-            return PlannedStep(op: action.name, params: params, why: "")
+            return Self.step(action, params, context)
         }
         return PlanParser.validate(AssistantPlan(reply: msg.content ?? "", steps: steps, dropped: dropped, cost: raw.usage?.cost), actions: actions)
+    }
+}
+
+/// A model behind a Chat Completions endpoint on this Mac (Ollama; an MLX server): free, and
+/// nothing leaves the machine, so it isn't asked about like a paid request. The endpoint has to
+/// be this Mac itself; anything else is refused rather than quietly sent somewhere.
+/// `tool_choice` is left out: Ollama's compatible endpoint doesn't take it.
+public struct LocalServerPlanner: AssistantPlanner {
+    public var endpoint: URL
+    public var model: String
+    /// "ollama" or "mlx", for the id stored with a plan.
+    public var kind: String
+    public var session: URLSession
+    /// A local model can take a while to load into memory the first time.
+    public var timeout: TimeInterval
+
+    public init(endpoint: URL = Ollama.base.appending(path: "v1"), model: String, kind: String = "ollama", session: URLSession = .shared, timeout: TimeInterval = 180) {
+        self.endpoint = endpoint
+        self.model = model
+        self.kind = kind
+        self.session = session
+        self.timeout = timeout
+    }
+
+    public var id: String { "\(kind):\(model)" }
+    public var paid: Bool { false }
+
+    public static func isThisMac(_ url: URL) -> Bool {
+        guard url.scheme == "http" || url.scheme == "https", let host = url.host()?.lowercased() else { return false }
+        return host == "127.0.0.1" || host == "localhost" || host == "::1" || host == "[::1]"
+    }
+
+    public func requestBody(goal: String, context: AssistantContext, history: [(user: String, reply: String)], actions: [AssistantAction]) -> [String: Any] {
+        var body = OpenRouterPlanner(endpoint: endpoint, model: model, key: { nil }).requestBody(goal: goal, context: context, history: history, actions: actions)
+        body["tool_choice"] = nil
+        body["stream"] = false
+        return body
+    }
+
+    public func plan(goal: String, context: AssistantContext, history: [(user: String, reply: String)],
+                     actions: [AssistantAction]) async throws -> AssistantPlan {
+        if let reply = PlanParser.guardrail(goal) { return AssistantPlan(reply: reply, steps: []) }
+        guard Self.isThisMac(endpoint) else { throw AssistantError.local("A local model's address has to be on this Mac (127.0.0.1); \(endpoint.host() ?? "that address") isn't.") }
+        var req = URLRequest(url: endpoint.appending(path: "chat/completions"))
+        req.timeoutInterval = timeout
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try JSONSerialization.data(withJSONObject: requestBody(goal: goal, context: context, history: history, actions: actions))
+        let data: Data, response: URLResponse
+        do { (data, response) = try await session.data(for: req) } catch {
+            throw AssistantError.local("The local model server at \(endpoint.host() ?? "127.0.0.1"):\(endpoint.port ?? 80) didn't answer (\(error.localizedDescription)).")
+        }
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(status) else { throw AssistantError.http(status, String(decoding: data.prefix(300), as: UTF8.self)) }
+        var plan = try OpenRouterPlanner.decode(data, actions: actions, context: context)
+        plan.reply = Self.withoutThinking(plan.reply)
+        plan.cost = nil
+        return PlanParser.augment(goal: goal, plan: plan)
+    }
+
+    /// Some local models put their reasoning in the reply between <think> tags; that isn't the answer.
+    static func withoutThinking(_ text: String) -> String {
+        var out = text
+        while let a = out.range(of: "<think>"), let b = out.range(of: "</think>", range: a.upperBound..<out.endIndex) { out.removeSubrange(a.lowerBound..<b.upperBound) }
+        return out.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
+/// A model in Ollama on this Mac, through Ollama's own chat API. Its OpenAI-style endpoint would do
+/// for the chat itself, but not for two things that decide whether a small model can plan at all:
+/// the context has to hold Jämmer's whole list of tools (Ollama's default of 4,096 tokens cuts it
+/// off), and a model that "thinks" before it answers takes minutes per request unless told not to.
+public struct OllamaPlanner: AssistantPlanner {
+    public var model: String
+    public var session: URLSession
+    public var timeout: TimeInterval
+    /// Tokens of context asked for: the tools and the document's description fit in this.
+    public var context: Int
+
+    public init(model: String, session: URLSession = .shared, timeout: TimeInterval = 240, context: Int = 16_384) {
+        self.model = model
+        self.session = session
+        self.timeout = timeout
+        self.context = context
+    }
+
+    public var id: String { "ollama:\(model)" }
+    public var paid: Bool { false }
+
+    public func requestBody(goal: String, context c: AssistantContext, history: [(user: String, reply: String)], actions: [AssistantAction], thinks: Bool) -> [String: Any] {
+        var body = OpenRouterPlanner(model: model, key: { nil }).requestBody(goal: goal, context: c, history: history, actions: actions)
+        body["tool_choice"] = nil
+        body["stream"] = false
+        body["options"] = ["num_ctx": context, "temperature": 0] as [String: Any]
+        if thinks { body["think"] = false }
+        return body
+    }
+
+    public func plan(goal: String, context c: AssistantContext, history: [(user: String, reply: String)],
+                     actions: [AssistantAction]) async throws -> AssistantPlan {
+        if let reply = PlanParser.guardrail(goal) { return AssistantPlan(reply: reply, steps: []) }
+        // Said before the request, not found out from a confusing answer: the model has to be one that calls tools.
+        guard let caps = await Ollama.capabilities(model, session: session) else {
+            throw AssistantError.local(await Ollama.version(session: session) == nil ? "Ollama isn't running on this Mac." : "Ollama has no model called \(model).")
+        }
+        guard caps.contains("tools") else { throw AssistantError.local("\(model) can't call tools, which the assistant needs. Pick a model that Ollama lists with tools.") }
+        var req = URLRequest(url: Ollama.base.appending(path: "api/chat"))
+        req.timeoutInterval = timeout
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try JSONSerialization.data(withJSONObject: requestBody(goal: goal, context: c, history: history, actions: actions, thinks: caps.contains("thinking")))
+        let data: Data, response: URLResponse
+        do { (data, response) = try await session.data(for: req) } catch {
+            throw AssistantError.local("Ollama didn't answer (\(error.localizedDescription)).")
+        }
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(status) else { throw AssistantError.http(status, String(decoding: data.prefix(300), as: UTF8.self)) }
+        return PlanParser.augment(goal: goal, plan: try Self.decode(data, actions: actions, context: c))
+    }
+
+    /// Ollama's own shape: `message.tool_calls[].function` with `arguments` as an object (not a string).
+    static func decode(_ data: Data, actions: [AssistantAction], context: AssistantContext? = nil) throws -> AssistantPlan {
+        guard let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any], let message = root["message"] as? [String: Any] else { throw AssistantError.badResponse }
+        var dropped: [String] = []
+        let calls = message["tool_calls"] as? [[String: Any]] ?? []
+        let steps = calls.compactMap { call -> PlannedStep? in
+            guard let f = call["function"] as? [String: Any], let name = f["name"] as? String else { return nil }
+            guard let action = actions.first(where: { OpenRouterPlanner.toolName($0) == name }) else { dropped.append(name); return nil }
+            var args = f["arguments"] as? [String: Any] ?? [:]
+            // Some models send the arguments as text all the same.
+            if let text = f["arguments"] as? String, let obj = (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any] { args = obj }
+            var params: [String: JSONValue] = [:]
+            for (k, v) in args { if let j = JSONValue(v) { params[k] = j } }
+            return OpenRouterPlanner.step(action, params, context)
+        }
+        let reply = LocalServerPlanner.withoutThinking(message["content"] as? String ?? "")
+        return PlanParser.validate(AssistantPlan(reply: reply, steps: steps, dropped: dropped), actions: actions)
+    }
+}
+
+/// What Jämmer asks of an Ollama server on this Mac besides the chat itself.
+public enum Ollama {
+    public static let base = URL(string: "http://127.0.0.1:11434")!
+
+    static func get(_ path: String, session: URLSession, timeout: TimeInterval = 3) async -> Data? {
+        var req = URLRequest(url: base.appending(path: path))
+        req.timeoutInterval = timeout
+        guard let (data, response) = try? await session.data(for: req), (response as? HTTPURLResponse)?.statusCode == 200 else { return nil }
+        return data
+    }
+
+    /// The server's version, or nil when none is running here.
+    public static func version(session: URLSession = .shared) async -> String? {
+        guard let d = await get("api/version", session: session) else { return nil }
+        return ((try? JSONSerialization.jsonObject(with: d)) as? [String: Any])?["version"] as? String
+    }
+
+    /// The models that are installed (Jämmer never fetches one).
+    public static func models(session: URLSession = .shared) async -> [String] {
+        guard let d = await get("api/tags", session: session), let list = ((try? JSONSerialization.jsonObject(with: d)) as? [String: Any])?["models"] as? [[String: Any]] else { return [] }
+        return list.compactMap { $0["name"] as? String }.sorted()
+    }
+
+    /// What the server says the model can do (`capabilities` of /api/show: "completion", "tools",
+    /// "thinking", "vision"), or nil when it has no such model or isn't running.
+    public static func capabilities(_ model: String, session: URLSession = .shared) async -> [String]? {
+        var req = URLRequest(url: base.appending(path: "api/show"))
+        req.httpMethod = "POST"
+        req.timeoutInterval = 5
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try? JSONSerialization.data(withJSONObject: ["model": model])
+        guard let (data, response) = try? await session.data(for: req), (response as? HTTPURLResponse)?.statusCode == 200 else { return nil }
+        return ((try? JSONSerialization.jsonObject(with: data)) as? [String: Any])?["capabilities"] as? [String] ?? []
+    }
+
+    public static func supportsTools(_ model: String, session: URLSession = .shared) async -> Bool {
+        await capabilities(model, session: session)?.contains("tools") ?? false
     }
 }
 
