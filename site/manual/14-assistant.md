@@ -18,7 +18,7 @@ Ask Jämmer in Swedish or English and it does the editing: "ta bort alla ehm och
 - Removing filler words needs a transcript; the assistant transcribes first if there isn't one.
 - Questions like "how loud is it?" are answered in the chat. A measured value is always written by Jämmer from the measurement itself: the assistant chooses what to measure, and its own sentence isn't shown.
 - The assistant's own sentence is only shown when everything it planned can run. If a step was left out (a name it couldn't find, a value it didn't give), Jämmer says what was left out and why in its own words, so that you never read "removed" above something that wasn't.
-- A delivery target you name ("master it for Spotify") is that target's loudness preset, not a level of the assistant's choosing; say the level yourself and it is yours.
+- A delivery target you name ("master it for Spotify") is that target's loudness preset, not a level of the assistant's choosing, and the plan is shown with the preset and its targets before it runs; say the level yourself and it is yours.
 - **The assistant doesn't make figures up.** Every figure with a unit in its answer is checked before you see it, and a sentence with a figure that nothing backs up is taken out; a line under the answer then says that a sentence was held back. A figure is backed up when it is:
   - in your request, in digits or in words ("two seconds", "en halv sekund");
   - in what the assistant was told about the document (its length, the playhead, the selection, the master limiter's ceiling), or among the values of the plan it shows you;

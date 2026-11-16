@@ -178,6 +178,7 @@ final class AssistantModel {
                 if !plan.heldBack.isEmpty { messages.append(Message(role: .note, text: ReplyGuard.heldBackNote(ReplyGuard.language(of: goal), count: plan.heldBack.count))) }
                 if !plan.dropped.isEmpty { messages.append(Message(role: .note, text: "Left out: " + plan.dropped.joined(separator: "; "))) }
                 guard !plan.steps.isEmpty else { return }
+                for line in plan.shownFirst { messages.append(Message(role: .note, text: line)) }
                 let unasked = plan.unasked(goal: goal, actions: actions)
                 if !unasked.isEmpty {
                     messages.append(Message(role: .note, text: "You didn't ask for \(unasked.count == 1 ? "this change" : "these changes") in so many words, so nothing has been done. Run it only if it is what you meant."))

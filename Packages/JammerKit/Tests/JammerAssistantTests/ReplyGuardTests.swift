@@ -101,8 +101,15 @@ struct ReplyGuardTests {
         #expect(ReplyGuard.checked(AssistantPlan(reply: "Lowering it.", steps: gain), goal: "lower it 3 dB", context: Self.context).reply == "Lowering it.")
         // A delivery target that the request names is its preset, not a level the model chose; a level the request gives stays.
         let n = [PlannedStep(op: "normalize", params: ["target": .string("loudness"), "level": .number(-16), "start": .number(0), "end": .number(60)])]
-        #expect(PlanParser.augment(goal: "master the episode for Spotify", plan: AssistantPlan(reply: "", steps: n)).steps
-                == [PlannedStep(op: "loudness_preset", params: ["preset": .string("spotify"), "start": .number(0), "end": .number(60)])])
+        let forSpotify = PlanParser.augment(goal: "master the episode for Spotify", plan: AssistantPlan(reply: "", steps: n))
+        #expect(forSpotify.steps == [PlannedStep(op: "loudness_preset", params: ["preset": .string("spotify"), "start": .number(0), "end": .number(60)])])
+        // Shown before it runs, with the preset and its targets in words.
+        #expect(forSpotify.needsConfirmation(goal: "master the episode for Spotify", actions: AssistantCatalog.actions))
+        #expect(forSpotify.shownFirst.count == 1 && forSpotify.shownFirst[0].contains("−14 LUFS") && forSpotify.shownFirst[0].contains("−1 dBTP"))
+        // Every preset can be named by a word of its own name: the list is the presets', not a second one.
+        for (goal, preset) in [("make it right for YouTube", "youtube"), ("deliver to EBU R128", "ebu_r128"), ("for Apple please", "apple_podcasts"), ("ATSC delivery", "atsc_a85")] {
+            #expect(PlanParser.augment(goal: goal, plan: AssistantPlan(reply: "", steps: n)).steps.first?.params["preset"] == .string(preset), "\(goal)")
+        }
         #expect(PlanParser.augment(goal: "normalize to -16 LUFS for Spotify", plan: AssistantPlan(reply: "", steps: n)).steps == n)
     }
 

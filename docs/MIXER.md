@@ -205,6 +205,43 @@ Only in the interface: the mixer panel with its faders and meters, dragging to r
 
 The assistant: the new actions are given to the on-device model only when the request names them (bus, send, pan, VCA, master, freeze, in Swedish and English), and the evaluation sets are run when they are added, as the rule from 2026-11-16 says.
 
+## Automation (sketch 2026-11-16, not built; waits for a yes on the API)
+
+What it is: a level, a pan or a mute that changes over the timeline, on a track, a bus, a VCA group or the master, and the level of a send. Plugin parameters are a later step of their own (they need a way to name a parameter that holds across AU, VST 3 and CLAP and across the helper process).
+
+**Model.** `Automation` on a strip: lanes keyed by what they move (`gain`, `pan`, `mute`, `send:<bus id>`), each a list of points `(frame, value)` in timeline frames, sorted, at most one per frame. Between points the value goes in a straight line (in dB for levels, so a fade sounds even), or holds until the next point (`hold`, the only shape for mute). Before the first point and after the last, the value is that point's. A lane **adds to the fader** (the fader is the trim): 0 dB everywhere is nothing, and a strip without lanes is exactly as today. Pan lanes replace the pan while they exist. A VCA's gain lane adds to its members', worked out when the plan is compiled like the VCA's level is now (two straight-line curves in dB add to a straight-line curve over the union of their points), so nothing new in the engine for VCAs.
+
+**When the timeline is edited.** A lane belongs to its strip and is in timeline time, like the faders of a console, not to a clip. So that an edit doesn't leave every later point in the wrong place: an edit that moves later material on a track (a rippling delete, removed pauses and filler words, inserted silence, an inserting paste) moves that track's points after the edit by the same amount, and takes away the points inside what was removed; the value just before and just after the removed stretch is kept by a point on each side, so the level doesn't jump to somewhere it never was. A bus's, a VCA's and the master's lanes move only when every track that reaches them moved by the same amount there (a delete across the whole document); otherwise they stay and the mixer sheet says that tracks under an automated bus were edited. Moving or trimming one clip leaves the lane alone in the first version; "automation follows the clip" is a later option, off by default. All of it is one value change on `Project` with the edit, so undo takes both back.
+
+**Modes.** First version: a lane is read, or switched off (`enabled: false`, kept but not heard). Writing from the faders comes in step 5, and then as touch (writes while the fader is held, goes back to the lane on release) and latch (keeps the last value until stop); no "write" mode that overwrites everything it plays past.
+
+**Engine.** A strip's gain is today one number per plan. With a lane it becomes a list of breakpoints handed to the plan (`jm_plan_set_strip_gain_curve(plan, strip, frames, gains, count)`, same for pan); the graph applies it in pieces of at most 64 frames, ramping linearly in amplitude between values taken from the dB line, at the strip's own time (the cursor minus how late the strip is, so automation lands where it was drawn whatever plugins are before it). A point lands on its own frame (the pieces are cut at the points), so it is sample-accurate in time; in level it is the dB line to within what a 64-frame straight piece differs from it, which for a fade of 1000 dB/s is about 0.03 dB and for anything slower much less (to be measured and written here, not assumed). The alternative, one value per 512-frame block, would be cheaper and is what is heard as zipper noise: a staircase 94 times a second, audible on a steady tone under any fade. No allocation or lock on the audio thread: the curve is part of the immutable plan. Without a curve the code path is the one that exists, bit for bit; the null tests and the 21 digests hold that.
+
+**Projects.** A project with a lane is format 3 and says so to an older Jämmer; without lanes it is saved as before. `ProjectSafety`: at most 10 000 points in a lane and 64 lanes on a strip, values in the parameter's range and finite, points sorted and inside ±24 h, a send lane only for a send that exists; each refused or repaired in words, with a generator per case.
+
+**Steps** (the one schema; each one undo step; unknown names refused):
+
+| Step | Does |
+|---|---|
+| `set_automation` | `strip` (track, bus or VCA id, or "master"), `param` (`gain`, `pan`, `mute`, or `send` with `to`), `points` (`[[seconds, value], …]`). Replaces the lane; with `start` and `end`, only the points inside that range. `shape`: `linear` (default) or `hold`. |
+| `clear_automation` | `strip`, `param` (left out: every lane of the strip), optionally `start`, `end`. |
+
+`GET …/mixer` gains `automation` on every strip: `[{param, to?, shape, points}]`. `GET …/documents/{id}/automation?strip=&param=&at=` answers the value at a time and the strip's whole level there (fader, VCA and lane together), so that an agent can check what it wrote without rendering.
+
+**Interface, in later steps:** lanes under a track in the timeline with points to drag; then writing a lane from fader moves during playback (touch and latch). The first step has no drawing: lanes come from the steps, and the mixer sheet says that a strip has automation.
+
+**The assistant:** not given these at first (`stepsNotForAssistant`); "fade the music down between 10 and 20 s" is a later evaluation set of its own.
+
+**Freezing and bouncing.** A frozen strip's file is what comes out of its plugins, before its fader, so its own gain, pan and mute lanes stay live and can be changed while it is frozen. What goes into it is another matter: the digest a freeze is made from covers the lanes of everything that feeds the strip (tracks into a frozen bus, sends to it, the source of a key), so changing one of those makes the frozen file stale as changing a clip does. Export, bounce, stems and batch render the same plan as playback, so they have the automation without anything of their own; the master's limiter loop measures the written file as before.
+
+**What an agent gets.** It writes points (with `rationale`, like every step), reads lanes and asks for the value at a time. It never records a movement: touch and latch exist only in the interface, and no step starts playback to write a lane.
+
+**Plugin parameters: later, not in the first version.** They need a name for a parameter that holds across AU, VST 3 and CLAP and across the helper process, values in the plugin's own units, and a way to hand changes to the plugin inside a block; each is its own piece of work and none is needed for level, pan, mute and sends.
+
+**What it leaves alone:** clip gain and fades; `duck` (which bounces a file today; it could write a lane instead, as a later change with its own comparison).
+
+**Order:** 1 gain lanes on tracks, buses and the master, engine and steps, null tests. 2 pan and mute. 3 sends and VCAs. 4 lanes shown and drawn. 5 written from the fader. 6 plugin parameters.
+
 ## Hostile and broken files
 
 Checked when a project is opened, like the rest of `ProjectSafety`: a routing loop; an output, send, VCA or key that names something that isn't there; gains and pans outside their ranges, or not numbers; more than 64 buses, 16 sends on a strip or 32 VCAs; a frozen file outside the project's media or of another length or format than the strip. Each is refused or repaired in words, with a generator in the test suite per case.

@@ -284,6 +284,9 @@ public struct AssistantPlan: Sendable, Equatable {
     /// Sentences of the model's that were taken out of the reply because a figure in them had nothing
     /// behind it (`ReplyGuard`). The user is told that something was held back; the evaluation prints them.
     public var heldBack: [String] = []
+    /// What Jämmer chose in the model's place (a preset for a named delivery target). A plan with any of
+    /// these is shown, with these lines, before anything runs.
+    public var shownFirst: [String] = []
     /// Set by a paid planner: what the call cost, in USD, when known.
     public var cost: Double?
 
@@ -314,7 +317,7 @@ public struct AssistantPlan: Sendable, Equatable {
     /// Shown with Run and Cancel instead of being run: it removes or replaces audio, or it changes the
     /// document in a way the request didn't ask for in so many words.
     public func needsConfirmation(goal: String, actions: [AssistantAction]) -> Bool {
-        isDestructive(actions) || !unasked(goal: goal, actions: actions).isEmpty
+        isDestructive(actions) || !unasked(goal: goal, actions: actions).isEmpty || !shownFirst.isEmpty
     }
 }
 
@@ -672,8 +675,9 @@ public enum PlanParser {
         // "Master the episode for Spotify" answered with a normalize to a level the request never gave (−16,
         // where Spotify's target is −14): a wrong target that runs is worse than a step left out. A delivery
         // target that the request names is that preset, unless the request gives the level itself.
-        let targets: [String: String] = ["spotify": "spotify", "youtube": "youtube", "apple": "apple_podcasts", "r128": "ebu_r128", "ebu": "ebu_r128",
-                                         "atsc": "atsc_a85", "a85": "atsc_a85"]
+        // The targets are the presets' own list: a word of a preset's name (apple, spotify, r128, …) names it.
+        var targets: [String: String] = [:]
+        for p in LoudnessPreset.allCases { for w in p.rawValue.split(separator: "_") where w != "podcasts" { targets[String(w)] = p.rawValue } }
         if let preset = Set(words.compactMap { targets[$0] }).onlyOne, !out.steps.contains(where: { $0.op == "loudness_preset" }) {
             let said = ReplyGuard.numbers(in: goal) + ReplyGuard.wordNumbers(in: goal)
             out.steps = out.steps.map { step in
@@ -681,6 +685,8 @@ public enum PlanParser {
                 if case .number(let level)? = step.params["level"], said.contains(where: { abs($0 - abs(level)) < 0.0005 }) { return step }
                 var params: [String: JSONValue] = ["preset": .string(preset)]
                 for k in ["start", "end"] { params[k] = step.params[k] }
+                // Jämmer's choice, not the request's words: the plan is shown with the preset and its targets before anything runs.
+                out.shownFirst.append("\(LoudnessPreset(rawValue: preset)?.title ?? preset): the preset for the target you named, not a level of the assistant's own.")
                 return PlannedStep(op: "loudness_preset", params: params, why: step.why)
             }
         }
