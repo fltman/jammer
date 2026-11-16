@@ -19,6 +19,15 @@ public enum SiblingDirectory {
         ("flimmer", "Flimmer", 9002, 9201...9219, "X-Flimmer-Agent"),
     ]
 
+    /// Whether this Jämmer is a debug build (tests can say otherwise).
+    nonisolated(unsafe) public static var isDebugBuild: Bool = {
+        #if DEBUG
+        true
+        #else
+        false
+        #endif
+    }()
+
     /// Finds the siblings that run. 1 s on the first port, about 300 ms on the rest.
     public static func discover(session: URLSession = .shared) async -> [Sibling] {
         await withTaskGroup(of: Sibling?.self) { group in
@@ -27,6 +36,9 @@ public enum SiblingDirectory {
                     for (i, port) in ([entry.first] + Array(entry.rest)).enumerated() {
                         guard let status = await get("http://127.0.0.1:\(port)/api/v1/status", timeout: i == 0 ? 1 : 0.3, session: session),
                               (status["app"] as? [String: Any])?["name"] as? String == entry.name else { continue }
+                        // Debug talks to debug (a sibling's guest copy included), release to release: a
+                        // sibling that says what it is and is the other sort is passed over.
+                        if let id = (status["app"] as? [String: Any])?["bundleID"] as? String, AgentAPI.isDebugBundle(id) != isDebugBuild { continue }
                         let ops = await get("http://127.0.0.1:\(port)/api/v1/operations", timeout: 2, session: session)?["operations"] as? [[String: Any]] ?? []
                         return Sibling(slug: entry.slug, name: entry.name, port: port, header: entry.header, actions: actions(from: ops, slug: entry.slug))
                     }

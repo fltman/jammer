@@ -475,6 +475,14 @@ struct FlimmerSendTests {
             (try! JSONSerialization.data(withJSONObject: ["app": ["name": "Glimmer", "bundleID": "com.brattoo.glimmer"]]), HTTPURLResponse(url: r.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
         }
         #expect(await FlimmerSend.find(transport: other, debug: false) == nil)
+        // A visiting test's guest copy of Flimmer is a debug build: a debug Jämmer pairs with it, a release one never.
+        let guest: FlimmerSend.Transport = { r in
+            (try! JSONSerialization.data(withJSONObject: ["app": ["name": "Flimmer", "bundleID": "com.brattoo.flimmer.debug.guest"]]), HTTPURLResponse(url: r.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+        }
+        #expect(await FlimmerSend.find(transport: guest, debug: true) != nil)
+        #expect(await FlimmerSend.find(transport: guest, debug: false) == nil)
+        #expect(AgentAPI.isDebugBundle("com.brattoo.glimmer.debug") && AgentAPI.isDebugBundle("com.brattoo.glimmer.debug.guest")
+                && !AgentAPI.isDebugBundle("com.brattoo.glimmer") && !AgentAPI.isDebugBundle("com.brattoo.glimmer.guest"))
     }
 }
 

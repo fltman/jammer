@@ -10,6 +10,9 @@ public enum AgentAPI {
 
     /// The `app` object of GET /api/v1/status (SIBLINGS.md §2): with the bundle id, so a
     /// sibling never pairs a debug build (com.brattoo.jammer.debug) with a release one.
+    /// A debug build, or a visiting test's guest copy of one (com.brattoo.<app>.debug.guest).
+    public static func isDebugBundle(_ id: String) -> Bool { id.hasSuffix(".debug") || id.hasSuffix(".debug.guest") }
+
     public static func appInfo(version: String, bundleID: String?) -> [String: Any] {
         ["name": appName, "displayName": "Jämmer", "version": version, "bundleID": bundleID ?? "com.brattoo.jammer"]
     }

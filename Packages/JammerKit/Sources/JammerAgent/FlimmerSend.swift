@@ -349,7 +349,8 @@ public enum FlimmerSend {
                   let app = ((try? JSONSerialization.jsonObject(with: data)) as? [String: Any])?["app"] as? [String: Any],
                   app["name"] as? String == "Flimmer" else { continue }
             let bundle = app["bundleID"] as? String ?? ""
-            if bundle.hasSuffix(".debug") == debug { return URL(string: "http://127.0.0.1:\(port)") }
+            // A guest copy (…debug.guest) is a debug build too; a release Jämmer never pairs with either.
+            if AgentAPI.isDebugBundle(bundle) == debug { return URL(string: "http://127.0.0.1:\(port)") }
         }
         return nil
     }

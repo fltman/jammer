@@ -9,7 +9,9 @@ enum LinkedEditing {
     /// Sibling apps by bundle id; debug builds talk to the siblings' debug builds (SIBLINGS.md §1).
     static let siblings: [String: String] = {
         #if DEBUG
-        ["com.brattoo.flimmer.debug": "Flimmer", "com.brattoo.glimmer.debug": "Glimmer"]
+        // …and to a sibling's guest copy (a visiting test's clone, SIBLINGS.md §1). A release build never does.
+        ["com.brattoo.flimmer.debug": "Flimmer", "com.brattoo.glimmer.debug": "Glimmer",
+         "com.brattoo.flimmer.debug.guest": "Flimmer", "com.brattoo.glimmer.debug.guest": "Glimmer"]
         #else
         ["com.brattoo.flimmer": "Flimmer", "com.brattoo.glimmer": "Glimmer"]
         #endif
