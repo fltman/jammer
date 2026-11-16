@@ -47,7 +47,7 @@ What this costs the computer depends on the plugins, not on the buses. It has no
 A VCA group moves several tracks and buses together without anything being routed through it. Type a name at the bottom of the mixer and choose **Add VCA**, then tick the strips in the group's **Members** menu.
 
 - The group's **level** is added to each member's own, and its **Mute** mutes them all. Each member keeps its own level, its plugins and where it goes, so the balance inside the group stays.
-- A strip in the mixer shows its own level; what you hear is that plus the group's.
+- A strip's slider is its own level. Under a strip that is in a group, a line says what is heard: "Heard at −9.0 dB with the group Drums (−6.0 dB)", or "Silent: the group Drums is muted" when the group's mute is the reason it is quiet.
 - A strip is in one group at most. Ticking it in another group moves it there. Unticking it takes the group's level off it.
 - A send taken **before the fader** doesn't follow the group, just as it doesn't follow the fader.
 - Removing a group (the − on its row) leaves the sound as it was: the group's level goes into each member's own level, and the members of a muted group stay muted.

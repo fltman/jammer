@@ -46,7 +46,7 @@ Phase 3, part 2. The sketch as the coordinator approved it on 2026-11-16, with t
 - Removing a group folds its level into each member's own (and leaves the members of a muted group muted), so the sound doesn't change.
 - Tested (`VCATests`): at 0 dB bit for bit the same; −6 dB on the group is the same samples as −6 dB on each member; a bus as a member; a pre-fader send doesn't follow the group and a post-fader one does; removal keeps the samples; one group per strip; refusals change nothing; a hostile file (twins, a member of a group that isn't there, an absurd level) is mended and said. With the group's level ignored once, three of the four failed.
 - In the app: a group of both tracks at −6 took the mix from −15.42 to −21.42 LUFS; one member taken out, −16.77; the group muted, only the other track (−13.92); removed again with both in it, −21.42 before and after, each track at −6 of its own. The group's Mute box found by its id and clicked: silence. The Members menu read with its ticks, and the sheet looked at as a picture: the list of strips was too short and cut the group's row off, so the list is now as tall as what is in it (up to a limit, then it scrolls).
-- A strip's row shows its own level, not the level with the group's; the manual says so.
+- A strip in a group says under its row what is heard (its own level with the group's, or that the group's mute is why it is silent), read in the app and looked at as a picture. The slider stays the strip's own level.
 - The VCA steps are not offered to the assistant yet.
 
 Not built: sidechain keys, freeze, solo.

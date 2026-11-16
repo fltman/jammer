@@ -24,6 +24,7 @@ struct MixerSheet: View {
                     Text("Tracks").font(.headline)
                     ForEach(project.tracks) { t in
                         MixerStrip(name: t.name, kind: "track", gainDB: t.gainDB, pan: t.pan, muted: t.isMuted, output: t.output, stereo: stereo,
+                                   group: t.vca.flatMap { project.vca($0) },
                                    destinations: project.buses.map { ($0.id, $0.name) },
                                    sends: t.sends, sendTargets: project.buses.map { ($0.id, $0.name) },
                                    change: { session.perform("set_track", ["track": .string(t.id.uuidString)].merging($0) { $1 }) },
@@ -33,6 +34,7 @@ struct MixerSheet: View {
                     if project.buses.isEmpty { Text("No buses yet.").foregroundStyle(.secondary) }
                     ForEach(project.buses) { b in
                         MixerStrip(name: b.name, kind: "bus", gainDB: b.gainDB, pan: b.pan, muted: b.isMuted, output: b.output, stereo: stereo,
+                                   group: b.vca.flatMap { project.vca($0) },
                                    // A bus can go to any bus that doesn't lead back to it.
                                    destinations: project.buses.filter { $0.id != b.id && !leadsBack(from: $0.id, to: b.id) }.map { ($0.id, $0.name) },
                                    sends: b.sends, sendTargets: project.buses.filter { $0.id != b.id && !leadsBack(from: $0.id, to: b.id) }.map { ($0.id, $0.name) },
@@ -87,7 +89,9 @@ struct MixerSheet: View {
     /// The height the strips need: three headings, a row per strip, and a line where a section is empty.
     private var listHeight: CGFloat {
         let rows = project.tracks.count + project.buses.count + project.vcas.count
-        return CGFloat(3 * 34 + rows * 34 + (project.buses.isEmpty ? 24 : 0) + (project.vcas.isEmpty ? 44 : 0) + 8)
+        // A strip in a group has a line under it saying what is heard.
+        let grouped = project.tracks.filter { $0.vca != nil }.count + project.buses.filter { $0.vca != nil }.count
+        return CGFloat(3 * 34 + rows * 34 + grouped * 16 + (project.buses.isEmpty ? 24 : 0) + (project.vcas.isEmpty ? 44 : 0) + 8)
     }
 
     private func add() {
@@ -222,6 +226,8 @@ private struct MixerStrip: View {
     let muted: Bool
     let output: UUID?
     let stereo: Bool
+    /// The VCA group the strip belongs to, if any.
+    let group: VCA?
     let destinations: [(UUID, String)]
     let sends: [Send]
     let sendTargets: [(UUID, String)]
@@ -235,7 +241,32 @@ private struct MixerStrip: View {
     static func levelText(_ db: Double) -> String { String(format: "%+.1f dB", db).replacingOccurrences(of: "-", with: "−") }
     static func panText(_ p: Double) -> String { p == 0 ? "Centre" : "\(Int((abs(p) * 100).rounded())) % \(p < 0 ? "left" : "right")" }
 
+    /// What is heard when the strip is in a group: the slider is the strip's own level, and this says
+    /// the level with the group's, or that the group's mute is why it is silent.
+    static func heardText(own: Double, muted: Bool, group: VCA) -> String {
+        if group.isMuted { return "Silent: the group \(group.name) is muted" }
+        if muted { return "Muted; \(levelText(own + group.gainDB)) with the group \(group.name) when it isn't" }
+        return "Heard at \(levelText(own + group.gainDB)) with the group \(group.name) (\(levelText(group.gainDB)))"
+    }
+
     var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            controls
+            if let group {
+                Text(Self.heardText(own: gainDB, muted: muted, group: group))
+                    .font(.caption).foregroundStyle(group.isMuted ? Color.orange : Color.secondary)
+                    .lineLimit(1).padding(.leading, 160).frame(height: 16)
+                    .accessibilityIdentifier("mixer.strip.heard")
+            }
+        }
+        .onAppear { level = gainDB; position = pan }
+        .onChange(of: gainDB) { if !dragging { level = gainDB } }
+        .onChange(of: pan) { if !dragging { position = pan } }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("\(name), \(kind)")
+    }
+
+    private var controls: some View {
         HStack(spacing: 10) {
             Text(name).lineLimit(1).truncationMode(.middle).frame(width: 150, alignment: .leading)
             Toggle("Mute", isOn: Binding(get: { muted }, set: { change(["muted": .bool($0)]) }))
@@ -298,10 +329,5 @@ private struct MixerStrip: View {
             Spacer(minLength: 0)
         }
         .frame(height: 28)
-        .onAppear { level = gainDB; position = pan }
-        .onChange(of: gainDB) { if !dragging { level = gainDB } }
-        .onChange(of: pan) { if !dragging { position = pan } }
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("\(name), \(kind)")
     }
 }
