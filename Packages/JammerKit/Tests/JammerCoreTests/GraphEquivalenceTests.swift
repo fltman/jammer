@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import Testing
 @testable import JammerCore
@@ -79,6 +80,23 @@ struct GraphEquivalenceTests {
         return out
     }
 
+    /// What each project gave by the older paths (the plain renderer, `renderRouted`, tracks' chains
+    /// pulling for themselves) on 2026-11-16, at the commit tagged `before-graph-only`: the first eight
+    /// bytes of the SHA-256 of the whole render's samples. Kept so that the suite goes on saying "the
+    /// same as what shipped before", not only "the same as itself". The ones with Apple's plugins in them
+    /// depend on those plugins and are held to only on the macOS build they were made on.
+    static let shippedBefore: [String: String] = [
+        "plain": "abbff03c38841469", "track gains": "3fc27e3cd742bcc3", "clip gain and fades": "8f12b0177ccb6e25", "a muted track": "7e300eb946d9bd98",
+        "a clip moved and cut": "70481b85eca178b6", "pan": "def8d26144086496", "a bus": "bb655fc10e649bd5", "nested buses and sends": "6e26e438d4e16538",
+        "a VCA group": "c7894fb33eab5c7b", "master gain": "44874737139e13d1", "master limiter, idle": "abbff03c38841469", "master limiter, working": "975560489d830cb8",
+        "clips out of track order": "6071a7faf2bd9e13", "two clips crossing on a track": "672db63533caecbd", "a soloed track": "0c65ad5dfd2b3df0",
+        "plugins on a track": "2840f30449d0288e", "plugins on every track": "766f666e7ba3f4f7", "a plugin on a bus": "731f722ca272c2b2",
+        "plugins on tracks and buses, a send": "6307664907e56aae", "plugins with latency before and after tracks without": "3dfebd3b3140440d", "mono, a plugin": "dd3bf710d569d0d5",
+    ]
+    static let shippedOnBuild = "Version 27.2.1 (Build 26B131)"
+    static func digest(_ x: [Float]) -> String { x.withUnsafeBytes { SHA256.hash(data: Data($0)) }.prefix(8).map { String(format: "%02x", $0) }.joined() }
+    static var thisBuild: String { ProcessInfo.processInfo.operatingSystemVersionString }
+
     static func worst(_ a: [Float], _ b: [Float]) -> (max: Float, db: Double, differing: Int) {
         var m: Float = 0, e = 0.0, r = 0.0, n = 0
         for i in 0..<min(a.count, b.count) {
@@ -99,6 +117,16 @@ struct GraphEquivalenceTests {
             }
             let n = Int(p.length)
             let old = plan(false).render(from: 0, frames: n), new = plan(true).render(from: 0, frames: n)
+            // The graph against what shipped before, by its recorded digest.
+            if let shipped = Self.shippedBefore[name] {
+                if !hasPlugins || Self.thisBuild == Self.shippedOnBuild {
+                    #expect(Self.digest(new) == shipped, "\(name): not the samples that shipped before")
+                } else {
+                    print("GRAPH EQ \(name): has Apple's plugins and this is another macOS build than the reference's; its digest is not held to")
+                }
+            } else {
+                Issue.record("\(name) has no recorded digest")
+            }
             let whole = Self.worst(new, old)
             // In blocks, through the graph: against the graph in one piece (its own consistency).
             let blocky = plan(true)
