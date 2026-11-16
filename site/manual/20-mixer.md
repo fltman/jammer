@@ -54,6 +54,12 @@ A VCA group moves several tracks and buses together without anything being route
 
 When to use which: a **bus** when the tracks should share a plugin or be one thing on the way out; a **VCA group** when they should only move together.
 
+## Solo
+
+Tick **Solo** on a strip to hear only that one; tick several to hear those. Soloing a bus lets through the tracks that go to it, by their output or by a send.
+
+Solo is a way of listening, not a change to the document: it isn't saved, **Undo** doesn't touch it, and exports, loudness measurements and everything else that works on the sound are exactly what they are without it. While it is on, the window's title says "Solo: …" and the mixer says so in orange, so a mix with tracks missing is never a puzzle. A track that is muted stays muted when soloed.
+
 ## The master
 
 Everything goes through the master last. At the bottom of the mixer it has a level, and a **Limiter** box.
@@ -80,4 +86,6 @@ An agent sees the mixer with `GET /api/v1/documents/{id}/mixer` and changes it w
 
 An export through the master's limiter answers what the file measured in the `X-Jammer-Master-Limiter` header, or fails with `ceiling_not_met`.
 
-Not there yet: solo, sidechain keys and freezing.
+An agent solos with `POST …/solo` (`{"strips": [ids]}`, `[]` to end it); the answer says that it affects listening only.
+
+Not there yet: sidechain keys and freezing.

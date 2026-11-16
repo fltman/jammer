@@ -25,6 +25,7 @@ struct MixerSheet: View {
                     ForEach(project.tracks) { t in
                         MixerStrip(name: t.name, kind: "track", gainDB: t.gainDB, pan: t.pan, muted: t.isMuted, output: t.output, stereo: stereo,
                                    group: t.vca.flatMap { project.vca($0) },
+                                   soloed: session.solo.contains(t.id), solo: { toggleSolo(t.id, $0) },
                                    destinations: project.buses.map { ($0.id, $0.name) },
                                    sends: t.sends, sendTargets: project.buses.map { ($0.id, $0.name) },
                                    change: { session.perform("set_track", ["track": .string(t.id.uuidString)].merging($0) { $1 }) },
@@ -35,6 +36,7 @@ struct MixerSheet: View {
                     ForEach(project.buses) { b in
                         MixerStrip(name: b.name, kind: "bus", gainDB: b.gainDB, pan: b.pan, muted: b.isMuted, output: b.output, stereo: stereo,
                                    group: b.vca.flatMap { project.vca($0) },
+                                   soloed: session.solo.contains(b.id), solo: { toggleSolo(b.id, $0) },
                                    // A bus can go to any bus that doesn't lead back to it.
                                    destinations: project.buses.filter { $0.id != b.id && !leadsBack(from: $0.id, to: b.id) }.map { ($0.id, $0.name) },
                                    sends: b.sends, sendTargets: project.buses.filter { $0.id != b.id && !leadsBack(from: $0.id, to: b.id) }.map { ($0.id, $0.name) },
@@ -56,6 +58,11 @@ struct MixerSheet: View {
             // As tall as what is in it, up to a limit; only past that does it scroll. A fixed short list cut
             // its last rows off (seen in a picture of the sheet, 2026-11-16).
             .frame(height: min(440, listHeight))
+            if !session.solo.isEmpty {
+                Text("Solo is on (\(session.soloNames.joined(separator: ", "))): only what reaches those strips is heard. It is a way of listening; exports and measurements are not affected, and it isn't saved.")
+                    .font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("mixer.solo.note")
+            }
             // Outside the list that scrolls: the master and what its limiter promises are always in view.
             Text("Master").font(.headline)
             MasterStrip(master: project.master, change: { session.perform("set_master", $0) })
@@ -83,7 +90,7 @@ struct MixerSheet: View {
         }
         .padding(20)
         // Wide enough for a whole strip: a row that doesn't fit pushes the sheet's content out of its left edge.
-        .frame(width: 1000)
+        .frame(width: 1070)
     }
 
     /// The height the strips need: three headings, a row per strip, and a line where a section is empty.
@@ -92,6 +99,12 @@ struct MixerSheet: View {
         // A strip in a group has a line under it saying what is heard.
         let grouped = project.tracks.filter { $0.vca != nil }.count + project.buses.filter { $0.vca != nil }.count
         return CGFloat(3 * 34 + rows * 34 + grouped * 16 + (project.buses.isEmpty ? 24 : 0) + (project.vcas.isEmpty ? 44 : 0) + 8)
+    }
+
+    private func toggleSolo(_ id: UUID, _ on: Bool) {
+        var now = session.solo
+        if on { now.insert(id) } else { now.remove(id) }
+        session.setSolo(now)
     }
 
     private func add() {
@@ -228,6 +241,8 @@ private struct MixerStrip: View {
     let stereo: Bool
     /// The VCA group the strip belongs to, if any.
     let group: VCA?
+    let soloed: Bool
+    let solo: (Bool) -> Void
     let destinations: [(UUID, String)]
     let sends: [Send]
     let sendTargets: [(UUID, String)]
@@ -273,6 +288,13 @@ private struct MixerStrip: View {
                 .toggleStyle(.checkbox)
                 .fixedSize()
                 .accessibilityLabel("Mute \(name)")
+            // Listening only: not a change to the document.
+            Toggle("Solo", isOn: Binding(get: { soloed }, set: { solo($0) }))
+                .toggleStyle(.checkbox)
+                .fixedSize()
+                .accessibilityLabel("Solo \(name)")
+                .accessibilityIdentifier("mixer.strip.solo")
+                .help("Hear only this strip (and any others that are soloed). Listening only: exports are not affected.")
             Slider(value: $level, in: -60...12, onEditingChanged: { editing in
                 dragging = editing
                 if !editing, level != gainDB { change(["gainDB": .number((level * 10).rounded() / 10)]) }

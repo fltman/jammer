@@ -73,13 +73,16 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
 
     /// A linked file says so under the title: "clip.wav · For Flimmer – ⌘S saves back".
+    /// And solo says so there too, for as long as it is on, so that a mix with tracks missing is never a puzzle.
     func showLink() {
+        var parts: [String] = []
         if let lost = session.lostLink {
-            window?.subtitle = "\(lost.name) · For \(lost.requester) – can't be saved back"
-            return
+            parts.append("\(lost.name) · For \(lost.requester) – can't be saved back")
+        } else if let link = session.linkedFile {
+            parts.append("\(link.fileName) · For \(link.requester) – ⌘S saves back")
         }
-        guard let link = session.linkedFile else { window?.subtitle = ""; return }
-        window?.subtitle = "\(link.fileName) · For \(link.requester) – ⌘S saves back"
+        if !session.solo.isEmpty { parts.append("Solo: \(session.soloNames.joined(separator: ", ")) (listening only; exports are not affected)") }
+        window?.subtitle = parts.joined(separator: " · ")
     }
 
     // File › Save and Duplicate come here first (the window controller is ahead of the

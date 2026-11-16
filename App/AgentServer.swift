@@ -507,6 +507,20 @@ enum AgentRouter {
                 let obj = try json(r)
                 session.play(from: (obj["at"] as? Double).map { session.project.frames($0) })
                 return .json(["playing": true, "playhead": seconds(session, session.playhead)])
+            case ["solo"]:
+                // Listening only: not a step, not undone, not saved, and nothing exported or measured changes.
+                try only("POST")
+                let obj = try json(r)
+                guard let names = obj["strips"] as? [String] else { throw APIError.badRequest("solo needs strips: a list of track and bus ids ([] ends solo).") }
+                var ids = Set<UUID>()
+                for n in names {
+                    guard let id = UUID(uuidString: n), session.project.tracks.contains(where: { $0.id == id }) || session.project.bus(id) != nil else {
+                        throw APIError.notFound("No track or bus with id \(n).")
+                    }
+                    ids.insert(id)
+                }
+                session.setSolo(ids)
+                return .json(["solo": soloJSON(session)])
             case ["stop"]:
                 try only("POST")
                 session.stop()
@@ -558,6 +572,14 @@ enum AgentRouter {
 
     /// The mixer as it is: every track and bus with its level, pan, mute and where it goes ("master" for
     /// the output), and for each bus what comes into it.
+    /// What is soloed and which tracks are heard because of it. Always says that it is listening only.
+    static func soloJSON(_ s: EditorSession) -> [String: Any] {
+        let on = s.solo
+        return ["strips": (s.project.tracks.map(\.id) + s.project.buses.map(\.id)).filter(on.contains).map(\.uuidString),
+                "heardTracks": on.isEmpty ? s.project.tracks.map(\.id.uuidString) : s.project.tracks.map(\.id).filter(s.project.heardInSolo(on).contains).map(\.uuidString),
+                "affects": "listening", "note": "Solo is a way of listening. Exports, measurements and bounces are not changed by it, and it is not saved or undone."]
+    }
+
     static func mixerJSON(_ p: Project, plan: RenderPlan, session: EditorSession) -> [String: Any] {
         func to(_ id: UUID?) -> String { id?.uuidString ?? "master" }
         // Latency, in samples: a strip's own plugins, and the delay the mixer adds to its way out so that
@@ -589,7 +611,7 @@ enum AgentRouter {
         let limiter: Any = p.master.limiter.map { ["ceilingDB": $0.ceilingDB, "releaseMs": $0.releaseMs, "lookaheadMs": $0.lookaheadMs,
                                                     "guarantee": "exports"] as [String: Any] } ?? NSNull()
         let master: [String: Any] = ["gainDB": p.master.gainDB, "inserts": plugins(p.master.inserts), "limiter": limiter, "latencySamples": plan.masterLatency]
-        return ["tracks": tracks, "buses": buses, "vcas": vcas, "master": master, "usesMixer": p.usesMixer, "panAvailable": p.channels == 2, "totalLatencySamples": plan.totalLatency,
+        return ["tracks": tracks, "buses": buses, "vcas": vcas, "master": master, "solo": soloJSON(session), "usesMixer": p.usesMixer, "panAvailable": p.channels == 2, "totalLatencySamples": plan.totalLatency,
                 "limits": ["buses": Mixer.maxBuses, "sendsPerStrip": Mixer.maxSends, "gainDB": [Mixer.gainRange.lowerBound, Mixer.gainRange.upperBound], "pan": [-1, 1]]]
     }
 

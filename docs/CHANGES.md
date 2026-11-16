@@ -4,6 +4,8 @@ Not a list of commits: what behaves differently from before, for a user, an agen
 
 ## 2026-11-16
 
+- **Solo** as a way of listening: `POST …/solo`, `solo` in `GET …/mixer`, a Solo box on every strip. Not saved, not undone, and no export or measurement changes. The mixer sheet is wider (1070 points).
+
 - **VCA groups** (`docs/MIXER.md`, step 5): `add_vca`, `set_vca`, `remove_vca`; `vcas` in `GET …/mixer`, and `vca` and `heard` on every track and bus there. A project with a group is format 2.
 
 - **The light behind the icon on the start screen breathes** (one breath in four seconds). It stands still with Reduce Motion, while any document plays, and when the window is covered or the app is in the background; with it in front the app idles at 0.0 % of a core. The start screen's window is now called "Welcome to Jämmer" to VoiceOver.

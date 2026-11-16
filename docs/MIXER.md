@@ -49,7 +49,13 @@ Phase 3, part 2. The sketch as the coordinator approved it on 2026-11-16, with t
 - A strip in a group says under its row what is heard (its own level with the group's, or that the group's mute is why it is silent), read in the app and looked at as a picture. The slider stays the strip's own level.
 - The VCA steps are not offered to the assistant yet.
 
-Not built: sidechain keys, freeze, solo.
+**Solo, 2026-11-16** (taken before step 6). A listening state of the window, not of the document: `EditorSession.solo`, and the playback plan is compiled from `Project.listening(solo:)`, a copy in which every track that doesn't reach a soloed strip is muted. Exports, measurements and bounces compile from the project itself. `POST …/solo`, `solo` in `GET …/mixer` (`strips`, `heardTracks`, `affects: "listening"`), a Solo box on every strip, the window's title and an orange line in the mixer while it is on.
+
+- Tested (`SoloTests`): one track, two, a bus reached by output, through another bus and by a send; buses are never muted by solo; a muted track stays muted; ids that are no strips count for nothing; the document is untouched.
+- In the app: with the music soloed the measurement was the same (−15.42 LUFS) and the export the same file, byte for byte, as before; an edit and its undo left the solo on; an id that is no strip got 404; the window's title read "Solo: Music (listening only; exports are not affected)"; the Solo box found by its id and clicked; the sheet looked at as a picture.
+- Not verified: what comes out of the speakers. That playback uses the listening copy is in the code and the copy is tested; nobody has heard it.
+
+Not built: sidechain keys (design agreed 2026-11-16: with a key in the project every strip is a node in one graph; own test unit first, a real plugin before users see it), freeze.
 
 ## What the render path costs today (measured 2026-11-16)
 

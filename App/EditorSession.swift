@@ -83,7 +83,7 @@ final class EditorSession {
         let host = inserts
         Task { @MainActor in
             guard await host.sync(p), host === self.inserts else { return }
-            self.plan = PlanCompiler.compile(self.project, pool: self.pool, inserts: host)
+            self.plan = PlanCompiler.compile(self.project.listening(solo: self.solo), pool: self.pool, inserts: host)
             self.output.setPlan(self.plan)
             self.pluginsVersion += 1
         }
@@ -194,7 +194,7 @@ final class EditorSession {
     /// Turns safe mode on or off and starts every plugin again.
     func restartPlugins() {
         inserts = InsertHost(channels: project.channels, sampleRate: project.sampleRate, outOfProcess: Self.pluginSafeMode)
-        plan = PlanCompiler.compile(project, pool: pool, inserts: inserts)
+        plan = PlanCompiler.compile(project.listening(solo: solo), pool: pool, inserts: inserts)
         output.setPlan(plan)
         pluginsVersion += 1
         syncInserts()
@@ -378,7 +378,7 @@ final class EditorSession {
         project = newProject
         if let s = selection { selection = s.clamped(to: 0..<max(1, project.length)) }
         playhead = min(playhead, project.length)
-        plan = PlanCompiler.compile(project, pool: pool, inserts: inserts)
+        plan = PlanCompiler.compile(project.listening(solo: solo), pool: pool, inserts: inserts)
         output.setPlan(plan)
         version += 1
         syncInserts()
@@ -454,6 +454,22 @@ final class EditorSession {
     // MARK: Playback
 
     func togglePlay() { isPlaying ? stop() : play() }
+
+    /// The strips that are soloed: a way of listening, not part of the document. Not saved, not undone,
+    /// and nothing that is exported, measured or bounced is changed by it. Ids of strips that are gone
+    /// are dropped when it is read.
+    private(set) var solo: Set<UUID> = []
+    var soloNames: [String] {
+        project.tracks.filter { solo.contains($0.id) }.map(\.name) + project.buses.filter { solo.contains($0.id) }.map(\.name)
+    }
+    func setSolo(_ strips: Set<UUID>) {
+        solo = strips.filter { id in project.tracks.contains { $0.id == id } || project.bus(id) != nil }
+        plan = PlanCompiler.compile(project.listening(solo: solo), pool: pool, inserts: inserts)
+        output.setPlan(plan)
+        // Said in the window for as long as it is on, so that a quiet mix is never a puzzle.
+        (window?.windowController as? EditorWindowController)?.showLink()
+        version += 1
+    }
 
     /// Times, since playback last started, that the sound card asked for audio and there wasn't enough
     /// rendered: each is a gap that was heard. (The engine counts nothing finer: a block that was late

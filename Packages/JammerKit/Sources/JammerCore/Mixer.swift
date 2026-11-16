@@ -207,6 +207,41 @@ extension Project {
     public var usesMixer: Bool { !buses.isEmpty || !vcas.isEmpty || !master.isDefault || tracks.contains { $0.pan != 0 || $0.output != nil || !$0.sends.isEmpty || $0.vca != nil } }
 
     public func vca(_ id: UUID) -> VCA? { vcas.first { $0.id == id } }
+
+    /// The buses a signal passes after leaving `bus`, by outputs and sends, `bus` itself included.
+    private func downstream(of bus: UUID) -> Set<UUID> {
+        var seen = Set<UUID>(), queue = [bus]
+        while let id = queue.popLast() {
+            guard seen.insert(id).inserted, let b = self.bus(id) else { continue }
+            if let o = b.output { queue.append(o) }
+            queue += b.sends.map(\.to)
+        }
+        return seen
+    }
+
+    /// The tracks that are heard while `solo` (ids of tracks and buses) is on: a soloed track, and every
+    /// track that reaches a soloed bus through its output or a send. Ids that aren't strips count for nothing.
+    public func heardInSolo(_ solo: Set<UUID>) -> Set<UUID> {
+        var heard = Set<UUID>()
+        for t in tracks {
+            if solo.contains(t.id) { heard.insert(t.id); continue }
+            let first = ([t.output].compactMap { $0 } + t.sends.map(\.to))
+            if first.contains(where: { !downstream(of: $0).isDisjoint(with: solo) }) { heard.insert(t.id) }
+        }
+        return heard
+    }
+
+    /// The project as it is listened to with `solo` on: every track that isn't heard is muted, nothing
+    /// else is touched. Solo is a way of listening: it is not in the document, not undone, not exported.
+    /// With no strip of this project in `solo`, the project itself.
+    public func listening(solo: Set<UUID>) -> Project {
+        let real = solo.filter { id in tracks.contains { $0.id == id } || bus(id) != nil }
+        guard !real.isEmpty else { return self }
+        let heard = heardInSolo(real)
+        var p = self
+        for t in p.tracks.indices where !heard.contains(p.tracks[t].id) { p.tracks[t].isMuted = true }
+        return p
+    }
     /// A strip's fader and mute as they are heard: its own, with its VCA's level added and its VCA's mute.
     /// Without a VCA, exactly its own.
     public func heard(gainDB: Double, muted: Bool, vca: UUID?) -> (gainDB: Double, muted: Bool) {
