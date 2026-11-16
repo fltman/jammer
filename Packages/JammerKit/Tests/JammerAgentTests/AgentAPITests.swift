@@ -725,6 +725,39 @@ struct InsertStepTests {
         #expect(r[0].reason == "not_found")
     }
 
+    @Test("set_master: the gain, the limiter on with values and off, refusals in words; a plugin goes on the master by name")
+    func master() throws {
+        var p = Project(sampleRate: 48_000, channels: 2)
+        p.tracks = [Track(name: "A")]
+        var s = EditState(project: p)
+        let measure: StepRunner.Measure = { _, _ in LoudnessResult(integrated: nil, range: nil, maxMomentary: nil, maxShortTerm: nil, samplePeak: 0, truePeak: 0, duration: 0) }
+        func run(_ op: String, _ params: [String: JSONValue]) -> StepResult { StepRunner.run([Step(op: op, params: params)], on: &s, measure: measure)[0] }
+        #expect(run("set_master", ["gainDB": .number(-3)]).status == .done && s.project.master.gainDB == -3 && s.project.master.limiter == nil)
+        var r = run("set_master", ["limiter": .bool(true)])
+        #expect(r.status == .done && r.info["limiter"] == 1 && r.info["ceilingDB"] == -1 && s.project.master.limiter == MasterLimiter())
+        // A value alone changes the limiter that is on, and keeps the rest.
+        #expect(run("set_master", ["ceiling": .number(-2), "release": .number(250)]).status == .done)
+        #expect(s.project.master.limiter == MasterLimiter(ceilingDB: -2, releaseMs: 250, lookaheadMs: 5) && s.project.master.gainDB == -3)
+        // Refused, and nothing changed: nothing given, a value with "off", a ceiling over full scale.
+        let before = s.project
+        #expect(run("set_master", [:]).status == .failed)
+        #expect(run("set_master", ["limiter": .bool(false), "ceiling": .number(-3)]).status == .failed)
+        #expect(run("set_master", ["ceiling": .number(2)]).status == .failed)
+        #expect(run("set_master", ["gainDB": .number(60)]).status == .failed)
+        #expect(s.project == before)
+        #expect(run("set_master", ["limiter": .bool(false)]).status == .done && s.project.master.limiter == nil)
+        // A value without a limiter puts one on.
+        #expect(run("set_master", ["ceiling": .number(-0.5)]).status == .done && s.project.master.limiter?.ceilingDB == -0.5)
+        // Plugins on the master.
+        r = run("add_insert", ["track": .string("master"), "plugin": .string("AULowpass")])
+        #expect(r.status == .done && s.project.master.inserts.map(\.name) == ["AULowpass"] && s.project.tracks[0].inserts.isEmpty, "\(r.error ?? "")")
+        let id = try #require(r.ids["insert"])
+        #expect(run("set_insert", ["track": .string("Master"), "insert": .string(id), "bypass": .bool(true)]).status == .done && s.project.master.inserts[0].bypass)
+        #expect(run("remove_insert", ["track": .string("master"), "insert": .string(id)]).status == .done && s.project.master.inserts.isEmpty)
+        // It is not offered to the assistant until the evaluation has been run with it.
+        #expect(Operations.all.contains { $0.name == "set_master" })
+    }
+
     @Test("The same steps put a plugin on a bus, by the bus's id; the track's plugins are not touched")
     func onBus() throws {
         var p = Project(sampleRate: 48_000, channels: 2)

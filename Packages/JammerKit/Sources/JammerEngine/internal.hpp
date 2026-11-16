@@ -154,7 +154,8 @@ public:
     };
     explicit Graph(const Plan &plan);
     void process(const Plan &plan, Renderer &renderer, int64_t start, int64_t n, float *out);
-    int64_t total = 0;                      // the longest path, in frames
+    int64_t total = 0;                      // the longest path through the buses, in frames
+    int64_t masterLatency = 0;              // what the master's plugins and its limiter add after that
     std::vector<int64_t> busLatency;        // each bus's own chain
     std::vector<int64_t> trackDelay;        // added to each track's own way out
     std::vector<int64_t> busDelay;          // added to each bus's own way out
@@ -187,8 +188,12 @@ struct Plan {
     /// True when anything is routed to a bus or panned. False is the path every plan took before
     /// there was a mixer, and still takes: the same code, the same bits.
     bool routed = false;
-    /// Made by finalize when a bus has plugins; otherwise the mixer needs no state and has none.
+    /// Made by finalize when a bus has plugins or the master does anything; otherwise the mixer needs
+    /// no state and has none.
     std::shared_ptr<Graph> graph;
+    /// The master: the sum of everything → its plugins → its gain → its limiter, last of all.
+    float masterGain = 1.0f;
+    std::shared_ptr<Chain> masterChain, masterLimiter;
     std::vector<Clip> clips; // sorted by start once finalized
     int64_t length = 0;
     bool finalized = false;

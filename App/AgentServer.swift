@@ -457,6 +457,9 @@ enum AgentRouter {
             case let t where t.count == 4 && (t[0] == "tracks" || t[0] == "buses") && t[2] == "inserts":
                 try only("GET")
                 return try await insertDetail(session, track: t[1], insert: t[3])
+            case let t where t.count == 3 && t[0] == "master" && t[1] == "inserts":
+                try only("GET")
+                return try await insertDetail(session, track: "master", insert: t[2])
             case let t where t.count == 3 && t[0] == "tracks" && t[2] == "drift":
                 try only("GET")
                 guard let id = UUID(uuidString: t[1]), session.project.tracks.contains(where: { $0.id == id }) else {
@@ -571,7 +574,11 @@ enum AgentRouter {
              "inserts": plugins(b.inserts), "latencySamples": own(b.inserts), "compensationSamples": plan.compensation(bus: true, index: p.buses.firstIndex { $0.id == b.id } ?? 0),
              "inputs": ["tracks": p.tracks.filter { $0.output == b.id }.map(\.id.uuidString), "buses": p.buses.filter { $0.output == b.id }.map(\.id.uuidString)]]
         }
-        return ["tracks": tracks, "buses": buses, "usesMixer": p.usesMixer, "panAvailable": p.channels == 2, "totalLatencySamples": plan.totalLatency,
+        // The master: what its plugins and its limiter add is in `latencySamples`, and in the total.
+        let limiter: Any = p.master.limiter.map { ["ceilingDB": $0.ceilingDB, "releaseMs": $0.releaseMs, "lookaheadMs": $0.lookaheadMs,
+                                                    "guarantee": "exports"] as [String: Any] } ?? NSNull()
+        let master: [String: Any] = ["gainDB": p.master.gainDB, "inserts": plugins(p.master.inserts), "limiter": limiter, "latencySamples": plan.masterLatency]
+        return ["tracks": tracks, "buses": buses, "master": master, "usesMixer": p.usesMixer, "panAvailable": p.channels == 2, "totalLatencySamples": plan.totalLatency,
                 "limits": ["buses": Mixer.maxBuses, "sendsPerStrip": Mixer.maxSends, "gainDB": [Mixer.gainRange.lowerBound, Mixer.gainRange.upperBound], "pan": [-1, 1]]]
     }
 
@@ -594,8 +601,8 @@ enum AgentRouter {
     /// One insert with its parameters, read from the playing unit (or a unit of its own
     /// while that one is still starting).
     private static func insertDetail(_ session: EditorSession, track: String, insert: String) async throws -> Response {
-        // The id of a track, or of a bus.
-        guard let t = UUID(uuidString: track).flatMap({ session.project.strip($0) }) else {
+        // The id of a track, or of a bus, or "master".
+        guard let t = (track.lowercased() == "master" ? Master.id : UUID(uuidString: track)).flatMap({ session.project.strip($0) }) else {
             throw APIError.notFound("No track or bus with id \(track).")
         }
         guard let i = t.inserts.first(where: { $0.id.uuidString == insert.uppercased() }) else {
@@ -1092,8 +1099,14 @@ enum AgentRouter {
             if format == .opus, n.doubleValue != 48_000 { throw APIError.badRequest("opus is always written at 48000 Hz; leave sampleRate out or give 48000.") }
             sampleRate = n.doubleValue
         }
-        let delivery = try await session.export(to: tmp, options: .init(encoding: encoding, range: range, dither: obj["dither"] as? Bool ?? false, encoded: encoded,
+        let delivery: LoudnessDelivery?
+        do {
+            delivery = try await session.export(to: tmp, options: .init(encoding: encoding, range: range, dither: obj["dither"] as? Bool ?? false, encoded: encoded,
                                                                         chapters: obj["chapters"] as? Bool ?? true, loudness: target, tracks: only, sampleRate: sampleRate))
+        } catch let e as MasterCeilingError {
+            // The master's limiter couldn't hold the file: the reason, and in the words the peak it measured.
+            throw APIError.unprocessable(MasterCeilingError.reason, e.localizedDescription)
+        }
         var headers = ["Content-Disposition": "attachment; filename=\"\(asciiName(session.name)).\(format.fileExtension)\""]
         if let d = delivery, let target {
             // What the file measures when decoded again, and what was added before the encoder to get there.
@@ -1110,6 +1123,10 @@ enum AgentRouter {
         }
         if format == .wav { headers["X-Jammer-Dither"] = session.lastExportDither }
         headers["X-Jammer-Sample-Rate"] = String(Int(session.lastExportSampleRate))
+        // Through a limiter on the master: the ceiling, what the file measured, and how far under the limiter aimed.
+        if let l = session.lastExportLimiter {
+            headers["X-Jammer-Master-Limiter"] = String(format: "ceiling=%.2f; truePeak=%.2f; margin=%.2f", l.ceilingDB, l.truePeakDB, l.marginDB)
+        }
         let data = try Data(contentsOf: tmp, options: .mappedIfSafe)
         let types: [ExportFormat: String] = [.wav: "audio/wav", .aiff: "audio/aiff", .flac: "audio/flac", .alac: "audio/mp4", .aac: "audio/mp4", .opus: "audio/ogg", .mp3: "audio/mpeg"]
         return Response(status: 200, contentType: types[format] ?? "application/octet-stream", body: data, extraHeaders: headers)

@@ -224,6 +224,12 @@ public enum Operations {
                        .init("gainDB", .number, "The send's level in dB. Default 0 for a new send.", range: -96...24),
                        .init("pre", .boolean, "True: before the fader and pan. Default false."),
                        .init("remove", .boolean, "True takes the send away.")]),
+        .init("set_master", "Change Master", "Changes the master, which everything goes through last: its gain, and a true-peak limiter after everything else (every track, bus and plugin). With the limiter on, an export is measured as written and rendered again further under the ceiling until the file holds it; playback has one pass and aims 0.1 dB under. Plugins go on the master with `add_insert` and `track: \"master\"`.",
+              params: [.init("gainDB", .number, "The master's gain in dB.", range: -96...24),
+                       .init("limiter", .boolean, "True puts the limiter on (with the values given, else the ones it had, else the defaults); false takes it off."),
+                       .init("ceiling", .number, "The true peak to stay at or under, in dBTP, −20 to 0. Default −1.", range: -20...0),
+                       .init("release", .number, "How fast the gain comes back, in milliseconds, 1–2000. Default 100.", range: 1...2_000),
+                       .init("lookahead", .number, "How far ahead a peak is seen, in milliseconds, 0.5–20. Default 5.", range: 0.5...20)]),
         .init("remove_bus", "Remove Bus", "Takes a bus away. Refused while tracks or buses are routed to it (reason in_use), unless `reroute` says where they go instead.",
               params: [.init("bus", .string, "Bus id.", required: true),
                        .init("reroute", .string, "Where what was routed to the bus goes: a bus id, or \"master\".")]),
@@ -809,6 +815,27 @@ public enum StepRunner {
             if let v = p["remove"], case .bool(let b) = v { remove = b }
             do { try s.project.setSend(from: from, to: to, gainDB: p["gainDB"]?.double, pre: pre, remove: remove) }
             catch let e as Mixer.Failure { throw StepFailure("set_send: " + (e.errorDescription ?? ""), reason: e.reason) }
+        case "set_master":
+            var limiter: MasterLimiter?? = nil
+            var on: Bool?
+            if let v = p["limiter"], case .bool(let b) = v { on = b }
+            let values = p["ceiling"] != nil || p["release"] != nil || p["lookahead"] != nil
+            if on == false {
+                guard !values else { throw StepFailure("set_master: limiter false takes the limiter off; ceiling, release and lookahead mean nothing then.") }
+                limiter = .some(nil)
+            } else if on == true || values {
+                // Values without `limiter` change a limiter that is on, and put one on that isn't.
+                var l = project.master.limiter ?? MasterLimiter()
+                if let c = p["ceiling"]?.double { l.ceilingDB = c }
+                if let r = p["release"]?.double { l.releaseMs = r }
+                if let a = p["lookahead"]?.double { l.lookaheadMs = a }
+                limiter = .some(l)
+            }
+            guard p["gainDB"] != nil || limiter != nil else { throw StepFailure("set_master: give gainDB, limiter, or a value for the limiter.") }
+            do { try s.project.setMaster(gainDB: p["gainDB"]?.double, limiter: limiter) }
+            catch let e as Mixer.Failure { throw StepFailure("set_master: " + (e.errorDescription ?? ""), reason: e.reason) }
+            if let l = s.project.master.limiter { return ["gainDB": s.project.master.gainDB, "limiter": 1, "ceilingDB": l.ceilingDB] }
+            return ["gainDB": s.project.master.gainDB, "limiter": 0]
         case "remove_bus":
             guard let id = UUID(uuidString: p["bus"]?.string ?? "") else { throw StepFailure("remove_bus: no such bus.", reason: "not_found") }
             do { try s.project.removeBus(id, reroute: try route(p["reroute"], "remove_bus")) }
@@ -1030,14 +1057,13 @@ extension StepRunner {
     static func applyInsert(_ step: Step, to s: inout EditState) throws -> [String: Double] {
         let p = step.params
         let project = s.project
-        // `track` is the id of a track, or of a bus: plugins sit on either.
-        let id = UUID(uuidString: p["track"]?.string ?? "")
-        let t = id.flatMap { id in project.tracks.firstIndex { $0.id == id } }, b = id.flatMap { id in project.buses.firstIndex { $0.id == id } }
-        guard t != nil || b != nil else {
-            throw StepFailure("\(step.op): no track or bus with id \(p["track"]?.string ?? "").", reason: "not_found")
+        // `track` is the id of a track, or of a bus, or "master": plugins sit on any of them.
+        let named = p["track"]?.string ?? ""
+        let id = named.lowercased() == "master" ? Master.id : UUID(uuidString: named)
+        guard let id, let current = project.strip(id)?.inserts else {
+            throw StepFailure("\(step.op): no track or bus with id \(named).", reason: "not_found")
         }
-        let current = t.map { project.tracks[$0].inserts } ?? project.buses[b!].inserts
-        func put(_ list: [Insert], _ s: inout EditState) { if let t { s.project.tracks[t].inserts = list } else if let b { s.project.buses[b].inserts = list } }
+        func put(_ list: [Insert], _ s: inout EditState) { s.project.setInserts(list, on: id) }
         func failure(_ e: Error) -> StepFailure {
             if let e = e as? PluginError { return StepFailure("\(step.op): \(e.localizedDescription)", reason: e.reason) }
             return StepFailure("\(step.op): \(e.localizedDescription)", reason: "plugin_failed")

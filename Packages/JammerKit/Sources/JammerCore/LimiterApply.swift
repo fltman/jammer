@@ -36,6 +36,8 @@ extension Project {
         // What is listened to: the chosen tracks together.
         var together = self
         together.tracks = targets.map { tracks[$0] }
+        // Not through the master: its limiter would already have taken the peaks this one is asked to find.
+        together.master = Master()
         for i in together.tracks.indices { together.tracks[i].inserts = [] }
         let mix = PlanCompiler.compile(together, pool: pool)
         var report = LimitReport()

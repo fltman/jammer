@@ -1,6 +1,6 @@
 # Mixer
 
-![The Mixer sheet: two tracks and two buses, each with a mute box, a level slider, a pan slider, where it goes, and its sends](../screens/mixer.webp)
+![The Mixer sheet: a track and a bus, each with a mute box, a level slider, a pan slider, where it goes, and its sends; under them the master with its level, its limiter and the limiter's ceiling](../screens/mixer.webp)
 
 **Audio › Mixer…** (⌥⌘X) shows every track as a strip: mute, level, pan, and where it goes. Use it to set the balance between tracks, to place a track to the left or the right, and to gather tracks on a bus.
 
@@ -42,6 +42,16 @@ A bus can hold plugins, like a track: one compressor for all the voices, or a re
 
 What this costs the computer depends on the plugins, not on the buses. It has not been measured well enough yet for the manual to give a number of tracks or plugins.
 
+## The master
+
+Everything goes through the master last. At the bottom of the mixer it has a level, and a **Limiter** box.
+
+- **The level** is one gain on the whole mix.
+- **The limiter** holds the true peak of everything under the ceiling you set (−1 dBTP to begin with). It comes after everything else: every track, every bus, every plugin, and the master's own level. So turning the master up pushes into the limiter, not past it.
+- **What it promises, and for what.** When you export, Jämmer measures the file it wrote and, if a peak is over the ceiling, writes it again with the limiter aiming a little lower, until the file holds. That covers what happens after the limiter too: another sample rate, 16 bits, and MP3 or AAC, whose encoders raise peaks (in a trial an MP3 needed 0.2 dB of margin and an AAC 0.8). If the file can't be held under the ceiling, the export fails and says what the file measured; lower the master's level or raise the ceiling. Playback has only one pass: it aims 0.1 dB under the ceiling and can go a little over. The promise is for exported files.
+- Plugins go on the master like on a bus: in **Audio › Plugins…**, choose **Master** in the list.
+- **Audio › Limit Peaks…** is another tool: it changes the tracks' own sound once, before plugins. The master's limiter changes nothing in the tracks and can be switched off again.
+
 ## What stays the same
 
 - A document without buses, with every pan in the centre, plays and exports exactly as it did before there was a mixer, sample for sample.
@@ -54,6 +64,8 @@ A project that uses the mixer (a bus, a pan, a track sent to a bus) is saved in 
 
 ## Agents
 
-An agent sees the mixer with `GET /api/v1/documents/{id}/mixer` and changes it with the steps `add_bus`, `set_bus`, `remove_bus`, `set_send` and `set_track` (`pan`, `output`), and puts a plugin on a bus with `add_insert` and the bus's id; the mixer answers each strip's `latencySamples` and `compensationSamples`; see [the guide](../agents.md#operations). The assistant can add a bus, and change or remove one you name ("set the Music bus to −6 dB"); for pan, routing and sends, use the sheet.
+An agent sees the mixer with `GET /api/v1/documents/{id}/mixer` and changes it with the steps `add_bus`, `set_bus`, `remove_bus`, `set_send`, `set_master` and `set_track` (`pan`, `output`), and puts a plugin on a bus with `add_insert` and the bus's id; the mixer answers each strip's `latencySamples` and `compensationSamples`; see [the guide](../agents.md#operations). The assistant can add a bus, and change or remove one you name ("set the Music bus to −6 dB"); for pan, routing and sends, use the sheet.
 
-Not there yet: a master strip and solo.
+An export through the master's limiter answers what the file measured in the `X-Jammer-Master-Limiter` header, or fails with `ceiling_not_met`.
+
+Not there yet: solo, VCA groups and freezing.

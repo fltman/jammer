@@ -43,7 +43,10 @@ struct MixerSheet: View {
                 }
                 .padding(.trailing, 6)
             }
-            .frame(minHeight: 220, maxHeight: 420)
+            .frame(minHeight: 180, maxHeight: 420)
+            // Outside the list that scrolls: the master and what its limiter promises are always in view.
+            Text("Master").font(.headline)
+            MasterStrip(master: project.master, change: { session.perform("set_master", $0) })
             HStack {
                 TextField("Name of a new bus", text: $newBus)
                     .accessibilityLabel("Name of a new bus")
@@ -81,6 +84,61 @@ struct MixerSheet: View {
 }
 
 /// One strip. The level and the pan are moved freely and sent when the slider is let go, so a drag is one undo step.
+/// The master: everything goes through it last. Its level, and the limiter after everything else.
+private struct MasterStrip: View {
+    let master: Master
+    let change: ([String: JSONValue]) -> Void
+    @State private var level = 0.0
+    @State private var ceiling = -1.0
+    @State private var dragging = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 10) {
+                Text("Master").frame(width: 150, alignment: .leading)
+                Slider(value: $level, in: -60...12, onEditingChanged: { editing in
+                    dragging = editing
+                    if !editing, level != master.gainDB { change(["gainDB": .number((level * 10).rounded() / 10)]) }
+                })
+                .frame(width: 150)
+                .accessibilityLabel("Level of the master")
+                .accessibilityValue(Text(MixerStrip.levelText(level)))
+                .accessibilityIdentifier("mixer.master.level")
+                Text(MixerStrip.levelText(level)).monospacedDigit().lineLimit(1).frame(width: 72, alignment: .trailing)
+                Toggle("Limiter", isOn: Binding(get: { master.limiter != nil }, set: { change(["limiter": .bool($0)]) }))
+                    .toggleStyle(.checkbox)
+                    .fixedSize()
+                    .accessibilityLabel("Limiter on the master")
+                    .accessibilityIdentifier("mixer.master.limiter")
+                if master.limiter != nil {
+                    Slider(value: $ceiling, in: -12...0, onEditingChanged: { editing in
+                        dragging = editing
+                        if !editing, ceiling != master.limiter?.ceilingDB { change(["ceiling": .number((ceiling * 10).rounded() / 10)]) }
+                    })
+                    .frame(width: 120)
+                    .accessibilityLabel("Ceiling of the master's limiter")
+                    .accessibilityValue(Text(String(format: "%.1f dBTP", ceiling)))
+                    .accessibilityIdentifier("mixer.master.ceiling")
+                    Text(String(format: "%.1f dBTP", ceiling).replacingOccurrences(of: "-", with: "−")).monospacedDigit().lineLimit(1).fixedSize()
+                }
+                Spacer(minLength: 0)
+            }
+            .frame(height: 28)
+            // Said where it is switched on: what the limiter promises, and for what.
+            if master.limiter != nil {
+                Text("The limiter comes after everything else. An exported file is measured and held under the ceiling; playback has one pass and can go a little over.")
+                    .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("mixer.master.limiter.note")
+            }
+        }
+        .onAppear { level = master.gainDB; ceiling = master.limiter?.ceilingDB ?? -1 }
+        .onChange(of: master.gainDB) { if !dragging { level = master.gainDB } }
+        .onChange(of: master.limiter?.ceilingDB) { if !dragging { ceiling = master.limiter?.ceilingDB ?? -1 } }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Master")
+    }
+}
+
 private struct MixerStrip: View {
     let name: String
     let kind: String

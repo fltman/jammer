@@ -29,7 +29,15 @@ Phase 3, part 2. The sketch as the coordinator approved it on 2026-11-16, with t
 - Plugin settings on a bus go through the same trust check as on a track before they are loaded; a file with more than 64 plugins on a strip is cut to 64 and says so.
 - A plugin that has a latency and doesn't report it can't be compensated. The manual says so.
 
-Not built: the master strip and its limiter, VCAs, sidechain keys, freeze, solo.
+**Step 4, 2026-11-16: the master, with the limiter last.** `Project.master` (`gainDB`, `inserts`, `limiter`); a master that does nothing is not saved and the project stays format 1. `set_master` with flat parameters (`gainDB`, `limiter` true/false, `ceiling`, `release`, `lookahead`: the step schema has no object parameters); plugins with `add_insert` and `track: "master"`. In the engine the graph ends: sum → the master's plugins → its gain → the limiter. The limiter is the one `limit` uses (`Limiter.Processor`), wrapped as a unit with a fixed latency of 4 096 + 16 + lookahead + 8 frames (4 360 at 48 kHz and 5 ms), hidden like any other.
+
+- Tested (`MasterTests`): gain within 1e-7; a limiter with nothing to do passes the mix bit for bit and on the sample, also from the middle; one with work holds the ceiling, equals the offline limiter over the plain mix to 1e-4, is the same samples in 512-frame blocks, and after a seek the same to 1e-3; with the master at +6 the ceiling still holds; over a bus with a 300-frame plugin everything is still on the sample. Two planted faults (the latency not hidden; the limiter before the gain) made them fail.
+- Exports: the file is measured as written (`EncodedWriter.measureWritten`) and written again at margins 0.1, 0.2, 0.4, 0.8, 1.5, 3 dB until it holds; otherwise `MasterCeilingError`, no file, 422 `ceiling_not_met`. The same in a batch (`BatchTests.masterLimiter`).
+- In the app, a mix turned up to +11 dBTP, ceiling −3, each file also measured with ffmpeg's ebur128: WAV 24 bit −3.10 (ffmpeg −3.0), 16 bit with dither −3.10, at 44.1 kHz −3.00, MP3 128k −3.04 at margin 0.2, AAC 96k −3.10 at margin 0.8, master at +12 dB −3.10. Played through it quietly with no gaps counted. The Limiter box found by its accessibility id and clicked: the limiter went off in the model. The sheet looked at as a picture: the note about what the limiter promises was cut off by the scrolling list, so the master now sits under the list.
+- Hostile files: an absurd master level is brought into range; a limiter with impossible values is left off, and said.
+- Not tried: an export that can't be held (the limiter held every one), so `ceiling_not_met` has only been seen as words in a test. `set_master` is not offered to the assistant yet.
+
+Not built: VCAs, sidechain keys, freeze, solo.
 
 ## What the render path costs today (measured 2026-11-16)
 

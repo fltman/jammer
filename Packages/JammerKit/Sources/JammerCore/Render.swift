@@ -142,6 +142,8 @@ public final class RenderPlan: @unchecked Sendable {
     /// The longest path through the mixer, in frames: what the plugins on the buses add, and what every
     /// other path is delayed to match. 0 without plugins on buses. The mix itself comes out on the sample.
     public var totalLatency: Int64 { jm_plan_total_latency(pointer) }
+    /// The part of it that the master adds (its plugins and its limiter).
+    public var masterLatency: Int64 { jm_plan_master_latency(pointer) }
     /// The delay added to a track's (or a bus's) own way out so that it lines up with the longest path it meets.
     public func compensation(bus: Bool, index: Int) -> Int64 { jm_plan_compensation(pointer, bus, Int32(index)) }
 
@@ -161,7 +163,9 @@ public enum PlanCompiler {
     /// Compiles the project into what the engine plays. Clips whose file is missing are left out.
     /// Inserts run only when `inserts` supplies their chains; without it the plan is the
     /// dry mix (what the bounced effects and restoration work from).
-    public static func compile(_ project: Project, pool: SourcePool, inserts: ChainProvider? = nil) -> RenderPlan {
+    /// `masterMargin`: how far under its ceiling the master's limiter aims (dB); an export that measured
+    /// its file over the ceiling renders again with more.
+    public static func compile(_ project: Project, pool: SourcePool, inserts: ChainProvider? = nil, masterMargin: Double = Mixer.masterMargins[0]) -> RenderPlan {
         let plan = jm_plan_create(Int32(project.channels), project.sampleRate)
         var indices: [UUID: Int32] = [:]
         // The buses first, when the project uses the mixer at all; otherwise the plan is the one it always was.
@@ -201,6 +205,14 @@ public enum PlanCompiler {
                 jm_plan_add_clip(plan, track, index, c.sourceStart, c.start, c.length, Float(dbToGain(c.gainDB)),
                                  c.fadeIn, c.fadeOut, c.fadeShape == .linear ? JM_FADE_LINEAR : JM_FADE_EQUAL_POWER)
             }
+        }
+        // The master, when it does anything: its plugins (with a provider), its gain, its limiter last.
+        let master = project.master
+        if !master.isDefault {
+            let chain = inserts.flatMap { master.inserts.contains(where: { !$0.bypass }) ? $0.masterChain(for: master) : nil }
+            let limiter = master.limiter.flatMap { MasterLimiterUnit.chain($0.settings, channels: project.channels, sampleRate: project.sampleRate, marginDB: masterMargin) }
+            jm_plan_set_master(plan, Float(dbToGain(master.gainDB)), chain, limiter)
+            if let limiter { jm_chain_release(limiter) }
         }
         jm_plan_finalize(plan)
         return RenderPlan(plan, channels: project.channels, sampleRate: project.sampleRate)

@@ -98,6 +98,16 @@ public enum ProjectSafety {
             var cut = 0
             for t in p.tracks.indices where p.tracks[t].inserts.count > 64 { cut += p.tracks[t].inserts.count - 64; p.tracks[t].inserts = Array(p.tracks[t].inserts.prefix(64)) }
             for b in p.buses.indices where p.buses[b].inserts.count > 64 { cut += p.buses[b].inserts.count - 64; p.buses[b].inserts = Array(p.buses[b].inserts.prefix(64)) }
+            if p.master.inserts.count > 64 { cut += p.master.inserts.count - 64; p.master.inserts = Array(p.master.inserts.prefix(64)) }
+            // The master: a level that is one, and a limiter whose values the limiter itself accepts, or none.
+            if !p.master.gainDB.isFinite || !Mixer.gainRange.contains(p.master.gainDB) {
+                p.master.gainDB = p.master.gainDB.isFinite ? min(max(p.master.gainDB, Mixer.gainRange.lowerBound), Mixer.gainRange.upperBound) : 0
+                fixed += 1
+            }
+            if let l = p.master.limiter, (try? l.settings.validate()) == nil {
+                p.master.limiter = nil
+                notes.append("The limiter on the master had values no limiter can have and was left off. Put it back in the mixer before exporting.")
+            }
             if cut > 0 { notes.append("\(cut) plugin\(cut == 1 ? "" : "s") beyond the 64 a track or bus can have \(cut == 1 ? "was" : "were") left out.") }
             if lost > 0 { notes.append("\(lost) route\(lost == 1 ? "" : "s") or send\(lost == 1 ? "" : "s") in the mixer led to a bus that isn't there, or round in a circle; a route now goes to the output and a send is gone.") }
             if fixed > 0 { notes.append("\(fixed) level\(fixed == 1 ? "" : "s") or pan\(fixed == 1 ? "" : "s") in the mixer \(fixed == 1 ? "was" : "were") outside what is possible and \(fixed == 1 ? "was" : "were") put inside.") }

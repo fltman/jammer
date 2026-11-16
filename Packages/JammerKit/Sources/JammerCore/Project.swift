@@ -261,6 +261,8 @@ public struct Project: Codable, Equatable, Sendable {
     public var formatVersion: Int
     /// The mixer's buses. None: every track goes to the output, as before there was a mixer.
     public var buses: [Bus] = []
+    /// The master strip. As made it does nothing.
+    public var master = Master()
     public var sampleRate: Double
     public var channels: Int
     public var tracks: [Track]
@@ -308,7 +310,7 @@ public struct Project: Codable, Equatable, Sendable {
         self.transcripts = transcripts
     }
 
-    private enum CodingKeys: String, CodingKey { case formatVersion, sampleRate, channels, tracks, markers, sources, tempo, transcripts, speakers, speakerTurns, imported, buses }
+    private enum CodingKeys: String, CodingKey { case formatVersion, sampleRate, channels, tracks, markers, sources, tempo, transcripts, speakers, speakerTurns, imported, buses, master }
 
     public func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
@@ -324,6 +326,7 @@ public struct Project: Codable, Equatable, Sendable {
         try c.encode(speakerTurns, forKey: .speakerTurns)
         try c.encodeIfPresent(imported, forKey: .imported)
         if !buses.isEmpty { try c.encode(buses, forKey: .buses) }
+        if !master.isDefault { try c.encode(master, forKey: .master) }
     }
 
     public init(from decoder: Decoder) throws {
@@ -334,6 +337,7 @@ public struct Project: Codable, Equatable, Sendable {
         // In memory the version is always the same: what the file is saved as is decided when it is saved.
         formatVersion = Self.formatVersion
         buses = try c.decodeIfPresent([Bus].self, forKey: .buses) ?? []
+        master = try c.decodeIfPresent(Master.self, forKey: .master) ?? Master()
         sampleRate = try c.decode(Double.self, forKey: .sampleRate)
         channels = try c.decode(Int.self, forKey: .channels)
         tracks = try c.decode([Track].self, forKey: .tracks)

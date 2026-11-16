@@ -4,6 +4,8 @@ Not a list of commits: what behaves differently from before, for a user, an agen
 
 ## 2026-11-16
 
+- **The master strip** (`docs/MIXER.md`, step 4): `set_master`, plugins on `track: "master"`, `master` in `GET …/mixer`. With its limiter on, an export measures its file and renders again until the ceiling holds, answers `X-Jammer-Master-Limiter`, and fails with 422 `ceiling_not_met` and no file when it can't. A project whose master does something is format 2.
+
 - **`underruns`** in a document's summary and in the answer to `stop`: gaps heard since playback started. Read only.
 
 - **Plugins on buses, with delay compensation across the mixer** (`docs/MIXER.md`, step 3). `add_insert`, `set_insert` and `remove_insert` take a bus's id as `track`; `GET …/buses/{busId}/inserts/{insert}`; `GET …/mixer` has `inserts` on buses, `latencySamples` and `compensationSamples` on every strip and `totalLatencySamples`. A project without plugins on a bus renders as before, bit for bit. `limit` answers `beforePlugins` also when the plugins are on a bus.

@@ -267,11 +267,36 @@ public enum BatchRunner {
         return LoudnessDelivery(loudness: m?.integrated, truePeak: m?.truePeak, compensatedDB: 0, encodes: 1, limitedByPeak: false)
     }
 
+    /// With a limiter on the master (a recipe can put one there) the file is measured as written and
+    /// written again further under the ceiling until it holds, as an export from the app is.
     static func export(_ project: Project, pool: SourcePool, to url: URL, request: BatchRequest) throws {
         guard project.length > 0 else { throw BatchError("empty", "Nothing is left to export.") }
+        guard let ceiling = project.master.limiter?.ceilingDB else {
+            return try exportOnce(project, pool: pool, to: url, request: request, masterMargin: Mixer.masterMargins[0])
+        }
+        // Checked under another name, so a file over the ceiling never stands where a good one was.
+        let trial = url.deletingLastPathComponent().appending(path: ".\(UUID().uuidString.prefix(8)).checked.\(url.pathExtension)")
+        defer { try? FileManager.default.removeItem(at: trial) }
+        var peak = Double.infinity
+        for margin in Mixer.exportMargins {
+            try exportOnce(project, pool: pool, to: trial, request: request, masterMargin: margin)
+            guard let measured = EncodedWriter.measureWritten(trial, scratch: FileManager.default.temporaryDirectory) else {
+                throw BatchError(MasterCeilingError.reason, MasterCeilingError(ceilingDB: ceiling, truePeakDB: nil).localizedDescription)
+            }
+            peak = measured.truePeak
+            if peak <= ceiling {
+                try? FileManager.default.removeItem(at: url)
+                try FileManager.default.moveItem(at: trial, to: url)
+                return
+            }
+        }
+        throw BatchError(MasterCeilingError.reason, MasterCeilingError(ceilingDB: ceiling, truePeakDB: peak).localizedDescription)
+    }
+
+    private static func exportOnce(_ project: Project, pool: SourcePool, to url: URL, request: BatchRequest, masterMargin: Double) throws {
         let original = project
         var project = project
-        var plan = PlanCompiler.mixBlocking(project, pool: pool)
+        var plan = PlanCompiler.mixBlocking(project, pool: pool, masterMargin: masterMargin)
         var range: Range<Frame> = 0..<project.length
         // Written under another name first, so a failed export never leaves half a file where a good one was.
         let tmp = url.deletingLastPathComponent().appending(path: ".\(UUID().uuidString.prefix(8)).\(url.pathExtension)")

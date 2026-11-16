@@ -579,6 +579,9 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
                     if let d = delivery, let l = d.loudness {
                         let how = d.limitedByPeak ? "the peaks held it back" : (d.compensatedDB == 0 ? "as encoded" : String(format: "%+.2f dB to make up for the encoder", d.compensatedDB))
                         session.status = String(format: "Exported %@ at %.1f LUFS (%@)", url.lastPathComponent, l, how)
+                    } else if let l = session.lastExportLimiter {
+                        session.status = String(format: "Exported %@; the master's limiter held it at %.2f dBTP (ceiling %.1f)", url.lastPathComponent, l.truePeakDB, l.ceilingDB)
+                            .replacingOccurrences(of: "-", with: "−")
                     } else {
                         session.status = "Exported \(url.lastPathComponent)"
                     }

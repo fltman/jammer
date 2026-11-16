@@ -216,7 +216,16 @@ void jm_plan_set_bus_chain(jm_plan *plan, int32_t bus, jm_chain *chain) {
     p.buses[size_t(bus)].chain = chain->ptr;
 }
 
-int64_t jm_plan_total_latency(const jm_plan *plan) { return plan->ptr->graph ? plan->ptr->graph->total : 0; }
+void jm_plan_set_master(jm_plan *plan, float gain, jm_chain *chain, jm_chain *limiter) {
+    Plan &p = *plan->ptr;
+    if (p.finalized) return;
+    p.masterGain = gain;
+    p.masterChain = chain ? chain->ptr : nullptr;
+    p.masterLimiter = limiter ? limiter->ptr : nullptr;
+}
+
+int64_t jm_plan_total_latency(const jm_plan *plan) { return plan->ptr->graph ? plan->ptr->graph->total + plan->ptr->graph->masterLatency : 0; }
+int64_t jm_plan_master_latency(const jm_plan *plan) { return plan->ptr->graph ? plan->ptr->graph->masterLatency : 0; }
 
 int64_t jm_plan_compensation(const jm_plan *plan, bool bus, int32_t index) {
     const Plan &p = *plan->ptr;
@@ -269,8 +278,9 @@ void jm_plan_finalize(jm_plan *plan) {
         }
     }
     p.busOrder.assign(placed.rbegin(), placed.rend());
-    for (const Bus &b : p.buses)
-        if (b.chain) { p.graph = std::make_shared<Graph>(p); break; }
+    bool stateful = p.masterChain || p.masterLimiter || p.masterGain != 1.0f;
+    for (const Bus &b : p.buses) stateful = stateful || b.chain;
+    if (stateful) p.graph = std::make_shared<Graph>(p);
     p.finalized = true;
 }
 

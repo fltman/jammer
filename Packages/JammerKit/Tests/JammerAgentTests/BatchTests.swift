@@ -97,6 +97,42 @@ struct BatchTests {
         #expect(again.skipped.count == 2 && again.outputs.isEmpty)
     }
 
+    @Test("A recipe that puts a limiter on the master: the file written is under the ceiling")
+    func masterLimiter() async throws {
+        let dir = try folder()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        // Loud, with clicks between the samples' reach: a true peak well over the ceiling.
+        let hot = dir.appending(path: "in/hot.wav")
+        let n = 48_000 * 3
+        let x = (0..<n).flatMap { i -> [Float] in
+            let v = Float(0.7 * sin(2 * .pi * 997 * Double(i) / 48_000) + 0.25 * sin(2 * .pi * 11_025 * Double(i) / 48_000 + 0.7))
+            return [v, v * 0.9]
+        }
+        let w = try WAVWriter(url: hot, options: .init(encoding: .int24, channels: 2, sampleRate: 48_000))
+        try w.write(x); try w.finish()
+        func peak(_ url: URL) throws -> Double {
+            let r = try AudioImporter.importFile(url, mediaFolder: dir.appending(path: "check-\(UUID().uuidString.prefix(6))"))
+            let p = Project(source: r.source)
+            return LoudnessMeter.measure(PlanCompiler.compile(p, pool: SourcePool()), 0..<p.length).truePeak
+        }
+        #expect(try peak(hot) > -1)
+        // (Another sample rate needs the converter, which this test target doesn't carry; that one is tried in the app.)
+        for rate in [Double?.none] {
+            var request = BatchRequest(inputs: [hot], steps: [Step(op: "set_master", params: ["ceiling": .number(-6)])], output: dir.appending(path: "out-\(Int(rate ?? 0))"))
+            request.sampleRate = rate
+            let result = await BatchRunner.run(request, media: dir.appending(path: "media"))
+            let out = try #require(result.outputs.first, "\(result)")
+            let measured = try peak(URL(fileURLWithPath: out))
+            #expect(measured <= -6 && measured > -8, "at \(rate ?? 48_000): \(measured) dBTP")
+        }
+        // Without the limiter the same file comes out as hot as it went in.
+        let plain = await BatchRunner.run(BatchRequest(inputs: [hot], steps: [], output: dir.appending(path: "plain")), media: dir.appending(path: "media"))
+        #expect(try peak(URL(fileURLWithPath: try #require(plain.outputs.first))) > -1)
+        // What a failure says: the ceiling, the peak that was measured, and what to do.
+        let words = MasterCeilingError(ceilingDB: -1, truePeakDB: -0.62).localizedDescription
+        #expect(words.contains("-1.0 dBTP") && words.contains("-0.62") && words.contains("Lower the master's level or raise the ceiling"))
+    }
+
     @Test("Paths must lie in an allowed folder, also through symlinks and ..; output never lands on an input")
     func policy() throws {
         let dir = try folder()

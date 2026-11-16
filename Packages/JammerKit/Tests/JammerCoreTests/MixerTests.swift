@@ -213,6 +213,13 @@ struct MixerTests {
         let (cut, said) = try ProjectPackage.decodeChecked(try ProjectPackage.encode(many))
         #expect(cut.buses[0].inserts.count == 64 && cut.tracks[0].inserts.count == 64 && cut.buses[0].inserts.last?.name == "p63")
         #expect(said.contains { $0.contains("12 plugins beyond the 64") }, "\(said)")
+        // A master with an absurd level, and a limiter with a ceiling over full scale and a lookahead of a minute.
+        var bad = Self.document().0
+        bad.master.gainDB = 1e300
+        bad.master.limiter = MasterLimiter(ceilingDB: 30, releaseMs: -1, lookaheadMs: 60_000)
+        let (mended, why) = try ProjectPackage.decodeChecked(try ProjectPackage.encode(bad))
+        #expect(mended.master.gainDB == Mixer.gainRange.upperBound && mended.master.limiter == nil)
+        #expect(why.contains { $0.contains("limiter on the master") } && why.contains { $0.contains("outside what is possible") }, "\(why)")
         // A pan in a mono project means nothing and is dropped.
         var mono = Self.document(channels: 1).0
         mono.tracks[0].pan = 0.5

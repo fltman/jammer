@@ -178,6 +178,7 @@ extension Project {
         if speech.isEmpty {
             var mix = base
             mix.tracks = controls.map { base.tracks[$0] }
+            mix.master = Master()
             for i in mix.tracks.indices { mix.tracks[i].inserts = [] }
             let plan = PlanCompiler.compile(mix, pool: pool)
             speech = Ducking.loudRanges(length: total, channels: channels, sampleRate: sampleRate, threshold: settings.threshold) {

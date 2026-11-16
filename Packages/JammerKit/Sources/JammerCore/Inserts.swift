@@ -442,12 +442,15 @@ public protocol ChainProvider: AnyObject {
     /// The same for a bus's plugins on plan bus `index`.
     @discardableResult
     func attachChain(for bus: Bus, to plan: OpaquePointer, index: Int32) -> Int64?
+    /// The chain of the master's plugins, if it has any running (not retained for the caller).
+    func masterChain(for master: Master) -> OpaquePointer?
 }
 
 public extension ChainProvider {
     /// A provider that knows nothing of buses puts no plugins on them.
     @discardableResult
     func attachChain(for bus: Bus, to plan: OpaquePointer, index: Int32) -> Int64? { nil }
+    func masterChain(for master: Master) -> OpaquePointer? { nil }
 }
 
 /// The running instances for a project's inserts and the chains built from them. One
@@ -590,6 +593,10 @@ public final class InsertHost: ChainProvider, @unchecked Sendable {
         }
     }
 
+    public func masterChain(for master: Master) -> OpaquePointer? {
+        lock.withLock { chainLocked(for: Master.id, inserts: master.inserts) }
+    }
+
     /// The chain of a strip (a track or a bus, by its id).
     private func chainLocked(for strip: UUID, inserts: [Insert]) -> OpaquePointer? {
         do {
@@ -621,15 +628,15 @@ extension PlanCompiler {
     /// The mix as it's heard, inserts included, with units of its own: for exports and
     /// loudness measurements, which mustn't share units with playback. The plan keeps
     /// its units alive.
-    public static func mix(_ project: Project, pool: SourcePool, outOfProcess: Bool = false) async -> RenderPlan {
-        guard project.hasActiveInserts else { return compile(project, pool: pool) }
-        return compile(project, pool: pool, inserts: await InsertHost.make(for: project, outOfProcess: outOfProcess))
+    public static func mix(_ project: Project, pool: SourcePool, outOfProcess: Bool = false, masterMargin: Double = Mixer.masterMargins[0]) async -> RenderPlan {
+        guard project.hasActiveInserts else { return compile(project, pool: pool, masterMargin: masterMargin) }
+        return compile(project, pool: pool, inserts: await InsertHost.make(for: project, outOfProcess: outOfProcess), masterMargin: masterMargin)
     }
 
     /// `mix` on this thread (background only).
-    public static func mixBlocking(_ project: Project, pool: SourcePool, outOfProcess: Bool = false) -> RenderPlan {
-        guard project.hasActiveInserts else { return compile(project, pool: pool) }
-        return compile(project, pool: pool, inserts: InsertHost.makeBlocking(for: project, outOfProcess: outOfProcess))
+    public static func mixBlocking(_ project: Project, pool: SourcePool, outOfProcess: Bool = false, masterMargin: Double = Mixer.masterMargins[0]) -> RenderPlan {
+        guard project.hasActiveInserts else { return compile(project, pool: pool, masterMargin: masterMargin) }
+        return compile(project, pool: pool, inserts: InsertHost.makeBlocking(for: project, outOfProcess: outOfProcess), masterMargin: masterMargin)
     }
 }
 

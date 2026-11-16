@@ -630,9 +630,41 @@ final class EditorSession {
     /// Renders to a WAV file off the main thread. Keeps the first source's
     /// Broadcast Wave and iXML data when exporting from the start.
     @discardableResult
+    /// Writes the file. With a limiter on the master the file is then measured as written, and written
+    /// again with the limiter aiming further under its ceiling until the file holds it: the promise is
+    /// about the file, whatever the conversion, the dither or the encoder did after the limiter.
     func export(to url: URL, options: ExportOptions, progress: @escaping @Sendable (Double) -> Void = { _ in }) async throws -> LoudnessDelivery? {
+        lastExportLimiter = nil
+        guard let ceiling = project.master.limiter?.ceilingDB else {
+            return try await exportOnce(to: url, options: options, masterMargin: Mixer.masterMargins[0], progress: progress)
+        }
+        var peak = Double.infinity
+        for margin in Mixer.exportMargins {
+            let delivery = try await exportOnce(to: url, options: options, masterMargin: margin, progress: progress)
+            let measured = await Task.detached(priority: .userInitiated) {
+                EncodedWriter.measureWritten(url, scratch: FileManager.default.temporaryDirectory)
+            }.value
+            guard let measured else {
+                try? FileManager.default.removeItem(at: url)
+                throw MasterCeilingError(ceilingDB: ceiling, truePeakDB: nil)
+            }
+            peak = measured.truePeak
+            if peak <= ceiling {
+                lastExportLimiter = (ceiling, peak, margin)
+                return delivery
+            }
+        }
+        try? FileManager.default.removeItem(at: url)
+        throw MasterCeilingError(ceilingDB: ceiling, truePeakDB: peak)
+    }
+
+    /// The ceiling, the true peak the file measured, and how far under the ceiling the limiter had to aim,
+    /// for the last export through a master limiter; nil when there was none.
+    var lastExportLimiter: (ceilingDB: Double, truePeakDB: Double, marginDB: Double)?
+
+    private func exportOnce(to url: URL, options: ExportOptions, masterMargin: Double, progress: @escaping @Sendable (Double) -> Void) async throws -> LoudnessDelivery? {
         // Units of its own: playback keeps going untouched while this renders.
-        let mixed = await PlanCompiler.mix(alone(options.tracks), pool: pool, outOfProcess: Self.pluginSafeMode)
+        let mixed = await PlanCompiler.mix(alone(options.tracks), pool: pool, outOfProcess: Self.pluginSafeMode, masterMargin: masterMargin)
         let asked = options.range ?? 0..<project.length
         guard !asked.isEmpty else { throw EditError.emptyRange }
         let chapters = project.chapters(in: asked)
@@ -678,7 +710,7 @@ final class EditorSession {
                         var p = project
                         if gain != 0 { try p.changeGain(range, by: gain) }
                         // The first encode uses the plan already made; a corrected one needs its own.
-                        let use = gain == 0 ? plan : PlanCompiler.mixBlocking(p, pool: pool, outOfProcess: safe)
+                        let use = gain == 0 ? plan : PlanCompiler.mixBlocking(p, pool: pool, outOfProcess: safe, masterMargin: masterMargin)
                         try EncodedWriter.export(use, range: range, to: url, options: final) { p in progress(p); return true }
                     }, measure: { EncodedWriter.measureWritten(url, scratch: FileManager.default.temporaryDirectory) })
                 }.value

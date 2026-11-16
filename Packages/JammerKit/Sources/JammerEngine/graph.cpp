@@ -15,6 +15,11 @@ Graph::Graph(const Plan &plan) : channels_(plan.channels) {
         busLatency[b] = plan.buses[b].chain->latency;
         preroll_ = std::max(preroll_, plan.buses[b].chain->preroll);
     }
+    for (const auto &c : {plan.masterChain, plan.masterLimiter}) {
+        if (!c) continue;
+        masterLatency += c->latency;
+        preroll_ = std::max(preroll_, c->preroll);
+    }
     auto valid = [nb](int32_t to) { return to >= 0 && size_t(to) < nb ? to : -1; };
     trackEdges_.resize(plan.tracks.size());
     for (size_t t = 0; t < plan.tracks.size(); ++t) {
@@ -65,6 +70,8 @@ Graph::Graph(const Plan &plan) : channels_(plan.channels) {
 void Graph::reset(const Plan &plan, int64_t start) {
     for (const Bus &b : plan.buses)
         if (b.chain) b.chain->restart();
+    if (plan.masterChain) plan.masterChain->restart();
+    if (plan.masterLimiter) plan.masterLimiter->restart();
     for (auto &edges : trackEdges_)
         for (Edge &e : edges) { std::fill(e.line.begin(), e.line.end(), 0.0f); e.at = 0; }
     for (auto &edges : busEdges_)
@@ -72,7 +79,7 @@ void Graph::reset(const Plan &plan, int64_t start) {
     // What comes out of the graph at its time g belongs to the timeline at g − total. To hand over the
     // timeline from `start`, it begins a run-in before that and throws the run-in and the lateness away.
     cursor_ = start - preroll_;
-    discard_ = preroll_ + total;
+    discard_ = preroll_ + total + masterLatency;
     readPos_ = start;
     fifo_.clear();
     fifoHead_ = 0;
@@ -138,6 +145,11 @@ void Graph::produce(const Plan &plan, Renderer &renderer) {
             else send(e, strip_.data(), bus.gain * e.gain * bus.panL, bus.gain * e.gain * bus.panR, q);
         }
     }
+    // The master: its plugins, its gain, and the limiter last of all.
+    if (plan.masterChain) plan.masterChain->stream(mix_.data());
+    if (plan.masterGain != 1.0f)
+        for (float &x : mix_) x *= plan.masterGain;
+    if (plan.masterLimiter) plan.masterLimiter->stream(mix_.data());
     cursor_ += q;
     const int64_t skip = std::min(discard_, q);
     discard_ -= skip;

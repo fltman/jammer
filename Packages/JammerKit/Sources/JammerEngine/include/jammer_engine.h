@@ -157,6 +157,11 @@ void jm_plan_set_chain(jm_plan *_Nonnull plan, int32_t track, jm_chain *_Nonnull
 /// leaves the bus late by the chain's latency; the plan then delays every other path to the longest where
 /// signals meet, and renders that far ahead, so the mix still comes out on the sample. Before finalize.
 void jm_plan_set_bus_chain(jm_plan *_Nonnull plan, int32_t bus, jm_chain *_Nonnull chain);
+/// The master: everything summed runs through `chain` (its plugins, or null), is multiplied by `gain`,
+/// and then runs through `limiter` (or null), last of all. Both chains are retained. What they add in
+/// latency is part of `jm_plan_total_latency` and is hidden like the rest. Before finalize.
+void jm_plan_set_master(jm_plan *_Nonnull plan, float gain, jm_chain *_Nullable chain, jm_chain *_Nullable limiter);
+int64_t jm_plan_master_latency(const jm_plan *_Nonnull plan);
 
 // MARK: Engine
 

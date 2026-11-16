@@ -67,7 +67,69 @@ public struct Bus: Codable, Hashable, Sendable, Identifiable {
     }
 }
 
+/// The limiter last on the master: the ceiling everything that leaves the document is held under.
+public struct MasterLimiter: Codable, Hashable, Sendable {
+    public var ceilingDB: Double
+    public var releaseMs: Double
+    public var lookaheadMs: Double
+    public init(ceilingDB: Double = -1, releaseMs: Double = 100, lookaheadMs: Double = 5) {
+        self.ceilingDB = ceilingDB
+        self.releaseMs = releaseMs
+        self.lookaheadMs = lookaheadMs
+    }
+    public var settings: Limiter { Limiter(ceilingDB: ceilingDB, releaseMs: releaseMs, lookaheadMs: lookaheadMs) }
+}
+
+/// The master strip: the sum of everything → its plugins → its gain → its limiter → out. As it is made
+/// (0 dB, no plugins, no limiter) it does nothing and is not saved.
+public struct Master: Codable, Hashable, Sendable {
+    /// The master's id where a strip is named by id (plugins, the mixer's listing). Never a track's or a bus's.
+    public static let id = UUID(uuidString: "00000000-0000-4000-8000-4D4153544552")!
+    public var gainDB: Double = 0
+    public var inserts: [Insert] = []
+    public var limiter: MasterLimiter?
+    public init() {}
+    public var isDefault: Bool { gainDB == 0 && inserts.isEmpty && limiter == nil }
+
+    private enum CodingKeys: String, CodingKey { case gainDB, inserts, limiter }
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        if gainDB != 0 { try c.encode(gainDB, forKey: .gainDB) }
+        if !inserts.isEmpty { try c.encode(inserts, forKey: .inserts) }
+        try c.encodeIfPresent(limiter, forKey: .limiter)
+    }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        gainDB = try c.decodeIfPresent(Double.self, forKey: .gainDB) ?? 0
+        inserts = try c.decodeIfPresent([Insert].self, forKey: .inserts) ?? []
+        limiter = try c.decodeIfPresent(MasterLimiter.self, forKey: .limiter)
+    }
+}
+
+/// An export through the master's limiter whose file still measured over the ceiling after every try.
+/// No file is left. `truePeakDB` is what the last try measured; nil when the file couldn't be read back.
+public struct MasterCeilingError: Error, LocalizedError, Equatable, Sendable {
+    public var ceilingDB: Double
+    public var truePeakDB: Double?
+    public init(ceilingDB: Double, truePeakDB: Double?) {
+        self.ceilingDB = ceilingDB
+        self.truePeakDB = truePeakDB
+    }
+    public static let reason = "ceiling_not_met"
+    public var errorDescription: String? {
+        guard let truePeakDB else {
+            return String(format: "The file was written but couldn't be read back to check it against the master's ceiling of %.1f dBTP, so it was removed.", ceilingDB)
+        }
+        return String(format: "The master's limiter couldn't keep the file under %.1f dBTP: it measured %.2f dBTP after the last try, so no file was left. Lower the master's level or raise the ceiling, and export again.", ceilingDB, truePeakDB)
+    }
+}
+
 public enum Mixer {
+    /// The lowest margin under the ceiling the master's limiter aims at: playback has one pass, so it
+    /// aims a little under; an export measures the file it wrote and goes further down if it has to.
+    public static let masterMargins: [Double] = [0.1, 0.2, 0.4, 0.8]
+    /// An export's tries: the same, and further for an encoder that overshoots more than a converter does.
+    public static let exportMargins: [Double] = masterMargins + [1.5, 3]
     public static let maxBuses = 64
     public static let maxSends = 16
     public static let gainRange = -96.0...24.0
@@ -118,7 +180,7 @@ public enum Mixer {
 extension Project {
     /// True when the project uses anything of the mixer. Such a project is saved as format 2, which a
     /// Jämmer from before the mixer refuses to open instead of playing every track straight out.
-    public var usesMixer: Bool { !buses.isEmpty || tracks.contains { $0.pan != 0 || $0.output != nil || !$0.sends.isEmpty } }
+    public var usesMixer: Bool { !buses.isEmpty || !master.isDefault || tracks.contains { $0.pan != 0 || $0.output != nil || !$0.sends.isEmpty } }
 
     public func bus(_ id: UUID) -> Bus? { buses.first { $0.id == id } }
 
@@ -126,22 +188,41 @@ extension Project {
     public func strip(_ id: UUID) -> (name: String, inserts: [Insert], isBus: Bool)? {
         if let t = tracks.first(where: { $0.id == id }) { return (t.name, t.inserts, false) }
         if let b = bus(id) { return (b.name, b.inserts, true) }
+        if id == Master.id { return ("Master", master.inserts, true) }
         return nil
     }
     /// Replaces the plugins of the track or bus with that id.
     public mutating func setInserts(_ inserts: [Insert], on id: UUID) {
         if let t = tracks.firstIndex(where: { $0.id == id }) { tracks[t].inserts = inserts }
         else if let b = buses.firstIndex(where: { $0.id == id }) { buses[b].inserts = inserts }
+        else if id == Master.id { master.inserts = inserts }
     }
 
     /// Every plugin in the project: on the tracks and on the buses.
-    public var allInserts: [Insert] { tracks.flatMap(\.inserts) + buses.flatMap(\.inserts) }
+    public var allInserts: [Insert] { tracks.flatMap(\.inserts) + buses.flatMap(\.inserts) + master.inserts }
+
+    /// Changes the master: its gain, and its limiter (`.some(nil)` takes the limiter away).
+    public mutating func setMaster(gainDB: Double? = nil, limiter: MasterLimiter?? = nil) throws {
+        if let gainDB {
+            guard gainDB.isFinite, Mixer.gainRange.contains(gainDB) else { throw Mixer.Failure.badValue("gainDB must be \(Int(Mixer.gainRange.lowerBound)) to \(Int(Mixer.gainRange.upperBound)).") }
+            master.gainDB = gainDB
+        }
+        if let limiter {
+            if let l = limiter {
+                // The same checks as the limiter itself makes, so a master that is set is one that runs.
+                do { _ = try Limiter.Processor(l.settings, channels: channels, sampleRate: sampleRate) }
+                catch { throw Mixer.Failure.badValue(error.localizedDescription) }
+            }
+            master.limiter = limiter
+        }
+    }
 
     /// Takes the mixer out of a copy that is made to render one track by itself (for a bounce, an
     /// analysis, a waveform): what is wanted there is the track's own sound, before its pan and its bus.
     /// The pan and the bus still apply afterwards, to whatever the track then plays.
     public mutating func withoutMixer() {
         buses = []
+        master = Master()
         for t in tracks.indices { tracks[t].pan = 0; tracks[t].output = nil; tracks[t].sends = [] }
     }
 

@@ -27,6 +27,8 @@ struct PluginsSheet: View {
     private var strips: [Strip] {
         session.project.tracks.map { Strip(id: $0.id, name: $0.name, inserts: $0.inserts, isBus: false) }
             + session.project.buses.map { Strip(id: $0.id, name: $0.name, inserts: $0.inserts, isBus: true) }
+            // The master is offered once the document has a mixer; before that a plugin on the one track is the same thing.
+            + (session.project.usesMixer ? [Strip(id: Master.id, name: "Master", inserts: session.project.master.inserts, isBus: true)] : [])
     }
     private var track: Strip? { strips.first { $0.id == trackID } ?? strips.first }
 
@@ -35,13 +37,14 @@ struct PluginsSheet: View {
             Text("Plugins").font(.title2.bold())
             if strips.count > 1 {
                 Picker(session.project.buses.isEmpty ? "Track" : "Track or bus", selection: Binding(get: { track?.id }, set: { trackID = $0 })) {
-                    ForEach(strips) { Text($0.isBus ? "\($0.name) (bus)" : $0.name).tag(Optional($0.id)) }
+                    ForEach(strips) { Text($0.id == Master.id ? "Master" : $0.isBus ? "\($0.name) (bus)" : $0.name).tag(Optional($0.id)) }
                 }
             }
             if let track {
                 List {
                     if track.inserts.isEmpty {
-                        Text(track.isBus ? "No plugins on the bus \(track.name). Add one below; it runs on everything that goes through the bus, before the bus's level. What it adds in delay is made up for across the mixer."
+                        Text(track.id == Master.id ? "No plugins on the master. Add one below; it runs on the whole mix, before the master's level and its limiter."
+                             : track.isBus ? "No plugins on the bus \(track.name). Add one below; it runs on everything that goes through the bus, before the bus's level. What it adds in delay is made up for across the mixer."
                                          : "No plugins on \(track.name). Add one below; it runs after the clips and before the track's gain.")
                             .foregroundStyle(.secondary)
                     }
