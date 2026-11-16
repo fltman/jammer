@@ -172,6 +172,9 @@ void jm_plan_set_bus_chain(jm_plan *_Nonnull plan, int32_t bus, jm_chain *_Nonnu
 /// nothing, or that would close a loop, is dropped by finalize; `jm_plan_key_count` says how many are left.
 void jm_plan_add_key(jm_plan *_Nonnull plan, bool to_bus, int32_t to, int32_t unit, bool from_bus, int32_t from);
 int32_t jm_plan_key_count(const jm_plan *_Nonnull plan);
+/// Makes every strip a node in the mixer graph, as a plan with a key is, whether or not it has one.
+/// Before finalize. For comparing the graph with the older paths, and for moving to it.
+void jm_plan_set_all_in_graph(jm_plan *_Nonnull plan, bool all);
 /// The master: everything summed runs through `chain` (its plugins, or null), is multiplied by `gain`,
 /// and then runs through `limiter` (or null), last of all. Both chains are retained. What they add in
 /// latency is part of `jm_plan_total_latency` and is hidden like the rest. Before finalize.

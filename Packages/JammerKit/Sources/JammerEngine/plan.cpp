@@ -224,6 +224,10 @@ void jm_plan_add_key(jm_plan *plan, bool to_bus, int32_t to, int32_t unit, bool 
 
 int32_t jm_plan_key_count(const jm_plan *plan) { return int32_t(plan->ptr->keys.size()); }
 
+void jm_plan_set_all_in_graph(jm_plan *plan, bool all) {
+    if (!plan->ptr->finalized) plan->ptr->allInGraph = all;
+}
+
 void jm_plan_set_master(jm_plan *plan, float gain, jm_chain *chain, jm_chain *limiter) {
     Plan &p = *plan->ptr;
     if (p.finalized) return;
@@ -299,7 +303,7 @@ void jm_plan_finalize(jm_plan *plan) {
     };
     p.keys.erase(std::remove_if(p.keys.begin(), p.keys.end(), [&](const Plan::Key &k) { return !real(k); }), p.keys.end());
     p.nodeOrder.clear();
-    while (!p.keys.empty()) {
+    while (!p.keys.empty() || p.allInGraph) {
         const size_t nodes = nt + nb;
         std::vector<std::vector<int32_t>> next(nodes);
         std::vector<int> waiting(nodes, 0);
@@ -317,20 +321,28 @@ void jm_plan_finalize(jm_plan *plan) {
                 if (s.bus >= 0 && size_t(s.bus) < nb && size_t(s.bus) != b) edge(nt + b, nt + size_t(s.bus));
         }
         for (const Plan::Key &k : p.keys) edge(size_t(k.from) + (k.fromBus ? nt : 0), size_t(k.to) + (k.toBus ? nt : 0));
-        std::vector<int32_t> order, ready;
-        for (size_t n = nodes; n-- > 0;)
-            if (waiting[n] == 0) ready.push_back(int32_t(n));
-        while (!ready.empty()) {
-            const int32_t n = ready.back();
-            ready.pop_back();
-            order.push_back(n);
-            for (int32_t m : next[size_t(n)])
-                if (--waiting[size_t(m)] == 0) ready.push_back(m);
+        // Among the strips that are ready, always the one that the older paths would have taken first:
+        // the tracks in their order, then the buses in theirs. Sums are then made in the same order as
+        // before, so the same project gives the same bits, and a key changes the order only as far as it must.
+        std::vector<int32_t> rank(nodes, 0);
+        for (size_t t = 0; t < nt; ++t) rank[t] = int32_t(t);
+        for (size_t i = 0; i < p.busOrder.size(); ++i) rank[nt + size_t(p.busOrder[i])] = int32_t(nt + i);
+        std::vector<int32_t> order;
+        std::vector<bool> placedNode(nodes, false);
+        for (size_t step = 0; step < nodes; ++step) {
+            int32_t best = -1;
+            for (size_t n = 0; n < nodes; ++n)
+                if (!placedNode[n] && waiting[n] == 0 && (best < 0 || rank[n] < rank[size_t(best)])) best = int32_t(n);
+            if (best < 0) break; // a loop: what is left can't be ordered
+            placedNode[size_t(best)] = true;
+            order.push_back(best);
+            for (int32_t m : next[size_t(best)]) --waiting[size_t(m)];
         }
         if (order.size() == nodes) { p.nodeOrder = std::move(order); break; }
+        if (p.keys.empty()) break; // (can't be: routes and sends alone never loop here; they were cut above)
         p.keys.pop_back();
     }
-    bool stateful = p.masterChain || p.masterLimiter || p.masterGain != 1.0f || !p.keys.empty();
+    bool stateful = p.masterChain || p.masterLimiter || p.masterGain != 1.0f || !p.keys.empty() || p.allInGraph;
     for (const Bus &b : p.buses) stateful = stateful || b.chain;
     if (stateful) p.graph = std::make_shared<Graph>(p);
     p.finalized = true;

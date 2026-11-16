@@ -80,6 +80,15 @@ Phase 3, part 2. The sketch as the coordinator approved it on 2026-11-16, with t
 - A file that carries a freeze whose file is missing, or whose strip is no longer what the file was made from, opens with that strip live, and says so.
 - The freeze endpoints are not offered to the assistant yet.
 
+**Every plan through the graph: shown equal, not switched on yet (2026-11-16).** `PlanCompiler.graphForAll` (and `allInGraph:` on `compile`; `JAMMER_GRAPH_FOR_ALL=1` in a debug build's or a test run's environment) sends every plan through the mixer graph, as plans with a key already go. It is off: the older paths (the plain renderer, `renderRouted`, tracks' chains pulling for themselves) are what runs, until the worst block has been measured on a quiet Mac.
+
+- The same samples: `GraphEquivalenceTests` renders 21 kinds of project both ways, whole and after seeks, and the graph in 512-frame blocks against itself: all bit for bit (plain; track gains; clip gain and fades; a muted track; clips moved, cut, crossing, and starting in another order than their tracks; pan; a bus; nested buses with sends before and after the fader; a VCA group; master gain; the master limiter idle and working; Apple's plugins on one track, on every track, on a bus, on tracks and buses with a send; a plugin with latency between tracks without; a soloed track; mono).
+- It wasn't so at first. Six kinds differed in the last bit (at most 6e-8, −145 dB) for two reasons, both about the order of arithmetic, both now the old order: the strips were summed in the order the graph happened to find them (now: tracks in their order, then buses in theirs, and a key changes that only as far as it must); and the plain renderer sums the clips of tracks without plugins in the order of their starts, with the track's gain folded into the clip's, before the tracks with plugins (the graph now does exactly that for a plan that uses nothing of the mixer).
+- The whole test suite, 425 tests, passes with `JAMMER_GRAPH_FOR_ALL=1`.
+- Cost, medians and means on a Mac that was not quiet (load 8): without plugins the same within what could be told apart (64 stereo tracks 0.195 against 0.192 ms a block, mean); with plugins about half (64 tracks × 2 plugins and 8 buses × 2: median 2.67 against 1.33 ms; 64 × 2 without buses: 2.61 against 1.20 ms). The worst block is not measured.
+- What changes for an agent when it is switched on: `totalLatencySamples` then includes the tracks' own plugins (they are no longer made up for inside each track), and a track's `compensationSamples` is the wait added to it for that reason. The mix is on the sample either way.
+- To do before the older paths are removed: the worst block on a quiet Mac, both ways; then switch on, run everything again, and delete `renderRouted`, the plain loop in `Renderer::render` and `Chain::process`.
+
 **Still to do in the mixer:** move every plan to the graph (agreed 2026-11-16, with its conditions), the measurements that wait for a quiet Mac, sidechain in the app, the assistant's actions with their evaluation, a cleaner for unused media.
 
 ## What the render path costs today (measured 2026-11-16)

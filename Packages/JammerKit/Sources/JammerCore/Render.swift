@@ -167,7 +167,20 @@ public enum PlanCompiler {
     /// dry mix (what the bounced effects and restoration work from).
     /// `masterMargin`: how far under its ceiling the master's limiter aims (dB); an export that measured
     /// its file over the ceiling renders again with more.
-    public static func compile(_ project: Project, pool: SourcePool, inserts: ChainProvider? = nil, masterMargin: Double = Mixer.masterMargins[0]) -> RenderPlan {
+    /// Every plan through the mixer graph (as plans with a sidechain key already go), instead of the
+    /// older paths. Off until the two have been shown to agree; a test can ask for either.
+    nonisolated(unsafe) public static var graphForAll: Bool = {
+        // `JAMMER_GRAPH_FOR_ALL=1` in the environment of a debug build or a test run: the whole test
+        // suite can then be run through the graph, to see that every test still holds.
+        #if DEBUG
+        ProcessInfo.processInfo.environment["JAMMER_GRAPH_FOR_ALL"] != nil
+        #else
+        false
+        #endif
+    }()
+
+    public static func compile(_ project: Project, pool: SourcePool, inserts: ChainProvider? = nil, masterMargin: Double = Mixer.masterMargins[0],
+                               allInGraph: Bool? = nil) -> RenderPlan {
         // A frozen strip is played from its file (see `Project.played`); everything below sees that project.
         let project = project.played()
         let plan = jm_plan_create(Int32(project.channels), project.sampleRate)
@@ -236,6 +249,7 @@ public enum PlanCompiler {
             jm_plan_set_master(plan, Float(dbToGain(master.gainDB)), chain, limiter)
             if let limiter { jm_chain_release(limiter) }
         }
+        if allInGraph ?? graphForAll { jm_plan_set_all_in_graph(plan, true) }
         jm_plan_finalize(plan)
         return RenderPlan(plan, channels: project.channels, sampleRate: project.sampleRate)
     }

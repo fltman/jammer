@@ -203,6 +203,13 @@ private:
     };
     std::vector<std::vector<KeyBuffer>> keyBuffers_;
     std::vector<std::vector<Chain::KeyFeed>> feeds_;
+    /// A plan that uses nothing of the mixer (no bus, no pan, no key): the tracks without plugins are
+    /// summed clip by clip with the track's gain folded in, before the tracks with plugins, as the
+    /// renderer has always done it, so that such a project gives the bits it always gave. That sum then
+    /// waits like any other path for the longest one.
+    bool plain_ = false;
+    std::vector<float> direct_, directLine_;
+    size_t directAt_ = 0;
     void reset(const Plan &plan, int64_t start);
     void produce(const Plan &plan, Renderer &renderer);
     void send(Edge &e, const float *in, float gainL, float gainR, int64_t n);
@@ -225,6 +232,9 @@ struct Plan {
         int32_t from;
     };
     std::vector<Key> keys;
+    /// Every strip as a node in the mixer graph even without a key (the path all plans are to take
+    /// once it has been shown to give what the older paths give; see docs/MIXER.md).
+    bool allInGraph = false;
     /// With keys: every strip (a track is its index, a bus is the number of tracks plus its index),
     /// each after every strip it listens to or is fed by.
     std::vector<int32_t> nodeOrder;

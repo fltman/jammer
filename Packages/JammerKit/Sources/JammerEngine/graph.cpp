@@ -10,7 +10,7 @@ namespace jm {
 
 Graph::Graph(const Plan &plan) : channels_(plan.channels) {
     const size_t nt = plan.tracks.size(), nb = plan.buses.size();
-    keyed_ = !plan.keys.empty();
+    keyed_ = !plan.keys.empty() || plan.allInGraph;
     busLatency.assign(nb, 0);
     for (size_t b = 0; b < nb; ++b) {
         if (!plan.buses[b].chain) continue;
@@ -99,6 +99,11 @@ Graph::Graph(const Plan &plan) : channels_(plan.channels) {
         for (Edge &e : busEdges_[b]) line(e, arrival(e) - out[nt + b]);
         busDelay[b] = busEdges_[b][0].delay;
     }
+    plain_ = keyed_ && !plan.routed && plan.keys.empty();
+    if (plain_) {
+        direct_.assign(size_t(kQuantum * channels_), 0.0f);
+        directLine_.assign(size_t(total * channels_), 0.0f);
+    }
     strip_.assign(size_t(kQuantum * channels_), 0.0f);
     mix_.assign(size_t(kQuantum * channels_), 0.0f);
     bus_.assign(nb, std::vector<float>(size_t(kQuantum * channels_), 0.0f));
@@ -116,6 +121,8 @@ void Graph::reset(const Plan &plan, int64_t start) {
         for (Edge &e : edges) { std::fill(e.line.begin(), e.line.end(), 0.0f); e.at = 0; }
     for (auto &edges : busEdges_)
         for (Edge &e : edges) { std::fill(e.line.begin(), e.line.end(), 0.0f); e.at = 0; }
+    std::fill(directLine_.begin(), directLine_.end(), 0.0f);
+    directAt_ = 0;
     // What comes out of the graph at its time g belongs to the timeline at g − total. To hand over the
     // timeline from `start`, it begins a run-in before that and throws the run-in and the lateness away.
     cursor_ = start - preroll_;
@@ -168,10 +175,38 @@ void Graph::produce(const Plan &plan, Renderer &renderer) {
     for (auto &b : bus_) std::fill(b.begin(), b.end(), 0.0f);
     for (auto &node : keyBuffers_)
         for (KeyBuffer &kb : node) std::fill(kb.data.begin(), kb.data.end(), 0.0f);
+    if (plain_) {
+        // The tracks without plugins, as the plain renderer sums them: every clip in the order of their
+        // starts, the track's gain folded into the clip's. Then as late as the longest path.
+        std::fill(direct_.begin(), direct_.end(), 0.0f);
+        const int64_t end = cursor_ + q;
+        for (const Clip &c : plan.clips) {
+            if (c.start >= end) break;
+            if (c.end() <= cursor_) continue;
+            const Track &track = plan.tracks[size_t(c.track)];
+            if (track.mute || track.chain) continue;
+            renderer.mixClip(plan, c, track.gain, cursor_, q, direct_.data());
+        }
+        if (total == 0) {
+            std::memcpy(mix_.data(), direct_.data(), samples * sizeof(float));
+        } else {
+            const size_t frames = size_t(total);
+            for (int64_t i = 0; i < q; ++i) {
+                float *slot = directLine_.data() + directAt_ * size_t(channels_);
+                for (int32_t c = 0; c < channels_; ++c) {
+                    mix_[size_t(i * channels_ + c)] = slot[c];
+                    slot[c] = direct_[size_t(i * channels_ + c)];
+                }
+                directAt_ = (directAt_ + 1) % frames;
+            }
+        }
+    }
     for (int32_t n : order_) {
         if (size_t(n) < nt) {
             const size_t t = size_t(n);
             const Track &track = plan.tracks[t];
+            // (In a plain plan the tracks without plugins are in the sum already.)
+            if (plain_ && !track.chain) continue;
             if (track.mute) {
                 // A muted strip sends silence, so that its delay lines empty in step with the others.
                 std::fill(strip_.begin(), strip_.end(), 0.0f);
