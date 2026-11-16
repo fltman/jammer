@@ -114,4 +114,30 @@ struct KeyedAUTests {
         let (cut, _) = try ProjectPackage.decodeChecked(try ProjectPackage.encode(loop))
         #expect(!cut.hasKeyLoop && (cut.tracks[0].inserts[0].key == nil) != (cut.tracks[1].inserts[0].key == nil))
     }
+
+    @Test("Soloing the track that is gated, or exporting it alone, keeps its key: the click track is not heard, and still gates")
+    func soloKeepsTheKey() async throws {
+        #expect(KeyedGateAU.registered)
+        var (p, pool) = Self.document()
+        p.tracks[0].inserts = [Insert(plugin: KeyedGateAU.plugin, name: "Keyed Gate")]
+        try p.setKey(strip: p.tracks[0].id, insert: p.tracks[0].inserts[0].id, key: p.tracks[1].id)
+        func heard(_ q: Project) async -> [Float] {
+            let host = await InsertHost.make(for: q)
+            return PlanCompiler.compile(q, pool: pool, inserts: host).render(from: 0, frames: Self.n)
+        }
+        // The steady track alone: 0.25 everywhere, a quarter of it on the click's frame, and no click.
+        for alone in [p.listening(solo: [p.tracks[0].id]), p.only(tracks: [p.tracks[0].id])] {
+            let y = await heard(alone)
+            var wrong = 0
+            for i in 0..<Self.n where abs(y[i * 2] - (i == Self.at ? 0.0625 : 0.25)) > 1e-7 || abs(y[i * 2 + 1] - (i == Self.at ? 0.0625 : 0.25)) > 1e-7 { wrong += 1 }
+            #expect(wrong == 0, "\(wrong) frames wrong")
+        }
+        // The click track alone is just the click; and a click track the document has muted is a silent key, solo or not.
+        let click = await heard(p.only(tracks: [p.tracks[1].id]))
+        #expect(click[Self.at * 2] == 0.5 && click.filter { $0 != 0 }.count == 2)
+        p.tracks[1].isMuted = true
+        let ungated = await heard(p.listening(solo: [p.tracks[0].id]))
+        let all = ungated.allSatisfy { $0 == 0.25 }
+        #expect(all)
+    }
 }

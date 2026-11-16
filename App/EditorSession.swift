@@ -593,11 +593,8 @@ final class EditorSession {
     /// The project with only `tracks` in it, as they sound (gain, fades, effects), over the same
     /// timeline. A track that is named plays even if it is muted: it was asked for.
     func alone(_ tracks: Set<UUID>?) -> Project {
-        guard let tracks else { return project }
-        var p = project
-        p.tracks = p.tracks.filter { tracks.contains($0.id) }
-        for i in p.tracks.indices { p.tracks[i].isMuted = false }
-        return p
+        // (A track that a plugin on one of these listens to stays as its key, heard nowhere.)
+        project.only(tracks: tracks)
     }
 
     func analyze(_ range: Range<Frame>? = nil, tracks: Set<UUID>? = nil) async -> LoudnessResult {

@@ -4,6 +4,8 @@ Not a list of commits: what behaves differently from before, for a user, an agen
 
 ## 2026-11-16
 
+- **A cancelled freeze stops and leaves no file** (seen in the app: job `cancelled`, the track live, the media folder's count unchanged). **Soloing, exporting or measuring some tracks keeps the keys their plugins listen to** (debug builds, where keys exist).
+
 - **Freezing** (`docs/MIXER.md`, step 7): `POST …/freeze` (a job) and `POST …/unfreeze`; `frozen` on strips in `GET …/mixer`; steps that would change what a frozen strip was made from fail with `reason: "frozen"`. A project with a frozen strip is format 2.
 
 - **The plugin scanner could call a good plugin invalid on a busy Mac**, and the catalogue kept that until the bundle changed. Cause: the helper's answer was read both by a background handler and by the caller, and the verdict could be taken between the handler's read and its storing ("0 bytes out, exit 0"). Shown by slowing the handler (6 of 6 probes of a good plugin "invalid"); not reproduced by load alone in 60 probes. Now one reader per pipe and the verdict waits for both (the same slowing: 6 of 6 found; 80 of 80 under load).

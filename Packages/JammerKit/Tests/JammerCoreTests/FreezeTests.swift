@@ -147,5 +147,18 @@ struct FreezeTests {
         #expect(throws: FreezeError.self) { try Self.freeze(p, UUID(), pool: pool, media: dir.url) }
         #expect(throws: FreezeError.self) { try Self.freeze(p, Master.id, pool: pool, media: dir.url) }
         #expect((try? FileManager.default.contentsOfDirectory(atPath: dir.url.path))?.isEmpty ?? true, "a refused freeze left a file")
+        // A freeze that is stopped part of the way (the job cancelled): no half file, and the project as it was.
+        struct Stopped: Error {}
+        var blocks = 0
+        #expect(throws: Stopped.self) {
+            _ = try p.freezing(p.tracks[0].id, media: dir.url) { context, range, write in
+                try PlanCompiler.compile(context, pool: pool).render(range, blockFrames: 4_096) { block in
+                    blocks += 1
+                    if blocks == 3 { throw Stopped() }
+                    try write(block)
+                }
+            }
+        }
+        #expect(blocks == 3 && ((try? FileManager.default.contentsOfDirectory(atPath: dir.url.path))?.isEmpty ?? true), "a stopped freeze left a file")
     }
 }

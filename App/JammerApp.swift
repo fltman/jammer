@@ -54,6 +54,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Operations.spectralFreeform = false
         #endif
         #if DEBUG
+        // `-registerAudioUnit <path to a .component>`: loads that Audio Unit as a host loads a plugin and
+        // registers it in this process only, so a plugin that is not installed on the Mac can be tried in
+        // the app (the sidechain test plugin, docs/LICENSES.md "Used in tests only"). Nothing is installed.
+        if let path = UserDefaults.standard.string(forKey: "registerAudioUnit") { DebugAudioUnit.register(path) }
         // Sidechain keys are in debug builds only until a real plugin with a sidechain input has been
         // through them (docs/RELEASE.md, rehearsal item 7).
         Operations.sidechain = true
@@ -313,3 +317,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return main
     }
 }
+
+#if DEBUG
+import AudioToolbox
+
+enum DebugAudioUnit {
+    /// Registers the Audio Unit in the bundle at `path` for this process, from what its Info.plist says it is.
+    static func register(_ path: String) {
+        let url = URL(fileURLWithPath: path)
+        guard let bundle = CFBundleCreate(nil, url as CFURL), CFBundleLoadExecutable(bundle),
+              let info = NSDictionary(contentsOf: url.appending(path: "Contents/Info.plist")),
+              let c = (info["AudioComponents"] as? [[String: Any]])?.first,
+              let type = c["type"] as? String, let subtype = c["subtype"] as? String, let maker = c["manufacturer"] as? String,
+              let factoryName = c["factoryFunction"] as? String,
+              let pointer = CFBundleGetFunctionPointerForName(bundle, factoryName as CFString) else {
+            NSLog("registerAudioUnit: %@ couldn't be loaded as an Audio Unit.", path)
+            return
+        }
+        func code(_ s: String) -> OSType { s.utf8.reduce(0) { $0 << 8 | OSType($1) } }
+        var description = AudioComponentDescription(componentType: code(type), componentSubType: code(subtype), componentManufacturer: code(maker),
+                                                    componentFlags: 0, componentFlagsMask: 0)
+        AudioComponentRegister(&description, (c["name"] as? String ?? "plugin") as CFString, UInt32(c["version"] as? Int ?? 1),
+                               unsafeBitCast(pointer, to: AudioComponentFactoryFunction.self))
+    }
+}
+#endif

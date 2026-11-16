@@ -145,6 +145,26 @@ struct PluginsSheet: View {
                 }
             }
             Spacer()
+            // A sidechain key, where the build has them and the plugin has the input: the track or bus the
+            // plugin listens to. (Not on the master; and never the strip the plugin sits on.)
+            if Operations.sidechain, track.id != Master.id, session.inserts.instance(insert.id)?.hasKeyInput == true {
+                let sources = session.project.tracks.map { ($0.id, $0.name) } + session.project.buses.map { ($0.id, "\($0.name) (bus)") }
+                let now = insert.key.flatMap { k in sources.first { $0.0 == k }?.1 }
+                Menu(now.map { "Key: \($0)" } ?? "Key: none") {
+                    Button("\(insert.key == nil ? "✓ " : "")None") {
+                        session.perform("set_insert", ["track": .string(track.id.uuidString), "insert": .string(insert.id.uuidString), "key": .string("none")])
+                    }
+                    ForEach(sources.filter { $0.0 != track.id }, id: \.0) { source in
+                        Button("\(insert.key == source.0 ? "✓ " : "")\(source.1)") {
+                            session.perform("set_insert", ["track": .string(track.id.uuidString), "insert": .string(insert.id.uuidString), "key": .string(source.0.uuidString)])
+                        }
+                    }
+                }
+                .fixedSize()
+                .accessibilityLabel("Sidechain key of \(insert.name)")
+                .accessibilityIdentifier("plugins.key")
+                .help("The track or bus this plugin listens to on its sidechain input.")
+            }
             Button("Edit…") { PluginWindows.show(session, track: track.id, insert: insert.id) }
                 .accessibilityLabel("Edit \(insert.name)")
                 .disabled(session.inserts.instance(insert.id) == nil)

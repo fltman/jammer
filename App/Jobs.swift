@@ -277,14 +277,21 @@ final class JobRegistry {
         tasks[id] = Task { [weak self, weak session] in
             job.status = .running
             self?.update(job)
-            let result = await Task.detached(priority: .userInitiated) { () -> Result<Project, Error> in
+            // Cancelling the job stops the render at its next block; the half-written file is then removed
+            // (`freezing` removes its file when the render throws).
+            let stop = StopFlag()
+            let work = Task.detached(priority: .userInitiated) { () -> Result<Project, Error> in
                 Result {
                     try project.freezing(strip, media: media) { context, range, write in
                         let plan = PlanCompiler.mixBlocking(context, pool: pool, outOfProcess: safe)
-                        try plan.render(range) { try write($0) }
+                        try plan.render(range) { block in
+                            if stop.isSet { throw CancellationError() }
+                            try write(block)
+                        }
                     }
                 }
-            }.value
+            }
+            let result = await withTaskCancellationHandler { await work.value } onCancel: { stop.set() }
             guard self?.jobs[id]?.status != .cancelled else { return }
             switch result {
             case .success(let frozen):
@@ -309,6 +316,14 @@ final class JobRegistry {
             self?.finish(job)
         }
         return job
+    }
+
+    /// Set from the job's cancellation, read by the work on its own thread.
+    final class StopFlag: @unchecked Sendable {
+        private let lock = NSLock()
+        private var value = false
+        var isSet: Bool { lock.withLock { value } }
+        func set() { lock.withLock { value = true } }
     }
 
     func startTranscription(_ session: EditorSession, locale: Locale, replace: Bool, engine choice: SpeechEngines.Choice = .auto, model: String? = nil) -> Job {

@@ -286,10 +286,44 @@ extension Project {
     public func listening(solo: Set<UUID>) -> Project {
         let real = solo.filter { id in tracks.contains { $0.id == id } || bus(id) != nil }
         guard !real.isEmpty else { return self }
-        let heard = heardInSolo(real)
+        return silencing(Set(tracks.map(\.id)).subtracting(heardInSolo(real)))
+    }
+
+    /// A copy in which `quiet` (track ids) are not heard. A track is muted, unless a plugin on a strip
+    /// that is still heard listens to it: a muted track is a silent key, and a ducked track mustn't come
+    /// up because the voice over it was soloed away. Such a track keeps playing into a muted bus instead,
+    /// so its key is what it was and nothing of it reaches the output.
+    public func silencing(_ quiet: Set<UUID>) -> Project {
+        guard !quiet.isEmpty else { return self }
+        var listenedTo = Set<UUID>()
+        for t in tracks where !quiet.contains(t.id) { listenedTo.formUnion(t.inserts.filter { !$0.bypass }.compactMap(\.key)) }
+        for b in buses { listenedTo.formUnion(b.inserts.filter { !$0.bypass }.compactMap(\.key)) }
         var p = self
-        for t in p.tracks.indices where !heard.contains(p.tracks[t].id) { p.tracks[t].isMuted = true }
+        var sink = false
+        for t in p.tracks.indices where quiet.contains(p.tracks[t].id) {
+            if listenedTo.contains(p.tracks[t].id), !p.tracks[t].isMuted {
+                p.tracks[t].output = Self.frozenSink
+                p.tracks[t].sends = []
+                sink = true
+            } else {
+                p.tracks[t].isMuted = true
+            }
+        }
+        if sink { p.buses.append(Bus(id: Self.frozenSink, name: "sink", isMuted: true)) }
         return p
+    }
+
+    /// The project with only `chosen` (track ids) heard: for exporting or measuring some of the tracks.
+    /// The others are gone, except one that a plugin on a chosen track listens to, which stays as its key
+    /// and is heard nowhere. nil: the project itself.
+    public func only(tracks chosen: Set<UUID>?) -> Project {
+        guard let chosen else { return self }
+        var keys = Set<UUID>()
+        for t in tracks where chosen.contains(t.id) { keys.formUnion(t.inserts.filter { !$0.bypass }.compactMap(\.key)) }
+        var p = self
+        p.tracks = p.tracks.filter { chosen.contains($0.id) || keys.contains($0.id) }
+        for i in p.tracks.indices where chosen.contains(p.tracks[i].id) { p.tracks[i].isMuted = false }
+        return p.silencing(Set(p.tracks.map(\.id)).subtracting(chosen))
     }
     /// A strip's fader and mute as they are heard: its own, with its VCA's level added and its VCA's mute.
     /// Without a VCA, exactly its own.

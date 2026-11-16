@@ -69,7 +69,7 @@ When a session has more plugins than the Mac plays, tick **Frozen** on a strip. 
 - What the file was made from can't be changed while the strip is frozen: a frozen track's clips and plugins; for a frozen bus also everything that feeds it. An edit that would change it is refused and says which strip is frozen. Untick **Frozen**, make the change, and freeze again.
 - Unticking it brings the strip back exactly as it was. Freezing and unfreezing are one **Undo** each.
 - A frozen bus takes the tracks that only feed it out of the work as well.
-- The file is kept with the project's other audio. A track's file is as long as the track (two seconds more when it has plugins, for what rings on), a bus's as long as the document.
+- The file is kept with the project's other audio. Like the files that effects and repairs make, it stays in Jämmer's media folder (`~/Library/Application Support/Jammer/Media`) after the strip is thawed: Jämmer doesn't remove audio files by itself. How much room they take is seen in that folder. A track's file is as long as the track (two seconds more when it has plugins, for what rings on), a bus's as long as the document.
 
 ## The master
 
