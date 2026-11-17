@@ -61,9 +61,9 @@ public enum SpectralShape: Sendable, Equatable {
         let t = timeSpan, f = frequencySpan
         let values = [Said.n(t.lowerBound, 2), Said.n(t.upperBound, 2), Said.n(f.lowerBound, 0), Said.n(f.upperBound, 0)]
         switch self {
-        case .box: return Said("spectral.summary.box", "Box, %1$@–%2$@ s, %3$@–%4$@ Hz", values)
-        case .polygon(let p): return Said("spectral.summary.lasso", "Lasso (%1$@ corners), %2$@–%3$@ s, %4$@–%5$@ Hz", ["\(p.count)"] + values)
-        case .brush: return Said("spectral.summary.brush", "Brush, %1$@–%2$@ s, %3$@–%4$@ Hz", values)
+        case .box: return Said("spectral.summary.box", "Box, %1$@–%2$@ s, %3$@–%4$@ Hz", values: values)
+        case .polygon(let p): return Said("spectral.summary.lasso", "Lasso (%1$@ corners), %2$@–%3$@ s, %4$@–%5$@ Hz", values: ["\(p.count)"] + values)
+        case .brush: return Said("spectral.summary.brush", "Brush, %1$@–%2$@ s, %3$@–%4$@ Hz", values: values)
         }
     }
 }
@@ -81,7 +81,7 @@ public enum SpectralAction: String, Sendable { case attenuate, heal }
 
 public enum SpectralEditError: Error, LocalizedError, Equatable {
     static func tooLongSaid(_ s: Double) -> Said {
-        Said("error.spectralEdit.tooLong", "Heal is for short sounds (up to %1$@ s); this area is %2$@ s. Use attenuate for longer ones.", Said.n(Spectral.healLimit, 1), Said.n(s, 2))
+        Said("error.spectralEdit.tooLong", "Heal is for short sounds (up to %1$@ s); this area is %2$@ s. Use attenuate for longer ones.", values: [Said.n(Spectral.healLimit, 1), Said.n(s, 2)])
     }
     case badShape(Said)
     case tooLong(Double)
@@ -222,7 +222,7 @@ extension Project {
         if case .polygon(let p) = shape, p.count < 3 { throw SpectralEditError.badShape(Said("error.spectralEdit.lasso_needs_least_three", "A lasso needs at least three corners.")) }
         guard t.upperBound > t.lowerBound || action == .heal, f.upperBound > f.lowerBound else { throw SpectralEditError.badShape(Said("error.spectralEdit.area_empty", "The area is empty.")) }
         guard t.lowerBound < duration, t.upperBound > 0, f.lowerBound < sampleRate / 2 else {
-            throw SpectralEditError.badShape(Said("error.spectralEdit.area_lies_outside_audio", "The area lies outside the audio (0–%1$@ s, 0–%2$@ Hz).", "\(String(format: "%.2f", duration))", "\(Int(sampleRate / 2))"))
+            throw SpectralEditError.badShape(Said("error.spectralEdit.area_lies_outside_audio", "The area lies outside the audio (0–%1$@ s, 0–%2$@ Hz).", values: [Said.n(duration, 2), "\(Int(sampleRate / 2))"]))
         }
         guard (-80...0).contains(gainDB) else { throw SpectralEditError.badShape(Said("error.spectralEdit.db_between_80_0", "db must be between -80 and 0.")) }
         if action == .heal {

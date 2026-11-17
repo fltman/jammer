@@ -79,6 +79,22 @@ def said_messages(root):
                     else: out[key] = (name, english, [])
     return out
 
+# A number made into text before it reaches a sentence's place: the window couldn't write it in the Mac's region
+# (Anders, 2026-11-17: numbers follow the region, in either language, inside sentences too). Said.n carries it.
+NUMBER_AS_TEXT = re.compile(r'\.formatted\(|\.plain\b|String\(format:')
+def numbers_as_text(root):
+    """file:line for every Said(…)/KeyedMessage(…) whose values make a number into text."""
+    out = []
+    for top in ('Packages', 'App'):
+        for folder, _, names in os.walk(os.path.join(root, top)):
+            if os.sep + 'Tests' in folder or os.sep + '.build' in folder: continue
+            for name in names:
+                if not name.endswith('.swift'): continue
+                for number, row in enumerate(open(os.path.join(folder, name), encoding='utf-8'), 1):
+                    for m in re.finditer(r'\b(?:Said|KeyedMessage)\(\s*"[A-Za-z0-9_.]+",', row):
+                        if NUMBER_AS_TEXT.search(row[m.end():]): out.append(f'{name}:{number}')
+    return out
+
 OPERATION = re.compile(r'\.init\("([a-z_0-9]+)", "([^"]*)"')
 def operation_titles(root):
     """name -> title, from the schema (every Operations.swift in the packages)."""
@@ -151,6 +167,8 @@ def check(root, require=None):
         have = units(strings[key].get('localizations', {}).get(source, {}))
         if not have or have[0][1].replace('’', "'") != english.replace('’', "'"):
             faults.append(f'{key}: the catalogue says "{have[0][1] if have else ""}" where {where} says "{english}"')
+    for where in numbers_as_text(root):
+        faults.append(f'{where}: a number is made into text in a sentence\'s values; give it as Said.n(value, decimals) so the window writes it in the Mac\'s region')
     # The operations' titles (L10n.operation looks them up by name): one entry per operation in the schema,
     # its English the schema's title, so the menus and the API name an operation the same way.
     ops = operation_titles(root)
@@ -318,6 +336,8 @@ def self_test(root):
             'a sentence (Said) whose catalogue English is not the code\'s': (lambda s: s['s.empty']['localizations']['en']['stringUnit'].update(value='Nothing to paste: %@.'), ''),
             'a sentence (Said) whose key is not in the catalogue': (lambda s: s.pop('s.empty'), ''),
             'one key given two sentences': (None, 'throw StepFailure(Said("s.empty", "Nothing was copied: %@.", "\\(op)"))\n'),
+            'a number made into text in a sentence (formatted)': (None, 'throw StepFailure(Said("s.empty", "The clipboard is empty: %@.", "\\(x.formatted())"))\n'),
+            'a number made into text in a keyed message (String(format:))': (None, 'case .x(let v): KeyedMessage("e.gone", [String(format: "%.1f", v)])\n'),
         }
         for name, (mutate, extra) in op_plants.items():
             if not run(mutate, op_extra=extra): bad.append('not caught: ' + name)

@@ -70,7 +70,7 @@ public final class HostedInsertUnit: InsertUnit, @unchecked Sendable {
         }
         guard !p.readonly else { throw PluginError.outOfRange(Said("error.plugin.can_only_read", "%@ can only be read.", "\(p.name)")) }
         guard value >= p.min, value <= p.max else {
-            throw PluginError.outOfRange(Said("error.plugin.1_takes_2_3", "%1$@ takes %2$@ to %3$@; %4$@ is outside.", "\(p.name)", "\(p.min.formatted())", "\(p.max.formatted())", "\(value.formatted())"))
+            throw PluginError.outOfRange(Said("error.plugin.1_takes_2_3", "%1$@ takes %2$@ to %3$@; %4$@ is outside.", values: ["\(p.name)", Said.n(p.min), Said.n(p.max), Said.n(value)]))
         }
         guard host.set(p.id, to: value) else { throw PluginError.failed(Said("error.plugin.didn_t_take_value", "%@ didn't take the value.", "\(displayName)")) }
     }

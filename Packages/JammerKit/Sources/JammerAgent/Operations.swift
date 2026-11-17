@@ -738,7 +738,7 @@ public enum StepRunner {
         let end = project.seconds(project.length)
         if let a = p["start"]?.double, let b = p["end"]?.double {
             guard a <= b else { throw StepFailure(Said("step.any.start_after_end", "%@: \"start\" is after \"end\".", "\(step.op)")) }
-            guard b <= end + 1e-9 else { throw StepFailure(Said("step.any.end_2_s_after", "%1$@: \"end\" is at %2$@ s, after the document's end (%3$@ s).", "\(step.op)", "\(b.plain)", "\(end.plain)")) }
+            guard b <= end + 1e-9 else { throw StepFailure(Said("step.any.end_2_s_after", "%1$@: \"end\" is at %2$@ s, after the document's end (%3$@ s).", values: ["\(step.op)", Said.n(b), Said.n(end)])) }
         }
         let param = AutomationLane.Param(rawValue: p["param"]?.string ?? "gain") ?? .gain
         if name == "master", param != .gain, param != .plugin, param != .azimuth, param != .elevation { throw StepFailure(Said("step.any.param_gain_plugin_master", "%@: \"param\" is gain or plugin for the master; it has no pan, mute or send to automate.", "\(step.op)")) }
@@ -778,13 +778,13 @@ public enum StepRunner {
         let allowed = Automation.range(of: param)
         for (i, pair) in (p["points"]?.pairs ?? []).enumerated() {
             guard allowed.contains(pair.1), param != .mute || pair.1 == 0 || pair.1 == 1 else {
-                throw StepFailure(param == .gain || param == .send ? Said("step.any.point_gain", "%1$@: points[%2$@] has the value %3$@; a gain is −96 to 24 dB.", step.op, "\(i)", pair.1.plain)
-                                  : param == .pan ? Said("step.any.point_pan", "%1$@: points[%2$@] has the value %3$@; a pan is −1 (left) to 1 (right).", step.op, "\(i)", pair.1.plain)
-                                  : Said("step.any.point_mute", "%1$@: points[%2$@] has the value %3$@; a mute is 1 (muted) or 0 (heard).", step.op, "\(i)", pair.1.plain))
+                throw StepFailure(param == .gain || param == .send ? Said("step.any.point_gain", "%1$@: points[%2$@] has the value %3$@; a gain is −96 to 24 dB.", values: ["\(step.op)", "\(i)", Said.n(pair.1)])
+                                  : param == .pan ? Said("step.any.point_pan", "%1$@: points[%2$@] has the value %3$@; a pan is −1 (left) to 1 (right).", values: ["\(step.op)", "\(i)", Said.n(pair.1)])
+                                  : Said("step.any.point_mute", "%1$@: points[%2$@] has the value %3$@; a mute is 1 (muted) or 0 (heard).", values: ["\(step.op)", "\(i)", Said.n(pair.1)]))
             }
-            guard pair.0 <= end + 1e-9 else { throw StepFailure(Said("step.any.points_2_3_s", "%1$@: points[%2$@] is at %3$@ s, after the document's end (%4$@ s).", "\(step.op)", "\(i)", "\(pair.0.plain)", "\(end.plain)")) }
+            guard pair.0 <= end + 1e-9 else { throw StepFailure(Said("step.any.points_2_3_s", "%1$@: points[%2$@] is at %3$@ s, after the document's end (%4$@ s).", values: ["\(step.op)", "\(i)", Said.n(pair.0), Said.n(end)])) }
             if let a = p["start"]?.double, let b = p["end"]?.double, pair.0 < a - 1e-9 || pair.0 > b + 1e-9 {
-                throw StepFailure(Said("step.any.points_2_3_s2", "%1$@: points[%2$@] is at %3$@ s, outside \"start\"…\"end\" (%4$@ to %5$@ s).", "\(step.op)", "\(i)", "\(pair.0.plain)", "\(a.plain)", "\(b.plain)"))
+                throw StepFailure(Said("step.any.points_2_3_s2", "%1$@: points[%2$@] is at %3$@ s, outside \"start\"…\"end\" (%4$@ to %5$@ s).", values: ["\(step.op)", "\(i)", Said.n(pair.0), Said.n(a), Said.n(b)]))
             }
         }
     }
@@ -804,7 +804,7 @@ public enum StepRunner {
                 guard let d = value.double, d.isFinite else { throw StepFailure(Said("step.any.2_number", "%1$@: \"%2$@\" must be a number.", "\(step.op)", "\(key)")) }
                 if p.kind == .seconds, d < 0 { throw StepFailure(Said("step.any.2_can_t_negative", "%1$@: \"%2$@\" can't be negative.", "\(step.op)", "\(key)")) }
                 if let r = p.range, !r.contains(d) {
-                    throw StepFailure(Said("step.any.2_between_3_4", "%1$@: \"%2$@\" must be between %3$@ and %4$@.", "\(step.op)", "\(key)", "\(r.lowerBound.formatted())", "\(r.upperBound.formatted())"))
+                    throw StepFailure(Said("step.any.2_between_3_4", "%1$@: \"%2$@\" must be between %3$@ and %4$@.", values: ["\(step.op)", "\(key)", Said.n(r.lowerBound), Said.n(r.upperBound)]))
                 }
             case .string:
                 guard let s = value.string else { throw StepFailure(Said("step.any.2_string", "%1$@: \"%2$@\" must be a string.", "\(step.op)", "\(key)")) }
@@ -820,9 +820,9 @@ public enum StepRunner {
             case .pairs:
                 guard let pairs = value.pairs else { throw StepFailure(Said("step.any.2_list_seconds_value", "%1$@: \"%2$@\" must be a list of [seconds, value] pairs of numbers.", "\(step.op)", "\(key)")) }
                 for (i, pair) in pairs.enumerated() {
-                    if pair.0 < 0 { throw StepFailure(Said("step.any.2_3_4_s", "%1$@: %2$@[%3$@] is at %4$@ s; a point can't be before the start.", "\(step.op)", "\(key)", "\(i)", "\(pair.0.plain)")) }
+                    if pair.0 < 0 { throw StepFailure(Said("step.any.2_3_4_s", "%1$@: %2$@[%3$@] is at %4$@ s; a point can't be before the start.", values: ["\(step.op)", "\(key)", "\(i)", Said.n(pair.0)])) }
                     if let r = p.range, !r.contains(pair.1) {
-                        throw StepFailure(Said("step.any.2_3_has_value", "%1$@: %2$@[%3$@] has the value %4$@; it must be between %5$@ and %6$@.", "\(step.op)", "\(key)", "\(i)", "\(pair.1.plain)", "\(r.lowerBound.formatted())", "\(r.upperBound.formatted())"))
+                        throw StepFailure(Said("step.any.2_3_has_value", "%1$@: %2$@[%3$@] has the value %4$@; it must be between %5$@ and %6$@.", values: ["\(step.op)", "\(key)", "\(i)", Said.n(pair.1), Said.n(r.lowerBound), Said.n(r.upperBound)]))
                     }
                 }
             }
@@ -854,7 +854,7 @@ public enum StepRunner {
         }
         func checkInside(_ r: Range<Frame>) throws {
             guard r.lowerBound < project.length else {
-                throw StepFailure(Said("step.any.range_starts_after_end", "%1$@: the range starts after the end of the audio (%2$@ s).", "\(step.op)", "\(String(format: "%.3f", project.duration))"))
+                throw StepFailure(Said("step.any.range_starts_after_end", "%1$@: the range starts after the end of the audio (%2$@ s).", values: ["\(step.op)", Said.n(project.duration, 3)]))
             }
         }
 

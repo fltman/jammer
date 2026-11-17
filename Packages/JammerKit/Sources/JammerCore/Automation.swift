@@ -291,18 +291,18 @@ extension Project {
         let end = length
         for (i, p) in new.enumerated() {
             guard p.frame >= 0, p.frame <= end else {
-                throw Automation.Failure.badValue(Said("error.value.points_1_2_s", "points[%1$@] is at %2$@ s, outside the document (0 to %3$@ s).", "\(i)", "\(seconds(p.frame))", "\(seconds(end))"))
+                throw Automation.Failure.badValue(Said("error.value.points_1_2_s", "points[%1$@] is at %2$@ s, outside the document (0 to %3$@ s).", values: ["\(i)", Said.n(seconds(p.frame)), Said.n(seconds(end))]))
             }
             guard p.value.isFinite, allowed.contains(p.value), param != .mute || p.value == 0 || p.value == 1 else {
-                throw Automation.Failure.badValue(Said("error.value.pointValue", "points[%1$@] has the value %2$@; %3$@.", "\(i)", "\(p.value)", inner: values.map { Said("automation.unit.parameter", "the parameter takes %1$@ to %2$@", $0.lowerBound.formatted(), $0.upperBound.formatted()) } ?? Automation.unit(of: param)))
+                throw Automation.Failure.badValue(Said("error.value.pointValue", "points[%1$@] has the value %2$@; %3$@.", values: ["\(i)", Said.n(p.value)], inner: values.map { Said("automation.unit.parameter", "the parameter takes %1$@ to %2$@", values: [Said.n($0.lowerBound), Said.n($0.upperBound)]) } ?? Automation.unit(of: param)))
             }
             if let r = range, !r.contains(p.frame) {
-                throw Automation.Failure.badValue(Said("error.value.points_1_2_s2", "points[%1$@] is at %2$@ s, outside the range given (%3$@ to %4$@ s).", "\(i)", "\(seconds(p.frame))", "\(seconds(r.lowerBound))", "\(seconds(r.upperBound))"))
+                throw Automation.Failure.badValue(Said("error.value.points_1_2_s2", "points[%1$@] is at %2$@ s, outside the range given (%3$@ to %4$@ s).", values: ["\(i)", Said.n(seconds(p.frame)), Said.n(seconds(r.lowerBound)), Said.n(seconds(r.upperBound))]))
             }
         }
         let sorted = new.sorted { $0.frame < $1.frame }
         for (a, b) in zip(sorted, sorted.dropFirst()) where a.frame == b.frame {
-            throw Automation.Failure.badValue(Said("error.value.two_points_s_lane", "two points are at %@ s; a lane has one value at a time.", "\(seconds(a.frame))"))
+            throw Automation.Failure.badValue(Said("error.value.two_points_s_lane", "two points are at %@ s; a lane has one value at a time.", values: [Said.n(seconds(a.frame))]))
         }
         var lane = lane(strip: strip, param: param, to: to, insert: insert, parameter: parameter)
             ?? AutomationLane(strip: strip, param: param, to: to, insert: insert, parameter: parameter, shape: param == .mute ? .hold : .linear, points: [])

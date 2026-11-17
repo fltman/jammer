@@ -128,6 +128,8 @@ public enum Rhythm {
     }
 
     public enum Failure: Error, LocalizedError, Equatable {
+        /// A tempo to two decimals at most: the API writes 120.5, the window as the Mac's region does.
+        static func bpm(_ v: Double) -> SaidValue { Said.n((v * 100).rounded() / 100) }
         case unavailable, tooShort, noSteadyTempo, doesNotFit(found: Double)
         public var reason: String {
             switch self {
@@ -140,7 +142,7 @@ public enum Rhythm {
             switch self {
             case .unavailable: "tempo detection isn't available in this build."
             case .tooShort: "tempo detection needs at least \(Int(minSeconds)) seconds of sound."
-            case .doesNotFit(let found): "the beat found in the sound is \(found.formatted(.number.precision(.fractionLength(0...2)))) BPM, which doesn't fit the tempo given (nor half or double it)."
+            case .doesNotFit(let found): "the beat found in the sound is \(Self.bpm(found).english) BPM, which doesn't fit the tempo given (nor half or double it)."
             case .noSteadyTempo: "no steady tempo was found (speech, noise, silence, or music whose tempo changes). If you know the tempo, give bpm."
             }
         }
@@ -149,7 +151,7 @@ public enum Rhythm {
             switch self {
             case .unavailable: KeyedMessage("error.rhythm.unavailable")
             case .tooShort: KeyedMessage("error.rhythm.tooShort", ["\(Int(minSeconds))"])
-            case .doesNotFit(let found): KeyedMessage("error.rhythm.doesNotFit", [found.formatted(.number.precision(.fractionLength(0...2)))])
+            case .doesNotFit(let found): KeyedMessage("error.rhythm.doesNotFit", values: [Self.bpm(found)])
             case .noSteadyTempo: KeyedMessage("error.rhythm.noSteadyTempo")
             }
         }

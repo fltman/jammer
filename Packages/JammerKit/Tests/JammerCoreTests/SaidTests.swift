@@ -12,6 +12,14 @@ struct SaidTests {
         #expect(Said("k", "no values").keyed == KeyedMessage("k"))
     }
 
+    @Test("A number stays a number in the key (the window writes it in the Mac's region) and is written with a point in the English (the API)")
+    func numbers() {
+        let s = Said("k", "%1$@ at %2$@ s", values: ["Box", Said.n(4.2, 2)])
+        #expect(s.text == "Box at 4.20 s" && s.keyed.args == [.text("Box"), .number(4.2, decimals: 2)])
+        #expect(Said.n(0.5).english == "0.5" && Said.n(3).english == "3" && Said.n(-27.44, 1).english == "-27.4")
+        #expect(SpectralShape.box(start: 4.2, end: 4.6, low: 2_000, high: 6_000).summarySaid.keyed.args.contains(.number(4.2, decimals: 2)))
+    }
+
     @Test("A sentence inside a sentence: its English in the last place, its key kept for the window")
     func inner() {
         let why = Said("error.import.isn_t_json", "it isn't JSON.")

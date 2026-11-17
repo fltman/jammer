@@ -44,7 +44,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         #if DEBUG
         // `-printLanguage YES`: says which language the texts come in, and one text, and ends (for the test of the switch).
         if UserDefaults.standard.bool(forKey: "printLanguage") {
-            print("language \(Bundle.main.preferredLocalizations.first ?? "?"): \(L10n.text("menu.picture")) number \(L10n.number(0.25, 2))")
+            // A sentence from the packages with numbers in it, as the window says it: the numbers in the Mac's region too.
+            let area = SpectralShape.box(start: 4.2, end: 4.6, low: 2_000, high: 6_000).summarySaid.keyed
+            print("language \(Bundle.main.preferredLocalizations.first ?? "?"): \(L10n.text("menu.picture")) sentence \(L10n.message(area)) number \(L10n.number(0.25, 2))")
             exit(0)
         }
         #endif

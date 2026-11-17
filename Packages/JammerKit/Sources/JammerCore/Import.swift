@@ -95,8 +95,7 @@ public enum AudioImporter {
         // What the decoder says about the file is as untrusted as the file.
         if let no = AudioFileInfo.refusal(channels: channels, sampleRate: input.sampleRate) { throw AudioFileError.unsupported(Said("error.file.cantRead", "Jämmer can't read %1$@. %2$@", url.lastPathComponent, inner: no)) }
         func tooLarge(_ bytes: Double) -> AudioFileError {
-            .unsupported(Said("error.file.tooLarge", "%1$@ is too large to open here: decoded it would take %2$@ GB, and %3$@ GB is what Jämmer may use on this disk.",
-                              url.lastPathComponent, Said.n(bytes / 1_073_741_824, 1), Said.n(Double(limit) / 1_073_741_824, 1)))
+            .unsupported(Said("error.file.tooLarge", "%1$@ is too large to open here: decoded it would take %2$@ GB, and %3$@ GB is what Jämmer may use on this disk.", values: ["\(url.lastPathComponent)", Said.n(bytes / 1_073_741_824, 1), Said.n(Double(limit) / 1_073_741_824, 1)]))
         }
         // By what it says of itself first, so a long file is refused before any of it is written…
         let claimed = Double(max(0, file.length)) * rate / input.sampleRate * Double(channels) * 4

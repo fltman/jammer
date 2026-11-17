@@ -96,8 +96,7 @@ public struct Limiter: Sendable, Equatable {
                                     ceilingDB: settings.ceilingDB, marginDB: margin))
             }
         }
-        throw LimiterError.ceilingNotMet(Said("limiter.ceilingNotMet", "The limiter couldn't keep the true peak under %1$@ dBTP (it came to %2$@). Try a longer lookahead.",
-                                              Said.n(settings.ceilingDB, 1), Said.n(last, 2)))
+        throw LimiterError.ceilingNotMet(Said("limiter.ceilingNotMet", "The limiter couldn't keep the true peak under %1$@ dBTP (it came to %2$@). Try a longer lookahead.", values: [Said.n(settings.ceilingDB, 1), Said.n(last, 2)]))
     }
 }
 

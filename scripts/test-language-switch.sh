@@ -23,5 +23,7 @@ fi
 for lang in en sv; do
   comma=$(say -AppleLanguages "(en)" -AppleLocale sv_SE -language $lang); point=$(say -AppleLanguages "(en)" -AppleLocale en_US -language $lang)
   [[ "$comma" == *"number 0,25" && "$point" == *"number 0.25" ]] || { echo "test-language-switch: numbers don't follow the region ($lang: Swedish region \"$comma\", US region \"$point\")"; exit 1; }
+  # Inside a sentence from the packages too (the area's description: 4.20–4.60 s).
+  [[ "$comma" == *", 4,20–4,60 s, "* && "$point" == *", 4.20–4.60 s, "* ]] || { echo "test-language-switch: numbers inside a sentence don't follow the region ($lang: \"$comma\" / \"$point\")"; exit 1; }
 done
-echo "test-language-switch: numbers follow the region in both languages (0,25 in Sweden, 0.25 in the US)"
+echo "test-language-switch: numbers follow the region in both languages, inside sentences too (0,25 and 4,20–4,60 s in Sweden, 0.25 and 4.20–4.60 s in the US)"

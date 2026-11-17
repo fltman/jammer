@@ -462,7 +462,7 @@ public final class PluginInstance: InsertUnit, @unchecked Sendable {
             throw PluginError.unknownParameter(Said("error.plugin.1_has_parameter_2", "%1$@ has no parameter \"%2$@\".", "\(avUnit.name)", "\(identifier)"))
         }
         guard value >= Self.decimal(p.minValue), value <= Self.decimal(p.maxValue) else {
-            throw PluginError.outOfRange(Said("error.plugin.1_takes_2_3", "%1$@ takes %2$@ to %3$@; %4$@ is outside.", "\(p.displayName)", "\(Self.decimal(p.minValue).formatted())", "\(Self.decimal(p.maxValue).formatted())", "\(value.formatted())"))
+            throw PluginError.outOfRange(Said("error.plugin.1_takes_2_3", "%1$@ takes %2$@ to %3$@; %4$@ is outside.", values: ["\(p.displayName)", Said.n(Self.decimal(p.minValue)), Said.n(Self.decimal(p.maxValue)), Said.n(value)]))
         }
         p.value = AUValue(value)
     }

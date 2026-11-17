@@ -25,7 +25,7 @@ Jämmer still starts in English whatever the Mac's language is; Swedish only wit
 - names Jämmer writes into a document (a separated track is "Demo song – Vocals"; the status line names the stems in Swedish);
 - the plugin helper's own errors (only in builds with CLAP, which a release doesn't have) and the model readers' (a damaged model file).
 
-Numbers inside these sentences are written as the API writes them (0.5, not 0,5), whatever the Mac's region.
+Numbers inside these sentences follow the Mac's region in the window, as all numbers do (Anders, 2026-11-17): a sentence carries a number as a number (`Said.n(value, decimals)`), the window writes it with `L10n.number` (0,5 with a Swedish region) and the API's English with a point (0.5). `check-strings.py` refuses a number made into text (`.formatted()`, `.plain`, `String(format:)`) in a sentence's values, and `test-language-switch.sh` holds a sentence's numbers to the region. Found on the way: the tempo error's English was made with `.formatted()`, so the API said "120,5 BPM" on a Mac with a Swedish region; it says 120.5 now. What is written into a document isn't touched.
 
 **Seen as pictures in Swedish (2026-11-17, block H):** Settings (Models, Agents, Paid Services), Storage, a linked file's window, Send to Flimmer, the ACX report, an import's notes and the spectral area, besides block C's pictures. Swedish stays off until Anders turns it on; the time readout keeps its point (0:07.480) until he has answered.
 

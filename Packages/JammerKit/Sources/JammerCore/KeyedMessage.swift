@@ -1,18 +1,42 @@
 import Foundation
 
+/// One value in a sentence: text (a name, an id, a whole number), or a number with fractions that the window
+/// writes in the Mac's region (0,5 in Sweden) and the API as it always has (0.5). Anders, 2026-11-17: numbers
+/// follow the region, in either language, also inside a sentence.
+public enum SaidValue: Sendable, Equatable, ExpressibleByStringLiteral, ExpressibleByStringInterpolation {
+    case text(String)
+    /// `decimals` nil: as few as it takes (up to six), as `Double.plain` writes it.
+    case number(Double, decimals: Int?)
+    public init(stringLiteral value: String) { self = .text(value) }
+    public init(stringInterpolation: DefaultStringInterpolation) { self = .text(String(stringInterpolation: stringInterpolation)) }
+    /// As the API says it: a point, fixed decimals or as few as it takes.
+    public var english: String {
+        switch self {
+        case .text(let s): return s
+        case .number(let v, let d?): return String(format: "%.\(d)f", v)
+        case .number(let v, nil): return v == v.rounded() && abs(v) < 1e15 ? String(Int64(v)) : String((v * 1_000_000).rounded() / 1_000_000)
+        }
+    }
+}
+
 /// A message by its key in the app's string catalogue, with its values: what lets the window say an
 /// error in the window's language while `errorDescription` (and so the agent API) keeps its English words.
-/// The values are already text (a name, a formatted number); the catalogue's entry has `%1$@`, `%2$@`
-/// where they go. `scripts/check-strings.py` holds each key's English to the words of `errorDescription`.
+/// The catalogue's entry has `%1$@`, `%2$@` where the values go; a number among them is written by the window
+/// in the Mac's region. `scripts/check-strings.py` holds each key's English to the words of `errorDescription`.
 public struct KeyedMessage: Sendable, Equatable {
     public var key: String
-    public var args: [String]
+    public var args: [SaidValue]
     /// Sentences that go in this one's last places, after `args`, each said in the window's language too
     /// ("The file can't be read as a timeline: %@" with "it isn't JSON." inside).
     public var inner: [KeyedMessage]
     public init(_ key: String, _ args: [String] = [], inner: [KeyedMessage] = []) {
         self.key = key
-        self.args = args
+        self.args = args.map(SaidValue.text)
+        self.inner = inner
+    }
+    public init(_ key: String, values: [SaidValue], inner: [KeyedMessage] = []) {
+        self.key = key
+        self.args = values
         self.inner = inner
     }
 }
@@ -35,10 +59,18 @@ public struct Said: Sendable, Equatable, CustomStringConvertible {
         keyed = KeyedMessage(key, args)
         text = Self.fill(english, args)
     }
+    /// With numbers among the values (`Said.n`): the window writes them in the Mac's region.
+    public init(_ key: String, _ english: String, values: [SaidValue]) {
+        keyed = KeyedMessage(key, values: values)
+        text = Self.fill(english, values.map(\.english))
+    }
     /// A sentence with another inside it, in its last place: `english` has one more place than `args`.
     public init(_ key: String, _ english: String, _ args: String..., inner: Said) {
-        keyed = KeyedMessage(key, args, inner: [inner.keyed])
-        text = Self.fill(english, args + [inner.text])
+        self.init(key, english, values: args.map(SaidValue.text), inner: inner)
+    }
+    public init(_ key: String, _ english: String, values: [SaidValue], inner: Said) {
+        keyed = KeyedMessage(key, values: values, inner: [inner.keyed])
+        text = Self.fill(english, values.map(\.english) + [inner.text])
     }
     /// Several sentences inside, in its last places in order.
     public init(_ key: String, _ english: String, inner: [Said]) {
@@ -57,8 +89,10 @@ public struct Said: Sendable, Equatable, CustomStringConvertible {
         self.text = text
         self.keyed = keyed
     }
-    /// A number as a value: written the same in both languages' sentences (as the API has always said it).
-    public static func n(_ v: Double, _ decimals: Int) -> String { String(format: "%.\(decimals)f", v) }
+    /// A number as a value, with its decimals: the API writes 0.5, the window 0,5 where the region says so.
+    public static func n(_ v: Double, _ decimals: Int) -> SaidValue { .number(v, decimals: decimals) }
+    /// A number written with as few decimals as it takes (up to six).
+    public static func n(_ v: Double) -> SaidValue { .number(v, decimals: nil) }
 
     /// The English with its values in their places, in one pass (a value is never read as a place).
     static func fill(_ format: String, _ args: [String]) -> String {

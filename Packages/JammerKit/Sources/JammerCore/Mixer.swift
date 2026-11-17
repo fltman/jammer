@@ -150,10 +150,9 @@ public struct MasterCeilingError: Error, LocalizedError, Equatable, Sendable, Ke
     public var keyed: KeyedMessage? { said.keyed }
     var said: Said {
         guard let truePeakDB else {
-            return Said("error.master.unread", "The file was written but couldn't be read back to check it against the master's ceiling of %@ dBTP, so it was removed.", Said.n(ceilingDB, 1))
+            return Said("error.master.unread", "The file was written but couldn't be read back to check it against the master's ceiling of %@ dBTP, so it was removed.", values: [Said.n(ceilingDB, 1)])
         }
-        return Said("error.master.ceiling", "The master's limiter couldn't keep the file under %1$@ dBTP: it measured %2$@ dBTP after the last try, so no file was left. Lower the master's level or raise the ceiling, and export again.",
-                    Said.n(ceilingDB, 1), Said.n(truePeakDB, 2))
+        return Said("error.master.ceiling", "The master's limiter couldn't keep the file under %1$@ dBTP: it measured %2$@ dBTP after the last try, so no file was left. Lower the master's level or raise the ceiling, and export again.", values: [Said.n(ceilingDB, 1), Said.n(truePeakDB, 2)])
     }
 }
 

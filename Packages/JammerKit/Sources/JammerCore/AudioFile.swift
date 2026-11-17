@@ -20,7 +20,7 @@ public struct AudioFileInfo: Sendable, Equatable, Codable {
             // Formatted as text: a rate like 1e300 doesn't fit in any integer.
             let low = "\(Int(sampleRates.lowerBound))", high = "\(Int(sampleRates.upperBound))"
             return sampleRate.isFinite
-                ? Said("error.file.badRate", "The file says its sample rate is %1$@ Hz; Jämmer takes %2$@ to %3$@ Hz.", Said.n(sampleRate, 0), low, high)
+                ? Said("error.file.badRate", "The file says its sample rate is %1$@ Hz; Jämmer takes %2$@ to %3$@ Hz.", values: [Said.n(sampleRate, 0), "\(low)", "\(high)"])
                 : Said("error.file.rateNaN", "The file says its sample rate is not a number; Jämmer takes %1$@ to %2$@ Hz.", low, high)
         }
         return nil

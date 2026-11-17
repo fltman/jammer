@@ -280,7 +280,7 @@ extension Project {
     /// fast) into a new file, anchored where it starts, so it stays in sync to the end.
     public func correctingDrift(of track: UUID, ppm: Double, pool: SourcePool, media: URL) throws -> Project {
         guard let t = tracks.firstIndex(where: { $0.id == track }), let first = tracks[t].clips.first?.start else { throw EffectError.nothingInRange }
-        guard abs(ppm) < 2_000 else { throw EffectError.badValue(Said("error.value.drift_ppm_beyond_what", "A drift of %@ ppm is beyond what a recorder does; check the measurement.", "\(ppm)")) }
+        guard abs(ppm) < 2_000 else { throw EffectError.badValue(Said("error.value.drift_ppm_beyond_what", "A drift of %@ ppm is beyond what a recorder does; check the measurement.", values: [Said.n(ppm)])) }
         let end = tracks[t].end
         var solo = self
         solo.tracks = [tracks[t]]

@@ -475,8 +475,7 @@ public enum FCPXMLImport {
                 }
                 sources[url] = s
                 if r.decoded, let original = try? AudioFileReader.info(at: url), original.sampleRate != timeline.sampleRate {
-                    warnings.append(Warning(code: "resampled", message: Said("import.note.resampled", "%1$@ is %2$@ Hz and the timeline %3$@ Hz; it plays from a converted copy.",
-                                                                             s.name, Said.n(original.sampleRate, 0), Said.n(timeline.sampleRate, 0)), clip: nil))
+                    warnings.append(Warning(code: "resampled", message: Said("import.note.resampled", "%1$@ is %2$@ Hz and the timeline %3$@ Hz; it plays from a converted copy.", values: ["\(s.name)", Said.n(original.sampleRate, 0), Said.n(timeline.sampleRate, 0)]), clip: nil))
                 }
             } catch {
                 warnings.append(Warning(code: "unreadable_media", message: Said("import.note.couldn_t_read_audio", "%@ couldn't be read as audio; its clips were left out.", "\(url.lastPathComponent)"), clip: nil))

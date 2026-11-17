@@ -76,7 +76,7 @@ public enum ACX {
 
     static func db(_ v: Double?) -> Said {
         guard let v, v.isFinite else { return Said("acx.silence", "silence") }
-        return Said("acx.db", "%@ dB", Said.n(v, 1))
+        return Said("acx.db", "%@ dB", values: [Said.n(v, 1)])
     }
 
     public static func requirements(_ m: Measured) -> [DeliveryRequirement] {
@@ -103,7 +103,7 @@ public enum ACX {
                          note: Said("acx.peak.note", "%1$@ ACX says \"peak\"; Jämmer asks both of the sample peak and of the true peak. On %2$@.", inner: [peakWhy, on])))
 
         out.append(.init(name: "noiseFloor", required: "Each file must have a noise floor no higher than -60dB RMS",
-                         measured: m.noiseFloor.map { Said("acx.noise.measured", "%1$@ dB over %2$@ s of pauses", Said.n($0, 1), Said.n(m.noiseSeconds, 1)) }
+                         measured: m.noiseFloor.map { Said("acx.noise.measured", "%1$@ dB over %2$@ s of pauses", values: [Said.n($0, 1), Said.n(m.noiseSeconds, 1)]) }
                              ?? Said("acx.noise.none", "no pause found to measure it in"),
                          pass: m.noiseFloor.map { $0 <= noiseFloorMax },
                          note: Said("acx.noise.note", "ACX doesn't say how the noise floor is measured. Here: the RMS of the quietest stretches between the speech (the pauses), on the mix.")))
@@ -112,11 +112,11 @@ public enum ACX {
         let formatOK = m.encoded != nil && (m.encodedBitRate ?? 0) >= minBitRate && fileRate == sampleRate
         let kbps = "\((m.encodedBitRate ?? 0) / 1_000)"
         out.append(.init(name: "format", required: "Each file must be a 192 kbps or higher CBR, 44.1kHz MP3",
-                         measured: m.encoded != nil ? Said("acx.format.mp3", "MP3, %1$@ kbps constant bit rate, %2$@ kHz", kbps, Said.n(fileRate / 1_000, 1))
-                                                    : Said("acx.format.document", "the document is %@ kHz", Said.n(m.sampleRate / 1_000, 1)),
+                         measured: m.encoded != nil ? Said("acx.format.mp3", "MP3, %1$@ kbps constant bit rate, %2$@ kHz", values: ["\(kbps)", Said.n(fileRate / 1_000, 1)])
+                                                    : Said("acx.format.document", "the document is %@ kHz", values: [Said.n(m.sampleRate / 1_000, 1)]),
                          pass: formatOK,
                          note: m.encoded == nil ? m.encodedReason
-                             : fileRate != m.sampleRate ? Said("acx.format.converted", "Encoded here to measure it; export it the same way: MP3, %1$@ kbps, sample rate %2$@ kHz (the document is %3$@ kHz and is converted).", kbps, Said.n(fileRate / 1_000, 1), Said.n(m.sampleRate / 1_000, 1))
+                             : fileRate != m.sampleRate ? Said("acx.format.converted", "Encoded here to measure it; export it the same way: MP3, %1$@ kbps, sample rate %2$@ kHz (the document is %3$@ kHz and is converted).", values: ["\(kbps)", Said.n(fileRate / 1_000, 1), Said.n(m.sampleRate / 1_000, 1)])
                              : Said("acx.format.same", "Encoded here to measure it; export it the same way: MP3, %@ kbps.", kbps)))
 
         out.append(.init(name: "channels", required: "All files must be in the same channel format (all mono or all stereo)",
@@ -132,7 +132,7 @@ public enum ACX {
             : m.head < 1 ? Said("acx.roomTone.shortStart", "Measured as the stretch at each end that stays under −45 dBFS. Under the recommended 1 second at the start.")
             : m.tail < 1 ? Said("acx.roomTone.shortEnd", "Measured as the stretch at each end that stays under −45 dBFS. Under the recommended 1 second at the end.") : nil
         out.append(.init(name: "roomTone", required: "Room tone spacing must not exceed 5 seconds (between 1 and 5 seconds at the beginning and end of each file is recommended)",
-                         measured: Said("acx.roomTone.measured", "%1$@ s at the start, %2$@ s at the end", Said.n(m.head, 1), Said.n(m.tail, 1)), pass: m.head <= roomToneMax && m.tail <= roomToneMax,
+                         measured: Said("acx.roomTone.measured", "%1$@ s at the start, %2$@ s at the end", values: [Said.n(m.head, 1), Said.n(m.tail, 1)]), pass: m.head <= roomToneMax && m.tail <= roomToneMax,
                          note: short ?? ends))
 
         out.append(.init(name: "narration", required: "Your submitted audiobook must be narrated by a human unless otherwise authorized",

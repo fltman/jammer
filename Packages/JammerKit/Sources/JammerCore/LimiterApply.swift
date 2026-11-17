@@ -55,8 +55,7 @@ extension Project {
         }
         report.truePeakBeforeDB = before.peakDB
         guard before.peakDB > settings.ceilingDB else {
-            throw LimiterError.nothingToDo(Said("limiter.nothingToDo", "The true peak there is %1$@ dBTP, already at or under the ceiling of %2$@. Nothing was changed.",
-                                                Said.n(before.peakDB, 1), Said.n(settings.ceilingDB, 1)))
+            throw LimiterError.nothingToDo(Said("limiter.nothingToDo", "The true peak there is %1$@ dBTP, already at or under the ceiling of %2$@. Nothing was changed.", values: [Said.n(before.peakDB, 1), Said.n(settings.ceilingDB, 1)]))
         }
 
         // Each track alone, at unity and without its plugins: its level and its plugins still apply afterwards.
@@ -114,8 +113,7 @@ extension Project {
         }
         guard met else {
             for u in urls { try? FileManager.default.removeItem(at: u) }
-            throw LimiterError.ceilingNotMet(Said("limiter.ceilingNotMet.unchanged", "The limiter couldn't keep the true peak under %1$@ dBTP (it came to %2$@). Try a longer lookahead. Nothing was changed.",
-                                                  Said.n(settings.ceilingDB, 1), Said.n(report.truePeakAfterDB, 2)))
+            throw LimiterError.ceilingNotMet(Said("limiter.ceilingNotMet.unchanged", "The limiter couldn't keep the true peak under %1$@ dBTP (it came to %2$@). Try a longer lookahead. Nothing was changed.", values: [Said.n(settings.ceilingDB, 1), Said.n(report.truePeakAfterDB, 2)]))
         }
 
         var p = self
