@@ -4,7 +4,7 @@ The rule is the series' (the-apps/SIBLINGS.md, "Språk"): English and Swedish in
 
 ## Built 2026-11-17 (block C): the Swedish is in, behind a start argument
 
-Jämmer still starts in English whatever the Mac's language is; Swedish only with `-language sv` (`JAMMER_LANG=sv scripts/with-app.sh …`), until Anders has seen it. `scripts/test-language-switch.sh` (in the pre-commit check) starts the debug build without a window on a Mac said to be Swedish, Swedish and English, German and English, and gets English each time, and Swedish only with the argument.
+**Switched on by Anders, 2026-11-17:** Jämmer speaks Swedish on a Mac whose language is Swedish and English on any other (macOS's own choice among the bundle's two languages). `-language en|sv` decides instead, and every test copy is started with it (`JAMMER_LANG=sv scripts/with-app.sh …`, English by default). Before that day Jämmer started in English whatever the Mac's language was, and Swedish only with `-language sv`. `scripts/test-language-switch.sh` (in the pre-commit check) starts the debug build without a window on Macs said to be Swedish, Swedish then English, German, German then Swedish, English, and English then Swedish, and gets Swedish exactly where Swedish comes before English; and `-language` decides over the Mac both ways.
 
 - **The catalogue:** 888 texts, each with English and Swedish; the pre-commit check runs `check-strings.py --require sv`. Every file of the app whose texts are all in the catalogue is on `scripts/l10n-moved.txt` (the check fails on a text written in such a file).
 - **Counts** by the catalogue's plural forms (34): no sentence is made by adding a letter.

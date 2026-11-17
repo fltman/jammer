@@ -42,7 +42,7 @@ quiet=(-silentOutput YES)
 # A test copy's language is set here, never taken from the Mac's settings, so both languages can be
 # tried on one Mac and a script knows which it gets: JAMMER_LANG=sv for Swedish, English otherwise.
 # (Scripts find menus and texts by key: scripts/l10n.sh <key>.)
-# (The app itself starts in English whatever the Mac's language is; Swedish is asked for with -language sv.)
+# (The app itself follows the Mac: Swedish on a Swedish Mac, English otherwise; a test copy is always told.)
 language=(-language "${JAMMER_LANG:-en}")
 # A test copy's journal of linked documents is its own and empty: what one check left waiting must not open
 # in the next. A check that is about the journal names the folder itself: JAMMER_LINK_JOURNAL=<absolute path>.

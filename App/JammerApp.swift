@@ -34,13 +34,15 @@ enum MenuPresets {
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     static func main() {
-        // One language at a time until the Swedish is whole and Anders has seen it (the series' rule):
-        // Jämmer starts in English whatever language the Mac has, and in Swedish only when started with
-        // `-language sv`. Set among the start arguments' own defaults, before anything asks for a text, so
-        // that the system's panels follow too; nothing is written to the app's settings.
+        // Jämmer speaks the Mac's language when it is Swedish, and English otherwise (Anders, 2026-11-17: the
+        // Swedish is on). `-language en` or `-language sv` decides instead, for test copies and pictures, which
+        // must know which language they get: set among the start arguments' own defaults, before anything asks
+        // for a text, so that the system's panels follow too; nothing is written to the app's settings.
         var arguments = UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)
-        arguments["AppleLanguages"] = [(arguments["language"] as? String) == "sv" ? "sv" : "en"]
-        UserDefaults.standard.setVolatileDomain(arguments, forName: UserDefaults.argumentDomain)
+        if let chosen = arguments["language"] as? String, ["en", "sv"].contains(chosen) {
+            arguments["AppleLanguages"] = [chosen]
+            UserDefaults.standard.setVolatileDomain(arguments, forName: UserDefaults.argumentDomain)
+        }
         #if DEBUG
         // `-printLanguage YES`: says which language the texts come in, and one text, and ends (for the test of the switch).
         if UserDefaults.standard.bool(forKey: "printLanguage") {

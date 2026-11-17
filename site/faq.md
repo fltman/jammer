@@ -6,6 +6,10 @@ A native macOS audio editor for speech: podcasts, interviews, voice-overs and th
 
 macOS 27 or later on a Mac with Apple silicon.
 
+## Which languages does it speak?
+
+English and Swedish. Jämmer follows your Mac: if Swedish is your Mac's language (System Settings › General › Language & Region), the windows and menus are in Swedish, otherwise English. Numbers follow your region in either language; the time readout always writes its point (0:07.480), as audio programs do. The manual and this site are in English.
+
 ## Is it free?
 
 Yes. Jämmer is free and open source under the MIT license. The source code will be on GitHub when it's released. If you want to support the work, you can do so on [Patreon](https://www.patreon.com/AndersBjarby).
