@@ -782,6 +782,9 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
             return EditorSession.binaural && session.project.channels > 2
         }
         if item.action == #selector(recenterHead(_:)) { return EditorSession.followHead }
+        if item.action == #selector(cloneVoice(_:)) { return session.selection != nil && !session.project.transcripts.isEmpty }
+        if item.action == #selector(overdubSelection(_:)) { return session.selection != nil && session.project.voices.contains { $0.deleted == nil } }
+        if item.action == #selector(deleteClonedVoice(_:)) { return session.project.voices.contains { $0.deleted == nil } }
         if item.action == #selector(performOperation(_:)), let op = (item.representedObject as? OperationItem)?.op {
             // The document's layout has its tick.
             if op == "set_layout", let order = (item.representedObject as? OperationItem)?.params["order"]?.string {

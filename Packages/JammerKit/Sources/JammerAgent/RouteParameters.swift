@@ -45,7 +45,7 @@ extension AgentAPI {
         .init("POST", "/api/v1/import/timeline", body: ["path", "rate"]),
         .init("GET", "/api/v1/documents"),
         // The body is the audio itself, or JSON that says where the audio is.
-        .init("POST", "/api/v1/documents", query: ["name"], body: ["name", "audio", "upload"]),
+        .init("POST", "/api/v1/documents", query: ["name", "order"], body: ["name", "audio", "upload"]),
         .init("POST", "/api/v1/uploads"),
         .init("GET", "/api/v1/uploads/{id}"), .init("DELETE", "/api/v1/uploads/{id}"),
         .init("PUT", "/api/v1/uploads/{id}", query: ["offset"], body: nil),
@@ -65,6 +65,11 @@ extension AgentAPI {
         .init("POST", doc + "/separate", body: ["model", "tracks"]),
         .init("POST", doc + "/diarize", body: ["mode", "tracks"]),
         .init("GET", doc + "/speakers"),
+        // Overdub (paid: the voice service's own price list).
+        .init("GET", doc + "/voices"),
+        .init("POST", doc + "/voices", body: ["name", "attest", "adult", "consent", "samples", "allowPaid", "allowUnknownPrice"]),
+        .init("DELETE", doc + "/voices/{voice}"),
+        .init("POST", doc + "/overdub", body: ["voice", "start", "end", "text", "track", "model", "allowPaid", "allowUnknownPrice"]),
         .init("GET", doc + "/mixer"),
         .init("GET", doc + "/automation", query: ["strip", "param", "at", "to", "insert", "parameter"]),
         .init("GET", doc + "/tracks"),

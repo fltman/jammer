@@ -96,9 +96,23 @@ final class UnknownPriceBox: NSObject {
 /// Settings › Paid Services: where an answer about an unknown price is taken back.
 struct PaidSettings: View {
     @State private var accepted = UnknownPrice.accepted
+    @State private var elevenKey = ""
+    @State private var elevenSaved = Keychain.get("elevenlabs") != nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
+            // The user's own ElevenLabs key, for Overdub (PROVIDERS.md rules 1 and 8; Anders, 2026-11-17).
+            Text(L10n.text("paid.elevenlabs.title")).font(.headline)
+            HStack {
+                SecureField(elevenSaved ? L10n.text("paid.elevenlabs.saved") : L10n.text("paid.elevenlabs.key"), text: $elevenKey)
+                    .accessibilityLabel(L10n.text("paid.elevenlabs.key"))
+                    .accessibilityIdentifier("paid.elevenlabs.key")
+                    .onSubmit { saveElevenKey() }
+                Button(L10n.text("button.save")) { saveElevenKey() }.disabled(elevenKey.isEmpty)
+                Button(L10n.text("paid.elevenlabs.remove")) { Keychain.set("elevenlabs", nil); elevenSaved = false }.disabled(!elevenSaved)
+            }
+            Text(L10n.text("paid.elevenlabs.note")).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            Divider()
             Text(L10n.text("paid.settings.about")).fixedSize(horizontal: false, vertical: true)
             if accepted.isEmpty {
                 Text(L10n.text("paid.settings.none")).foregroundStyle(.secondary).accessibilityIdentifier("paid.settings.none")
@@ -117,12 +131,20 @@ struct PaidSettings: View {
             Spacer()
         }
         .padding(20)
-        .frame(width: 520)
+        .frame(width: 560)
         .frame(maxHeight: .infinity, alignment: .top)
         // The window is kept between showings, and an answer may be given while it is open.
         .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)) { _ in
             let now = UnknownPrice.accepted
             if now.map(\.id) != accepted.map(\.id) { accepted = now }
         }
+    }
+
+    private func saveElevenKey() {
+        let k = elevenKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !k.isEmpty else { return }
+        Keychain.set("elevenlabs", k)
+        elevenKey = ""
+        elevenSaved = true
     }
 }

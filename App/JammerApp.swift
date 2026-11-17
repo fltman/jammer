@@ -322,6 +322,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // The head followed while listening binaurally (headphones with motion sensors); off until asked for.
             item(L10n.text("menu.listen.followHead"), #selector(EditorWindowController.toggleFollowHead(_:)), ""),
             item(L10n.text("menu.listen.recenterHead"), #selector(EditorWindowController.recenterHead(_:)), ""),
+            // Overdub: words said again in a cloned voice (ElevenLabs, the user's own key; consent first).
+            item(L10n.text("menu.overdub.clone"), #selector(EditorWindowController.cloneVoice(_:)), ""),
+            item(L10n.text("menu.overdub"), #selector(EditorWindowController.overdubSelection(_:)), ""),
+            item(L10n.text("menu.overdub.delete"), #selector(EditorWindowController.deleteClonedVoice(_:)), ""),
             // The document's loudspeakers: a value of the document, undone like any other change.
             submenu(L10n.text("menu.layout"), ChannelLayout.allCases.map { l in
                 op(L10n.layoutTitle(l), "set_layout", ["layout": .string(l.rawValue)])

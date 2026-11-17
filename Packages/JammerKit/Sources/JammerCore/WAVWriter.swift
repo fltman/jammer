@@ -160,6 +160,18 @@ public final class WAVWriter {
 
     // MARK: Chunks
 
+    /// A LIST chunk's payload of type INFO with one comment (ICMT), NUL-terminated and padded to even length.
+    public static func infoList(comment: String) -> Data {
+        var text = Data(comment.utf8)
+        text.append(0)
+        var d = Data("INFO".utf8)
+        d.append(Data("ICMT".utf8))
+        d.u32le(UInt32(text.count))
+        d.append(text)
+        if text.count % 2 == 1 { d.append(0) }
+        return d
+    }
+
     static func chunk(_ id: String, _ payload: Data) -> Data {
         var d = Data()
         d.fourCC(id); d.u32le(UInt32(payload.count)); d.append(payload)

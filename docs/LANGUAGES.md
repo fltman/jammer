@@ -147,6 +147,7 @@ How an English term is written in Swedish text: unchanged, with a capital only w
 | edit decision list, EDL | redigeringslista, EDL | added 2026-11-17 (block F), for Anders to look at |
 | sound field, turn (a field), front, side | ljudfält, vrida (vridning), fronten, sidan | added 2026-11-17 (block I), for Anders to look at; the API's yaw, pitch and roll stay as they are |
 | Follow Head Movements, Center Head | Följ huvudets rörelser, Centrera huvudet | added 2026-11-17 (block K); macOS's own question about motion is in App/InfoPlist.xcstrings |
+| Clone Voice, cloned voice, consent sentence; Overdub | Klona röst, klonad röst, samtyckesmening; Overdub (kept as the feature's name) | added 2026-11-17 (Overdub), for Anders to look at; the Swedish consent sentence is what a Swedish recording must say |
 
 ## Rules added 2026-11-17 (the series', to be followed when the work gets there)
 

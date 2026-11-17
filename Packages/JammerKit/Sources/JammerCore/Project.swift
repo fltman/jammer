@@ -26,6 +26,9 @@ public struct SourceRef: Codable, Hashable, Sendable, Identifiable {
     /// mask's (rears before sides). nil is the WAV mask's, as every project saved before had it, and as every
     /// file Jämmer writes itself is.
     public var unmaskedOrder: ChannelOrder?
+    /// Speech a voice service made in a cloned voice (Overdub): the mark it carries in the project and into an
+    /// export's metadata. Never removed by an edit.
+    public var synthetic: SyntheticSpeech?
 
     /// Whether nothing in the file says its loudspeakers' order: 7.1 or 7.1.4 without a mask or ADM's chna.
     /// (5.1 is the same in both orders.)
@@ -67,7 +70,7 @@ public struct SourceRef: Codable, Hashable, Sendable, Identifiable {
     /// a mask) is a change of the project, which the window keeps and undoes. (Until 2026-11-17 only the id and
     /// the path were compared, so a step that changed nothing else, set_track `field` alone, was dropped.)
     public static func == (a: SourceRef, b: SourceRef) -> Bool {
-        a.id == b.id && a.path == b.path && a.fieldOrder == b.fieldOrder && a.unmaskedOrder == b.unmaskedOrder
+        a.id == b.id && a.path == b.path && a.fieldOrder == b.fieldOrder && a.unmaskedOrder == b.unmaskedOrder && a.synthetic == b.synthetic
     }
     public func hash(into h: inout Hasher) { h.combine(id) }
 }
@@ -343,7 +346,13 @@ public struct Project: Codable, Equatable, Sendable {
     /// What a project with a file heard in BS.2051's order is saved as: an app before it would hear the file's
     /// sides and rears the other way round, so it refuses the file instead.
     public static let orderFormatVersion = 6
-    public static let newestFormatVersion = 6
+    /// What a project with a cloned voice or speech made with one is saved as: an app before it would drop the
+    /// record of consent and the mark on the made speech, so it refuses the file instead.
+    public static let voiceFormatVersion = 7
+    public static let newestFormatVersion = 7
+
+    /// A cloned voice, or speech made with one.
+    public var usesVoices: Bool { !voices.isEmpty || sources.contains { $0.synthetic != nil } }
 
     /// A file without a mask heard in BS.2051's order.
     public var usesOrder: Bool { sources.contains { $0.needsOrder && $0.unmaskedOrder == .bs2051 } }
@@ -387,6 +396,9 @@ public struct Project: Codable, Equatable, Sendable {
     public var vcas: [VCA] = []
     /// Automation lanes (see `AutomationLane`). None: every level is its fader, as before.
     public var automation: [AutomationLane] = []
+    /// Voices cloned for this project (Overdub), each with the record of its consent; kept after a voice is
+    /// deleted at the provider.
+    public var voices: [ClonedVoice] = []
     public var sampleRate: Double
     public var channels: Int
     public var tracks: [Track]
@@ -439,11 +451,11 @@ public struct Project: Codable, Equatable, Sendable {
         self.transcripts = transcripts
     }
 
-    private enum CodingKeys: String, CodingKey { case formatVersion, sampleRate, channels, tracks, markers, sources, tempo, transcripts, speakers, speakerTurns, imported, timecode, video, buses, master, vcas, automation }
+    private enum CodingKeys: String, CodingKey { case formatVersion, sampleRate, channels, tracks, markers, sources, tempo, transcripts, speakers, speakerTurns, imported, timecode, video, buses, master, vcas, automation, voices }
 
     public func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
-        try c.encode(usesOrder ? Self.orderFormatVersion : usesFields ? Self.fieldFormatVersion : channels > 2 ? Self.immersiveFormatVersion : usesAutomation ? Self.automationFormatVersion
+        try c.encode(usesVoices ? Self.voiceFormatVersion : usesOrder ? Self.orderFormatVersion : usesFields ? Self.fieldFormatVersion : channels > 2 ? Self.immersiveFormatVersion : usesAutomation ? Self.automationFormatVersion
                      : usesMixer ? Self.mixerFormatVersion : Self.formatVersion, forKey: .formatVersion)
         try c.encode(sampleRate, forKey: .sampleRate)
         try c.encode(channels, forKey: .channels)
@@ -461,6 +473,7 @@ public struct Project: Codable, Equatable, Sendable {
         if !master.isDefault { try c.encode(master, forKey: .master) }
         if !vcas.isEmpty { try c.encode(vcas, forKey: .vcas) }
         if usesAutomation { try c.encode(liveLanes, forKey: .automation) }
+        if !voices.isEmpty { try c.encode(voices, forKey: .voices) }
     }
 
     public init(from decoder: Decoder) throws {
@@ -496,6 +509,7 @@ public struct Project: Codable, Equatable, Sendable {
         timecode = (try? c.decodeIfPresent(TimecodeSettings.self, forKey: .timecode)).flatMap { $0 }
             .flatMap { (0..<(24 * 3_600 * $0.rate.base)).contains($0.startFrames) ? $0 : nil }
         speakerTurns = try c.decodeIfPresent([SourceSpeakers].self, forKey: .speakerTurns) ?? []
+        voices = try c.decodeIfPresent([ClonedVoice].self, forKey: .voices) ?? []
     }
 
     /// A project with one track playing the whole file.

@@ -1102,6 +1102,8 @@ final class EditorSession {
         var wav = WAVWriter.Options(encoding: options.encoding, channels: project.channels, sampleRate: project.sampleRate,
                                     channelMask: project.layout.isAmbisonic ? 0 : project.layout.mask, dither: options.dither)
         if let adm = ADM.chunks(for: project.layout, title: name) { wav.foreignChunks = adm }
+        // Speech made with a cloned voice says so in the file (LIST/INFO ICMT), as the series' rule 9 asks.
+        if let note = project.syntheticNote(in: range) { wav.foreignChunks.append(("LIST", WAVWriter.infoList(comment: note))) }
         let first = self.project.sources.first?.info
         if asked.lowerBound == 0 {
             if var bext = first?.bext {

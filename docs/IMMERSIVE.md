@@ -10,7 +10,7 @@ Phase 4 of `docs/PLAN.md`: multichannel up to 7.1.4, ADM BWF, Ambisonics, APAC/A
 4. **Ambisonics** (D4): AmbiX (ACN/SN3D) documents, a source encoded into them by direction, and decoded to a layout or to headphones.
 5. **Binaural monitoring with head tracking** (D5): through the system's own renderer where it can take the document's channels; otherwise not built.
 6. **APAC export** (D6): where AudioToolbox can write it.
-7. **Overdub with consent flow**: waits for Anders's decision on the voice provider's terms.
+7. **Overdub with consent flow**: built 2026-11-17 (ElevenLabs with the user's own key; `site/manual/23-overdub.md`, `docs/LICENSES.md`).
 
 ## Decisions (2026-11-17)
 
@@ -157,4 +157,4 @@ In a layout wider than stereo the timeline draws a clip through the same matrix 
 - A seen GUI pass of a 5.1 document (the menu, the status bar, listening).
 - The panner's place automated over time; buses placed; a spread wider than a pair of loudspeakers for a mono source.
 - Loudness for a field (BS.1770 has none); a field heard by ear on loudspeakers.
-- Overdub with consent (waits for Anders's decision on the voice provider's terms).
+- Overdub tried with a real ElevenLabs request (it has only met a stand-in server).

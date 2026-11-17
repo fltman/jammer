@@ -2,6 +2,7 @@ import AppKit
 import JammerAgent
 import JammerCore
 import JammerPlugins
+import JammerSpeech
 import JammerStems
 import Network
 import OSLog
@@ -508,6 +509,16 @@ enum AgentRouter {
             case ["speakers"]:
                 try only("GET")
                 return try speakers(session, r)
+            case ["voices"]:
+                if r.method == "GET" { return .json(["voices": session.project.voices.map(voiceJSON), "consentSentence": Overdub.consentSentence(language: session.project.transcripts.first?.language ?? "en")]) }
+                try only("POST")
+                return try await cloneVoice(session, r)
+            case let v where v.count == 2 && v[0] == "voices":
+                try only("DELETE")
+                return try await deleteVoice(session, id: v[1])
+            case ["overdub"]:
+                try only("POST")
+                return try await overdub(session, r)
             case ["mixer"]:
                 try only("GET")
                 return .json(["mixer": mixerJSON(session.project, plan: session.plan, session: session)])
@@ -1377,5 +1388,105 @@ enum AgentRouter {
         let data = try Data(contentsOf: tmp, options: .mappedIfSafe)
         let types: [ExportFormat: String] = [.wav: "audio/wav", .aiff: "audio/aiff", .flac: "audio/flac", .alac: "audio/mp4", .aac: "audio/mp4", .opus: "audio/ogg", .mp3: "audio/mpeg", .apac: "audio/mp4"]
         return Response(status: 200, contentType: types[format] ?? "application/octet-stream", body: data, extraHeaders: headers)
+    }
+}
+
+// MARK: Overdub (PROVIDERS.md rule 9; Anders, 2026-11-17: ElevenLabs with the user's own key)
+
+extension AgentRouter {
+    static func voiceJSON(_ v: ClonedVoice) -> [String: Any] {
+        let f = ISO8601DateFormatter()
+        var o: [String: Any] = ["id": v.id.uuidString, "name": v.name, "provider": v.provider, "attest": v.attestation.kind.rawValue,
+                                "consentHeardAt": [v.attestation.heardAt.lowerBound, v.attestation.heardAt.upperBound],
+                                "consentHeard": v.attestation.heard, "created": f.string(from: v.created),
+                                "samples": v.samples.map { [$0.lowerBound, $0.upperBound] }]
+        if let d = v.deleted { o["deleted"] = f.string(from: d) }
+        return o
+    }
+
+    /// Both gates of a paid call, as for a paid transcription: allowPaid, and allowUnknownPrice (Jämmer
+    /// doesn't know the price on the user's plan).
+    private static func paidGates(_ body: [String: Any]) throws {
+        if body["allowPaid"] as? Bool != true {
+            throw APIError.paidNotAllowed("This sends audio or text to ElevenLabs and the user's account pays. Pass \"allowPaid\": true to run it.")
+        }
+        if body["allowUnknownPrice"] as? Bool != true {
+            throw APIError.unprocessable("unknown_price", "Jämmer doesn't know what this costs on the user's ElevenLabs plan (it charges in credits by its own price list). Pass \"allowUnknownPrice\": true beside \"allowPaid\" if that is all right.")
+        }
+    }
+
+    private static func pair(_ v: Any?) -> ClosedRange<Double>? {
+        guard let a = v as? [Any], a.count == 2, let s = (a[0] as? NSNumber)?.doubleValue, let e = (a[1] as? NSNumber)?.doubleValue, s.isFinite, e.isFinite, e > s else { return nil }
+        return s...e
+    }
+
+    private static func provider(_ e: Error) -> APIError {
+        if let f = e as? ElevenLabs.Failure { return .unprocessable(f.reason, f.localizedDescription) }
+        if e is ElevenLabs.NoKey { return .unprocessable("key_missing", e.localizedDescription) }
+        if let o = e as? OverdubError { return .unprocessable(o.reason, o.localizedDescription) }
+        return .unprocessable("provider_error", (e as? LocalizedError)?.errorDescription ?? e.localizedDescription)
+    }
+
+    private static func cloneVoice(_ session: EditorSession, _ r: AgentAPI.Request) async throws -> Response {
+        let body = try json(r)
+        guard let name = (body["name"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty, name.count <= 100 else {
+            throw APIError.badRequest("name is whose voice it is (1–100 characters).")
+        }
+        // The attestation comes first: before the paid gates, before anything else is looked at.
+        if let given = body["attest"], (given as? String).flatMap(VoiceAttestation.Kind.init(rawValue:)) == nil {
+            throw APIError.badRequest("attest is one of \(VoiceAttestation.Kind.allCases.map(\.rawValue).joined(separator: ", ")).")
+        }
+        let kind = (body["attest"] as? String).flatMap(VoiceAttestation.Kind.init(rawValue:))
+        guard kind != nil else { throw APIError.unprocessable(OverdubError.notAttested.reason, OverdubError.notAttested.localizedDescription + " (attest: own or owner_consent)") }
+        guard let consent = pair(body["consent"]) else { throw APIError.badRequest("consent is [start, end] in seconds: where the consent sentence is said.") }
+        guard let list = body["samples"] as? [Any], !list.isEmpty, list.count <= 50 else { throw APIError.badRequest("samples is [[start, end], …] in seconds.") }
+        let samples = try list.map { v -> ClosedRange<Double> in
+            guard let p = pair(v) else { throw APIError.badRequest("samples is [[start, end], …] in seconds.") }
+            return p
+        }
+        let prepared: (VoiceAttestation, [Data])
+        do { prepared = try OverdubService.prepareClone(session.project, plan: session.plan, kind: kind, adult: body["adult"] as? Bool == true, consent: consent, samples: samples) }
+        catch { throw provider(error) }
+        try paidGates(body)
+        _ = prepared
+        let made: (ClonedVoice, needsVerification: Bool)
+        do { made = try await session.cloneVoice(name: name, kind: kind, adult: true, consent: consent, samples: samples) } catch { throw provider(error) }
+        return .json(["voice": voiceJSON(made.0), "needsVerification": made.needsVerification], status: 201)
+    }
+
+    private static func deleteVoice(_ session: EditorSession, id: String) async throws -> Response {
+        guard let vid = UUID(uuidString: id), let v = session.project.voices.first(where: { $0.id == vid }) else { throw APIError.notFound("No cloned voice \(id) in this document.") }
+        guard v.deleted == nil else { return .json(["voice": voiceJSON(v)]) }
+        do { try await session.deleteVoice(vid) } catch { throw provider(error) }
+        return .json(["voice": voiceJSON(session.project.voices.first { $0.id == vid }!)])
+    }
+
+    private static func overdub(_ session: EditorSession, _ r: AgentAPI.Request) async throws -> Response {
+        let body = try json(r)
+        guard let vid = (body["voice"] as? String).flatMap(UUID.init(uuidString:)), let voice = session.project.voices.first(where: { $0.id == vid }) else {
+            throw APIError.notFound("No cloned voice by that id. GET …/voices lists them.")
+        }
+        guard let s = (body["start"] as? NSNumber)?.doubleValue, let e = (body["end"] as? NSNumber)?.doubleValue, s.isFinite, e.isFinite, s >= 0, e >= s else {
+            throw APIError.badRequest("start and end are seconds, start ≤ end (equal to insert without replacing).")
+        }
+        let text = body["text"] as? String ?? ""
+        let model = body["model"] as? String ?? Overdub.models[0]
+        guard Overdub.models.contains(model) else { throw APIError.badRequest("model is one of \(Overdub.models.joined(separator: ", ")).") }
+        let p0 = session.project
+        let range = p0.frames(s)..<p0.frames(e)
+        guard range.upperBound <= p0.length else { throw APIError.badRequest("end is past the document's end.") }
+        let track: Int
+        if let t = body["track"] as? String {
+            guard let id = UUID(uuidString: t), let i = p0.tracks.firstIndex(where: { $0.id == id }) else { throw APIError.notFound("No track \(t).") }
+            track = i
+        } else {
+            guard let i = p0.tracks.firstIndex(where: { $0.clips.contains { $0.start <= range.lowerBound && $0.end > range.lowerBound } }) else { throw provider(OverdubError.noTrack) }
+            track = i
+        }
+        try paidGates(body)
+        let source: SourceRef
+        do { source = try await session.overdub(voice: voice, range: range, text: text, model: model, track: track) } catch { throw provider(error) }
+        let p = session.project
+        return .json(["document": detail(session), "source": source.id.uuidString, "seconds": Double(source.info.frames) / p.sampleRate])
     }
 }

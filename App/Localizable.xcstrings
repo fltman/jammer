@@ -5199,6 +5199,23 @@
         }
       }
     },
+    "button.save": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spara"
+          }
+        }
+      }
+    },
     "button.send": {
       "comment": "Button: send (to Flimmer, to OpenAI).",
       "extractionState": "manual",
@@ -9332,6 +9349,210 @@
           "stringUnit": {
             "state": "translated",
             "value": "Utenheten har inga kanaler."
+          }
+        }
+      }
+    },
+    "error.overdub.consentNotHeard": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The consent sentence isn’t heard there. The person whose voice it is says, in the recording: “%@”"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Samtyckesmeningen hörs inte där. Personen vars röst det är säger, i inspelningen: ”%@”"
+          }
+        }
+      }
+    },
+    "error.overdub.emptyText": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Write what the voice should say."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skriv vad rösten ska säga."
+          }
+        }
+      }
+    },
+    "error.overdub.noTrack": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No track has speech where the words are to be replaced."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inget spår har tal där orden ska ersättas."
+          }
+        }
+      }
+    },
+    "error.overdub.noTranscript": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transcribe the recording first: Jämmer listens for the consent sentence in its transcript."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkribera inspelningen först: Jämmer letar efter samtyckesmeningen i transkriptionen."
+          }
+        }
+      }
+    },
+    "error.overdub.noVoice": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This document has no cloned voice by that id."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dokumentet har ingen klonad röst med det id:t."
+          }
+        }
+      }
+    },
+    "error.overdub.notAdult": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A voice is cloned only from someone 18 or older."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En röst klonas bara från någon som är 18 år eller äldre."
+          }
+        }
+      }
+    },
+    "error.overdub.notAttested": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Before anything is uploaded, say whose voice it is: your own, or one whose owner has given you explicit consent."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Innan något laddas upp, säg vems röst det är: din egen, eller en vars ägare har gett dig uttryckligt samtycke."
+          }
+        }
+      }
+    },
+    "error.overdub.sampleOutside": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A piece of the speaker lies outside the document."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En del av talaren ligger utanför dokumentet."
+          }
+        }
+      }
+    },
+    "error.overdub.samplesTooLong": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "At most 3 minutes of the speaker are sent."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Högst 3 minuter av talaren skickas."
+          }
+        }
+      }
+    },
+    "error.overdub.samplesTooShort": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The voice needs at least 10 seconds of the speaker, in pieces of at least 5 seconds."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rösten behöver minst 10 sekunder av talaren, i delar på minst 5 sekunder."
+          }
+        }
+      }
+    },
+    "error.overdub.textTooLong": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The text is longer than the model takes (%@ characters)."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Texten är längre än modellen tar (%@ tecken)."
+          }
+        }
+      }
+    },
+    "error.overdub.voiceDeleted": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "That voice was deleted at the provider."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Den rösten är raderad hos leverantören."
           }
         }
       }
@@ -14629,6 +14850,57 @@
         }
       }
     },
+    "menu.overdub": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overdub…"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overdub…"
+          }
+        }
+      }
+    },
+    "menu.overdub.clone": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clone Voice…"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Klona röst…"
+          }
+        }
+      }
+    },
+    "menu.overdub.delete": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete Cloned Voice…"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Radera klonad röst…"
+          }
+        }
+      }
+    },
     "menu.picture": {
       "comment": "Menu item: opens the window that shows a film beside the sound.",
       "extractionState": "manual",
@@ -17771,6 +18043,23 @@
         }
       }
     },
+    "op.clone_voice.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clone Voice"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Klona röst"
+          }
+        }
+      }
+    },
     "op.copy.title": {
       "comment": "The title of the operation copy: in the menus, the command palette, the assistant’s plan and as the undo name (“Undo …”). The agent API keeps the English title.",
       "extractionState": "manual",
@@ -17893,6 +18182,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Radera"
+          }
+        }
+      }
+    },
+    "op.delete_voice.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete Cloned Voice"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Radera klonad röst"
           }
         }
       }
@@ -18327,6 +18633,23 @@
         }
       }
     },
+    "op.list_voices.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "List Cloned Voices"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lista klonade röster"
+          }
+        }
+      }
+    },
     "op.loudness_preset.title": {
       "comment": "The title of the operation loudness_preset: in the menus, the command palette, the assistant’s plan and as the undo name (“Undo …”). The agent API keeps the English title.",
       "extractionState": "manual",
@@ -18377,6 +18700,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Normalisera"
+          }
+        }
+      }
+    },
+    "op.overdub.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overdub"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overdub"
           }
         }
       }
@@ -19498,6 +19838,744 @@
           "stringUnit": {
             "state": "translated",
             "value": "starta utenheten"
+          }
+        }
+      }
+    },
+    "overdub.ask.note": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The text goes to ElevenLabs with your key. The new clip is marked as made with a cloned voice, in the document and in an exported WAV."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Texten går till ElevenLabs med din nyckel. Det nya klippet märks som gjort med en klonad röst, i dokumentet och i en exporterad WAV."
+          }
+        }
+      }
+    },
+    "overdub.ask.text": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Says the text in the cloned voice and puts it in place of %1$@–%2$@ s; what follows moves with it. One undo step."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Säger texten med den klonade rösten och lägger den i stället för %1$@–%2$@ s; det som följer flyttar med. Ett ångrasteg."
+          }
+        }
+      }
+    },
+    "overdub.ask.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overdub"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overdub"
+          }
+        }
+      }
+    },
+    "overdub.clone.adult": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The person is 18 or older"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Personen är 18 år eller äldre"
+          }
+        }
+      }
+    },
+    "overdub.clone.done": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The voice of %@ is ready for Overdub."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rösten för %@ är klar för Overdub."
+          }
+        }
+      }
+    },
+    "overdub.clone.heard": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The selection is where the person says: “%@” Jämmer checks it in the transcript before anything is sent."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Markeringen är där personen säger: ”%@” Jämmer kontrollerar det i transkriptionen innan något skickas."
+          }
+        }
+      }
+    },
+    "overdub.clone.name": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Whose voice is it?"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vems röst är det?"
+          }
+        }
+      }
+    },
+    "overdub.clone.pieces": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld piece"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld pieces"
+                }
+              }
+            }
+          }
+        },
+        "sv": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld del"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld delar"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "overdub.clone.selectConsent": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select where the person says, in the recording: “%@”, and choose Clone Voice again."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Markera där personen säger, i inspelningen: ”%@”, och välj Klona röst igen."
+          }
+        }
+      }
+    },
+    "overdub.clone.sends": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sent to ElevenLabs: %1$@ s of this speaker, in %2$@."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skickas till ElevenLabs: %1$@ s av den här talaren, i %2$@."
+          }
+        }
+      }
+    },
+    "overdub.clone.text": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overdub says new words in a speaker’s own voice. First say whose voice it is; nothing is sent until that, the age and the consent sentence hold."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overdub säger nya ord med en talares egen röst. Säg först vems röst det är; inget skickas förrän det, åldern och samtyckesmeningen stämmer."
+          }
+        }
+      }
+    },
+    "overdub.clone.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clone a Voice for Overdub"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Klona en röst för Overdub"
+          }
+        }
+      }
+    },
+    "overdub.clone.unnamed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unnamed voice"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Namnlös röst"
+          }
+        }
+      }
+    },
+    "overdub.clone.verify": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ElevenLabs wants the voice of %@ verified before it speaks (it matches a protected voice). Verify it at elevenlabs.io."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ElevenLabs vill att rösten för %@ verifieras innan den talar (den liknar en skyddad röst). Verifiera den på elevenlabs.io."
+          }
+        }
+      }
+    },
+    "overdub.clone.whose.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Whose voice it is"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vems röst det är"
+          }
+        }
+      }
+    },
+    "overdub.clone.whose.choose": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose whose voice it is…"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Välj vems röst det är…"
+          }
+        }
+      }
+    },
+    "overdub.clone.whose.consent": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Its owner has given me explicit, informed consent"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dess ägare har gett mig uttryckligt, informerat samtycke"
+          }
+        }
+      }
+    },
+    "overdub.clone.whose.own": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "It is my own voice"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Det är min egen röst"
+          }
+        }
+      }
+    },
+    "overdub.clone.working": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sending the voice to ElevenLabs…"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skickar rösten till ElevenLabs…"
+          }
+        }
+      }
+    },
+    "overdub.delete.button": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Radera"
+          }
+        }
+      }
+    },
+    "overdub.delete.done": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The voice of %@ is deleted at ElevenLabs."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rösten för %@ är raderad hos ElevenLabs."
+          }
+        }
+      }
+    },
+    "overdub.delete.text": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deletes the voice at ElevenLabs. The record of consent stays in the document, and speech made with it stays marked."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Raderar rösten hos ElevenLabs. Samtyckesposten finns kvar i dokumentet, och tal som gjorts med den förblir märkt."
+          }
+        }
+      }
+    },
+    "overdub.delete.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete a Cloned Voice"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Radera en klonad röst"
+          }
+        }
+      }
+    },
+    "overdub.done": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overdub in the voice of %@ is in place."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overdub med rösten för %@ är på plats."
+          }
+        }
+      }
+    },
+    "overdub.keyRejected": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ElevenLabs didn’t accept the key. Check it under Jämmer › Settings… › Paid Services."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ElevenLabs godtog inte nyckeln. Kontrollera den under Jämmer › Inställningar… › Betaltjänster."
+          }
+        }
+      }
+    },
+    "overdub.model.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ElevenLabs model"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ElevenLabs-modell"
+          }
+        }
+      }
+    },
+    "overdub.noKey": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "There is no ElevenLabs key. Add your own under Jämmer › Settings… › Paid Services."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Det finns ingen ElevenLabs-nyckel. Lägg in din egen under Jämmer › Inställningar… › Betaltjänster."
+          }
+        }
+      }
+    },
+    "overdub.noVoice": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This document has no cloned voice. Select where the person says the consent sentence and choose Audio › Clone Voice…."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dokumentet har ingen klonad röst. Markera där personen säger samtyckesmeningen och välj Ljud › Klona röst…."
+          }
+        }
+      }
+    },
+    "overdub.providerSaid": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ElevenLabs answered %1$@: %2$@"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ElevenLabs svarade %1$@: %2$@"
+          }
+        }
+      }
+    },
+    "overdub.selectWords": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select the words to say again, on a track with speech."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Markera orden som ska sägas igen, på ett spår med tal."
+          }
+        }
+      }
+    },
+    "overdub.terms": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ElevenLabs’ terms (9 October 2026, short): you must have every right to the voice; cloning anyone’s voice without their explicit and informed consent is not allowed, nor recordings of anyone under 18. ElevenLabs may use the recordings to run its service and says it won’t sell a voice on its own without permission. It puts a watermark in what it makes. Your own key, your own account: it pays, by ElevenLabs’ price list. Full terms: elevenlabs.io/terms-of-use and elevenlabs.io/use-policy."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ElevenLabs villkor (9 oktober 2026, kort): du måste ha alla rättigheter till rösten; att klona någons röst utan deras uttryckliga och informerade samtycke är inte tillåtet, inte heller inspelningar av någon under 18. ElevenLabs får använda inspelningarna för att driva tjänsten och säger att de inte säljer en röst för sig själv utan tillstånd. De lägger ett vattenmärke i det de gör. Din egen nyckel, ditt eget konto: det betalar, efter ElevenLabs prislista. Hela villkoren: elevenlabs.io/terms-of-use och elevenlabs.io/use-policy."
+          }
+        }
+      }
+    },
+    "overdub.text.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "What the voice says"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Det rösten säger"
+          }
+        }
+      }
+    },
+    "overdub.undo.clone": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clone Voice of %@"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Klona rösten för %@"
+          }
+        }
+      }
+    },
+    "overdub.undo.delete": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete Cloned Voice of %@"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Radera den klonade rösten för %@"
+          }
+        }
+      }
+    },
+    "overdub.undo.overdub": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overdub"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overdub"
+          }
+        }
+      }
+    },
+    "overdub.voice.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cloned voice"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Klonad röst"
+          }
+        }
+      }
+    },
+    "overdub.working": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overdub in the voice of %@…"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overdub med rösten för %@…"
+          }
+        }
+      }
+    },
+    "paid.elevenlabs.key": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your ElevenLabs API key"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Din API-nyckel från ElevenLabs"
+          }
+        }
+      }
+    },
+    "paid.elevenlabs.note": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your own key from your own ElevenLabs account, kept in this Mac’s Keychain. Don’t share it: ElevenLabs’ terms tie a key to its account, and every request made with it is that account’s. Used only for Overdub, only when you send. Built from ElevenLabs’ documentation, not tried with a real request."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Din egen nyckel från ditt eget ElevenLabs-konto, sparad i den här Macens nyckelring. Dela den inte: enligt ElevenLabs villkor hör en nyckel till sitt konto, och varje anrop med den är det kontots. Används bara för Overdub, och bara när du skickar. Byggt efter ElevenLabs dokumentation, inte provat med ett riktigt anrop."
+          }
+        }
+      }
+    },
+    "paid.elevenlabs.remove": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove Key"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ta bort nyckeln"
+          }
+        }
+      }
+    },
+    "paid.elevenlabs.saved": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A key is saved (type a new one to replace it)"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En nyckel är sparad (skriv en ny för att byta)"
+          }
+        }
+      }
+    },
+    "paid.elevenlabs.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ElevenLabs (Overdub)"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ElevenLabs (Overdub)"
           }
         }
       }
