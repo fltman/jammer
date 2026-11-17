@@ -19,6 +19,14 @@ final class FlimmerSendModel {
     var flimmerLines: [String] = []
     /// How many of them, from the first, are warnings.
     var flimmerWarnings = 0
+    /// Send each clip's transcript after the sound (when it has one).
+    var sendTranscripts = true
+    /// Replace a transcript a person corrected by hand in Flimmer: off every time the sheet opens, never kept.
+    var replaceEdited = false
+    /// How each transcript went, clip by clip, and how many of the lines (from the first after the summary) failed.
+    var transcriptLines: [String] = []
+    var transcriptFailures = 0
+    var hasTranscripts: Bool { !(prepared?.transcripts.isEmpty ?? true) }
     @ObservationIgnored private var prepared: FlimmerSend.Prepared?
     @ObservationIgnored private var client: FlimmerSend.Client?
     @ObservationIgnored private var task: Task<Void, Never>?
@@ -69,10 +77,15 @@ final class FlimmerSendModel {
         stage = .sending
         task = Task {
             do {
-                (flimmerLines, flimmerWarnings) = try await FlimmerSend.sendCounting(prepared, client: client)
+                let r = try await FlimmerSend.sendAll(prepared, client: client, transcripts: sendTranscripts, replaceEdited: replaceEdited)
+                (flimmerLines, flimmerWarnings) = (r.lines, r.warnings)
+                transcriptLines = FlimmerSend.transcriptLines(r.transcripts)
+                transcriptFailures = r.transcripts.filter { !$0.ok }.count
                 self.prepared = nil
                 stage = .done
-                session.status = L10n.text("flimmer.sent")
+                // The status line says the sound went, and, when some transcripts didn't, that not all of them did.
+                session.status = transcriptFailures == 0 ? L10n.text("flimmer.sent")
+                    : L10n.text("flimmer.sent.transcriptsMissing", String(r.transcripts.count - transcriptFailures), String(r.transcripts.count))
             } catch {
                 stage = .failed(L10n.error(error))
             }
@@ -101,6 +114,12 @@ struct FlimmerSendSheet: View {
             .pickerStyle(.radioGroup)
             .labelsHidden()
             .disabled(model.stage != .choose)
+            Toggle(L10n.text("flimmer.transcripts"), isOn: $model.sendTranscripts)
+                .disabled(model.stage == .sending || model.stage == .done)
+                .accessibilityIdentifier("flimmer.transcripts")
+            Toggle(L10n.text("flimmer.replaceEdited"), isOn: $model.replaceEdited)
+                .disabled(!model.sendTranscripts || model.stage == .sending || model.stage == .done)
+                .accessibilityIdentifier("flimmer.replaceEdited")
             Text(L10n.text("flimmer.promise"))
                 .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             switch model.stage {
@@ -115,6 +134,11 @@ struct FlimmerSendSheet: View {
                         if !model.flimmerLines.isEmpty { Divider() }
                         ForEach(Array(model.flimmerLines.enumerated()), id: \.offset) { i, l in
                             StateLine(kind: i < model.flimmerWarnings ? .warning : .info, text: l, font: .body)
+                        }
+                        // Clip by clip: which got its transcript and which didn't, in Flimmer's words.
+                        ForEach(Array(model.transcriptLines.enumerated()), id: \.offset) { i, l in
+                            StateLine(kind: i == 0 ? (model.transcriptFailures > 0 ? .warning : .success)
+                                      : (i > model.transcriptLines.count - 1 - model.transcriptFailures ? .error : .success), text: l, font: .body)
                         }
                     }
                     .font(.callout)

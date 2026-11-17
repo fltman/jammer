@@ -28,6 +28,12 @@ final class PretendFlimmer: @unchecked Sendable {
     var seenHeaders: [[String: String]] = []
     var polls = 0
     var n = 0
+    /// Transcripts by clip id, whether a person corrected each in Flimmer, and the PUT bodies as they came.
+    var transcripts: [String: [String: Any]] = [:]
+    var edited: Set<String> = []
+    var transcriptBodies: [[String: Any]] = []
+    /// Clip ids whose transcript PUT the pretend Flimmer refuses (as unknown_clip), to test a partial outcome.
+    var refuseTranscript: Set<String> = []
 
     var transport: FlimmerSend.Transport { { [self] r in lock.withLock { self.handle(r) } } }
 
@@ -111,6 +117,8 @@ final class PretendFlimmer: @unchecked Sendable {
             polls += 1
             guard let job = jobs[String(p.dropFirst("/api/v1/jobs/".count))] else { return fail(404, "not_found", r) }
             return answer(200, ["job": job], r)
+        case ("PUT", let p) where p.hasPrefix("/api/v1/audio/") && p.hasSuffix("/transcript"):
+            return transcript(String(p.dropFirst("/api/v1/audio/".count).dropLast("/transcript".count)), r)
         case ("POST", "/api/v1/audio/sibling-plan"):
             guard hasEndpoint else { return fail(404, "not_found", r) }
             guard signedIn else { return fail(409, "not_available", r) }
@@ -118,6 +126,42 @@ final class PretendFlimmer: @unchecked Sendable {
             return plan(try! JSONSerialization.jsonObject(with: r.httpBody!) as! [String: Any], r)
         default: return fail(404, "not_found", r)
         }
+    }
+
+    /// Flimmer's PUT /api/v1/audio/{clipId}/transcript as its TRANSCRIPT-API says (closed schema, file times,
+    /// duration within 0.05 s, provider when not local, 409 edited_exists without replaceEdited).
+    func transcript(_ clip: String, _ r: URLRequest) -> (Data, HTTPURLResponse) {
+        guard r.value(forHTTPHeaderField: "X-Flimmer-Agent") == "1" else { return fail(403, "forbidden", r) }
+        let b = (try? JSONSerialization.jsonObject(with: r.httpBody ?? Data()) as? [String: Any]) ?? [:]
+        transcriptBodies.append(b)
+        let known: Set<String> = ["projectId", "timeBase", "language", "words", "speakers", "text", "source", "media", "edited", "replaceEdited", "rationale"]
+        if let odd = b.keys.first(where: { !known.contains($0) }) { return answer(400, ["error": ["code": "bad_request", "message": "Unknown field \(odd)."]], r) }
+        func no(_ reason: String, _ message: String) -> (Data, HTTPURLResponse) { answer(422, ["error": ["code": "unprocessable", "reason": reason, "message": message]], r) }
+        if let p = b["projectId"] as? String, p != projectId { return no("wrong_project", "Another project is open.") }
+        if refuseTranscript.contains(clip) { return no("unknown_clip", "No audio clip \(clip) in the open project.") }
+        guard let c = clips.first(where: { $0.id == clip }) else { return no("unknown_clip", "No audio clip \(clip) in the open project.") }
+        guard b["timeBase"] as? String == "file" else { return no("wrong_time_base", "timeBase must be file.") }
+        let duration = ((b["media"] as? [String: Any])?["duration"] as? NSNumber)?.doubleValue ?? -1
+        guard abs(duration - c.duration) <= 0.05 else { return no("duration_mismatch", "media.duration \(duration) is not the file's \(c.duration).") }
+        let source = b["source"] as? [String: Any] ?? [:]
+        guard let local = source["local"] as? Bool, local || source["provider"] is String else { return answer(400, ["error": ["code": "bad_request", "message": "source.provider is required when local is false."]], r) }
+        let words = b["words"] as? [[String: Any]] ?? []
+        var last = -1.0
+        for (i, w) in words.enumerated() {
+            let s = (w["start"] as? NSNumber)?.doubleValue ?? -1, e = (w["end"] as? NSNumber)?.doubleValue ?? -1
+            if s < 0 || e > c.duration + 0.05 { return no("words_out_of_range", "Word \(i) lies outside the file.") }
+            if s < last { return no("words_not_ordered", "Word \(i) starts before the one before it.") }
+            last = s
+        }
+        let wasEdited = edited.contains(clip)
+        if wasEdited, b["replaceEdited"] as? Bool != true {
+            return answer(409, ["error": ["code": "not_available", "reason": "edited_exists", "message": "A person corrected this transcript in Flimmer; send replaceEdited to replace it."]], r)
+        }
+        let replaced = transcripts[clip] != nil
+        transcripts[clip] = b
+        edited.remove(clip)
+        if wasEdited { undoSteps.append("Jämmer ersatte ett rättat transkript.") }
+        return answer(200, ["transcript": ["id": "tr-\(clip)", "language": b["language"] ?? "", "replaced": replaced, "replacedEdited": wasEdited, "words": words.count]], r)
     }
 
     func plan(_ b: [String: Any], _ r: URLRequest) -> (Data, HTTPURLResponse) {
@@ -167,8 +211,10 @@ final class PretendFlimmer: @unchecked Sendable {
         // For real: all at once, one undo step; the uploads are consumed.
         for item in items { uploads[item["uploadId"] as! String]?.used = true }
         for id in mute { clips[clips.firstIndex { $0.id == id }!].muted = true }
-        for c in create where c["takeOf"] != nil {
-            clips.append(Clip(id: "take-\(clips.count)", trackId: c["trackId"] as! String, timelineOffset: c["timelineOffset"] as! Double, duration: c["duration"] as! Double, linked: false))
+        for (k, c) in create.enumerated() where c["takeOf"] != nil {
+            let id = "take-\(clips.count)"
+            clips.append(Clip(id: id, trackId: c["trackId"] as! String, timelineOffset: c["timelineOffset"] as! Double, duration: c["duration"] as! Double, linked: false))
+            create[k]["clipId"] = id
         }
         for s in settings {
             let i = tracks.firstIndex { $0.id == s["trackId"] as? String }!
@@ -513,5 +559,93 @@ enum RenderPlanProbe {
         // The clip keeps its origin (the mono original) and now plays from the processed file.
         p.tracks[0].clips[0].sourceID = ref.id
         return (p, pool)
+    }
+
+}
+
+extension FlimmerSendTests {
+    /// A document whose two dialogue clips have transcripts: C1 (berattare) by KB-Whisper with a speaker, C3 (musik) by OpenAI, text and times.
+    func filmWithWords() -> (Project, SourcePool) {
+        var (p, pool) = film()
+        func words(_ list: [(String, Double, Double)]) -> [Word] { list.map { Word(text: $0.0, start: Frame($0.1 * sr), end: Frame($0.2 * sr), speaker: 0) } }
+        p.transcripts = [
+            SourceTranscript(sourceID: p.tracks[0].clips[0].sourceID, language: "sv-SE", engine: "whisper-kb-whisper-large",
+                             words: words([("God", 0.4, 0.6), ("morgon", 0.7, 1.1), ("havet", 2.0, 2.5)]), speakers: ["Berättaren"]),
+            SourceTranscript(sourceID: p.tracks[1].clips[0].sourceID, language: "sv-SE", engine: "openai gpt-4o-transcribe",
+                             words: [Word(text: "la", start: Frame(1 * sr), end: Frame(1.4 * sr))]),
+        ]
+        return (p, pool)
+    }
+
+    @Test("Transcripts go after the plan, one PUT each, to the new takes: times in the file's own seconds, its length, the speaker by name, local and provider as the engine was; the dry run names them and sends none")
+    func transcriptsAfterThePlan() async throws {
+        var (p, pool) = filmWithWords()
+        let f = flimmer(), c = client(f)
+        try p.changeGain(Frame(5.5 * sr)..<Frame(6.5 * sr), by: -6)
+        p.tracks[1].clips[0].start += Frame(0.5 * sr)
+        let prepared = try await FlimmerSend.prepare(p, mode: .takes, client: c, render: render(pool))
+        #expect(prepared.transcripts.count == 2 && f.transcriptBodies.isEmpty, "the dry run sends no transcript")
+        #expect(prepared.lines.contains { $0.hasPrefix("Transcripts of 2 clips go after the sound") })
+        let r = try await FlimmerSend.sendAll(prepared, client: c, transcripts: true, replaceEdited: false)
+        #expect(r.transcripts.count == 2 && r.transcripts.allSatisfy(\.ok), "\(r.transcripts)")
+        #expect(f.transcriptBodies.count == 2 && Set(r.transcripts.compactMap(\.clipId)).allSatisfy { $0.hasPrefix("take-") }, "to the new takes, not the originals")
+        let first = f.transcriptBodies[0]
+        // C1 starts at 4.5 s on the timeline and plays its source from 0: the file's 0.4 s is the word's 0.4 s.
+        let w = first["words"] as! [[String: Any]]
+        #expect(w.count == 3 && (w[0]["start"] as! Double) == 0.4 && (w[0]["end"] as! Double) == 0.6 && w[0]["speaker"] as? String == "Berättaren")
+        #expect((first["media"] as! [String: Any])["duration"] as! Double == 4 && first["timeBase"] as? String == "file" && first["projectId"] as? String == "P1")
+        let s1 = first["source"] as! [String: Any], s2 = f.transcriptBodies[1]["source"] as! [String: Any]
+        #expect(s1["engine"] as? String == "whisper" && s1["model"] as? String == "kb-whisper-large" && s1["local"] as? Bool == true && s1["provider"] == nil)
+        #expect(s2["engine"] as? String == "openai" && s2["local"] as? Bool == false && s2["provider"] as? String == "openai", "a transcript made in the cloud says so")
+        #expect(FlimmerSend.transcriptLines(r.transcripts).first == "Every transcript went to Flimmer (2).")
+    }
+
+    @Test("A transcript corrected by hand in Flimmer: refused without replaceEdited (409 edited_exists, in Flimmer's words, the others still go), replaced with it; a refused one is named clip by clip, never all or nothing; a failed plan sends none; the box off sends none")
+    func transcriptOutcomes() async throws {
+        var (p, pool) = filmWithWords()
+        let f = flimmer(), c = client(f)
+        try p.changeGain(Frame(5.5 * sr)..<Frame(6.5 * sr), by: -6)
+        p.tracks[1].clips[0].start += Frame(0.5 * sr)
+        // The box off: the sound goes, no transcript.
+        let off = try await FlimmerSend.sendAll(try await FlimmerSend.prepare(p, mode: .takes, client: c, render: render(pool)), client: c, transcripts: false, replaceEdited: false)
+        #expect(off.transcripts.isEmpty && f.transcriptBodies.isEmpty)
+        // One take's transcript corrected in Flimmer, the other refused for another reason.
+        let prepared = try await FlimmerSend.prepare(p, mode: .takes, client: c, render: render(pool))
+        let before = f.clips.count
+        f.edited = ["take-\(before)"]
+        f.refuseTranscript = ["take-\(before + 1)"]
+        let r = try await FlimmerSend.sendAll(prepared, client: c, transcripts: true, replaceEdited: false)
+        #expect(r.transcripts.count == 2 && r.transcripts.allSatisfy { !$0.ok })
+        #expect(r.transcripts[0].reason == "edited_exists" && r.transcripts[0].message?.contains("corrected this transcript") == true)
+        #expect(r.transcripts[1].reason == "unknown_clip")
+        let lines = FlimmerSend.transcriptLines(r.transcripts)
+        #expect(lines[0] == "No transcript went to Flimmer (2 refused); the sound did." && lines[1].hasPrefix("Transcript not sent: berattare. Flimmer said: A person corrected"))
+        // Partial: one goes, one doesn't, and both are named.
+        f.refuseTranscript = []
+        f.edited = ["take-\(f.clips.count)"]
+        let prepared2 = try await FlimmerSend.prepare(p, mode: .takes, client: c, render: render(pool))
+        f.edited = ["take-\(f.clips.count)"]
+        f.refuseTranscript = ["take-\(f.clips.count + 1)"]
+        let partial = try await FlimmerSend.sendAll(prepared2, client: c, transcripts: true, replaceEdited: true)
+        #expect(partial.transcripts.map(\.ok) == [true, false] && partial.transcripts[0].replacedEdited, "\(partial.transcripts)")
+        #expect(FlimmerSend.transcriptLines(partial.transcripts) == [
+            "1 of 2 transcripts went to Flimmer; 1 didn't.",
+            "Transcript sent: berattare (it replaced one corrected by hand in Flimmer)",
+            "Transcript not sent: musik. Flimmer said: No audio clip take-\(f.clips.count - 1) in the open project. [unknown_clip]"])
+        #expect(f.undoSteps.last == "Jämmer ersatte ett rättat transkript.")
+        // A failed plan: nothing of the transcripts is sent.
+        let sentBefore = f.transcriptBodies.count
+        let prepared3 = try await FlimmerSend.prepare(p, mode: .takes, client: c, render: render(pool))
+        f.projectId = "OTHER"
+        let failed = await failure { _ = try await FlimmerSend.sendAll(prepared3, client: c, transcripts: true, replaceEdited: false) }
+        #expect(failed?.reason == "wrong_project" && f.transcriptBodies.count == sentBefore)
+    }
+
+    @Test("The source of a transcript by its engine: on this Mac local, OpenAI and ElevenLabs (Scribe, Overdub's speech) not, with the provider")
+    func transcriptSources() {
+        #expect(FlimmerSend.transcriptSource(engine: "apple-dictation")["local"] == .bool(true))
+        #expect(FlimmerSend.transcriptSource(engine: "parakeet-tdt-0.6b-v3") == ["app": .string("jammer"), "engine": .string("parakeet"), "model": .string("tdt-0.6b-v3"), "local": .bool(true)])
+        #expect(FlimmerSend.transcriptSource(engine: "openai gpt-4o-transcribe")["provider"] == .string("openai"))
+        #expect(FlimmerSend.transcriptSource(engine: "overdub")["provider"] == .string("elevenlabs") && FlimmerSend.transcriptSource(engine: "overdub")["local"] == .bool(false))
     }
 }

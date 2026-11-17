@@ -390,6 +390,8 @@ public enum FlimmerSend {
         /// tell a warning by its words, which are another language's tomorrow.)
         public var flimmerWarnings = 0
         public var body: [String: J]
+        /// Each item's transcript, by item, sent after the plan (`sendAll`).
+        public var transcripts: [Int: [String: J]] = [:]
     }
 
     /// One item rendered to a WAV file at a bit depth and sample rate Flimmer takes.
@@ -443,11 +445,14 @@ public enum FlimmerSend {
             let dry = body(project, plan: plan, mode: mode, items: items, uploads: uploads, dryRun: true)
             let answer = try await client.plan(dry, items: items)
             progress(1)
+            let transcripts = transcriptBodies(project, items: items)
+            let said = transcripts.isEmpty ? [] : ["Transcripts of \(transcripts.count) clip\(transcripts.count == 1 ? "" : "s") go after the sound, each on its own (when that box is ticked)."]
             return Prepared(mode: mode, plan: plan, items: items, uploads: uploads,
-                            lines: lines(project, plan: plan, mode: mode, items: items, resampledTo: rate == project.sampleRate ? nil : rate) + notes,
+                            lines: lines(project, plan: plan, mode: mode, items: items, resampledTo: rate == project.sampleRate ? nil : rate) + notes + said,
                             flimmerLines: lines(answer: answer, items: items),
                             flimmerWarnings: warnings(answer: answer),
-                            body: body(project, plan: plan, mode: mode, items: items, uploads: uploads, dryRun: false))
+                            body: body(project, plan: plan, mode: mode, items: items, uploads: uploads, dryRun: false),
+                            transcripts: transcripts)
         } catch {
             for id in uploads { await client.remove(upload: id) }
             throw error
@@ -462,6 +467,17 @@ public enum FlimmerSend {
     public static func sendCounting(_ prepared: Prepared, client: Client) async throws -> (lines: [String], warnings: Int) {
         let answer = try await client.plan(prepared.body, items: prepared.items)
         return (lines(answer: answer, items: prepared.items), warnings(answer: answer))
+    }
+    /// For real, and then the transcripts, each in a PUT of its own: only when the plan succeeded (a failed plan
+    /// throws before any is sent), and each answered for itself.
+    public static func sendAll(_ prepared: Prepared, client: Client, transcripts: Bool, replaceEdited: Bool) async throws
+        -> (lines: [String], warnings: Int, transcripts: [TranscriptOutcome]) {
+        let answer = try await client.plan(prepared.body, items: prepared.items)
+        var outcomes: [TranscriptOutcome] = []
+        if transcripts, !prepared.transcripts.isEmpty {
+            outcomes = await sendTranscripts(prepared.transcripts, created: createdClips(answer), items: prepared.items, replaceEdited: replaceEdited, client: client)
+        }
+        return (lines(answer: answer, items: prepared.items), warnings(answer: answer), outcomes)
     }
     /// The warnings in Flimmer's answer: its overlaps, which `lines(answer:items:)` puts first.
     public static func warnings(answer: [String: Any]) -> Int { ((answer["overlaps"] as? [[String: Any]]) ?? []).count }
@@ -515,5 +531,141 @@ public enum FlimmerSend {
             try? FileManager.default.removeItem(at: full)
         }
         return Rendered(file: out, channels: channels)
+    }
+}
+
+// MARK: Transcripts to Flimmer (Flimmer's TRANSCRIPT-API, block/c, 2026-11-18; the coordinator's three conditions)
+
+extension FlimmerSend {
+    /// What `source` says of a transcript's engine (Jämmer's names: "openai <model>", "whisper-<model>",
+    /// "parakeet-…", "apple-<kind>", "overdub"): engine and model, whether the sound stayed on this Mac, and
+    /// where it went when it didn't. Overdub's words are the text that was spoken at ElevenLabs.
+    public static func transcriptSource(engine: String) -> [String: J] {
+        var name = engine, model = ""
+        if let space = engine.firstIndex(of: " ") { name = String(engine[..<space]); model = String(engine[engine.index(after: space)...]) }
+        else if let dash = engine.firstIndex(of: "-") { name = String(engine[..<dash]); model = String(engine[engine.index(after: dash)...]) }
+        var s: [String: J] = ["app": .string("jammer"), "engine": .string(name)]
+        if !model.isEmpty { s["model"] = .string(model) }
+        let provider: String? = switch name {
+        case "openai": "openai"
+        case "elevenlabs", "scribe", "overdub": "elevenlabs"
+        default: nil
+        }
+        s["local"] = .bool(provider == nil)
+        if let provider { s["provider"] = .string(provider) }
+        return s
+    }
+
+    /// The transcript of each item that has words in what it renders, as Flimmer's PUT body (without
+    /// `replaceEdited`): times in seconds in the file Jämmer sends (the item's range starts at 0), the file's
+    /// length, the language, speakers by name. Words nobody knows the time of (a text-only transcript) are not
+    /// sent as words; the text goes alone.
+    public static func transcriptBodies(_ project: Project, items: [Item]) -> [Int: [String: J]] {
+        var out: [Int: [String: J]] = [:]
+        let projectId = project.imported?.projectId
+        for (i, item) in items.enumerated() {
+            let p = item.render
+            let placed = p.placedWords(in: item.range).sorted { $0.start < $1.start }
+            guard !placed.isEmpty else { continue }
+            let rate = p.sampleRate, length = Double(item.range.count) / rate
+            let bySource = Dictionary(p.transcripts.map { ($0.sourceID, $0) }, uniquingKeysWith: { a, _ in a })
+            let clipSource = Dictionary(p.tracks.flatMap(\.clips).map { ($0.id, $0.sourceID) }, uniquingKeysWith: { a, _ in a })
+            let transcripts = placed.compactMap { clipSource[$0.clipID].flatMap { bySource[$0] } }
+            guard let first = transcripts.first else { continue }
+            var words: [J] = [], names: [String] = []
+            let timed = placed.filter { $0.word.untimed != true }
+            for w in timed {
+                let s = max(0, min(length, Double(w.start - item.range.lowerBound) / rate))
+                let e = max(s, min(length, Double(w.end - item.range.lowerBound) / rate))
+                var o: [String: J] = ["text": .string(w.word.text), "start": .number((s * 1_000).rounded() / 1_000), "end": .number((e * 1_000).rounded() / 1_000)]
+                if let c = w.word.confidence { o["confidence"] = .number(c) }
+                if let k = w.word.speaker, let t = clipSource[w.clipID].flatMap({ bySource[$0] }), t.speakers.indices.contains(k) {
+                    o["speaker"] = .string(t.speakers[k])
+                    if !names.contains(t.speakers[k]) { names.append(t.speakers[k]) }
+                }
+                words.append(.object(o))
+            }
+            var body: [String: J] = ["timeBase": .string("file"), "language": .string(first.language), "words": .array(words),
+                                     "text": .string(placed.map(\.word.text).joined(separator: " ")),
+                                     "source": .object(transcriptSource(engine: first.engine)),
+                                     "media": .object(["duration": .number((length * 1_000).rounded() / 1_000)])]
+            if let projectId, !projectId.isEmpty { body["projectId"] = .string(projectId) }
+            if !names.isEmpty { body["speakers"] = .array(names.map { .string($0) }) }
+            out[i] = body
+        }
+        return out
+    }
+
+    /// How one transcript went: the clip by its name, and Flimmer's own words when it refused.
+    public struct TranscriptOutcome: Sendable, Equatable {
+        public var item: Int
+        public var name: String
+        public var clipId: String?
+        public var ok: Bool
+        public var replacedEdited: Bool
+        /// Flimmer's error code, reason and message, as it said them.
+        public var reason: String?
+        public var message: String?
+    }
+
+    /// The new clips' ids from the finished plan's result, by item.
+    public static func createdClips(_ answer: [String: Any]) -> [Int: String] {
+        var out: [Int: String] = [:]
+        for c in (answer["created"] as? [[String: Any]]) ?? [] {
+            guard let i = (c["item"] as? NSNumber)?.intValue, let id = (c["clipId"] ?? c["id"]) as? String else { continue }
+            out[i] = id
+        }
+        return out
+    }
+
+    /// One PUT per transcript, after the plan succeeded: each answered for itself, never all or nothing.
+    public static func sendTranscripts(_ bodies: [Int: [String: J]], created: [Int: String], items: [Item], replaceEdited: Bool, client: Client) async -> [TranscriptOutcome] {
+        var out: [TranscriptOutcome] = []
+        for i in bodies.keys.sorted() {
+            guard var body = bodies[i] else { continue }
+            let name = items.indices.contains(i) ? items[i].name : "Clip"
+            guard let clip = created[i] else {
+                out.append(TranscriptOutcome(item: i, name: name, clipId: nil, ok: false, replacedEdited: false, reason: "no_clip", message: "Flimmer's answer named no new clip for it."))
+                continue
+            }
+            if replaceEdited { body["replaceEdited"] = .bool(true) }
+            let data = (try? JSONSerialization.data(withJSONObject: J.object(body).any, options: [.sortedKeys])) ?? Data()
+            var r = URLRequest(url: URL(string: client.base.absoluteString + "/api/v1/audio/\(clip)/transcript")!)
+            r.httpMethod = "PUT"
+            r.httpBody = data
+            r.setValue("1", forHTTPHeaderField: "X-Flimmer-Agent")
+            r.setValue("jammer", forHTTPHeaderField: "X-Sibling")
+            r.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            do {
+                let (answer, response) = try await client.transport(r)
+                let object = ((try? JSONSerialization.jsonObject(with: answer)) as? [String: Any]) ?? [:]
+                if (200..<300).contains(response.statusCode) {
+                    let t = object["transcript"] as? [String: Any] ?? [:]
+                    out.append(TranscriptOutcome(item: i, name: name, clipId: clip, ok: true, replacedEdited: (t["replacedEdited"] as? Bool) ?? false))
+                } else {
+                    let e = object["error"] as? [String: Any] ?? [:]
+                    out.append(TranscriptOutcome(item: i, name: name, clipId: clip, ok: false, replacedEdited: false,
+                                                 reason: (e["reason"] as? String) ?? (e["code"] as? String) ?? "HTTP \(response.statusCode)",
+                                                 message: (e["message"] as? String) ?? String(decoding: answer.prefix(300), as: UTF8.self)))
+                }
+            } catch {
+                out.append(TranscriptOutcome(item: i, name: name, clipId: clip, ok: false, replacedEdited: false, reason: "unreachable", message: "Flimmer stopped answering."))
+            }
+        }
+        return out
+    }
+
+    /// The outcomes as lines for the API's answer and the window: every clip by name, which got its
+    /// transcript and which didn't, with Flimmer's words for the refusals.
+    public static func transcriptLines(_ outcomes: [TranscriptOutcome]) -> [String] {
+        guard !outcomes.isEmpty else { return [] }
+        let good = outcomes.filter(\.ok), bad = outcomes.filter { !$0.ok }
+        var out: [String] = []
+        if bad.isEmpty { out.append("Every transcript went to Flimmer (\(good.count)).") }
+        else if good.isEmpty { out.append("No transcript went to Flimmer (\(bad.count) refused); the sound did.") }
+        else { out.append("\(good.count) of \(outcomes.count) transcripts went to Flimmer; \(bad.count) didn't.") }
+        for o in good { out.append("Transcript sent: \(o.name)" + (o.replacedEdited ? " (it replaced one corrected by hand in Flimmer)" : "")) }
+        for o in bad { out.append("Transcript not sent: \(o.name). Flimmer said: \(o.message ?? "") [\(o.reason ?? "")]") }
+        return out
     }
 }

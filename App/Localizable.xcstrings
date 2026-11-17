@@ -11790,6 +11790,23 @@
         }
       }
     },
+    "flimmer.replaceEdited": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Replace transcripts corrected by hand in Flimmer"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ersätt transkript som rättats för hand i Flimmer"
+          }
+        }
+      }
+    },
     "flimmer.sent": {
       "comment": "Status line.",
       "extractionState": "manual",
@@ -11808,6 +11825,23 @@
         }
       }
     },
+    "flimmer.sent.transcriptsMissing": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sent to Flimmer, but only %1$@ of %2$@ transcripts went: the sheet says which."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skickat till Flimmer, men bara %1$@ av %2$@ transkript gick fram: arket säger vilka."
+          }
+        }
+      }
+    },
     "flimmer.title": {
       "comment": "Heading of the sheet.",
       "extractionState": "manual",
@@ -11822,6 +11856,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Skicka till Flimmer"
+          }
+        }
+      }
+    },
+    "flimmer.transcripts": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send each clip’s transcript too"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skicka också varje klipps transkript"
           }
         }
       }
