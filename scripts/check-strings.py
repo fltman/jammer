@@ -89,6 +89,7 @@ def check(root, require=None):
                 where = f'{key} ({lang}{", " + form if form else ""})'
                 if numbered and len(numbered) != len(ph): faults.append(f'{where}: mixes numbered and plain placeholders: "{text}"')
                 if len(ph) > 1 and not numbered: faults.append(f'{where}: more than one placeholder and none numbered: "{text}"')
+                if not is_count and any(k != '@' for _, k in ph): faults.append(f'{where}: a value in a text is %@ (text, written out in the code); only a count has a number: "{text}"')
                 if is_count and [k for _, k in ph] != ['lld']: faults.append(f'{where}: a count has exactly one number (%lld) and nothing else: "{text}"')
                 if not text.strip() and key != 'mixer.automation.separator' and not text: faults.append(f'{where}: empty')
             if lang != source and not is_count:
@@ -237,6 +238,7 @@ def self_test(root):
             'a placeholder dropped in the translation': (lambda s: sv(s, 'a.one', 'Nivå'), None, ''),
             'a count without the form other': (lambda s: s['a.count']['localizations']['sv']['variations']['plural'].pop('other'), None, ''),
             'a count with a text beside the number': (lambda s: s['a.count']['localizations']['en']['variations']['plural']['one']['stringUnit'].update(value='%lld point on %@'), None, ''),
+            'a number placeholder in a text that is not a count': (lambda s: (s['a.one']['localizations']['en']['stringUnit'].update(value='Level %d'), sv(s, 'a.one', 'Nivå %d')), None, ''),
             'a key without the required language': (lambda s: s['a.one']['localizations'].pop('sv'), None, ''),
             'a key the code asks for that is not there': (None, None, 'let d = L10n.text("a.missing")\n'),
             'a key nothing uses': (lambda s: s.update({'a.spare': {'localizations': {'en': {'stringUnit': {'value': 'Spare'}}, 'sv': {'stringUnit': {'value': 'Extra'}}}}}), None, ''),

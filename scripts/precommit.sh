@@ -26,6 +26,7 @@ scripts/check-strings.py >> "$out/strings.out" 2>&1 || fail "the string catalogu
 # The project file is generated and not committed: made again whenever project.yml or the list of files is newer.
 xcodegen generate > /dev/null 2>&1 || fail "the project couldn't be generated"
 xcodebuild -project Jammer.xcodeproj -scheme Jammer -configuration Debug -derivedDataPath build/dd build > "$out/app.out" 2>&1 || fail "the app didn't build"
+scripts/test-language-switch.sh > "$out/language.out" 2>&1 || fail "the language switch: $(tail -1 "$out/language.out")"
 # The signed app's entitlements, read as the system reads them, against what is decided.
 scripts/check-entitlements.sh > "$out/entitlements.out" 2>&1 || fail "the signed app's entitlements are not what is decided ($(head -1 "$out/entitlements.out"))"
 scripts/test.sh > "$out/suite.out" 2>&1 || fail "the test suite: $(grep -c '✘ Test' "$out/suite.out") failing"

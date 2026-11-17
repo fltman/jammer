@@ -11,9 +11,11 @@ import JammerCore
 /// `scripts/check-strings.py` (in the pre-commit check) holds the catalogue and the code to this.
 enum L10n {
     /// The text for a key, in the language the app runs in, with its values filled in.
-    static func text(_ key: String, _ args: CVarArg...) -> String {
+    /// The values are text (a name, a number already written out): the compiler then refuses a number
+    /// handed to a place that is written `%@`, which would otherwise crash when the line is shown.
+    static func text(_ key: String, _ args: String...) -> String {
         let format = NSLocalizedString(key, comment: "")
-        return args.isEmpty ? format : String(format: format, locale: Locale.current, arguments: args)
+        return args.isEmpty ? format : String(format: format, locale: Locale.current, arguments: args.map { $0 as CVarArg })
     }
     /// An error's reason by its key (`KeyedMessage`, from the packages), in the window's language, as a
     /// sentence of its own: the packages write it to follow a step's name and a colon, so it may start small.
