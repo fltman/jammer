@@ -39,6 +39,15 @@ public struct Job: Sendable, Equatable {
 
     public var isFinished: Bool { status == .done || status == .failed || status == .cancelled }
 
+    /// Canceled. A job whose paid request has left the app may have been charged, and says so in
+    /// `result.mayHaveBeenCharged` (SIBLINGS.md §2, 2026-11-17): false only when the provider itself confirms
+    /// the cancel came before the charge, which no provider Jämmer uses does; so true once a request has gone.
+    /// Before any has gone, nothing is said about a charge: nothing reached the provider.
+    public mutating func cancel(paidRequestLeft: Bool, providerConfirmedNoCharge: Bool = false) {
+        status = .cancelled
+        if paidRequestLeft { result = (result ?? [:]).merging(["mayHaveBeenCharged": .bool(!providerConfirmedNoCharge)]) { $1 } }
+    }
+
     public var json: [String: Any] {
         var d: [String: Any] = ["id": id, "kind": kind, "status": status.rawValue, "progress": (progress * 1_000).rounded() / 1_000]
         if let error { d["error"] = ["code": error.code, "message": error.message] }

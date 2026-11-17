@@ -66,3 +66,21 @@ struct SourceHearingEqualityTests {
         #expect(f.project.sources[0].fieldOrder == 3 && f.project != plain)
     }
 }
+
+@Suite("A canceled job with a paid step says whether it may have been charged (SIBLINGS.md §2)")
+struct PaidCancelJobTests {
+    @Test("Canceled after the paid request left: mayHaveBeenCharged true unless the provider confirms otherwise; before it left, nothing said; written canceled")
+    func marks() {
+        var sent = Job(kind: "transcribe")
+        sent.status = .running
+        sent.cancel(paidRequestLeft: true)
+        #expect(sent.status == .cancelled && sent.json["status"] as? String == "canceled")
+        #expect(sent.result?["mayHaveBeenCharged"] == .bool(true))
+        var confirmed = Job(kind: "transcribe")
+        confirmed.cancel(paidRequestLeft: true, providerConfirmedNoCharge: true)
+        #expect(confirmed.result?["mayHaveBeenCharged"] == .bool(false))
+        var early = Job(kind: "transcribe")
+        early.cancel(paidRequestLeft: false)
+        #expect(early.result == nil && early.isFinished)
+    }
+}

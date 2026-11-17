@@ -18,6 +18,9 @@ final class JobRegistry {
     /// Finished jobs stay readable for this long.
     @ObservationIgnored private let keep: TimeInterval = 3_600
     @ObservationIgnored private var finishedAt: [String: Date] = [:]
+    /// Jobs whose paid request has left the app, and the provider's name: a cancel may come too late to
+    /// spare the charge (SIBLINGS.md §2).
+    @ObservationIgnored private var paidSent: [String: String] = [:]
 
     /// The newest job of `kind` for a document, running or not.
     func latest(_ kind: String, document: String) -> Job? {
@@ -34,9 +37,15 @@ final class JobRegistry {
     func cancel(_ id: String) -> Job? {
         guard var job = jobs[id] else { return nil }
         if !job.isFinished {
+            // Canceling the task stops the request where it is; whatever the provider still sends back is not
+            // fetched (an async URLSession request ends with the task), and nothing of it is applied.
             tasks[id]?.cancel()
-            job.status = .cancelled
+            let provider = paidSent[id]
+            job.cancel(paidRequestLeft: provider != nil)
             finish(job)
+            if let provider, let s = AgentRegistry.shared.sessions.first(where: { $0.agentID == job.documentID }) {
+                s.say(L10n.text("job.mayHaveBeenCharged", provider), .warning)
+            }
         }
         return jobs[id]
     }
@@ -51,6 +60,7 @@ final class JobRegistry {
         jobs[job.id] = job
         tasks[job.id] = nil
         finishedAt[job.id] = Date()
+        paidSent[job.id] = nil
     }
 
     private func prune() {
@@ -364,6 +374,8 @@ final class JobRegistry {
             do {
                 for src in todo {
                     try Task.checkCancellation()
+                    // From here a paid engine's request leaves the app.
+                    if choice.paid { self?.paidSent[id] = "OpenAI" }
                     let base = done
                     let share = Double(src.info.frames) / max(1, total)
                     let t = try await engine.transcribe(src, pool: pool, locale: locale) { p in

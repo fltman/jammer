@@ -13046,6 +13046,23 @@
         }
       }
     },
+    "job.mayHaveBeenCharged": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Canceled. The request had already gone to %@, which may have charged for it. Anything it still sends back is not fetched."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avbrutet. Förfrågan hade redan gått till %@, som kan ha debiterat för den. Det som ändå skickas tillbaka hämtas inte."
+          }
+        }
+      }
+    },
     "key.space": {
       "comment": "The space bar, as a shortcut’s name.",
       "extractionState": "manual",
