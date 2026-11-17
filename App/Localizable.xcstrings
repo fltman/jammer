@@ -1,6 +1,378 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "automation.ax.group": {
+      "comment": "VoiceOver: the group of lanes in the timeline.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automation"
+          }
+        }
+      }
+    },
+    "automation.ax.inView": {
+      "comment": "How many of a lane’s points are in the part of the timeline that is shown.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld in view"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld in view"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "automation.ax.lane.gain": {
+      "comment": "VoiceOver: a lane. %@ is the track.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Level automation of %@"
+          }
+        }
+      }
+    },
+    "automation.ax.lane.mute": {
+      "comment": "VoiceOver: a lane. %@ is the track.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mute automation of %@"
+          }
+        }
+      }
+    },
+    "automation.ax.lane.pan": {
+      "comment": "VoiceOver: a lane. %@ is the track.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pan automation of %@"
+          }
+        }
+      }
+    },
+    "automation.ax.lane.role": {
+      "comment": "VoiceOver: what kind of thing a lane is.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "automation lane"
+          }
+        }
+      }
+    },
+    "automation.ax.point": {
+      "comment": "VoiceOver: a point’s name. Both are whole numbers.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Point %1$@ of %2$@"
+          }
+        }
+      }
+    },
+    "automation.ax.point.role": {
+      "comment": "VoiceOver: what kind of thing a point is.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "automation point"
+          }
+        }
+      }
+    },
+    "automation.ax.point.value": {
+      "comment": "VoiceOver: a point’s value. %1$@ is its time, %2$@ its value.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@, %2$@"
+          }
+        }
+      }
+    },
+    "automation.ax.points": {
+      "comment": "How many points a lane has.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld point"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld points"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "automation.caption.level": {
+      "comment": "Caption of a lane in the timeline. %@ is the fader’s level.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Level lane, added to the fader (%@)"
+          }
+        }
+      }
+    },
+    "automation.caption.level.groupOnly": {
+      "comment": "Caption on a track that has no lane of its own. %1$@ is its VCA group, %2$@ the fader’s level with the group’s.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Level lane of %1$@, added to the fader (%2$@)"
+          }
+        }
+      }
+    },
+    "automation.caption.level.withGroup": {
+      "comment": "Caption. %1$@ is a VCA group, %2$@ the fader’s level with the group’s.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Level lane with the lane of %1$@ in it, added to the fader (%2$@)"
+          }
+        }
+      }
+    },
+    "automation.caption.mute": {
+      "comment": "Caption of a mute lane.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mute lane"
+          }
+        }
+      }
+    },
+    "automation.caption.mute.groupOnly": {
+      "comment": "Caption on a track with no mute lane of its own. %@ is its VCA group.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mute lane of %@"
+          }
+        }
+      }
+    },
+    "automation.caption.mute.withGroup": {
+      "comment": "Caption. %@ is a VCA group.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mute lane with the lane of %@ in it"
+          }
+        }
+      }
+    },
+    "automation.caption.off": {
+      "comment": "A lane that is kept but not played. %@ is the lane’s caption.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@: switched off, not heard"
+          }
+        }
+      }
+    },
+    "automation.caption.pan": {
+      "comment": "Caption of a pan lane.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pan lane, in place of the pan slider. Left is up."
+          }
+        }
+      }
+    },
+    "automation.value.centre": {
+      "comment": "A pan in the middle.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Centre"
+          }
+        }
+      }
+    },
+    "automation.value.db": {
+      "comment": "A level. %@ is the number with its sign.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ dB"
+          }
+        }
+      }
+    },
+    "automation.value.heard": {
+      "comment": "A mute lane’s value.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Heard"
+          }
+        }
+      }
+    },
+    "automation.value.left": {
+      "comment": "A pan. %@ is a whole number of per cent.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ % left"
+          }
+        }
+      }
+    },
+    "automation.value.muted": {
+      "comment": "A mute lane’s value.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Muted"
+          }
+        }
+      }
+    },
+    "automation.value.right": {
+      "comment": "A pan. %@ is a whole number of per cent.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ % right"
+          }
+        }
+      }
+    },
+    "menu.view.automation": {
+      "comment": "View menu: the submenu that chooses which lanes are shown.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automation"
+          }
+        }
+      }
+    },
+    "menu.view.automation.gain": {
+      "comment": "View › Automation.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Level Lanes"
+          }
+        }
+      }
+    },
+    "menu.view.automation.mute": {
+      "comment": "View › Automation.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mute Lanes"
+          }
+        }
+      }
+    },
+    "menu.view.automation.none": {
+      "comment": "View › Automation.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide Lanes"
+          }
+        }
+      }
+    },
+    "menu.view.automation.pan": {
+      "comment": "View › Automation.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pan Lanes"
+          }
+        }
+      }
+    },
     "mixer.automation.forGroup": {
       "comment": "The line under a VCA group. %@ is the whole automation line.",
       "extractionState": "manual",
@@ -141,6 +513,114 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@, and the group's automation on top"
+          }
+        }
+      }
+    },
+    "mixer.pan.automated": {
+      "comment": "Beside a strip’s pan slider when a pan lane steers the pan. Short: 72 points wide.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automated"
+          }
+        }
+      }
+    },
+    "mixer.pan.automated.help": {
+      "comment": "Why the pan slider is grey.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A pan lane steers this strip’s pan, so the slider does nothing. Switch the lane off or clear it to pan by hand."
+          }
+        }
+      }
+    },
+    "paid.settings.about": {
+      "comment": "Settings › Paid Services.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Before a request that costs money, Jämmer shows the price and asks. Where it doesn’t know the price, it asks once for each service whether to go on without one, and says that the price is unknown every time after that. Those answers are kept here."
+          }
+        }
+      }
+    },
+    "paid.settings.none": {
+      "comment": "Settings › Paid Services, the empty list.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No service has been allowed without a known price."
+          }
+        }
+      }
+    },
+    "paid.settings.row": {
+      "comment": "A row in Settings › Paid Services. %@ is the service.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@: used without a known price"
+          }
+        }
+      }
+    },
+    "paid.settings.tab": {
+      "comment": "A tab in Settings.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paid Services"
+          }
+        }
+      }
+    },
+    "paid.settings.takeBack": {
+      "comment": "The button that takes back the answer for a service.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ask Again"
+          }
+        }
+      }
+    },
+    "paid.unknownPrice.accepted": {
+      "comment": "Shown in place of the box once it has been ticked for the service. %@ is the service.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jämmer doesn’t know the price of this. You have said that %@ may be used all the same; take that back in Settings › Paid Services."
+          }
+        }
+      }
+    },
+    "paid.unknownPrice.tick": {
+      "comment": "The box that must be ticked before a paid request with no known price. %@ is the service.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jämmer doesn’t know the price. Use %@ anyway"
           }
         }
       }

@@ -267,6 +267,11 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         }
     }
 
+    /// View › Automation: the item's represented object is the kind of lane, or nil for none.
+    @objc func showAutomation(_ sender: Any?) {
+        timeline.shownAutomation = ((sender as? NSMenuItem)?.representedObject as? String).flatMap(AutomationLane.Param.init(rawValue:))
+    }
+
     @objc func toggleSpectrogram(_ sender: Any?) {
         timeline.showsSpectrogram.toggle()
     }
@@ -604,6 +609,10 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         if item.action == #selector(attenuateFrequencies(_:)) { return session.selection != nil }
         if item.action == #selector(healArea(_:)) || item.action == #selector(attenuateArea(_:)) {
             return timeline.showsSpectrogram && session.spectralArea != nil
+        }
+        if item.action == #selector(showAutomation(_:)) {
+            item.state = (item.representedObject as? String) == timeline.shownAutomation?.rawValue ? .on : .off
+            return true
         }
         if item.action == #selector(toggleSpectrogram(_:)) {
             item.title = timeline.showsSpectrogram ? "Show Waveform" : "Show Spectrogram"

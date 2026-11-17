@@ -119,7 +119,7 @@ public enum AssistantCatalog {
                 // The assistant transcribes on this Mac: sending audio to a paid service is the user's own
                 // choice in the transcript panel, with its sheet, never something a plan does.
                 AssistantAction(name: $0.name, description: $0.description,
-                                params: $0.params.filter { !["model", "allowPaid"].contains($0.name) }.map { p in
+                                params: $0.params.filter { !["model", "allowPaid", "allowUnknownPrice"].contains($0.name) }.map { p in
                                     var p = p
                                     p.options = p.options?.filter { $0 != "openai" }
                                     return p

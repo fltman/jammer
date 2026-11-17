@@ -377,8 +377,17 @@ final class AssistantModel {
         alert.informativeText = "\(price) The request and a short description of the document go to \(provider.name); the audio doesn't. \(provider.note)"
         alert.addButton(withTitle: "Send")
         alert.addButton(withTitle: "Cancel")
-        guard let window = session.window else { return alert.runModal() == .alertFirstButtonReturn }
-        return await alert.beginSheetModal(for: window) == .alertFirstButtonReturn
+        // No price on the provider's list for this model: Send stays grey until that is ticked as understood.
+        // (A price from the provider's own list counts as known. Asked once per provider, not per model.)
+        let unknown = UnknownPriceBox(service: "text.\(provider.id)", name: provider.name)
+        if choice?.estimate == nil {
+            alert.accessoryView = UnknownPriceBox.accessory([unknown.view])
+            unknown.gate(alert.buttons[0])
+        }
+        let yes: Bool
+        if let window = session.window { yes = await alert.beginSheetModal(for: window) == .alertFirstButtonReturn } else { yes = alert.runModal() == .alertFirstButtonReturn }
+        if yes, choice?.estimate == nil { unknown.sent() }
+        return yes
     }
 }
 

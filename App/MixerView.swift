@@ -28,6 +28,7 @@ struct MixerSheet: View {
                                    soloed: session.solo.contains(t.id), solo: { toggleSolo(t.id, $0) },
                                    frozen: t.frozen != nil, freeze: { toggleFreeze(t.id, t.name, $0) },
                                    automation: MixerStrip.automationText(project.lanes(of: t.id)),
+                                   panAutomated: project.lane(strip: t.id, param: .pan)?.enabled == true,
                                    destinations: project.buses.map { ($0.id, $0.name) },
                                    sends: t.sends, sendTargets: project.buses.map { ($0.id, $0.name) },
                                    change: { session.perform("set_track", ["track": .string(t.id.uuidString)].merging($0) { $1 }) },
@@ -41,6 +42,7 @@ struct MixerSheet: View {
                                    soloed: session.solo.contains(b.id), solo: { toggleSolo(b.id, $0) },
                                    frozen: b.frozen != nil, freeze: { toggleFreeze(b.id, b.name, $0) },
                                    automation: MixerStrip.automationText(project.lanes(of: b.id)),
+                                   panAutomated: project.lane(strip: b.id, param: .pan)?.enabled == true,
                                    // A bus can go to any bus that doesn't lead back to it.
                                    destinations: project.buses.filter { $0.id != b.id && !leadsBack(from: $0.id, to: b.id) }.map { ($0.id, $0.name) },
                                    sends: b.sends, sendTargets: project.buses.filter { $0.id != b.id && !leadsBack(from: $0.id, to: b.id) }.map { ($0.id, $0.name) },
@@ -279,6 +281,8 @@ private struct MixerStrip: View {
     let freeze: (Bool) -> Void
     /// Said when the strip's level is automated: until lanes are drawn in the window, this line is where it shows.
     let automation: String?
+    /// A pan lane steers the pan: the slider then does nothing, so it is grey and says why.
+    var panAutomated = false
     let destinations: [(UUID, String)]
     let sends: [Send]
     let sendTargets: [(UUID, String)]
@@ -386,9 +390,14 @@ private struct MixerStrip: View {
                     if !editing { if abs(position) < 0.03 { position = 0 }; if position != pan { change(["pan": .number((position * 100).rounded() / 100)]) } }
                 })
                 .frame(width: 90)
+                .disabled(panAutomated)
+                .help(panAutomated ? L10n.text("mixer.pan.automated.help") : "")
                 .accessibilityLabel("Pan of \(name)")
-                .accessibilityValue(Text(Self.panText(position)))
-                Text(Self.panText(position)).font(.caption).lineLimit(1).frame(width: 72, alignment: .leading)
+                .accessibilityValue(Text(panAutomated ? L10n.text("mixer.pan.automated.help") : Self.panText(position)))
+                .accessibilityIdentifier("mixer.strip.pan")
+                Text(panAutomated ? L10n.text("mixer.pan.automated") : Self.panText(position)).font(.caption).lineLimit(1).frame(width: 72, alignment: .leading)
+                    .foregroundStyle(panAutomated ? .orange : .primary)
+                    .help(panAutomated ? L10n.text("mixer.pan.automated.help") : "")
             }
             Picker("Output of \(name)", selection: Binding(get: { output }, set: { change(["output": .string($0?.uuidString ?? "master")]) })) {
                 Text("Output").tag(UUID?.none)

@@ -292,6 +292,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             item("Play", #selector(EditorWindowController.togglePlayback(_:)), "p", [.command, .option]),
             item("Go to Start", #selector(EditorWindowController.goToStart(_:)), ""),
         ]))
+        // Which lanes the timeline draws. Hidden where automation is (debug builds, until lanes can be drawn by hand too).
+        let kinds: [(String?, String)] = [(nil, L10n.text("menu.view.automation.none")), ("gain", L10n.text("menu.view.automation.gain")),
+                                          ("pan", L10n.text("menu.view.automation.pan")), ("mute", L10n.text("menu.view.automation.mute"))]
+        let automationMenu = submenu(L10n.text("menu.view.automation"), kinds.map { kind, title in
+            let i = item(title, #selector(EditorWindowController.showAutomation(_:)))
+            i.representedObject = kind
+            return i
+        })
+        automationMenu.isHidden = !Operations.automation
         main.addItem(submenu("View", [
             item("Show History", #selector(EditorWindowController.showHistory(_:)), "y", [.command, .option]),
             item("Zoom In", #selector(EditorWindowController.zoomIn(_:)), "+"),
@@ -300,6 +309,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             item("Zoom to Selection", #selector(EditorWindowController.zoomToSelection(_:)), "e"),
             .separator(),
             item("Show Spectrogram", #selector(EditorWindowController.toggleSpectrogram(_:)), "s", [.command, .option]),
+            automationMenu,
             item("Show Transcript", #selector(EditorWindowController.toggleTranscript(_:)), "t", [.command, .option]),
             item("Show Assistant", #selector(EditorWindowController.toggleAssistant(_:)), "a", [.command, .option]),
             .separator(),

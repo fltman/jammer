@@ -187,6 +187,7 @@ struct SettingsTabs: View {
         TabView {
             ModelsSettings().tabItem { Label("Models", systemImage: "square.and.arrow.down") }
             AgentSettings().tabItem { Label("Agents", systemImage: "terminal") }
+            PaidSettings().tabItem { Label(L10n.text("paid.settings.tab"), systemImage: "creditcard") }
         }
     }
 }

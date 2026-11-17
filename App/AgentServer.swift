@@ -421,6 +421,10 @@ enum AgentRouter {
                 if choice.paid, body["allowPaid"] as? Bool != true {
                     throw APIError.paidNotAllowed("engine \(name) sends the audio to its provider and is paid for by the user. Pass \"allowPaid\": true to run it.")
                 }
+                // Allowing a paid request is not allowing any price: Jämmer has no price for this one.
+                if choice.paid, body["allowUnknownPrice"] as? Bool != true {
+                    throw APIError.unprocessable("unknown_price", "Jämmer doesn't know what engine \(name) costs: its provider charges by its own price list, which Jämmer can't read. Pass \"allowUnknownPrice\": true beside \"allowPaid\": true to run it anyway.")
+                }
                 let model = body["model"] as? String
                 do { _ = try SpeechEngines.engine(choice, for: Locale(identifier: lang), model: model) } catch let e as SpeechEngines.Unavailable {
                     throw APIError.unprocessable(e.reason, e.message)

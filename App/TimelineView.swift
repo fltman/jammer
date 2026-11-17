@@ -26,6 +26,12 @@ final class TimelineView: NSView {
     private let metal: WaveformMetalView
     private let overlay: TimelineOverlay
     private let spectrogram: SpectrogramLayerView
+    private let automation: AutomationLanesView
+    /// Which kind of automation lane is drawn over the tracks (View › Automation). nil: none.
+    var shownAutomation: AutomationLane.Param? {
+        get { automation.shown }
+        set { automation.shown = newValue }
+    }
     var showsSpectrogram: Bool {
         get { !spectrogram.isHidden }
         set { spectrogram.isHidden = !newValue; metal.isHidden = newValue; spectrogram.refresh(); refresh(waveform: true) }
@@ -37,10 +43,11 @@ final class TimelineView: NSView {
         metal = WaveformMetalView(session: session, viewport: viewport)
         overlay = TimelineOverlay(session: session, viewport: viewport)
         spectrogram = SpectrogramLayerView(session: session, viewport: viewport)
+        automation = AutomationLanesView(session: session, viewport: viewport)
         super.init(frame: .zero)
         wantsLayer = true
         spectrogram.isHidden = true
-        for v in [metal, spectrogram, overlay] as [NSView] {
+        for v in [metal, spectrogram, automation, overlay] as [NSView] {
             v.translatesAutoresizingMaskIntoConstraints = false
             addSubview(v)
             NSLayoutConstraint.activate([
@@ -112,6 +119,7 @@ final class TimelineView: NSView {
     func refresh(waveform: Bool) {
         if waveform { metal.invalidate(); spectrogram.refresh() }
         overlay.needsDisplay = true
+        automation.invalidate()
     }
 
     private func observe() {

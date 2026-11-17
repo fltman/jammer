@@ -51,45 +51,52 @@ So about 1 250 texts to translate, about 300 of them with values in them.
 5. The assistant's own sentences.
 6. The manual gets a line on languages; the site stays English.
 
-## Word list for Anders (proposed; nothing is used until he has seen it)
+## Word list for Anders (second round, 2026-11-17; nothing is used until he has seen it, then it is locked)
 
-Where studio Swedish has a word that people who work with sound actually say, that word. Where they say the English one, the English one, written as Swedish (no capital, Swedish endings). Units and standard names are never translated (dB, LUFS, dBTP, Hz, BPM, EBU R 128).
+Anders chose the English word in all four open cases (Sidechain, Lookahead, Bounce, Loudness), and the series rule now says: a term of the trade that is said in English in a Swedish studio stays English in the Swedish interface. The list was gone through again in that light. **Changed** marks a row that differs from the first round; the old proposal stands struck in the last column. Words that really are said in Swedish are kept.
 
-| English | Swedish (proposed) | Alternative, and why not |
+How an English term is written in Swedish text: unchanged, with a capital only where Swedish would have one (the start of a label or menu item: "Sidechain", "Release"; inside a sentence: "sidechain", "release"). It is not given Swedish verb endings: the menu says "Bounce", a sentence says "gör en bounce", never "bouncea". Units and standard names are never translated (dB, LUFS, dBTP, Hz, BPM, EBU R 128).
+
+| English | Swedish | Note |
 |---|---|---|
 | track | spår | |
 | clip | klipp | |
 | bus | buss | |
-| send | sändning ("Sends": Sändningar) | "send" is also said; "sändning" reads as Swedish in a menu |
-| master | master | "huvudutgång" is longer and nobody says it |
-| fader, level | regel, nivå ("Level": Nivå) | "fader" is said too; "regel" is the Swedish word on a mixing desk |
-| pan | panorering ("Pan": Panorera; centre: Mitten) | "pan" |
-| mute | tysta ("Muted": Tystad) | "mute" |
+| send | **send (en send, flera sends)** | **Changed.** ~~sändning~~: "send" is what is said at a desk |
+| master | master | |
+| fader | **fader** | **Changed.** ~~regel~~: "fader" is what is said |
+| level | nivå | |
+| pan | panorering ("Pan": Panorera; centre: Mitten) | kept: "panorera" is said in Swedish |
+| mute | tysta ("Muted": Tystad) | kept |
 | solo | solo | |
 | VCA group | VCA-grupp | |
-| plugin | plugin (en plugin, flera pluginer) | "insticksprogram" is correct and nobody says it |
-| insert | plugin on a strip is just "plugin"; the word insert isn't shown | |
-| sidechain, key | sidokedja; nyckel ("Key": Nyckel) | "sidechain" is what most say; "sidokedja" is in Swedish manuals. Anders to choose |
-| threshold | tröskel | |
-| limiter | limiter (en limiter) | "begränsare" is correct and rare |
-| ceiling | tak | |
-| release | släpptid | "release" |
-| lookahead | framförhållning | "lookahead"; unsure, Anders to choose |
-| compressor, gate | kompressor, gate | "grind" is not said |
-| freeze, frozen, unfreeze | frysa, fryst, tina | |
-| bounce | studsa ("Bounce": Studsa ner) | "bounce"; "studsa" is said in Swedish studios, but Anders to choose |
+| plugin | plugin (en plugin, flera pluginer) | |
+| insert | the word isn't shown; a plugin on a strip is just "plugin" | |
+| sidechain | **sidechain** | **Changed** (Anders). ~~sidokedja~~ |
+| key (of a sidechain) | **key ("Key")** | **Changed.** ~~nyckel~~, which also collides with API-nyckel |
+| threshold | tröskel | kept |
+| limiter | limiter (en limiter) | |
+| ceiling | tak | kept |
+| attack, release, hold | **attack, release, hold** | **Changed.** ~~släpptid~~ |
+| lookahead | **lookahead** | **Changed** (Anders). ~~framförhållning~~ |
+| compressor, gate | kompressor, gate | |
+| freeze, frozen, unfreeze | frysa, fryst, tina | kept |
+| bounce | **bounce ("Bounce"; "gör en bounce")** | **Changed** (Anders). ~~studsa~~ |
 | automation, lane, point | automation, bana, punkt | |
 | latency, delay compensation | latens, fördröjningskompensation | |
-| loudness | hörnivå ("Loudness": Hörnivå) | "loudness" is what the EBU's Swedish texts also use; "ljudstyrka" means something looser. Anders to choose between hörnivå and loudness |
-| true peak | sann toppnivå (true peak) | the English in brackets the first time on a sheet |
+| loudness | **loudness ("Loudness")** | **Changed** (Anders). ~~hörnivå~~ |
+| true peak | **true peak ("True Peak")** | **Changed.** ~~sann toppnivå~~: the standard's own name, like LUFS |
 | normalize | normalisera | |
-| fade in, fade out, crossfade | tona in, tona ut, övertoning | |
-| gain | förstärkning | "gain" |
-| noise, hum, click, clipping, reverb | brus, brum, klick, överstyrning, efterklang | |
+| fade in, fade out | tona in, tona ut | kept |
+| crossfade | övertoning | kept; "crossfade" is also said. One for Anders to look at |
+| gain | **gain** | **Changed.** ~~förstärkning~~ |
+| noise, hum, click | brus, brum, klick | kept |
+| clipping | överstyrning | kept: it is the Swedish word and it is said |
+| reverb | **reverb** | **Changed.** ~~efterklang~~: "reverb" is what is said; "efterklang" is the room's, in acoustics |
 | repair (Restore) | reparera | |
 | de-bleed | ta bort överhörning | |
-| duck (under speech) | ducka (under tal) | "sänka under tal" is clearer but longer; ducka is said |
-| stem, stems | stam, stammar | "stem" |
+| duck (under speech) | ducka (under tal) | kept: it is already the English word with the ending everyone uses |
+| stem, stems | **stem, stems** | **Changed.** ~~stam, stammar~~ |
 | transcript, transcribe | transkription, transkribera | |
 | speaker (in a conversation) | talare | |
 | filler word | utfyllnadsord | |
@@ -105,3 +112,9 @@ Where studio Swedish has a word that people who work with sound actually say, th
 | assistant | assistent | |
 | agent (API) | agent | |
 | on this Mac / on device | på den här Macen | |
+| Requested by Flimmer | Begärt av Flimmer | the API's words stay English in both languages |
+
+## Rules added 2026-11-17 (the series', to be followed when the work gets there)
+
+- **One language at a time until the move is whole.** Jämmer starts wholly in English whatever language the Mac has, until the Swedish is finished and Anders has seen it. Swedish only with a start argument, and a test keeps the switch off.
+- **Title Case** on English buttons and menu items.

@@ -57,7 +57,7 @@ extension AgentAPI {
         .init("GET", doc + "/analysis/restoration", query: range.union(tracks)),
         .init("GET", doc + "/analysis/acx"),
         .init("GET", doc + "/waveform", query: range.union(["width"])),
-        .init("POST", doc + "/transcribe", body: ["language", "engine", "replace", "allowPaid", "model"]),
+        .init("POST", doc + "/transcribe", body: ["language", "engine", "replace", "allowPaid", "allowUnknownPrice", "model"]),
         .init("GET", doc + "/transcript", query: range),
         .init("GET", doc + "/history"), .init("POST", doc + "/history/{node}"),
         .init("POST", doc + "/separate", body: ["model", "tracks"]),
