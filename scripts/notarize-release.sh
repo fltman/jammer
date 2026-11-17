@@ -18,10 +18,10 @@ rm -f "$zip"
 ditto -c -k --keepParent "$app" "$zip"
 echo "notarize-release: uploading $(du -h "$zip" | cut -f1) to Apple's notary service (profile $profile)"
 xcrun notarytool submit "$zip" --keychain-profile "$profile" --wait --output-format plist > build/release-signed/notary.plist
-status="$(/usr/libexec/PlistBuddy -c 'Print :status' build/release-signed/notary.plist 2>/dev/null || echo unknown)"
+verdict="$(/usr/libexec/PlistBuddy -c 'Print :status' build/release-signed/notary.plist 2>/dev/null || echo unknown)"
 sid="$(/usr/libexec/PlistBuddy -c 'Print :id' build/release-signed/notary.plist 2>/dev/null || echo "")"
-echo "notarize-release: Apple says: $status (submission $sid)"
-if [[ "$status" != "Accepted" ]]; then
+echo "notarize-release: Apple says: $verdict (submission $sid)"
+if [[ "$verdict" != "Accepted" ]]; then
   [[ -n "$sid" ]] && xcrun notarytool log "$sid" --keychain-profile "$profile" build/release-signed/notary-log.json && echo "notarize-release: the log is in build/release-signed/notary-log.json"
   exit 1
 fi
