@@ -528,7 +528,7 @@ struct MixerStrip: View {
                     Divider()
                     Button(L10n.text("mixer.field.off")) { change(["turned": .bool(false)]) }.disabled(rotation == nil)
                 }
-                .menuStyle(.borderlessButton).font(.caption).frame(width: 160, alignment: .leading)
+                .menuStyle(.borderlessButton).font(.caption).frame(width: 250, alignment: .leading)
                 .accessibilityIdentifier("mixer.strip.field")
             } else if placeable {
                 // The surround panner: where the sound comes from, positive to the left (BS.2051's convention).
