@@ -106,6 +106,27 @@ The converter is r8brain-free-src 7.7 by Aleksey Vaneev of Voxengo (MIT), one co
 
 **Also through this converter since the same day:** the batch export (`export.sampleRate`, the same field and the same refusals) and the import of a file at another rate than the document's (the same file through the system's converter and through this one: same length, difference −145.4 dB; `docs/CHANGES.md` says what changed and what is still on the system's converter). The converter registers at `SampleRateConversion` in the core, so there is one place a rate changes.
 
+## Dialogue-gated loudness (debug builds, 2026-11-17: not yet set beside a reference meter)
+
+Film and television are set by how loud the talking is. Jämmer measures it itself, and the measurement is never called anything but Jämmer's own.
+
+- **What is measured:** BS.1770 K-weighting and channel weights, in the meter's 100 ms blocks; a block is speech when at least half of it lies where the document says there is speech; the dialogue loudness is −0.691 + 10·log10 of the mean energy of the speech blocks above −70 LKFS. No relative gate. That is what ATSC A/85:2026-07 describes (§5.2.2: "BS.1770 (without the relative-level gate) along with a dialogue-gating algorithm and measured over the entire duration"), with the −70 LKFS absolute gate kept so that silence marked as speech doesn't pull the number down.
+- **Where the speech is:** what the document already knows from this Mac's own speech tools. Who speaks when (Find Speakers) on the tracks that are heard; without that, a transcript's words, joined when less than 0.3 s apart. Without either the answer says `speechFrom: none` and gives no dialogue number. No new model, nothing sent anywhere.
+- **Not Dolby's.** Most specifications name Dolby's Dialogue Intelligence. Its reference code is offered under an agreement (read 2026-11-17, https://professional.dolby.com/support/dolbys-speech-gating-reference-code-agreement/): object code only, non-sublicensable, professional products, a notice and patent marking. That can't go in an MIT source tree, so nothing of it is fetched, read or used. A meter with another speech detector puts the speech in other places and gives another number; how much is to be measured (below) and written in the manual as it is.
+- **The arithmetic is tested** against EBU Tech 3341's own case (a 1 kHz stereo sine at −23 dBFS is −23.0): 10 s of it marked as speech among 20 s at −10 dBFS measures −23.0 ± 0.1 with a third of the time speech.
+- **API:** `GET …/analysis/dialogue` (`dialogueLKFS`, `speechShare`, `speechSeconds`, `speechFrom`, `program`), with `profile` for a delivery target. A build without it answers `not_available`.
+
+**Profiles** (each with where it was read and when; no verdict is given until the reference measurements are in):
+
+| Profile | Dialogue target | True peak | Goes by the whole programme when | Read |
+|---|---|---|---|---|
+| `atsc_a85_dialogue` | −24 LKFS, about ±2 | below −2 dBTP | speech under 8 % (the standard's example for automated processes), then −24 ±2 | ATSC A/85:2026-07, at the source, 2026-11-17 |
+| `netflix` | −27 LKFS ±2 | −2 dBTP | dialogue under 15 %, then −24 ±2 | **Not at the source:** Netflix's page is an application that could not be read; the numbers are MeterPlugs' account (deliveryqc.com/netflix-delivery-specs), 2026-11-17 |
+
+Not made a profile: Apple's Atmos film range (−31 to −10 LKFS dialogue, on a 5.1 render: nothing Jämmer makes before phase 4); Amazon, Disney+, Max (no public numbers found).
+
+**Calibration, waiting for Anders.** `scripts/make-dialogue-test-files.py` makes eight files (system voices reading an invented text, music and effects from tones and noise; nothing fetched) in `$JAMMER_TEST_MEDIA/dialogue`, with `manifest.json` saying where the speech was put: speech alone; over quiet music; half speech with loud music between; little speech with loud effects; quiet speech; speech under music; music only; two voices over room tone. He measures them in a reference meter (TBProAudio dpMeter5 in DIAL mode, or DeliveryQC.com, both of which say they use Dolby's code); the differences go in the manual with the share of speech beside them. Until then: debug builds only, and nothing is called met or failed.
+
 ## Not built yet
 
 - The limiter as a live insert comes with the mixer, after its realtime measurements. With the mixer its place is on the master bus, after everything; today it comes before the tracks' plugins and says so (`beforePlugins`).

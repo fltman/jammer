@@ -136,6 +136,10 @@ public enum Operations {
     /// the window (docs/MIXER.md): what changes how a project sounds without being seen isn't shipped. A
     /// build with it off doesn't know the steps; a project that has lanes is still played as it was saved.
     nonisolated(unsafe) public static var automation = false
+    /// Dialogue-gated loudness is in debug builds only until its numbers have been set beside a reference
+    /// meter's on the test files (docs/MASTERING.md): a number isn't shown before it has a known-good
+    /// reference. A build with it off answers not_available.
+    nonisolated(unsafe) public static var dialogueLoudness = false
     @TaskLocal public static var automationForThisTask: Bool?
     public static var automationOn: Bool { automationForThisTask ?? automation }
     static let automationSteps: [OperationSpec] = [

@@ -382,6 +382,20 @@ enum AgentRouter {
                 if let range { body["start"] = seconds(session, range.lowerBound); body["end"] = seconds(session, range.upperBound) }
                 if let only { body["tracks"] = session.project.tracks.filter { only.contains($0.id) }.map(\.id.uuidString) }
                 return .json(["analysis": body])
+            case ["analysis", "dialogue"]:
+                try only("GET")
+                guard Operations.dialogueLoudness else { throw APIError.notAvailable("Dialogue-gated loudness isn't in this build yet: its numbers haven't been set beside a reference meter's.") }
+                let range = try queryRange(r, session)
+                var profile: DialogueProfile?
+                if let named = r.query["profile"] {
+                    guard let p = DialogueProfile(rawValue: named) else { throw APIError.badRequest("\"profile\" is one of \(DialogueProfile.allCases.map(\.rawValue).joined(separator: ", ")).") }
+                    profile = p
+                }
+                let measured = await session.analyzeDialogue(range)
+                var body = measured.json
+                if let profile { body["profile"] = profile.json(measured) }
+                if let range { body["start"] = seconds(session, range.lowerBound); body["end"] = seconds(session, range.upperBound) }
+                return .json(["dialogue": body])
             case ["analysis", "rhythm"]:
                 try only("GET")
                 let range = try queryRange(r, session) ?? 0..<session.project.length

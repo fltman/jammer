@@ -65,6 +65,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Automation is in debug builds only until lanes are shown and drawn in the window (docs/MIXER.md):
         // what changes how a project sounds without being seen isn't shipped.
         Operations.automation = true
+        // Dialogue-gated loudness: in debug builds only until Anders has measured the test files in a
+        // reference meter and the difference is written in the manual.
+        Operations.dialogueLoudness = true
         #endif
         NSApp.mainMenu = buildMenu()
         // Our own "open documents" handler: AppKit hands document-based apps' opens straight

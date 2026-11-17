@@ -54,6 +54,7 @@ extension AgentAPI {
         .init("POST", doc + "/undo"), .init("POST", doc + "/redo"),
         .init("GET", doc + "/analysis", query: range.union(tracks)),
         .init("GET", doc + "/analysis/rhythm", query: range.union(tracks)),
+        .init("GET", doc + "/analysis/dialogue", query: range.union(["profile"])),
         .init("GET", doc + "/analysis/restoration", query: range.union(tracks)),
         .init("GET", doc + "/analysis/acx"),
         .init("GET", doc + "/waveform", query: range.union(["width"])),

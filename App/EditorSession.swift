@@ -879,6 +879,14 @@ final class EditorSession {
         return result
     }
 
+    /// Dialogue-gated loudness of the mix: the loudness over the parts the document knows to be speech.
+    func analyzeDialogue(_ range: Range<Frame>? = nil) async -> DialogueLoudness {
+        let plan = await PlanCompiler.mix(project, pool: pool, outOfProcess: Self.pluginSafeMode)
+        let r = range ?? 0..<project.length
+        let speech = project.speechRanges(in: r)
+        return await Task.detached(priority: .userInitiated) { DialogueLoudness.measure(plan, r, speech: speech.ranges, source: speech.source) }.value
+    }
+
     /// The document measured for ACX's requirements: the mix, its pauses, its ends, and, when the document
     /// is at 44.1 kHz, the MP3 it would be handed in as (192 kbps, constant bit rate), decoded again.
     func acxMeasured() async -> ACX.Measured {
