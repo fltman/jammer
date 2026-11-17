@@ -246,7 +246,7 @@ final class EditorSession {
     /// Turns safe mode on or off and starts every plugin again.
     func restartPlugins() {
         inserts = InsertHost(channels: project.channels, sampleRate: project.sampleRate, outOfProcess: Self.pluginSafeMode)
-        plan = PlanCompiler.compile(project.listening(solo: solo), pool: pool, inserts: inserts)
+        plan = PlanCompiler.compile(project.listening(solo: solo), pool: pool, inserts: inserts, ridable: mixerAhead != nil)
         output.setPlan(plan)
         pluginsVersion += 1
         syncInserts()
@@ -439,7 +439,7 @@ final class EditorSession {
         project = newProject
         if let s = selection { selection = s.clamped(to: 0..<max(1, project.length)) }
         playhead = min(playhead, project.length)
-        plan = PlanCompiler.compile(project.listening(solo: solo), pool: pool, inserts: inserts)
+        plan = PlanCompiler.compile(project.listening(solo: solo), pool: pool, inserts: inserts, ridable: mixerAhead != nil)
         output.setPlan(plan)
         version += 1
         syncInserts()
@@ -566,7 +566,7 @@ final class EditorSession {
     }
     func setSolo(_ strips: Set<UUID>) {
         solo = strips.filter { id in project.tracks.contains { $0.id == id } || project.bus(id) != nil }
-        plan = PlanCompiler.compile(project.listening(solo: solo), pool: pool, inserts: inserts)
+        plan = PlanCompiler.compile(project.listening(solo: solo), pool: pool, inserts: inserts, ridable: mixerAhead != nil)
         output.setPlan(plan)
         // Said in the window for as long as it is on, so that a quiet mix is never a puzzle.
         (window?.windowController as? EditorWindowController)?.showLink()
@@ -603,6 +603,9 @@ final class EditorSession {
             dropoutsSeen = output.underruns
             mixerAhead = Self.mixerAheadSteps[0]
             output.setAhead(seconds: Self.mixerAheadSteps[0])
+            // Every track a strip of its own from now, so that a fader has something to be ridden on.
+            plan = PlanCompiler.compile(project.listening(solo: solo), pool: pool, inserts: inserts, ridable: true)
+            output.setPlan(plan)
             aheadWatch = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
                 MainActor.assumeIsolated { self?.watchDropouts() }
             }
@@ -611,6 +614,8 @@ final class EditorSession {
                 guard let self else { return }
                 aheadWatch?.invalidate()
                 aheadWatch = nil
+                endAllPasses()
+                writeModes = [:]
                 mixerAhead = nil
                 output.setAhead(seconds: 0)
             }
@@ -618,6 +623,137 @@ final class EditorSession {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
         }
     }
+    // MARK: A level ridden while the sound plays
+
+    /// How a strip's fader is taken while the sound plays: only heard (and sent when it is let go, as
+    /// always), or written as the strip's level lane while it is held (Touch), or from when it is taken
+    /// until playback stops (Latch). Not saved: every strip is in Read when a document opens, when the
+    /// mixer window leaves the front, and, for Latch, when playback stops.
+    enum WriteMode: String, CaseIterable { case read, touch, latch }
+    var writeModes: [UUID: WriteMode] = [:]
+    func writeMode(_ strip: UUID) -> WriteMode { writeModes[strip] ?? Self.startingWriteMode }
+    /// Read, always, outside a check: `-mixerWriteMode touch` (or latch) starts a test copy's strips in that mode (debug builds).
+    static let startingWriteMode: WriteMode = {
+        #if DEBUG
+        if let given = UserDefaults.standard.string(forKey: "mixerWriteMode"), let mode = WriteMode(rawValue: given) { return mode }
+        #endif
+        return .read
+    }()
+
+    private struct Ride {
+        var kind: Int32, index: Int32
+        var serial: UInt64
+        /// The strip's fader (with its group's) when it was taken: the lane is what is added to this.
+        var base: Double
+        var writes: Bool
+        var last: Double        // the level last put on, in the lane's place (or on top, in Read)
+        var heard: [AutomationPoint] = []
+        var gliding = false
+    }
+    @ObservationIgnored private var rides: [UUID: Ride] = [:]
+    @ObservationIgnored private var rideTimer: Timer?
+    /// Strips being written right now (the mixer window shows it).
+    private(set) var writing: Set<UUID> = []
+
+    /// The level a strip's control should stand at when it is taken in Touch or Latch: the fader plus the lane where the sound is.
+    func rideStart(_ strip: UUID) -> Double? {
+        guard isPlaying, writeMode(strip) != .read, let level = project.level(of: strip, at: output.playhead) else { return nil }
+        return level.totalDB
+    }
+
+    /// A strip's level control was taken (true) or let go (false) at `level` dB. Returns whether the
+    /// control should send its value as the fader, as it always has: yes unless it was a ride that is written.
+    @discardableResult
+    func faderHeld(_ strip: UUID, _ held: Bool, level: Double) -> Bool {
+        guard isPlaying, mixerAhead != nil, let at = plan.strips[strip], let now = project.level(of: strip, at: output.playhead) else { return true }
+        let mode = writeMode(strip)
+        if held {
+            if var ride = rides[strip] {          // taken again while it glides back, or in Latch
+                ride.gliding = false
+                rides[strip] = ride
+                faderMoved(strip, level: level)
+                return false
+            }
+            let writes = mode != .read
+            // In the lane's place when written; on top of the lane when only heard.
+            let value = writes ? level - now.faderDB : level - now.faderDB
+            rides[strip] = Ride(kind: at.kind, index: at.index, serial: plan.serial, base: now.faderDB, writes: writes, last: value)
+            output.setLiveGain(kind: at.kind, index: at.index, db: value, replaces: writes, serial: plan.serial)
+            if writes { writing.insert(strip) }
+            startRideTimer()
+            return false
+        }
+        guard var ride = rides[strip] else { return true }
+        if !ride.writes {
+            // Only heard: the control sends its value as the fader now; the plan that comes of it takes over from the trim.
+            rides[strip] = nil
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in self?.output.setLiveGain(kind: ride.kind, index: ride.index, db: 0, replaces: false, serial: 0) }
+            return true
+        }
+        if mode == .touch { ride.gliding = true; rides[strip] = ride }   // back to the lane over a quarter of a second, then written
+        return false                                                      // Latch: goes on at this level until playback stops
+    }
+    /// The control moved while it is held.
+    func faderMoved(_ strip: UUID, level: Double) {
+        guard var ride = rides[strip], !ride.gliding else { return }
+        ride.last = level - ride.base
+        rides[strip] = ride
+        output.setLiveGain(kind: ride.kind, index: ride.index, db: ride.last, replaces: ride.writes, serial: ride.serial)
+    }
+
+    private func startRideTimer() {
+        guard rideTimer == nil else { return }
+        rideTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60, repeats: true) { [weak self] _ in MainActor.assumeIsolated { self?.rideTick() } }
+    }
+    /// Sixty times a second: what the engine has put on is taken into the passes, and a strip that glides back is moved on.
+    private func rideTick() {
+        takeApplied()
+        let step = 1.0 / 60 / Automation.writeGlide
+        for (strip, var ride) in rides where ride.gliding {
+            let target = project.lane(strip: strip, param: .gain).flatMap { $0.enabled ? $0.value(at: output.playhead) : nil } ?? 0
+            // A straight way back in the time that is left: all of it when the level is there.
+            let left = target - ride.last
+            if abs(left) < 0.02 { endPass(strip); continue }
+            ride.last += left * min(1, step * 4)
+            rides[strip] = ride
+            output.setLiveGain(kind: ride.kind, index: ride.index, db: ride.last, replaces: true, serial: ride.serial)
+        }
+        if rides.isEmpty { rideTimer?.invalidate(); rideTimer = nil }
+    }
+    private func takeApplied() {
+        for a in output.takeApplied() {
+            guard let strip = rides.first(where: { $0.value.kind == a.kind && $0.value.index == a.index && $0.value.writes })?.key else { continue }
+            if let last = rides[strip]!.heard.last, a.frame <= last.frame { continue }
+            rides[strip]!.heard.append(AutomationPoint(frame: a.frame, value: a.db))
+        }
+    }
+    /// A pass is over: what was heard becomes the strip's lane between its first and last frame, as one step.
+    private func endPass(_ strip: UUID) {
+        takeApplied()
+        guard let ride = rides.removeValue(forKey: strip) else { return }
+        writing.remove(strip)
+        let name = project.tracks.first { $0.id == strip }?.name ?? project.bus(strip)?.name ?? ""
+        if ride.writes, ride.heard.count > 1 {
+            let old = project.lane(strip: strip, param: .gain) ?? AutomationLane(strip: strip, points: [])
+            let (lane, _) = old.written(ride.heard)
+            let rate = project.sampleRate
+            let said = L10n.text("mixer.write.done", L10n.count("automation.ax.points", Automation.thinned(ride.heard, tolerance: Automation.writeTolerance).count), name,
+                                 formatTime(Double(ride.heard.first!.frame) / rate), formatTime(Double(ride.heard.last!.frame) / rate))
+            perform("set_automation", ["strip": .string(strip.uuidString), "param": .string("gain"),
+                                       "points": .array(lane.points.map { JSONValue.array([.number(Double($0.frame) / rate), .number($0.value)]) })], saying: said)
+        }
+        // The plan with the lane takes over from the trim between two blocks; the trim is taken off once it has.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+            guard let self, rides[strip] == nil else { return }
+            output.setLiveGain(kind: ride.kind, index: ride.index, db: 0, replaces: false, serial: 0)
+        }
+    }
+    /// Playback stopped, or the mixer left the front: every pass is written, and Latch is Read again.
+    func endAllPasses() {
+        for strip in Array(rides.keys) { endPass(strip) }
+        for (strip, mode) in writeModes where mode == .latch { writeModes[strip] = .read }
+    }
+
     private func watchDropouts() {
         let now = output.underruns
         guard isPlaying, now > dropoutsSeen else { dropoutsSeen = now; return }
@@ -651,6 +787,7 @@ final class EditorSession {
     }
 
     func stop() {
+        endAllPasses()
         output.stop()
         isPlaying = false
         NotificationCenter.default.post(name: PulsingGlow.transportChanged, object: nil)

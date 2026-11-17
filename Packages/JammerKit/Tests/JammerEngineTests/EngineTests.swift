@@ -336,4 +336,75 @@ struct RingLengthTests {
         #expect(mostWhileShort > 0 && mostWhileShort <= Int64(short), "while short the ring was \(mostWhileShort) frames ahead")
         #expect(jm_engine_underruns(engine) == 0)
     }
+
+    @Test("A level under a hand: with none the output is the source bit for bit, also on a track marked for it; a trim for another plan does nothing; a trim of −6 dB is −6 dB once its first block has ramped to it, and what was put on comes back frame by frame")
+    func liveTrim() throws {
+        let frames = 60_000
+        var signal = [Float](repeating: 0, count: frames * 2)
+        for i in 0..<frames { signal[i * 2] = Float(0.2 * sin(2 * .pi * 220 * Double(i) / 48_000)); signal[i * 2 + 1] = Float(i % 997) / 2_000 }
+        let src = jm_source_create_memory(signal, Int64(frames), 2)
+        defer { jm_source_release(src) }
+        func plan() -> OpaquePointer {
+            let plan = jm_plan_create(2, 48_000)
+            let t = jm_plan_add_track(plan, 1, false)
+            jm_plan_add_clip(plan, t, jm_plan_add_source(plan, src), 0, 0, Int64(frames), 1, 0, 0, JM_FADE_LINEAR)
+            jm_plan_set_track_live(plan, t, true)
+            jm_plan_finalize(plan)
+            return plan
+        }
+        /// Plays `count` frames of `plan` from the start through an engine with the ring short, the trim set before it starts.
+        func played(_ plan: OpaquePointer, count: Int, trim: (db: Float, serial: UInt64)?) throws -> (out: [Float], applied: [(Int64, Float)]) {
+            let engine = jm_engine_create(2, 48_000, 4_096)
+            defer { jm_engine_destroy(engine) }
+            jm_engine_set_plan(engine, plan)
+            jm_engine_set_ahead(engine, 512)
+            if let trim { jm_engine_set_live_gain(engine, 0, 0, trim.db, true, trim.serial) }
+            var left = [Float](repeating: 0, count: 256), right = [Float](repeating: 0, count: 256)
+            func pull() {
+                left.withUnsafeMutableBufferPointer { l in
+                    right.withUnsafeMutableBufferPointer { r in
+                        let outs: [UnsafeMutablePointer<Float>] = [l.baseAddress!, r.baseAddress!]
+                        outs.withUnsafeBufferPointer { jm_engine_pull(engine, $0.baseAddress!, 2, 256) }
+                    }
+                }
+            }
+            jm_engine_play(engine, 0)
+            for _ in 0..<2_000 where !jm_engine_seek_settled(engine) { pull(); usleep(500) }
+            var got: [Float] = []
+            while got.count < count * 2 {
+                for _ in 0..<20_000 where jm_engine_buffered(engine) < 256 { usleep(100) }
+                try #require(jm_engine_buffered(engine) >= 256)
+                pull()
+                for i in 0..<256 { got.append(left[i]); got.append(right[i]) }
+            }
+            var kinds = [Int32](repeating: 0, count: 4_096), indices = kinds, at = [Int64](repeating: 0, count: 4_096), db = [Float](repeating: 0, count: 4_096)
+            let n = Int(jm_engine_take_applied(engine, &kinds, &indices, &at, &db, 4_096))
+            #expect((0..<n).allSatisfy { kinds[$0] == 0 && indices[$0] == 0 })
+            return (got, (0..<n).map { (at[$0], db[$0]) })
+        }
+        let count = 8_192
+        // None: the source. (The track is marked as one that may be ridden, and goes by its own strip.)
+        let a = plan()
+        defer { jm_plan_release(a) }
+        let plain = try played(a, count: count, trim: nil)
+        #expect(plain.out == Array(signal[0..<(count * 2)]) && plain.applied.isEmpty)
+        // A trim that is for another plan: nothing.
+        let b = plan()
+        defer { jm_plan_release(b) }
+        let other = try played(b, count: count, trim: (-6, jm_plan_serial(a)))
+        #expect(jm_plan_serial(b) != jm_plan_serial(a) && other.out == plain.out && other.applied.isEmpty)
+        // −6 dB for this plan: after the block that ramps to it, every sample is the source at −6 dB.
+        let c = plan()
+        defer { jm_plan_release(c) }
+        let trimmed = try played(c, count: count, trim: (-6, jm_plan_serial(c)))
+        let g = Float(pow(10.0, -6.0 / 20.0))
+        let settled = 2_048
+        #expect((settled..<count).allSatisfy { abs(trimmed.out[$0 * 2] - signal[$0 * 2] * g) < 1e-6 && abs(trimmed.out[$0 * 2 + 1] - signal[$0 * 2 + 1] * g) < 1e-6 })
+        // The first block goes from nothing added down to −6 without a step: no sample-to-sample jump beyond what the tone itself makes.
+        #expect(trimmed.out[0] == signal[0])
+        // What was put on: it starts at 0 dB at frame 0, is −6 from the end of the first block, the frames rise, and it reaches what was played.
+        let applied = trimmed.applied
+        #expect(applied.first?.0 == 0 && applied.first?.1 == 0 && applied.dropFirst().allSatisfy { $0.1 == -6 })
+        #expect(zip(applied, applied.dropFirst()).allSatisfy { $0.0 < $1.0 } && (applied.last?.0 ?? 0) >= Int64(count))
+    }
 }

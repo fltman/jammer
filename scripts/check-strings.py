@@ -93,6 +93,22 @@ def check(root, require=None):
                         faults.append(f'{path}:{n}: text for the user written in the code: "{text[:60]}"')
     faults += text_logic(root)
     faults += british(root, strings)
+    faults += loose_colours(root)
+    return faults
+
+# A state is not coloured by hand in a view (the-apps/SIBLINGS.md, "Tillstånd i fönstret"): an error, a
+# warning, something done or going on gets its symbol, its colour and its spoken word from the one type
+# (StateKind, shown by StateLine). A red, orange, yellow or green written into a view is such a colouring.
+LOOSE = re.compile(r'(?:foregroundStyle|foregroundColor|stroke|fill|tint)\(\s*(?:Color)?\.(red|orange|yellow|green)\b|Color\.(red|orange|yellow|green)\b')
+def loose_colours(root):
+    faults = []
+    app = os.path.join(root, 'App')
+    for name in sorted(os.listdir(app)):
+        if not name.endswith('.swift'): continue
+        for n, row in enumerate(open(os.path.join(app, name), encoding='utf-8'), 1):
+            if 'not a state:' in row: continue
+            m = LOOSE.search(row.split(' //')[0])
+            if m: faults.append(f'App/{name}:{n}: a state coloured by hand ({m.group(1) or m.group(2)}); use StateLine with its kind')
     return faults
 
 # The interface's English is American, as Apple's (the-apps/SIBLINGS.md, "Språk"): Center, Color, Gray,
@@ -185,6 +201,7 @@ def self_test(root):
             'an alert text in a file listed as moved': (None, 'App/Code.swift\n', 'alert.messageText = "Send it?"\n'),
             'a British form in the catalogue': (lambda s: s['a.one']['localizations']['en']['stringUnit'].update(value='Centre %@'), None, ''),
             'a British form in a text in the code': (None, None, 'note("Cancelled; nothing changed.")\n'),
+            'a state coloured by hand in a view': (None, None, 'Text(problem).foregroundStyle(.orange)\n'),
             'a colour chosen by a line\'s first word': (None, None, 'let c = line.hasPrefix("Warning") ? red : green\n'),
             'a decision made on the status line\'s words': (None, None, 'if session.status == "Uploading the files" { ask() }\n'),
         }

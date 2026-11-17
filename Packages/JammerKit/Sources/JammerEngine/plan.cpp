@@ -77,6 +77,8 @@ jm_plan *jm_plan_create(int32_t channels, double sample_rate) {
     auto p = std::make_shared<Plan>();
     p->channels = std::max(1, channels);
     p->sampleRate = sample_rate;
+    static std::atomic<uint64_t> made{0};
+    p->serial = made.fetch_add(1, std::memory_order_relaxed) + 1;
     return new jm_plan{std::move(p)};
 }
 
@@ -239,6 +241,11 @@ bool continuePlan(Plan &next, Plan &prev) {
 }
 } // namespace jm
 } // extern "C++"
+
+uint64_t jm_plan_serial(const jm_plan *plan) { return plan->ptr->serial; }
+void jm_plan_set_track_live(jm_plan *plan, int32_t track, bool live) {
+    if (track >= 0 && size_t(track) < plan->ptr->tracks.size()) plan->ptr->tracks[size_t(track)].live = live;
+}
 
 bool jm_plan_continue_from(jm_plan *plan, jm_plan *previous) { return jm::continuePlan(*plan->ptr, *previous->ptr); }
 

@@ -200,6 +200,31 @@ void Graph::reset(const Plan &plan, int64_t start) {
     primed_ = true;
 }
 
+bool Graph::trim(const Plan &plan, Renderer &renderer, int32_t kind, int32_t index, size_t node, const Curve &lane, int64_t at, int64_t q,
+                 const float *in, float *out, bool &replaced) {
+    replaced = false;
+    LiveTrims *live = renderer.live;
+    const int32_t s = live ? LiveTrims::slot(kind, index) : -1;
+    if (liveLast_.size() <= node) { liveLast_.resize(node + 1, 0.0f); liveOn_.resize(node + 1, false); }
+    const bool on = s >= 0 && plan.serial != 0 && live->slots[s].serial.load(std::memory_order_acquire) == plan.serial;
+    if (!on) { liveOn_[node] = false; return false; }
+    const bool replaces = live->slots[s].replaces.load(std::memory_order_relaxed);
+    const float target = live->slots[s].db.load(std::memory_order_relaxed);
+    // The first block under the hand starts from where the level was: the lane's value there when the
+    // trim stands in its place, nothing added when it comes on top.
+    const float from = liveOn_[node] ? liveLast_[node] : (replaces && !lane.empty() ? float(lane.dbAt(at)) : (replaces ? 0.0f : 0.0f));
+    liveRamp_.kind = Curve::kDecibel;
+    liveRamp_.frames.assign({at, at + q});
+    liveRamp_.db.assign({from, target});
+    liveRamp_.apply(in, out, at, q, channels_);
+    if (!liveOn_[node] && replaces) live->push({s, at, from});
+    if (replaces) live->push({s, at + q, target});
+    liveOn_[node] = true;
+    liveLast_[node] = target;
+    replaced = replaces;
+    return true;
+}
+
 bool Graph::sameShape(const Graph &o) const {
     auto edges = [](const std::vector<std::vector<Edge>> &a, const std::vector<std::vector<Edge>> &b) {
         if (a.size() != b.size()) return false;
@@ -304,7 +329,7 @@ void Graph::produce(const Plan &plan, Renderer &renderer) {
             if (c.start >= end) break;
             if (c.end() <= cursor_) continue;
             const Track &track = plan.tracks[size_t(c.track)];
-            if (track.mute || track.chain || track.automated()) continue;
+            if (track.mute || track.chain || track.automated() || track.live) continue;
             renderer.mixClip(plan, c, track.gain, cursor_, q, direct_.data());
         }
         if (total == 0) {
@@ -326,7 +351,7 @@ void Graph::produce(const Plan &plan, Renderer &renderer) {
             const size_t t = size_t(n);
             const Track &track = plan.tracks[t];
             // (In a plain plan the tracks without plugins are in the sum already.)
-            if (plain_ && !track.chain && !track.automated()) continue;
+            if (plain_ && !track.chain && !track.automated() && !track.live) continue;
             if (track.mute) {
                 // A muted strip sends silence, so that its delay lines empty in step with the others.
                 std::fill(strip_.begin(), strip_.end(), 0.0f);
@@ -343,7 +368,11 @@ void Graph::produce(const Plan &plan, Renderer &renderer) {
             if (!track.mute) {
                 const int64_t at = cursor_ - nodeOut_[t];
                 if (!track.muteCurve.empty()) track.muteCurve.apply(strip_.data(), strip_.data(), at, q, channels_);
-                if (!track.curve.empty()) { track.curve.apply(post, faded_.data(), at, q, channels_); post = faded_.data(); }
+                // A level under a hand: in the lane's place, or on top of it.
+                bool replaced = false;
+                const bool trimmed = renderer.live && trim(plan, renderer, 0, int32_t(t), t, track.curve, at, q, post, faded_.data(), replaced);
+                if (trimmed) post = faded_.data();
+                if (!replaced && !track.curve.empty()) { track.curve.apply(post, faded_.data(), at, q, channels_); post = faded_.data(); }
                 if (!track.panCurve.empty()) { track.panCurve.apply(post, faded_.data(), at, q, channels_); post = faded_.data(); }
             }
             for (Edge &e : trackEdges_[t]) {
@@ -366,7 +395,10 @@ void Graph::produce(const Plan &plan, Renderer &renderer) {
             if (!bus.mute) {
                 const int64_t at = cursor_ - nodeOut_[size_t(n)];
                 if (!bus.muteCurve.empty()) bus.muteCurve.apply(strip_.data(), strip_.data(), at, q, channels_);
-                if (!bus.curve.empty()) { bus.curve.apply(post, faded_.data(), at, q, channels_); post = faded_.data(); }
+                bool replaced = false;
+                const bool trimmed = renderer.live && trim(plan, renderer, 1, int32_t(b), size_t(n), bus.curve, at, q, post, faded_.data(), replaced);
+                if (trimmed) post = faded_.data();
+                if (!replaced && !bus.curve.empty()) { bus.curve.apply(post, faded_.data(), at, q, channels_); post = faded_.data(); }
                 if (!bus.panCurve.empty()) { bus.panCurve.apply(post, faded_.data(), at, q, channels_); post = faded_.data(); }
             }
             for (Edge &e : busEdges_[b]) {
@@ -382,7 +414,12 @@ void Graph::produce(const Plan &plan, Renderer &renderer) {
     if (plan.masterChain) plan.masterChain->stream(mix_.data());
     if (plan.masterGain != 1.0f)
         for (float &x : mix_) x *= plan.masterGain;
-    if (!plan.masterCurve.empty()) plan.masterCurve.apply(mix_.data(), mix_.data(), cursor_ - total - masterChainLatency_, q, channels_);
+    {
+        const int64_t at = cursor_ - total - masterChainLatency_;
+        bool replaced = false;
+        if (renderer.live) trim(plan, renderer, 2, 0, nt + plan.buses.size(), plan.masterCurve, at, q, mix_.data(), mix_.data(), replaced);
+        if (!replaced && !plan.masterCurve.empty()) plan.masterCurve.apply(mix_.data(), mix_.data(), at, q, channels_);
+    }
     if (plan.masterLimiter) plan.masterLimiter->stream(mix_.data());
     cursor_ += q;
     const int64_t skip = std::min(discard_, q);

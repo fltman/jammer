@@ -227,6 +227,23 @@ int64_t jm_engine_underruns(const jm_engine *_Nonnull engine);
 /// The tap counts what is handed to the device before the volume (the sum of squares over every channel,
 /// and the device frames), from when it is switched on; switching it on or off starts the count afresh.
 void jm_engine_set_silent(jm_engine *_Nonnull engine, bool silent);
+/// A level under a hand, while the sound plays. For a strip (`kind` 0 a track, 1 a bus, 2 the master),
+/// `db` is put on by the render thread from its next block, ramped within the block: in the place of the
+/// strip's level lane when `replaces` (what is then put on can be taken back with jm_engine_take_applied,
+/// to be written as the lane), or on top of the lane otherwise (only heard). It holds for the plan with
+/// that serial and no other, so the plan that follows, with the fader or the lane the hand left, takes
+/// over between two blocks. `plan_serial` 0 takes the trim off. A render that isn't the engine's own
+/// playback (an export, a measurement) never has it. With no trim the output is bit for bit what it was.
+void jm_engine_set_live_gain(jm_engine *_Nonnull engine, int32_t kind, int32_t index, float db, bool replaces, uint64_t plan_serial);
+/// What the render thread has put on since the last call, oldest first: for each entry the strip, the
+/// frame of the strip's own timeline, and the level in dB at that frame (it goes straight from one
+/// entry to the next). Returns how many were written, at most `max`.
+int32_t jm_engine_take_applied(jm_engine *_Nonnull engine, int32_t *_Nonnull kinds, int32_t *_Nonnull indices, int64_t *_Nonnull frames, float *_Nonnull db, int32_t max);
+/// Which plan this is among all that have been made (1, 2, …): what a live trim is tied to.
+uint64_t jm_plan_serial(const jm_plan *_Nonnull plan);
+/// Marks a track as one a fader may be ridden on while this plan plays (before finalize). It is then
+/// worked as a strip of its own also where plain tracks are otherwise summed together; the sound is the same.
+void jm_plan_set_track_live(jm_plan *_Nonnull plan, int32_t track, bool live);
 /// How far ahead of the playhead the engine renders, in frames at the device's rate. 0 (the default):
 /// the whole ring, about a third of a second, which gives the render thread the most room. A small
 /// number (about 20 ms' worth) while a hand is on a control: a change to the plan is then heard that

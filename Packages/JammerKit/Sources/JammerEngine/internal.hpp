@@ -155,6 +155,10 @@ struct Track {
     /// An automated mute (amplitude) and an automated pan, which then takes the fixed pan's place.
     Curve muteCurve, panCurve;
     bool automated() const { return !curve.empty() || !muteCurve.empty() || !panCurve.empty(); }
+    /// The strip is one a fader may be ridden on while this plan plays: it is then worked as a strip of
+    /// its own also in a plan that otherwise uses nothing of the mixer (where plain tracks are summed
+    /// together), so that a level under a hand has a strip to be put on. The sound is the same.
+    bool live = false;
     std::shared_ptr<Chain> chain;
     std::vector<Send> sends;
     /// Where the track goes: a bus (its index), or -1 for the output. With pan: the gain of the left
@@ -234,6 +238,14 @@ private:
     std::vector<int64_t> nodeOut_;
     int64_t masterChainLatency_ = 0;
     std::vector<float> faded_, sent_;
+    /// A level under a hand, per node (and the master last): the value the block before ended on, and a
+    /// two-point line from it to this block's, applied as a lane's piece is.
+    std::vector<float> liveLast_;
+    std::vector<bool> liveOn_;
+    Curve liveRamp_;
+    /// Puts a live trim on `io` for this block if the strip has one for this plan. Returns whether it did
+    /// (the lane is then not applied when the trim stands in its place).
+    bool trim(const Plan &plan, Renderer &renderer, int32_t kind, int32_t index, size_t node, const Curve &lane, int64_t at, int64_t q, const float *in, float *out, bool &replaced);
     struct KeyBuffer {
         int32_t unit;
         std::vector<float> data;
@@ -288,9 +300,44 @@ struct Plan {
     std::vector<Clip> clips; // sorted by start once finalized
     int64_t length = 0;
     bool finalized = false;
+    /// Which plan this is among all that have been made: what a live trim is tied to.
+    uint64_t serial = 0;
 };
 
 bool continuePlan(Plan &next, Plan &prev);
+
+/// A level under a hand: for a strip, a value in dB that the render thread puts on in the lane's place
+/// (or on top of the lane), block by block, while a fader is held and the sound plays. Written by the
+/// main thread, read by the render thread once a block; and, the other way, what the render thread put
+/// on and at which frame of the strip's timeline, for the lane that is written from it afterwards.
+/// A trim belongs to one plan (its serial): the plan that comes after it, with the fader or the lane
+/// that the hand left, is never trimmed by it, so the level goes from one to the other between two
+/// blocks without a step.
+struct LiveTrims {
+    static constexpr int32_t kTracks = 256, kBuses = 64, kSlots = kTracks + kBuses + 1;
+    static int32_t slot(int32_t kind, int32_t index) {   // kind 0 track, 1 bus, 2 master; -1: no such slot
+        if (kind == 0) return index >= 0 && index < kTracks ? index : -1;
+        if (kind == 1) return index >= 0 && index < kBuses ? kTracks + index : -1;
+        return kind == 2 ? kTracks + kBuses : -1;
+    }
+    struct Slot {
+        std::atomic<uint64_t> serial{0};   // the plan it is for; 0: none
+        std::atomic<float> db{0.0f};
+        std::atomic<bool> replaces{true};  // in the lane's place (written afterwards), or on top of it (only heard)
+    };
+    Slot slots[kSlots];
+    /// What was put on: one entry a block and strip, from the render thread to the main thread.
+    struct Applied { int32_t slot; int64_t frame; float db; };
+    static constexpr uint32_t kQueue = 8192;   // a power of two; about 40 s of one strip at 256 frames a block
+    Applied queue[kQueue];
+    std::atomic<uint32_t> head{0}, tail{0};
+    void push(const Applied &a) {
+        const uint32_t h = head.load(std::memory_order_relaxed);
+        if (h - tail.load(std::memory_order_acquire) >= kQueue) return;   // full: the entry is dropped (the main thread takes them four times a second)
+        queue[h & (kQueue - 1)] = a;
+        head.store(h + 1, std::memory_order_release);
+    }
+};
 
 /// Renders a plan into interleaved float. Owns its scratch, so reuse one per thread.
 class Renderer {
@@ -304,6 +351,12 @@ private:
     int32_t channels_;
     std::vector<float> scratch_;
 
+public:
+    /// The engine's live trims, for the renderer that plays; null for every other render (an export, a
+    /// measurement), which is never trimmed.
+    LiveTrims *live = nullptr;
+
+private:
     friend class Graph;
     void mixClip(const Plan &plan, const Clip &c, float trackGain, int64_t start, int64_t frames, float *out);
 };

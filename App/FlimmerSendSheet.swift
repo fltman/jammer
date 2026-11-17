@@ -106,7 +106,7 @@ struct FlimmerSendSheet: View {
             switch model.stage {
             case .choose: EmptyView()
             case .working(let what), .failed(let what):
-                Text(what).font(.callout).foregroundStyle(model.stage == .working(what) ? Color.secondary : Color.orange)
+                StateLine(kind: model.stage == .working(what) ? .progress : .error, text: what, font: .callout)
                     .fixedSize(horizontal: false, vertical: true)
             case .ready, .sending, .done:
                 ScrollView {
@@ -114,7 +114,7 @@ struct FlimmerSendSheet: View {
                         ForEach(Array(model.lines.enumerated()), id: \.offset) { _, l in Text(l).fixedSize(horizontal: false, vertical: true) }
                         if !model.flimmerLines.isEmpty { Divider() }
                         ForEach(Array(model.flimmerLines.enumerated()), id: \.offset) { i, l in
-                            Text(l).foregroundStyle(i < model.flimmerWarnings ? Color.orange : Theme.neonColor).fixedSize(horizontal: false, vertical: true)
+                            StateLine(kind: i < model.flimmerWarnings ? .warning : .info, text: l, font: .body)
                         }
                     }
                     .font(.callout)

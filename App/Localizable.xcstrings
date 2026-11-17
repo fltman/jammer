@@ -1201,6 +1201,66 @@
         }
       }
     },
+    "mixer.mode.help": {
+      "comment": "Help of the mode menu.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Read: the fader is heard while you move it and set when you let go. Touch: while the sound plays, what you do with the fader is written as the strip’s level lane for as long as you hold it. Latch: it is written from when you take the fader until playback stops."
+          }
+        }
+      }
+    },
+    "mixer.mode.label": {
+      "comment": "Accessibility label of a strip’s Read/Touch/Latch menu. %@ is the strip.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "How the fader of %@ is taken while the sound plays"
+          }
+        }
+      }
+    },
+    "mixer.mode.latch": {
+      "comment": "A strip’s mode: its level is written from when the fader is taken until playback stops.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Latch"
+          }
+        }
+      }
+    },
+    "mixer.mode.read": {
+      "comment": "A strip’s mode: its fader is only heard while the sound plays, and sent when let go.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Read"
+          }
+        }
+      }
+    },
+    "mixer.mode.touch": {
+      "comment": "A strip’s mode: its level is written as a lane while the fader is held.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Touch"
+          }
+        }
+      }
+    },
     "mixer.pan.automated": {
       "comment": "Beside a strip’s pan slider when a pan lane steers the pan. Short: 72 points wide.",
       "extractionState": "manual",
@@ -1233,6 +1293,30 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mixer – %@"
+          }
+        }
+      }
+    },
+    "mixer.write.done": {
+      "comment": "Status line after a level was written from a fader. %1$@ is “14 points”, %2$@ the strip, then two times.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wrote the level of %2$@ from %3$@ to %4$@ (%1$@)."
+          }
+        }
+      }
+    },
+    "mixer.writing": {
+      "comment": "Beside a strip’s level while it is being written.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Writing"
           }
         }
       }

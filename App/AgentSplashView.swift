@@ -1,4 +1,5 @@
 import AppKit
+import JammerCore
 import SwiftUI
 
 /// Shown at launch: the line to hand to an AI agent so it can learn Jämmer's
@@ -63,7 +64,7 @@ struct AgentSplashView: View {
                         .keyboardShortcut("c", modifiers: [.command, .shift])
                     }
                 } else if let failure = server.failure {
-                    Label(failure, systemImage: "exclamationmark.triangle").foregroundStyle(.orange)
+                    StateLine(kind: .error, text: failure, font: .body)
                 } else {
                     ProgressView().controlSize(.small)
                 }

@@ -48,6 +48,7 @@ struct Out {
 /// (AudioConverter, mastering quality). Never used on the audio thread.
 class Resampler {
 public:
+    void setLive(LiveTrims *live) { renderer_.live = live; }
     Resampler(int32_t channels, double from, double to) : channels_(channels), renderer_(channels) {
         AudioStreamBasicDescription in{};
         in.mFormatID = kAudioFormatLinearPCM;
@@ -155,6 +156,8 @@ struct Engine {
     std::atomic<int64_t> ahead{0};
     /// How many times a new plan has gone on from the one before it without a reset.
     std::atomic<int64_t> continued{0};
+    /// Levels under a hand, and what was put on (see LiveTrims).
+    LiveTrims live;
     std::atomic<float> peaks[kMaxChannels];
     std::atomic<uint64_t> renderedSinceAck{0};
 
@@ -189,6 +192,7 @@ struct Engine {
 void Engine::run() {
     pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     Renderer renderer(channels);
+    renderer.live = &live;
     std::vector<float> block(size_t(kBlock * channels));
     std::unique_ptr<Resampler> resampler;
     uint64_t workerSeq = 0;
@@ -219,6 +223,7 @@ void Engine::run() {
             } else {
                 if (!resampler || resamplerRate != parkRate) {
                     resampler = std::make_unique<Resampler>(channels, sampleRate, parkRate);
+                    resampler->setLive(&live);
                     resamplerRate = parkRate;
                     if (!resampler->ok()) resampler.reset();
                 }
@@ -410,6 +415,30 @@ bool jm_engine_is_playing(const jm_engine *engine) { return engine->e.playing.lo
 int64_t jm_engine_playhead(const jm_engine *engine) { return engine->e.playhead.load(std::memory_order_relaxed); }
 void jm_engine_set_gain(jm_engine *engine, float gain) { engine->e.gain.store(gain, std::memory_order_relaxed); }
 void jm_engine_set_ahead(jm_engine *engine, int32_t frames) { engine->e.ahead.store(std::max<int32_t>(0, frames), std::memory_order_relaxed); }
+void jm_engine_set_live_gain(jm_engine *engine, int32_t kind, int32_t index, float db, bool replaces, uint64_t plan_serial) {
+    const int32_t s = LiveTrims::slot(kind, index);
+    if (s < 0) return;
+    LiveTrims::Slot &slot = engine->e.live.slots[s];
+    slot.db.store(db, std::memory_order_relaxed);
+    slot.replaces.store(replaces, std::memory_order_relaxed);
+    slot.serial.store(plan_serial, std::memory_order_release);
+}
+int32_t jm_engine_take_applied(jm_engine *engine, int32_t *kinds, int32_t *indices, int64_t *frames, float *db, int32_t max) {
+    LiveTrims &live = engine->e.live;
+    int32_t n = 0;
+    uint32_t t = live.tail.load(std::memory_order_relaxed);
+    const uint32_t h = live.head.load(std::memory_order_acquire);
+    while (t != h && n < max) {
+        const LiveTrims::Applied &a = live.queue[t & (LiveTrims::kQueue - 1)];
+        kinds[n] = a.slot < LiveTrims::kTracks ? 0 : a.slot < LiveTrims::kTracks + LiveTrims::kBuses ? 1 : 2;
+        indices[n] = kinds[n] == 0 ? a.slot : kinds[n] == 1 ? a.slot - LiveTrims::kTracks : 0;
+        frames[n] = a.frame;
+        db[n] = a.db;
+        ++n; ++t;
+    }
+    live.tail.store(t, std::memory_order_release);
+    return n;
+}
 int64_t jm_engine_continued(const jm_engine *engine) { return engine->e.continued.load(std::memory_order_relaxed); }
 int64_t jm_engine_buffered(const jm_engine *engine) {
     return int64_t(engine->e.writePos.load(std::memory_order_acquire) - engine->e.readPos.load(std::memory_order_acquire));

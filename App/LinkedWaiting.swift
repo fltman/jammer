@@ -65,7 +65,7 @@ private struct LinkedWaitingList: View {
             }
             ForEach(found.broken, id: \.self) { file in
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(L10n.text("link.waiting.broken")).foregroundStyle(.orange)
+                    StateLine(kind: .error, text: L10n.text("link.waiting.broken"), font: .body)
                     Text(file.path).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
                 }
             }

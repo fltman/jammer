@@ -457,7 +457,7 @@ struct AssistantView: View {
                                     }
                                 }
                                 ForEach(Array((impact?.warnings ?? []).enumerated()), id: \.offset) { _, w in
-                                    Label(w, systemImage: "exclamationmark.triangle.fill").font(.caption.weight(.semibold)).foregroundStyle(.orange)
+                                    StateLine(kind: .warning, text: w, font: .caption.weight(.semibold))
                                 }
                                 HStack {
                                     if alarming {
@@ -471,7 +471,7 @@ struct AssistantView: View {
                             }
                             .padding(8)
                             .background(RoundedRectangle(cornerRadius: 6).fill(Color.white.opacity(0.06)))
-                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(alarming ? Color.orange : .clear, lineWidth: 1.5))
+                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(alarming ? StateKind.warning.color : .clear, lineWidth: 1.5))
                         }
                         if model.busy { ProgressView().controlSize(.small) }
                     }
@@ -534,7 +534,7 @@ struct AssistantView: View {
                         Text(c.tools == false ? "\(c.id) (no tool calls: can't be used)" : c.id).tag(c.id)
                     }
                 }
-                if let note = model.listNote { Text(note).font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true) }
+                if let note = model.listNote { StateLine(kind: .error, text: note) }
                 SecureField(Keychain.get(p.id) == nil ? "\(p.name) key" : "Key saved; type to replace", text: $key)
                 Text("\(p.note) The key stays in your Keychain. Every request asks first and shows the price.")
                     .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)

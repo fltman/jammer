@@ -15,6 +15,12 @@ struct MixerSheet: View {
     private var stereo: Bool { project.channels == 2 }
 
     var body: some View {
+        // In a scroll view: the window can be made lower and narrower than the mixer, and the mixer then scrolls in it.
+        ScrollView([.horizontal, .vertical]) { content }
+            .frame(minWidth: 560, idealWidth: 1300, maxWidth: .infinity, minHeight: 220, idealHeight: 560, maxHeight: .infinity)
+    }
+
+    private var content: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Mixer").font(.title2.bold())
             Text("Tracks go to the output, or to a bus that gathers several of them under one level. A document without buses, with every pan in the center, plays exactly as it always did.")
@@ -23,7 +29,7 @@ struct MixerSheet: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Tracks").font(.headline)
                     ForEach(project.tracks) { t in
-                        MixerStrip(name: t.name, kind: "track", gainDB: t.gainDB, pan: t.pan, muted: t.isMuted, output: t.output, stereo: stereo,
+                        MixerStrip(id: t.id, session: session, name: t.name, kind: "track", gainDB: t.gainDB, pan: t.pan, muted: t.isMuted, output: t.output, stereo: stereo,
                                    group: t.vca.flatMap { project.vca($0) }, groupAutomated: t.vca.map { !project.lanes(of: $0).isEmpty } ?? false,
                                    soloed: session.solo.contains(t.id), solo: { toggleSolo(t.id, $0) },
                                    frozen: t.frozen != nil, freeze: { toggleFreeze(t.id, t.name, $0) },
@@ -37,7 +43,7 @@ struct MixerSheet: View {
                     Text("Buses").font(.headline).padding(.top, 8)
                     if project.buses.isEmpty { Text("No buses yet.").foregroundStyle(.secondary) }
                     ForEach(project.buses) { b in
-                        MixerStrip(name: b.name, kind: "bus", gainDB: b.gainDB, pan: b.pan, muted: b.isMuted, output: b.output, stereo: stereo,
+                        MixerStrip(id: b.id, session: session, name: b.name, kind: "bus", gainDB: b.gainDB, pan: b.pan, muted: b.isMuted, output: b.output, stereo: stereo,
                                    group: b.vca.flatMap { project.vca($0) }, groupAutomated: b.vca.map { !project.lanes(of: $0).isEmpty } ?? false,
                                    soloed: session.solo.contains(b.id), solo: { toggleSolo(b.id, $0) },
                                    frozen: b.frozen != nil, freeze: { toggleFreeze(b.id, b.name, $0) },
@@ -111,7 +117,7 @@ struct MixerSheet: View {
         }
         .padding(20)
         // Wide enough for a whole strip: a row that doesn't fit pushes the sheet's content out of its left edge.
-        .frame(width: 1160)
+        .frame(width: 1260)
     }
 
     /// The height the strips need: three headings, a row per strip, and a line where a section is empty.
@@ -273,6 +279,8 @@ private struct MasterStrip: View {
 }
 
 private struct MixerStrip: View {
+    let id: UUID
+    let session: EditorSession
     let name: String
     let kind: String
     let gainDB: Double
@@ -351,7 +359,7 @@ private struct MixerStrip: View {
             }
             if let group {
                 Text(groupAutomated ? L10n.text("mixer.heard.groupAutomated", Self.heardText(own: gainDB, muted: muted, group: group)) : Self.heardText(own: gainDB, muted: muted, group: group))
-                    .font(.caption).foregroundStyle(group.isMuted ? Color.orange : Color.secondary)
+                    .font(.caption).foregroundStyle(Color.secondary)
                     .lineLimit(1).padding(.leading, 160).frame(height: 16)
                     .accessibilityIdentifier("mixer.strip.heard")
             }
@@ -385,12 +393,36 @@ private struct MixerStrip: View {
                 .help("Play this strip from a file made through its plugins, and let the plugins rest. Its level, pan, mute and sends still work.")
             Slider(value: $level, in: -60...12, onEditingChanged: { editing in
                 dragging = editing
-                if !editing, level != gainDB { change(["gainDB": .number((level * 10).rounded() / 10)]) }
+                if editing {
+                    // Taken while the sound plays in Touch or Latch: from where the level is now (the fader with its lane).
+                    if let start = session.rideStart(id) { level = min(12, max(-60, start)) }
+                    session.faderHeld(id, true, level: level)
+                } else if session.faderHeld(id, false, level: level) {
+                    if level != gainDB { change(["gainDB": .number((level * 10).rounded() / 10)]) }
+                } else {
+                    level = gainDB      // a ride that is written leaves the fader where it was
+                }
             })
+            .onChange(of: level) { if dragging { session.faderMoved(id, level: level) } }
             .frame(width: 150)
             .accessibilityLabel("Level of \(name)")
             .accessibilityValue(Text(Self.levelText(level)))
             Text(Self.levelText(level)).monospacedDigit().lineLimit(1).frame(width: 72, alignment: .trailing)
+            if Operations.automationOn {
+                // How the fader is taken while the sound plays. Not saved; Read again when the window leaves the front.
+                Picker(L10n.text("mixer.mode.label", name), selection: Binding(get: { session.writeMode(id) }, set: { session.writeModes[id] = $0 })) {
+                    Text(L10n.text("mixer.mode.read")).tag(EditorSession.WriteMode.read)
+                    Text(L10n.text("mixer.mode.touch")).tag(EditorSession.WriteMode.touch)
+                    Text(L10n.text("mixer.mode.latch")).tag(EditorSession.WriteMode.latch)
+                }
+                .labelsHidden()
+                .frame(width: 86)
+                .help(L10n.text("mixer.mode.help"))
+                .accessibilityIdentifier("mixer.strip.mode")
+                if session.writing.contains(id) {
+                    StateLine(kind: .progress, text: L10n.text("mixer.writing")).accessibilityIdentifier("mixer.strip.writing")
+                }
+            }
             if stereo {
                 Slider(value: $position, in: -1...1, onEditingChanged: { editing in
                     dragging = editing
@@ -404,7 +436,7 @@ private struct MixerStrip: View {
                 .accessibilityValue(Text(panAutomated ? L10n.text("mixer.pan.automated.help") : Self.panText(position)))
                 .accessibilityIdentifier("mixer.strip.pan")
                 Text(panAutomated ? L10n.text("mixer.pan.automated") : Self.panText(position)).font(.caption).lineLimit(1).frame(width: 72, alignment: .leading)
-                    .foregroundStyle(panAutomated ? .orange : .primary)
+                    .foregroundStyle(panAutomated ? .secondary : .primary)
                     .help(panAutomated ? L10n.text("mixer.pan.automated.help") : "")
             }
             Picker("Output of \(name)", selection: Binding(get: { output }, set: { change(["output": .string($0?.uuidString ?? "master")]) })) {

@@ -72,6 +72,22 @@ public final class AudioOutput {
     /// How far ahead of the playhead the engine renders, in seconds; 0 is the whole ring (about a third
     /// of a second). Short while a hand is on the mixer: a change is then heard that soon.
     public func setAhead(seconds: Double) { jm_engine_set_ahead(engine, Int32(max(0, seconds) * sampleRate)) }
+    /// A level under a hand while the sound plays (see jm_engine_set_live_gain): `db` on a strip of the plan
+    /// with that serial, in its lane's place (`replaces`) or on top of it. `serial` 0 takes it off.
+    public func setLiveGain(kind: Int32, index: Int32, db: Double, replaces: Bool, serial: UInt64) {
+        jm_engine_set_live_gain(engine, kind, index, Float(db), replaces, serial)
+    }
+    /// What the engine has put on since the last call: the strip, the frame of its timeline, the level in dB.
+    public func takeApplied() -> [(kind: Int32, index: Int32, frame: Int64, db: Double)] {
+        var out: [(Int32, Int32, Int64, Double)] = []
+        var kinds = [Int32](repeating: 0, count: 1_024), indices = kinds, frames = [Int64](repeating: 0, count: 1_024), db = [Float](repeating: 0, count: 1_024)
+        while true {
+            let n = Int(jm_engine_take_applied(engine, &kinds, &indices, &frames, &db, 1_024))
+            for i in 0..<n { out.append((kinds[i], indices[i], frames[i], Double(db[i]))) }
+            if n < 1_024 { break }
+        }
+        return out.map { (kind: $0.0, index: $0.1, frame: $0.2, db: $0.3) }
+    }
     /// Seconds rendered and not yet played: how long a change to the plan takes to be heard from now.
     public var buffered: Double { Double(jm_engine_buffered(engine)) / sampleRate }
     /// How many plans have gone on from the one before without a reset since the engine was made.

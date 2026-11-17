@@ -129,7 +129,7 @@ struct ModelsSettings: View {
                         Text("\(ByteCountFormatter.string(fromByteCount: row.bytes, countStyle: .file)) · \(row.licence)")
                             .font(.caption).foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
-                        if let e = model.errors[row.id] { Text(e).font(.caption).foregroundStyle(.orange) }
+                        if let e = model.errors[row.id] { StateLine(kind: .error, text: e) }
                     }
                     Spacer()
                     if let p = model.progress[row.id] {

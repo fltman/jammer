@@ -88,13 +88,15 @@ struct PluginsSheet: View {
                     Spacer()
                 }
                 ForEach(failed, id: \.name) { f in
-                    HStack {
+                    HStack(alignment: .firstTextBaseline, spacing: 5) {
+                        // Still listed from before: a warning. Not usable: an error. Told apart by the symbol.
+                        Image(systemName: (f.kept ? StateKind.warning : .error).symbol).foregroundStyle((f.kept ? StateKind.warning : .error).color).accessibilityHidden(true)
                         Text(f.reason == "blocked" ? "\(f.name) is switched off: it failed while it was in use."
                              : f.kept ? "\(f.name) is still listed from an earlier scan; the last scan of it didn't succeed (\(f.reason == "timed_out" ? "it didn't answer in time" : f.reason == "scan_failed" ? "the scanner got no answer" : f.reason)). It will be tried again."
                              : ["timed_out", "scan_failed"].contains(f.reason) ? (f.reason == "timed_out" ? "\(f.name) didn't answer in time when it was scanned. A plugin that keeps doing that is tried again only now and then, so it doesn't hold up every start; Scan for CLAP Plugins tries it at once."
                                                                                 : "\(f.name) couldn't be scanned (the scanner got no answer). It will be tried again at the next scan.")
                              : "\(f.name) couldn't be used (\(f.reason)).")
-                            .font(.callout).foregroundStyle(.orange)
+                            .font(.callout)
                         Spacer()
                         if f.reason == "blocked", let key = HostedPlugins.current().blocked.first(where: { k in HostedPlugins.current().entries.flatMap(\.plugins).contains { PluginCatalogue.key($0) == k && $0.name == f.name } }) {
                             Button("Switch On") {
@@ -141,7 +143,7 @@ struct PluginsSheet: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(insert.name)
                 if let f = session.inserts.failure(insert.id) {
-                    Label(f.localizedDescription, systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(.orange)
+                    StateLine(kind: .error, text: f.localizedDescription)
                 }
             }
             Spacer()
@@ -323,7 +325,7 @@ struct HostedPluginView: View {
                     }
                 }
             }
-            if let problem { Text(problem).foregroundStyle(.orange) }
+            if let problem { StateLine(kind: .error, text: problem, font: .body) }
         }
         .formStyle(.grouped)
         .frame(width: 440)

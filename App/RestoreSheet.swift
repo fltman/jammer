@@ -166,7 +166,7 @@ struct RestoreSheet: View {
                     }
                 }
             }
-            if let e = model.previewError { Text(e).font(.callout).foregroundStyle(.orange) }
+            if let e = model.previewError { StateLine(kind: .error, text: e, font: .callout) }
             HStack {
                 Button(model.previewing ? "Stop" : "Preview") {
                     if model.previewing { model.stopPreview() } else { Task { await model.preview() } }

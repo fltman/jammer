@@ -96,7 +96,8 @@ enum LinkJournalStore {
         // Said after the link's own words (a file that is gone says so first, and this then says the work is here).
         let requester = entry.record.requester
         let what = why ?? (entry.kept ? L10n.text("link.kept.status", requester) : L10n.text("link.recovered.status", requester))
-        session.status = session.lostLink == nil ? what : L10n.text("link.recovered.lost", what, session.status ?? "")
+        // A warning: the app that handed the file over doesn't have these changes yet.
+        session.say(session.lostLink == nil ? what : L10n.text("link.recovered.lost", what, session.status ?? ""), .warning)
         (doc.windowControllers.first as? EditorWindowController)?.showLink()
         return doc
     }

@@ -28,7 +28,7 @@ build() { # <label> <expected count of the reverb code: 0 or more>
   # Debug-only launch arguments must never be in a release.
   # (As whole strings: "agentFolders" is a field of the API and is meant to be there. That the search
   # finds them at all is shown on the Debug build, where each is counted once or more.)
-  for word in openaiEndpoint openaiTestKey linkAnyOpen agentFolder pluginFolder masterMeasureOffsetDB pluginsStrip silentOutput dataFolder registerAudioUnit assistantScript ai.noKeychain linkJournalFolder; do
+  for word in openaiEndpoint openaiTestKey linkAnyOpen agentFolder pluginFolder masterMeasureOffsetDB pluginsStrip silentOutput dataFolder registerAudioUnit assistantScript ai.noKeychain linkJournalFolder mixerWriteMode stepProbe; do
     c=$(grep -c -x "$word" "$keep/strings.txt")
     [[ $c == 0 ]] || { echo "   WRONG: \"$word\" is in the Release bundle ($c)"; failed=1; }
   done

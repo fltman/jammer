@@ -120,6 +120,10 @@ public final class RenderPlan: @unchecked Sendable {
     public let pointer: OpaquePointer
     public let channels: Int
     public let sampleRate: Double
+    /// Where each track and bus is in the plan (kind 0 a track, 1 a bus), for a level put on while it plays.
+    public internal(set) var strips: [UUID: (kind: Int32, index: Int32)] = [:]
+    /// Which plan this is among all that have been made: what a level under a hand is tied to.
+    public var serial: UInt64 { jm_plan_serial(pointer) }
 
     init(_ pointer: OpaquePointer, channels: Int, sampleRate: Double) {
         self.pointer = pointer
@@ -167,7 +171,9 @@ public enum PlanCompiler {
     /// dry mix (what the bounced effects and restoration work from).
     /// `masterMargin`: how far under its ceiling the master's limiter aims (dB); an export that measured
     /// its file over the ceiling renders again with more.
-    public static func compile(_ project: Project, pool: SourcePool, inserts: ChainProvider? = nil, masterMargin: Double = Mixer.masterMargins[0]) -> RenderPlan {
+    /// `ridable`: every track is worked as a strip of its own, so that a fader can be ridden on it while
+    /// the plan plays (the mixer window is in use). The sound is the same; only the playing plan asks for it.
+    public static func compile(_ project: Project, pool: SourcePool, inserts: ChainProvider? = nil, masterMargin: Double = Mixer.masterMargins[0], ridable: Bool = false) -> RenderPlan {
         // A frozen strip is played from its file (see `Project.played`); everything below sees that project.
         let project = project.played()
         let plan = jm_plan_create(Int32(project.channels), project.sampleRate)
@@ -200,6 +206,7 @@ public enum PlanCompiler {
             let fader = project.heard(gainDB: t.gainDB, muted: t.isMuted, vca: t.vca)
             let track = jm_plan_add_track(plan, Float(dbToGain(fader.gainDB)), fader.muted)
             trackIndex[t.id] = track
+            if ridable { jm_plan_set_track_live(plan, track, true) }
             if routed {
                 let pan = project.channels == 2 && project.panCurve(of: t.id) == nil ? Mixer.panGains(t.pan) : (1, 1)
                 jm_plan_set_track_route(plan, track, t.output.flatMap { busIndex[$0] } ?? -1, pan.0, pan.1)
@@ -257,7 +264,10 @@ public enum PlanCompiler {
             if let limiter { jm_chain_release(limiter) }
         }
         jm_plan_finalize(plan)
-        return RenderPlan(plan, channels: project.channels, sampleRate: project.sampleRate)
+        let made = RenderPlan(plan, channels: project.channels, sampleRate: project.sampleRate)
+        for (id, i) in trackIndex { made.strips[id] = (0, i) }
+        for (id, i) in busIndex { made.strips[id] = (1, i) }
+        return made
     }
 }
 

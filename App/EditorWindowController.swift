@@ -399,7 +399,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
     private var mixerWindow: MixerWindow?
     @objc func showMixer(_ sender: Any?) {
         if let w = mixerWindow { w.makeKeyAndOrderFront(nil); return }
-        let w = MixerWindow(contentRect: .zero, styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
+        let w = MixerWindow(contentRect: .zero, styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
         w.session = session
         w.isReleasedWhenClosed = false
         w.identifier = NSUserInterfaceItemIdentifier("mixer")
@@ -409,9 +409,13 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         w.nextResponder = self
         mixerWindow = w
         w.makeKeyAndOrderFront(nil)
-        // Under the document's window where the screen has room for it there, so that it doesn't lie over
-        // the timeline it is opened to be used beside; otherwise at the bottom of the screen.
-        if let main = window, let screen = main.screen?.visibleFrame {
+        // Where it was put last time, and as large (it can be made lower: the strips then scroll). The
+        // first time: under the document's window where the screen has room for it there, so that it
+        // doesn't lie over the timeline it is opened to be used beside; otherwise at the bottom of the screen.
+        if w.setFrameUsingName("JammerMixer") {
+            w.setFrameAutosaveName("JammerMixer")
+        } else if let main = window, let screen = main.screen?.visibleFrame {
+            w.setFrameAutosaveName("JammerMixer")
             w.layoutIfNeeded()
             let size = w.frame.size
             let top = main.frame.minY - 8 >= screen.minY + size.height ? main.frame.minY - 8 : screen.minY + size.height
@@ -745,7 +749,7 @@ struct StatusBar: View {
             }
             Spacer()
             if !session.missingSources.isEmpty {
-                Label("\(session.missingSources.count) missing file(s)", systemImage: "exclamationmark.triangle").foregroundStyle(.orange)
+                StateLine(kind: .warning, text: "\(session.missingSources.count) missing file(s)", font: .system(size: 11, design: .monospaced))
                     // Which, and, for one that Jämmer itself moved to the Trash, where to look.
                     .help(session.missingSources.map { s in MediaStorage.trashedHint(for: s.path, media: MediaStore.folder) ?? "\(s.name) can't be found at \(s.path)." }.joined(separator: "\n"))
             }

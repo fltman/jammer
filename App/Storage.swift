@@ -110,7 +110,7 @@ struct StorageView: View {
             Text("Effects, repairs and frozen tracks are made as new audio files in Jämmer's media folder; your own files are never changed. This shows what is there. Nothing is removed unless you choose it here, and what you choose goes to the Trash.")
                 .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             if report.register == "broken" {
-                Label("Jämmer's record of the files it has made can't be read, so nothing here can be chosen.", systemImage: "exclamationmark.triangle").foregroundStyle(.orange)
+                StateLine(kind: .error, text: "Jämmer's record of the files it has made can't be read, so nothing here can be chosen.", font: .body)
             }
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
