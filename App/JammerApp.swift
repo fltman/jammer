@@ -101,6 +101,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         // Saved plugin settings a project brings from elsewhere are asked about before they are loaded.
         PluginStateTrust.install()
+        // Linked documents with changes that were never saved back come back from Jämmer's own journal,
+        // whatever the system does with its saved windows (after it has done it).
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { LinkJournalStore.recover() }
         #if JAMMER_CLAP
         // CLAP: found by a scan in a helper process, run in helper processes. A build can leave it
         // out (Config/Features.xcconfig), and releases do until it has been tried in a signed build.
@@ -128,6 +131,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        LinkJournalStore.settle()
         UploadStore.shared.removeAll()
     }
 

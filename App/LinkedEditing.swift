@@ -105,6 +105,10 @@ extension EditorSession {
                                    scratch: FileManager.default.temporaryDirectory.appending(path: "jammer-saveback"))
                 }.value
                 document?.updateChangeCount(.changeCleared)
+                // Saved back: nothing waits in the journal but the clean document, and it is no longer "recovered".
+                recovered = false
+                LinkJournalStore.note(self)
+                (window?.windowController as? EditorWindowController)?.showLink()
                 status = "Saved \(link.fileName) for \(link.requester)."
                 done?(true)
             } catch {

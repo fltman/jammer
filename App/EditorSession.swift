@@ -134,13 +134,26 @@ final class EditorSession {
                 lostLink = nil
             }
             watchLink()
-            // The link is saved with the window, so a restart (or a crash) doesn't make this an ordinary document.
-            document?.invalidateRestorableState()
+            // The link is in Jämmer's own journal from now on, and the window is not among the system's
+            // saved windows: one way back after a restart or a crash, not two.
+            window?.isRestorable = false
+            noteInLinkJournal()
             (window?.windowController as? EditorWindowController)?.showLink()
         }
     }
     /// What is kept of the link across a restart.
     private(set) var linkRecord: LinkedFile.Record?
+    /// The document's entry in Jämmer's own journal of linked documents (LinkJournalStore).
+    var linkEntryID: UUID?
+    /// Brought back from the journal when Jämmer started, with changes that were never saved back. True
+    /// until they are saved back or given up; the window and `linkedFile.recovered` say so.
+    var recovered = false
+    /// The document as it now stands into the journal, once the step that is being made is done with
+    /// (so that "has changes" is what it is after the step).
+    func noteInLinkJournal() {
+        guard linkRecord != nil else { return }
+        DispatchQueue.main.async { [weak self] in if let self { LinkJournalStore.note(self) } }
+    }
     /// Set for a document that was linked and whose file can't be used any more (gone, read-only,
     /// another kind of file). It is still not an ordinary document: ⌘S says what is wrong instead of
     /// offering Save As.
@@ -185,6 +198,7 @@ final class EditorSession {
     /// After a restart: the link again, or the fact that it is lost.
     func restoreLink(_ record: LinkedFile.Record) {
         linkRecord = record
+        window?.isRestorable = false
         watchLink()
         switch LinkedFile.restore(record) {
         case .linked(let link):
@@ -398,6 +412,7 @@ final class EditorSession {
         syncInserts()
         loadPeaks()
         document?.invalidateRestorableState()
+        noteInLinkJournal()
         // Keep playing: restart where we are so the change is heard at once.
         if isPlaying { try? output.play(from: output.playhead) }
     }

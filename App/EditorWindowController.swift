@@ -75,12 +75,16 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
     /// A linked file says so under the title: "clip.wav · For Flimmer – ⌘S saves back".
     /// And solo says so there too, for as long as it is on, so that a mix with tracks missing is never a puzzle.
     func showLink() {
+        // A linked window is not among the system's saved windows: Jämmer's own journal is its way back.
+        if session.linkRecord != nil { window?.isRestorable = false }
         var parts: [String] = []
         if let lost = session.lostLink {
             parts.append("\(lost.name) · For \(lost.requester) – can't be saved back")
         } else if let link = session.linkedFile {
             parts.append("\(link.fileName) · For \(link.requester) – ⌘S saves back")
         }
+        // Said in the window for as long as it is so, not only once in the status line.
+        if session.recovered, session.wasLinked { parts.append(L10n.text("link.recovered.subtitle")) }
         if !session.solo.isEmpty { parts.append("Solo: \(session.soloNames.joined(separator: ", ")) (listening only; exports are not affected)") }
         window?.subtitle = parts.joined(separator: " · ")
     }

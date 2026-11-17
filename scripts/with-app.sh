@@ -30,7 +30,10 @@ quiet=(-silentOutput YES)
 # tried on one Mac and a script knows which it gets: JAMMER_LANG=sv for Swedish, English otherwise.
 # (Scripts find menus and texts by key: scripts/l10n.sh <key>.)
 language=(-AppleLanguages "(${JAMMER_LANG:-en})")
-env -u OPENROUTER_API_KEY ${=JAMMER_WRAP:-} "$app" $restore $quiet -ai.noKeychain YES $language ${=JAMMER_ARGS:-} >"${JAMMER_LOG:-/dev/null}" 2>&1 &
+# A test copy's journal of linked documents is its own and empty: what one check left waiting must not open
+# in the next. A check that is about the journal names the folder itself: JAMMER_LINK_JOURNAL=<absolute path>.
+journal="${JAMMER_LINK_JOURNAL:-$(mktemp -d "${TMPDIR:-/tmp/}jammer-linkjournal.XXXXXX")}"
+env -u OPENROUTER_API_KEY ${=JAMMER_WRAP:-} "$app" $restore $quiet -ai.noKeychain YES -linkJournalFolder "$journal" $language ${=JAMMER_ARGS:-} >"${JAMMER_LOG:-/dev/null}" 2>&1 &
 pid=$!
 # On the way out the test copy is stopped, and (unless the check is about restoration) the windows it
 # would bring back next time are forgotten: the debug copy's saved state, nothing of the real app's.

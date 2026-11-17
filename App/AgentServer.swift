@@ -256,6 +256,7 @@ enum AgentRouter {
             try only("GET")
             return .json(["app": AgentAPI.appInfo(version: appVersion, bundleID: Bundle.main.bundleIdentifier),
                           "api": AgentAPI.version, "port": Int(port), "pid": Int(ProcessInfo.processInfo.processIdentifier), "agentFolders": AgentFolders.urls.count,
+                          "linkJournal": ["entries": LinkJournalStore.counts.entries, "broken": LinkJournalStore.counts.broken],
                           "documents": AgentRegistry.shared.sessions.map(summary),
                           "jobs": JobRegistry.shared.running.map(\.json)])
         case let p where p.count == 4 && Array(p.prefix(3)) == ["api", "v1", "jobs"]:
@@ -615,11 +616,13 @@ enum AgentRouter {
 
     static func summary(_ s: EditorSession) -> [String: Any] {
         s.checkLink()
+        // Brought back from the journal with changes that were never saved back: said until they are, or are given up.
+        let recovered: [String: Any] = s.recovered ? ["recovered": true] : [:]
         return ["id": s.agentID, "name": s.name, "duration": seconds(s, s.project.length), "frames": s.project.length,
          "sampleRate": s.project.sampleRate, "channels": s.project.channels, "tracks": s.project.tracks.count,
          "edited": s.document?.isDocumentEdited ?? false, "playing": s.isPlaying, "underruns": s.underruns,
-         "linkedFile": s.linkedFile.map { ["name": $0.fileName, "format": $0.format.rawValue, "requester": $0.requester, "available": true] as [String: Any] } as Any?
-             ?? s.lostLink.map { ["name": $0.name, "requester": $0.requester, "available": false, "reason": $0.why] as [String: Any] } as Any? ?? NSNull(),
+         "linkedFile": s.linkedFile.map { ["name": $0.fileName, "format": $0.format.rawValue, "requester": $0.requester, "available": true].merging(recovered) { $1 } as [String: Any] } as Any?
+             ?? s.lostLink.map { ["name": $0.name, "requester": $0.requester, "available": false, "reason": $0.why].merging(recovered) { $1 } as [String: Any] } as Any? ?? NSNull(),
          // The document the user is looking at (restored windows can be many; SIBLINGS.md §1).
          "frontmost": s.window != nil && s.window === NSApp.orderedWindows.first { $0.isVisible && $0.windowController is EditorWindowController }]
     }

@@ -4,3 +4,4 @@
 App/L10n.swift
 App/UnknownPrice.swift
 App/AutomationLanesView.swift
+App/LinkJournalStore.swift

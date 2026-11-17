@@ -139,7 +139,11 @@ final class JammerDocument: NSDocument {
                         // The copy is saved through the ordinary panel; the document stays open until that is done.
                         session.saveJammerCopy()
                         answer(false)
-                    case .alertSecondButtonReturn: answer(true)
+                    case .alertSecondButtonReturn:
+                        // Given up, in so many words: the journal's entry goes with the changes.
+                        session.recovered = false
+                        LinkJournalStore.forget(session)
+                        answer(true)
                     default: answer(false)
                     }
                 }
@@ -147,8 +151,20 @@ final class JammerDocument: NSDocument {
         }
     }
 
+    // A linked document has no autosave of its own: its changes are in Jämmer's journal after every step,
+    // and an autosaved copy would be a second way back after a crash, without the last steps.
+    override func scheduleAutosaving() {
+        if MainActor.assumeIsolated({ session?.linkRecord != nil }) { return }
+        super.scheduleAutosaving()
+    }
+    override var hasUnautosavedChanges: Bool {
+        MainActor.assumeIsolated { session?.linkRecord != nil } ? false : super.hasUnautosavedChanges
+    }
+
     override func close() {
         if let session {
+            // Closed without changes waiting (saved back, or never changed): its entry in the journal goes.
+            if !isDocumentEdited { LinkJournalStore.forget(session) }
             session.stop()
             AgentRegistry.shared.unregister(session)
         }

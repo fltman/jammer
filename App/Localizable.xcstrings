@@ -565,6 +565,54 @@
         }
       }
     },
+    "link.kept.status": {
+      "comment": "Status line of a linked document whose changes the user chose to keep for later. %@ is the app that handed the file over.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kept from last time. The changes are not saved back to %@."
+          }
+        }
+      }
+    },
+    "link.recovered.lost": {
+      "comment": "A recovered document whose file can’t be used: what happened, then why it can’t be saved back. Two whole sentences.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ %2$@"
+          }
+        }
+      }
+    },
+    "link.recovered.status": {
+      "comment": "Status line of a linked document brought back from the journal after a crash. %@ is the app that handed the file over.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recovered after Jämmer ended unexpectedly. The changes are not saved back to %@."
+          }
+        }
+      }
+    },
+    "link.recovered.subtitle": {
+      "comment": "In the window’s subtitle while a recovered linked document has not been saved back.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recovered: not saved back yet"
+          }
+        }
+      }
+    },
     "menu.view.automation": {
       "comment": "View menu: the submenu that chooses which lanes are shown.",
       "extractionState": "manual",
