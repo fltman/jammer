@@ -17,6 +17,8 @@ final class FlimmerSendModel {
     var stage: Stage = .choose
     var lines: [String] = []
     var flimmerLines: [String] = []
+    /// How many of them, from the first, are warnings.
+    var flimmerWarnings = 0
     @ObservationIgnored private var prepared: FlimmerSend.Prepared?
     @ObservationIgnored private var client: FlimmerSend.Client?
     @ObservationIgnored private var task: Task<Void, Never>?
@@ -54,6 +56,7 @@ final class FlimmerSendModel {
                 prepared = p
                 lines = p.lines
                 flimmerLines = p.flimmerLines
+                flimmerWarnings = p.flimmerWarnings
                 stage = .ready
             } catch {
                 stage = .failed(error.localizedDescription)
@@ -66,7 +69,7 @@ final class FlimmerSendModel {
         stage = .sending
         task = Task {
             do {
-                flimmerLines = try await FlimmerSend.send(prepared, client: client)
+                (flimmerLines, flimmerWarnings) = try await FlimmerSend.sendCounting(prepared, client: client)
                 self.prepared = nil
                 stage = .done
                 session.status = "Sent to Flimmer. One undo step there takes it back."
@@ -110,8 +113,8 @@ struct FlimmerSendSheet: View {
                     VStack(alignment: .leading, spacing: 6) {
                         ForEach(Array(model.lines.enumerated()), id: \.offset) { _, l in Text(l).fixedSize(horizontal: false, vertical: true) }
                         if !model.flimmerLines.isEmpty { Divider() }
-                        ForEach(Array(model.flimmerLines.enumerated()), id: \.offset) { _, l in
-                            Text(l).foregroundStyle(l.hasPrefix("Warning") ? Color.orange : Theme.neonColor).fixedSize(horizontal: false, vertical: true)
+                        ForEach(Array(model.flimmerLines.enumerated()), id: \.offset) { i, l in
+                            Text(l).foregroundStyle(i < model.flimmerWarnings ? Color.orange : Theme.neonColor).fixedSize(horizontal: false, vertical: true)
                         }
                     }
                     .font(.callout)

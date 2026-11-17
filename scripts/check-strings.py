@@ -91,6 +91,29 @@ def check(root, require=None):
                     text = next((g for g in m.groups() if g), '')
                     if re.search(r'[A-Za-zÅÄÖåäö]{2}', re.sub(r'\\\([^)]*\)', '', text)):
                         faults.append(f'{path}:{n}: text for the user written in the code: "{text[:60]}"')
+    faults += text_logic(root)
+    return faults
+
+# Logic must not hang on a text the user sees (the-apps/SIBLINGS.md, "Språk"): a status line, a title, a
+# message or a default name is another language's words tomorrow, and a comparison with the English ones
+# then quietly stops being true. A line that compares with something that only looks like such a text
+# (a file format's own word, say) says so at its end: `// not a shown text: <what it is>`.
+SHOWN = r'(?:status|title|message|errorDescription|localizedDescription|label|stringValue|toolTip|line|l)'
+LOGIC = [re.compile(r'\b' + SHOWN + r'\??\s*(?:==|!=)\s*"([A-ZÅÄÖ][a-zåäö]+[^"]*)"'),
+         re.compile(r'\b' + SHOWN + r'\??\.(?:hasPrefix|hasSuffix|contains)\(\s*"([A-ZÅÄÖ][a-zåäö]+[^"]*)"')]
+def text_logic(root):
+    faults = []
+    for base in ('App', os.path.join('Packages', 'JammerKit', 'Sources')):
+        for folder, _, names in os.walk(os.path.join(root, base)):
+            for name in sorted(names):
+                if not name.endswith('.swift'): continue
+                full = os.path.join(folder, name)
+                for n, row in enumerate(open(full, encoding='utf-8'), 1):
+                    if 'not a shown text:' in row: continue
+                    code = row.split('//')[0]
+                    for rx in LOGIC:
+                        for m in rx.finditer(code):
+                            faults.append(f'{os.path.relpath(full, root)}:{n}: logic that hangs on a text the user sees: "{m.group(1)[:50]}"')
     return faults
 
 def self_test(root):
@@ -128,9 +151,11 @@ def self_test(root):
             'a count asked for as a text': (None, None, 'let e = L10n.text("a.count", 2)\n'),
             'user text in a file listed as moved': (None, 'App/Code.swift\n', 'Text("Hello there")\n'),
             'an alert text in a file listed as moved': (None, 'App/Code.swift\n', 'alert.messageText = "Send it?"\n'),
+            'a colour chosen by a line\'s first word': (None, None, 'let c = line.hasPrefix("Warning") ? red : green\n'),
+            'a decision made on the status line\'s words': (None, None, 'if session.status == "Uploading the files" { ask() }\n'),
         }
         bad = []
-        clean = run(None, 'App/Code.swift\n', 'Text(L10n.text("a.one", x)); Text("\\(n)")\n')
+        clean = run(None, 'App/Code.swift\n', 'Text(L10n.text("a.one", x)); Text("\\(n)")\nif title == "Fcpxml" { } // not a shown text: the format\'s own word\nif op.name == "limit" { }\n')
         if clean: bad.append('the clean copy was faulted: ' + '; '.join(clean))
         for name, (mutate, moved, extra) in plants.items():
             if not run(mutate, moved, extra): bad.append('not caught: ' + name)

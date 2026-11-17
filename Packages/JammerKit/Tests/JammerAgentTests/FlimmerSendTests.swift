@@ -305,6 +305,7 @@ struct FlimmerSendTests {
         let items = prepared.body["items"]!.any as! [[String: Any]]
         #expect((items[0]["position"] as? [String: Double]) == ["clipRelativeOffset": 0.75])
         #expect(prepared.flimmerLines.first == "Warning: berattare would overlap the next clip on its track by 0.75 s.", "\(prepared.flimmerLines)")
+        #expect(prepared.flimmerWarnings == 1)
     }
 
     @Test("What v1 doesn't carry out is listed; new sound becomes a new clip; a ripple cut is said")

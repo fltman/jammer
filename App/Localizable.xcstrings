@@ -13,6 +13,18 @@
         }
       }
     },
+    "automation.ax.group.strips": {
+      "comment": "VoiceOver: the group of lane rows under the tracks.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automation of buses, groups and the master"
+          }
+        }
+      }
+    },
     "automation.ax.inView": {
       "comment": "How many of a lane’s points are in the part of the timeline that is shown.",
       "extractionState": "manual",
@@ -349,6 +361,18 @@
         }
       }
     },
+    "automation.row.master": {
+      "comment": "The master’s row among the automation rows.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Master"
+          }
+        }
+      }
+    },
     "automation.value.centre": {
       "comment": "A pan in the middle.",
       "extractionState": "manual",
@@ -477,6 +501,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pan Lanes"
+          }
+        }
+      }
+    },
+    "menu.view.automation.strips": {
+      "comment": "View › Automation: opens the rows under the tracks.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Buses, Groups and Master"
           }
         }
       }

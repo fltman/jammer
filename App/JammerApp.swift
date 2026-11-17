@@ -300,6 +300,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             i.representedObject = kind
             return i
         })
+        automationMenu.submenu?.addItem(.separator())
+        automationMenu.submenu?.addItem(item(L10n.text("menu.view.automation.strips"), #selector(EditorWindowController.toggleStripLanes(_:))))
         automationMenu.isHidden = !Operations.automation
         main.addItem(submenu("View", [
             item("Show History", #selector(EditorWindowController.showHistory(_:)), "y", [.command, .option]),

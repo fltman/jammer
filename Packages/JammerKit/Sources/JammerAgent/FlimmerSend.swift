@@ -365,6 +365,9 @@ public enum FlimmerSend {
         public var uploads: [String]
         public var lines: [String]
         public var flimmerLines: [String]
+        /// How many of `flimmerLines`, from the first, are warnings. (Said as a number: a window must not
+        /// tell a warning by its words, which are another language's tomorrow.)
+        public var flimmerWarnings = 0
         public var body: [String: J]
     }
 
@@ -422,6 +425,7 @@ public enum FlimmerSend {
             return Prepared(mode: mode, plan: plan, items: items, uploads: uploads,
                             lines: lines(project, plan: plan, mode: mode, items: items, resampledTo: rate == project.sampleRate ? nil : rate) + notes,
                             flimmerLines: lines(answer: answer, items: items),
+                            flimmerWarnings: warnings(answer: answer),
                             body: body(project, plan: plan, mode: mode, items: items, uploads: uploads, dryRun: false))
         } catch {
             for id in uploads { await client.remove(upload: id) }
@@ -431,8 +435,15 @@ public enum FlimmerSend {
 
     /// For real, after the user has seen the dry run. One undo step in Flimmer.
     public static func send(_ prepared: Prepared, client: Client) async throws -> [String] {
-        lines(answer: try await client.plan(prepared.body, items: prepared.items), items: prepared.items)
+        try await sendCounting(prepared, client: client).lines
     }
+    /// The same, with how many of the lines (from the first) are warnings.
+    public static func sendCounting(_ prepared: Prepared, client: Client) async throws -> (lines: [String], warnings: Int) {
+        let answer = try await client.plan(prepared.body, items: prepared.items)
+        return (lines(answer: answer, items: prepared.items), warnings(answer: answer))
+    }
+    /// The warnings in Flimmer's answer: its overlaps, which `lines(answer:items:)` puts first.
+    public static func warnings(answer: [String: Any]) -> Int { ((answer["overlaps"] as? [[String: Any]]) ?? []).count }
 
     /// The user closed the sheet without sending.
     public static func cancel(_ prepared: Prepared, client: Client) async {

@@ -20,9 +20,19 @@ final class AutomationLanesView: NSView {
     static let maxPointElements = 200
     static let maxDots = 400
 
+    /// What the view's rows are: the tracks (over the waveform, under the timeline's own layer), or the
+    /// strips that have no waveform (buses, VCA groups and the master, in thin rows of their own under the tracks).
+    enum Rows { case tracks, strips }
+    struct Row { let id: UUID; let name: String; let clips: [Clip] }
+
     let session: EditorSession
     let viewport: Viewport
-    /// Which kind of lane is shown, on every track that has one. nil: none.
+    let rows: Rows
+    /// Whether this view's focused lane is the one the keys work on (one of the two views is).
+    var isActive = true { didSet { if !isActive { selected = nil; drag = nil; hover = nil }; needsDisplay = true; elements = nil } }
+    /// Called when a click made this view the one worked in.
+    var onActivate: () -> Void = {}
+    /// Which kind of lane is shown, on every row that has one. nil: none.
     var shown: AutomationLane.Param? { didSet { selected = nil; drag = nil; pending = nil; hover = nil; needsDisplay = true; elements = nil } }
     /// The track whose lane is worked on, and the point of its own lane that is selected.
     private(set) var focus = 0
@@ -34,19 +44,45 @@ final class AutomationLanesView: NSView {
     /// The label at the pointer: where, and what it says.
     private var hover: (at: NSPoint, text: String)?
 
-    init(session: EditorSession, viewport: Viewport) {
+    init(session: EditorSession, viewport: Viewport, rows: Rows = .tracks) {
         self.session = session
         self.viewport = viewport
+        self.rows = rows
         super.init(frame: .zero)
+        isActive = rows == .tracks
     }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
 
     override var isFlipped: Bool { true }
-    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    /// Over the tracks the timeline's own layer takes the clicks and offers them here; the strips' rows take their own.
+    override func hitTest(_ point: NSPoint) -> NSView? { rows == .tracks ? nil : super.hitTest(point) }
+    override func mouseDown(with event: NSEvent) {
+        onActivate()
+        let p = convert(event.locationInWindow, from: nil)
+        if mouseDown(event, at: p) { return }
+        // Elsewhere in a row: the playhead, as in the timeline.
+        session.seek(Frame(max(0, min(Double(project.length), viewport.frame(atX: p.x))).rounded()))
+    }
+    override func mouseDragged(with event: NSEvent) { _ = mouseDragged(event, at: convert(event.locationInWindow, from: nil)) }
+    override func mouseUp(with event: NSEvent) { _ = mouseUp(event, at: convert(event.locationInWindow, from: nil)) }
+
+    /// The rows, top to bottom. Among the strips only those that can have a lane of the shown kind:
+    /// a VCA group has a level and a mute, the master a level.
+    var rowList: [Row] {
+        let p = session.project
+        if rows == .tracks { return p.tracks.map { Row(id: $0.id, name: $0.name, clips: $0.clips) } }
+        guard let shown else { return [] }
+        var out = p.buses.map { Row(id: $0.id, name: $0.name, clips: []) }
+        if shown == .gain || shown == .mute { out += p.vcas.map { Row(id: $0.id, name: $0.name, clips: []) } }
+        if shown == .gain { out.append(Row(id: Master.id, name: L10n.text("automation.row.master"), clips: [])) }
+        return out
+    }
+    private var topInset: CGFloat { rows == .tracks ? TimelineView.rulerHeight : 0 }
+    private var margin: CGFloat { rows == .tracks ? 6 : 3 }
 
     func invalidate() {
         if drag == nil { pending = nil }
-        focus = min(focus, max(0, project.tracks.count - 1))
+        focus = min(focus, max(0, rowList.count - 1))
         if let s = selected, s >= (ownLane?.points.count ?? 0) { selected = nil }
         needsDisplay = true
         elements = nil
@@ -59,7 +95,7 @@ final class AutomationLanesView: NSView {
         try? p.setAutomation(strip: lane.strip, param: lane.param, points: lane.points)
         return p
     }
-    private var focusedTrack: Track? { project.tracks[safe: focus] }
+    private var focusedTrack: Row? { rowList[safe: focus] }
     /// The focused track's own lane of the shown kind, as stored (or as dragged).
     private var ownLane: AutomationLane? {
         guard let shown, let t = focusedTrack else { return nil }
@@ -77,10 +113,10 @@ final class AutomationLanesView: NSView {
     }
 
     private var project: Project { session.project }
-    private var laneHeight: CGFloat { (bounds.height - TimelineView.rulerHeight) / CGFloat(max(1, project.tracks.count)) }
+    private var laneHeight: CGFloat { (bounds.height - topInset) / CGFloat(max(1, rowList.count)) }
     /// The part of a track's row the values are drawn in: its whole height but a margin.
     private func area(_ track: Int) -> NSRect {
-        NSRect(x: 0, y: TimelineView.rulerHeight + CGFloat(track) * laneHeight + 6, width: bounds.width, height: max(1, laneHeight - 12))
+        NSRect(x: 0, y: topInset + CGFloat(track) * laneHeight + margin, width: bounds.width, height: max(1, laneHeight - 2 * margin))
     }
     private func y(_ value: Double, _ param: AutomationLane.Param, in r: NSRect) -> CGFloat {
         r.maxY - CGFloat(Automation.height(of: value, param)) * r.height
@@ -88,7 +124,7 @@ final class AutomationLanesView: NSView {
     private var lanes: [(track: Int, lane: ShownLane)] {
         guard let shown else { return [] }
         let p = shownProject
-        return p.tracks.enumerated().compactMap { i, t in p.shownLane(shown, of: t.id).map { (i, $0) } }
+        return rowList.enumerated().compactMap { i, t in p.shownLane(shown, of: t.id).map { (i, $0) } }
     }
     private var view: ClosedRange<Frame> {
         let a = Frame(viewport.frame(atX: 0).rounded(.down)), b = Frame(viewport.frame(atX: bounds.width).rounded(.up))
@@ -131,12 +167,25 @@ final class AutomationLanesView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         guard let shown else { return }
-        let all = lanes
-        // The focused track: a bar at its left edge, and where a first point would go when it has no lane.
-        if project.tracks.indices.contains(focus) {
+        let all = lanes, list = rowList
+        if rows == .strips {
+            // Rows of their own: a ground, a line between them, each strip's name, and the playhead carried on down.
+            Theme.lane.setFill()
+            bounds.fill()
+            for (i, row) in list.enumerated() {
+                let top = CGFloat(i) * laneHeight
+                NSColor(white: 1, alpha: 0.12).setFill()
+                NSRect(x: 0, y: top, width: bounds.width, height: 1).fill()
+                (row.name as NSString).draw(at: NSPoint(x: 8, y: top + 3), withAttributes: [.font: Self.nameFont, .foregroundColor: NSColor.white])
+            }
+            Theme.playhead.setFill()
+            NSRect(x: viewport.x(of: Double(session.playhead)), y: 0, width: 1.5, height: bounds.height).fill()
+        }
+        // The focused row: a bar at its left edge, and where a first point would go when it has no lane.
+        if isActive, list.indices.contains(focus) {
             let r = area(focus)
             NSColor.systemOrange.setFill()
-            NSRect(x: 0, y: r.minY - 6, width: 3, height: r.height + 12).fill()
+            NSRect(x: 0, y: r.minY - margin, width: 3, height: r.height + 2 * margin).fill()
             if !all.contains(where: { $0.track == focus }) {
                 NSColor.systemOrange.withAlphaComponent(0.35).setFill()
                 NSRect(x: 0, y: y(shown == .mute ? 1 : 0, shown, in: r).rounded(), width: bounds.width, height: 1).fill()
@@ -145,7 +194,7 @@ final class AutomationLanesView: NSView {
         }
         for (i, lane) in all {
             let r = area(i)
-            let focused = i == focus
+            let focused = isActive && i == focus
             let colour = lane.plays ? NSColor.systemOrange : NSColor(white: 0.7, alpha: 1)
             // Where the fader alone would be (0 dB added), or the centre.
             if lane.param != .mute {
@@ -216,13 +265,18 @@ final class AutomationLanesView: NSView {
             }
             drawCaption(caption(lane), track: i, colour: colour)
         }
-        if let hover {
+        // The label: at the pointer, or else at the selected point (so a point stepped to with the keys says what it is worth).
+        var said = hover
+        if said == nil, isActive, let k = selected, let own = ownLane, own.points.indices.contains(k) {
+            said = (place(own.points[k], shown, in: area(focus)), label(own, frame: own.points[k].frame, value: own.points[k].value))
+        }
+        if let hover = said {
             let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .medium), .foregroundColor: NSColor.white]
             let text = hover.text as NSString
             let size = text.size(withAttributes: attrs)
             var at = NSPoint(x: hover.at.x + 12, y: hover.at.y - size.height - 10)
             at.x = min(at.x, bounds.width - size.width - 10)
-            at.y = max(TimelineView.rulerHeight + 2, at.y)
+            at.y = max(topInset + 2, at.y)
             NSColor(white: 0, alpha: 0.85).setFill()
             NSBezierPath(roundedRect: NSRect(x: at.x - 5, y: at.y - 2, width: size.width + 10, height: size.height + 4), xRadius: 4, yRadius: 4).fill()
             text.draw(at: at, withAttributes: attrs)
@@ -232,11 +286,11 @@ final class AutomationLanesView: NSView {
     static let nameFont = NSFont.systemFont(ofSize: 11, weight: .semibold)
     /// The caption has a place of its own: on a plate, on the line of the track's name and after it.
     private func drawCaption(_ text: String, track: Int, colour: NSColor) {
-        let top = TimelineView.rulerHeight + CGFloat(track) * laneHeight
-        let name = (project.tracks[track].name as NSString).size(withAttributes: [.font: Self.nameFont]).width
+        let top = topInset + CGFloat(track) * laneHeight
+        let name = (rowList[track].name as NSString).size(withAttributes: [.font: Self.nameFont]).width
         let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 10, weight: .medium), .foregroundColor: colour]
         let size = (text as NSString).size(withAttributes: attrs)
-        let at = NSPoint(x: 8 + name + 14, y: top + 23)
+        let at = NSPoint(x: 8 + name + 14, y: top + (rows == .tracks ? 23 : 4))
         NSColor(white: 0, alpha: 0.8).setFill()
         NSBezierPath(roundedRect: NSRect(x: at.x - 5, y: at.y - 2, width: size.width + 10, height: size.height + 4), xRadius: 4, yRadius: 4).fill()
         (text as NSString).draw(at: at, withAttributes: attrs)
@@ -244,13 +298,21 @@ final class AutomationLanesView: NSView {
 
     // MARK: By hand
 
+    /// Takes the focus from the other view: on its first row, or its last.
+    func enter(atEnd: Bool) {
+        isActive = true
+        focus = atEnd ? max(0, rowList.count - 1) : 0
+        if let row = rowList[safe: focus] { session.status = L10n.text("automation.focus.status", row.name) }
+    }
+
     private func track(atY py: CGFloat) -> Int? {
-        guard py >= TimelineView.rulerHeight, !project.tracks.isEmpty else { return nil }
-        return min(project.tracks.count - 1, Int((py - TimelineView.rulerHeight) / laneHeight))
+        let n = rowList.count
+        guard py >= topInset, n > 0 else { return nil }
+        return min(n - 1, Int((py - topInset) / laneHeight))
     }
     private func send(_ lane: AutomationLane, saying: String? = nil) {
         pending = lane
-        let name = lane.strip.uuidString, rate = project.sampleRate
+        let name = lane.strip == Master.id ? "master" : lane.strip.uuidString, rate = project.sampleRate
         if lane.points.isEmpty {
             pending = nil
             session.perform("clear_automation", ["strip": .string(name), "param": .string(lane.param.rawValue)], saying: saying)
@@ -280,7 +342,8 @@ final class AutomationLanesView: NSView {
     /// What is said at the pointer: the time and the lane's value there, and for a level what is heard with the group's lane and the fader.
     private func label(_ lane: AutomationLane, frame: Frame, value: Double) -> String {
         let time = formatTime(Double(frame) / project.sampleRate)
-        if lane.param == .gain, let t = focusedTrack, let shownLane = shownProject.shownLane(.gain, of: t.id), shownLane.plays {
+        // (A group isn't heard itself: its lane is heard in its members' lines, and said there.)
+        if lane.param == .gain, let t = focusedTrack, project.vca(t.id) == nil, let shownLane = shownProject.shownLane(.gain, of: t.id), shownLane.plays {
             return L10n.text("automation.label.heard", time, Self.valueText(value, .gain), Self.valueText(shownLane.value(at: frame) + shownLane.onTopDB, .gain))
         }
         return L10n.text("automation.label", time, Self.valueText(value, lane.param))
@@ -299,6 +362,7 @@ final class AutomationLanesView: NSView {
     /// A click in the timeline, offered here first. True: it was about a point, and the timeline leaves it alone.
     func mouseDown(_ event: NSEvent, at p: NSPoint) -> Bool {
         guard let shown, let t = track(atY: p.y) else { return false }
+        if !isActive { onActivate() }
         if t != focus { focus = t; selected = nil; needsDisplay = true; elements = nil }
         let r = area(t)
         if let own = ownLane, let k = own.points.indices.min(by: { hypot(place(own.points[$0], shown, in: r).x - p.x, place(own.points[$0], shown, in: r).y - p.y)
@@ -384,14 +448,18 @@ final class AutomationLanesView: NSView {
 
     /// A key in the timeline, offered here first. True: it was about a lane or a point.
     func key(_ event: NSEvent) -> Bool {
-        guard let shown, !project.tracks.isEmpty else { return false }
+        let list = rowList
+        guard let shown, !list.isEmpty else { return false }
         let flags = event.modifierFlags.intersection([.option, .shift, .command, .control])
         let rate = project.sampleRate
         switch (event.keyCode, flags) {
         case (125, [.option]), (126, [.option]):     // ⌥↓ ⌥↑: the lane of the next or the previous track
-            focus = min(project.tracks.count - 1, max(0, focus + (event.keyCode == 125 ? 1 : -1)))
+            // Past the last or the first row: not this view's (the timeline tries the other one).
+            let next = focus + (event.keyCode == 125 ? 1 : -1)
+            guard list.indices.contains(next) else { return false }
+            focus = next
             selected = nil
-            session.status = L10n.text("automation.focus.status", project.tracks[focus].name)
+            session.status = L10n.text("automation.focus.status", list[focus].name)
             needsDisplay = true
             elements = nil
             return true
@@ -437,7 +505,7 @@ final class AutomationLanesView: NSView {
             less.points.remove(at: k)
             // The point before it is selected next (or the first), so the keys alone can go on to an empty lane.
             selected = less.points.isEmpty ? nil : max(0, k - 1)
-            let name = project.tracks[focus].name
+            let name = list[focus].name
             let gone: String
             switch shown {
             case .gain, .send: gone = L10n.text("automation.removed.gain", name)
@@ -461,8 +529,8 @@ final class AutomationLanesView: NSView {
 
     override func isAccessibilityElement() -> Bool { shown != nil }
     override func accessibilityRole() -> NSAccessibility.Role? { .group }
-    override func accessibilityLabel() -> String? { L10n.text("automation.ax.group") }
-    override func accessibilityIdentifier() -> String { "timeline.automation" }
+    override func accessibilityLabel() -> String? { rows == .tracks ? L10n.text("automation.ax.group") : L10n.text("automation.ax.group.strips") }
+    override func accessibilityIdentifier() -> String { rows == .tracks ? "timeline.automation" : "timeline.automation.strips" }
     override func accessibilityChildren() -> [Any]? {
         let key = [Double(session.version), viewport.start, viewport.framesPerPoint, Double(bounds.width), Double(bounds.height), Double(focus), Double(selected ?? -1)]
         if let elements, key == elementsFor { return elements }
@@ -471,14 +539,14 @@ final class AutomationLanesView: NSView {
         let made: [NSAccessibilityElement] = lanes.map { i, lane in
             let r = area(i)
             // The focused track's own points are the ones that can be moved; they are what is named there.
-            let own = i == focus ? ownLane : nil
+            let own = isActive && i == focus ? ownLane : nil
             let named = own.map { o in var l = lane; l.points = o.points; return l } ?? lane
             let inView = named.points(in: view, limit: Self.maxPointElements)
             let e = LaneElement()
             e.setAccessibilityParent(self)
             e.setAccessibilityRole(.list)
-            e.setAccessibilityIdentifier("timeline.automation.lane.\(i)")
-            let name = project.tracks[i].name
+            e.setAccessibilityIdentifier(rows == .tracks ? "timeline.automation.lane.\(i)" : "timeline.automation.strip.\(i)")
+            let name = rowList[i].name
             switch lane.param {
             case .gain, .send: e.setAccessibilityLabel(L10n.text("automation.ax.lane.gain", name))
             case .pan: e.setAccessibilityLabel(L10n.text("automation.ax.lane.pan", name))

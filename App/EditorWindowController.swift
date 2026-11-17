@@ -272,6 +272,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         timeline.shownAutomation = ((sender as? NSMenuItem)?.representedObject as? String).flatMap(AutomationLane.Param.init(rawValue:))
     }
 
+    @objc func toggleStripLanes(_ sender: Any?) { timeline.showsStripLanes.toggle() }
+
     @objc func toggleSpectrogram(_ sender: Any?) {
         timeline.showsSpectrogram.toggle()
     }
@@ -614,6 +616,10 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
             item.state = (item.representedObject as? String) == timeline.shownAutomation?.rawValue ? .on : .off
             return true
         }
+        if item.action == #selector(toggleStripLanes(_:)) {
+            item.state = timeline.showsStripLanes ? .on : .off
+            return timeline.shownAutomation != nil
+        }
         if item.action == #selector(toggleSpectrogram(_:)) {
             item.title = timeline.showsSpectrogram ? "Show Waveform" : "Show Spectrogram"
             return true
@@ -703,14 +709,15 @@ struct StatusBar: View {
     var body: some View {
         HStack(spacing: 16) {
             if let sel = session.selection {
-                Text("Selection \(formatTime(session.project.seconds(sel.lowerBound)))–\(formatTime(session.project.seconds(sel.upperBound))) (\(formatTime(session.project.seconds(Frame(sel.count)))))")
+                Text("Selection \(formatTime(session.project.seconds(sel.lowerBound)))–\(formatTime(session.project.seconds(sel.upperBound))) (\(formatTime(session.project.seconds(Frame(sel.count)))))").lineLimit(1)
             } else {
                 Text("No selection")
             }
             if let job = JobRegistry.shared.running.first(where: { $0.documentID == session.agentID }) {
                 Text("\(job.kind == "transcribe" ? "Transcribing" : "Repairing")… \(Int(job.progress * 100)) %")
                     .foregroundStyle(Theme.neonColor)
-            } else if let status = session.status { Text(status).foregroundStyle(Theme.neonColor).lineLimit(1) }
+            // What was just done is said whole; the selection's text gives way to it first.
+            } else if let status = session.status { Text(status).foregroundStyle(Theme.neonColor).lineLimit(1).layoutPriority(2).help(status) }
             Spacer()
             if !session.missingSources.isEmpty {
                 Label("\(session.missingSources.count) missing file(s)", systemImage: "exclamationmark.triangle").foregroundStyle(.orange)

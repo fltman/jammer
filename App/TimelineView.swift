@@ -27,10 +27,36 @@ final class TimelineView: NSView {
     private let overlay: TimelineOverlay
     private let spectrogram: SpectrogramLayerView
     let automation: AutomationLanesView
+    /// The lanes of the strips that have no waveform (buses, VCA groups, the master), in thin rows under the tracks.
+    let stripLanes: AutomationLanesView
+    private var stripHeight: NSLayoutConstraint!
     /// Which kind of automation lane is drawn over the tracks (View › Automation). nil: none.
     var shownAutomation: AutomationLane.Param? {
         get { automation.shown }
-        set { automation.shown = newValue }
+        set { automation.shown = newValue; stripLanes.shown = newValue; sizeStripLanes() }
+    }
+    /// Whether the rows for buses, groups and the master are open (View › Automation).
+    var showsStripLanes = false { didSet { sizeStripLanes() } }
+    /// The rows take height from the tracks only while they are open and a kind of lane is shown: 44 points a row, at most half the timeline.
+    private func sizeStripLanes() {
+        let n = showsStripLanes && shownAutomation != nil ? stripLanes.rowList.count : 0
+        let h = min(CGFloat(n) * 44, bounds.height * 0.5)
+        if stripHeight.constant != h { stripHeight.constant = h }
+        if !showsStripLanes || n == 0, stripLanes.isActive { stripLanes.isActive = false; automation.isActive = true }
+    }
+    /// A key, offered to the lane view that is worked in; ⌥↓ and ⌥↑ past its last or first row go on into the other.
+    func automationKey(_ event: NSEvent) -> Bool {
+        guard shownAutomation != nil else { return false }
+        let here = stripLanes.isActive ? stripLanes : automation, there = stripLanes.isActive ? automation : stripLanes
+        if here.key(event) { return true }
+        let flags = event.modifierFlags.intersection([.option, .shift, .command, .control])
+        guard flags == [.option], event.keyCode == 125 || event.keyCode == 126 else { return false }
+        let down = event.keyCode == 125
+        // Down from the tracks into the rows below, up from them into the tracks; nowhere else to go.
+        guard down == (here === automation), stripHeight.constant > 0, !there.rowList.isEmpty else { NSSound.beep(); return true }
+        here.isActive = false
+        there.enter(atEnd: !down)
+        return true
     }
     var showsSpectrogram: Bool {
         get { !spectrogram.isHidden }
@@ -44,16 +70,29 @@ final class TimelineView: NSView {
         overlay = TimelineOverlay(session: session, viewport: viewport)
         spectrogram = SpectrogramLayerView(session: session, viewport: viewport)
         automation = AutomationLanesView(session: session, viewport: viewport)
+        stripLanes = AutomationLanesView(session: session, viewport: viewport, rows: .strips)
         super.init(frame: .zero)
         wantsLayer = true
         spectrogram.isHidden = true
+        stripLanes.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(stripLanes)
+        stripHeight = stripLanes.heightAnchor.constraint(equalToConstant: 0)
+        NSLayoutConstraint.activate([stripLanes.leadingAnchor.constraint(equalTo: leadingAnchor), stripLanes.trailingAnchor.constraint(equalTo: trailingAnchor),
+                                     stripLanes.bottomAnchor.constraint(equalTo: bottomAnchor), stripHeight])
         for v in [metal, spectrogram, automation, overlay] as [NSView] {
             v.translatesAutoresizingMaskIntoConstraints = false
             addSubview(v)
             NSLayoutConstraint.activate([
                 v.leadingAnchor.constraint(equalTo: leadingAnchor), v.trailingAnchor.constraint(equalTo: trailingAnchor),
-                v.topAnchor.constraint(equalTo: topAnchor), v.bottomAnchor.constraint(equalTo: bottomAnchor),
+                v.topAnchor.constraint(equalTo: topAnchor), v.bottomAnchor.constraint(equalTo: stripLanes.topAnchor),
             ])
+        }
+        automation.onActivate = { [weak self] in self?.stripLanes.isActive = false; self?.automation.isActive = true }
+        stripLanes.onActivate = { [weak self] in
+            guard let self else { return }
+            automation.isActive = false
+            stripLanes.isActive = true
+            window?.makeFirstResponder(overlay)   // the keys stay the timeline's, which offers them to the lanes
         }
         overlay.onChange = { [weak self] in self?.refresh(waveform: true) }
         observe()
@@ -120,6 +159,8 @@ final class TimelineView: NSView {
         if waveform { metal.invalidate(); spectrogram.refresh() }
         overlay.needsDisplay = true
         automation.invalidate()
+        stripLanes.invalidate()
+        sizeStripLanes()
     }
 
     private func observe() {
@@ -627,7 +668,7 @@ final class TimelineOverlay: NSView {
     // MARK: Keys and edit commands
 
     override func keyDown(with event: NSEvent) {
-        if timeline?.automation.key(event) == true { return }
+        if timeline?.automationKey(event) == true { return }
         switch event.keyCode {
         case 49: session.togglePlay() // space
         case 36: session.seek(0) // return
