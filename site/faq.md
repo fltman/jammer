@@ -68,7 +68,7 @@ Yes. Every control has a name, the timeline reads out the playhead, the selectio
 
 ## Can I stop the splash from appearing?
 
-Untick "Show at launch" on the splash. Help › Agent Access shows it again.
+Untick "Show at launch" on the splash. **Help › Agent Access…** shows it again.
 
 ## How do I uninstall Jämmer?
 

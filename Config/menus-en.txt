@@ -1,0 +1,119 @@
+Jämmer › About Jämmer	
+Jämmer › Settings…	⌘,
+Jämmer › Hide Jämmer	⌘H
+Jämmer › Hide Others	⌥⌘H
+Jämmer › Show All	
+Jämmer › Quit Jämmer	⌘Q
+Jämmer › Quit and Keep Windows	⌥⌘Q
+File › New	⌘N
+File › Open…	⌘O
+File › Open Recent	
+File › Close	⌘W
+File › Close All	⌥⌘W
+File › Save…	⌘S
+File › Duplicate	⇧⌘S
+File › Revert to Saved	
+File › Collect Audio and Save	
+File › Import Tracks…	⇧⌘I
+File › Import Timeline…	
+File › Export Audio…	⇧⌘E
+File › Export Timeline…	
+File › Batch…	⌥⌘B
+File › Storage…	
+File › Linked Files Waiting…	
+File › Send to Flimmer…	
+Edit › Cut	⌘X
+Edit › Copy	⌘C
+Edit › Paste	⌘V
+Edit › Delete	
+Edit › Select All	⌘A
+Edit › Command Palette…	⌘K
+Audio › Fade In	⌥⌘I
+Audio › Fade Out	⌥⌘O
+Audio › Silence	⇧⌘L
+Audio › Crop to Selection	⌘T
+Audio › Insert 1 Second of Silence	
+Audio › Gain +1 dB	⌘Ä
+Audio › Gain −1 dB	⌘Ö
+Audio › Normalize to −16 LUFS (podcast)	
+Audio › Normalize to −23 LUFS (EBU R 128)	
+Audio › Normalize Peak to −1 dBFS	
+Audio › Normalize True Peak to −1 dBTP	
+Audio › Loudness Preset	
+Audio › Loudness Preset › Apple Podcasts (−16 LUFS, −1 dBTP)	
+Audio › Loudness Preset › Spotify (−14 LUFS, −1 dBTP)	
+Audio › Loudness Preset › YouTube (−14 LUFS, −1 dBTP)	
+Audio › Loudness Preset › EBU R 128 broadcast (−23 LUFS, −1 dBTP)	
+Audio › Loudness Preset › ATSC A/85 broadcast (−24 LUFS, −2 dBTP)	
+Audio › Loudness Preset With Limiter	
+Audio › Loudness Preset With Limiter › Apple Podcasts (−16 LUFS, −1 dBTP)	
+Audio › Loudness Preset With Limiter › Spotify (−14 LUFS, −1 dBTP)	
+Audio › Loudness Preset With Limiter › YouTube (−14 LUFS, −1 dBTP)	
+Audio › Loudness Preset With Limiter › EBU R 128 broadcast (−23 LUFS, −1 dBTP)	
+Audio › Loudness Preset With Limiter › ATSC A/85 broadcast (−24 LUFS, −2 dBTP)	
+Audio › Level Speakers	
+Audio › Level Speakers › One Gain per Speaker	
+Audio › Level Speakers › Ride Each Speaker’s Level	
+Audio › Remove Bleed	
+Audio › Remove Bleed › Gate Each Track Outside Its Speaker	
+Audio › Remove Bleed › Cancel the Other Tracks’ Leak	
+Audio › Duck Under Speech…	
+Audio › Limit Peaks…	
+Audio › Check Against ACX Requirements…	
+Audio › Measure Loudness	⌥⌘L
+Audio › Add Marker	⌥⌘M
+Audio › Set Tempo…	
+Audio › Detect Tempo	
+Audio › Remove Hum…	
+Audio › Repair Clipping…	
+Audio › Remove Clicks…	
+Audio › Reduce Noise…	
+Audio › Reduce Reverb…	
+Audio › Attenuate Frequencies…	
+Audio › Attenuate Area…	
+Audio › Heal Area	
+Audio › Edit Spectrum Numerically…	
+Audio › Find Speakers	
+Audio › Find Speakers › Automatically	
+Audio › Find Speakers › 2 Speakers	
+Audio › Find Speakers › 3 Speakers	
+Audio › Find Speakers › 4 Speakers	
+Audio › Separate Stems	
+Audio › Separate Stems › Vocals, Drums, Bass, Other (music)	
+Audio › Separate Stems › Speech, Music, Effects (soundtrack)	
+Audio › Mixer…	⌥⌘X
+Audio › Plugins…	⌥⇧⌘P
+Audio › Picture…	
+Audio › Listen on Headphones (Binaural)	
+Audio › Layout	
+Audio › Layout › Mono	
+Audio › Layout › Stereo	
+Audio › Layout › 5.1	
+Audio › Layout › 7.1	
+Audio › Layout › 7.1.4	
+Audio › Layout › Ambisonics (1st Order)	
+Audio › Layout › Ambisonics (2nd Order)	
+Audio › Layout › Ambisonics (3rd Order)	
+Transport › Play	⌥⌘P
+Transport › Go to Start	
+View › Show History	⌥⌘Y
+View › Zoom In	⌘+
+View › Zoom Out	⌘-
+View › Zoom to Fit	⌘0
+View › Zoom to Selection	⌘E
+View › Show Spectrogram	⌥⌘S
+View › Automation	
+View › Automation › Hide Lanes	
+View › Automation › Level Lanes	
+View › Automation › Pan Lanes	
+View › Automation › Mute Lanes	
+View › Automation › Send Lanes	
+View › Automation › Place	
+View › Automation › Height	
+View › Automation › Plugin Parameters	
+View › Automation › Buses, Groups and Master	
+View › Show Transcript	⌥⌘T
+View › Show Assistant	⌥⌘A
+Help › Agent Access…	
+Help › Open the Agent Guide	
+Help › Jämmer Website	

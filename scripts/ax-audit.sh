@@ -8,7 +8,7 @@
 # Empty panels pass an audit that filled ones fail, so the states are made here, not assumed.
 #
 #   <the-apps>/tools/with-gui-lock.sh jammer -- <the-apps>/tools/run-supervised.sh --timeout 600 -- \
-#     env JAMMER_ARGS="-forceAgentSplash YES -linkAnyOpen Flimmer -agentFolder <data>" scripts/with-app.sh scripts/ax-audit.sh <data> [<out> [note]]
+#     env JAMMER_ARGS="-agent.splashAtLaunch YES -linkAnyOpen Flimmer -agentFolder <data>" scripts/with-app.sh scripts/ax-audit.sh <data> [<out> [note]]
 #
 # <data> holds the material: site/"Episode 7.wav" (speech), site/"Demo song.wav" (music),
 # flimmer/Morgon_i_hamnen.fcpxml, packages/Settings.jammer, link/clip.wav. A state whose material
@@ -21,7 +21,7 @@ AX="$tools/axaudit/axaudit"; SM="$tools/safemenu/safemenu"; SP="$tools/safepoint
 for t in "$AX" "$SM" "$SP" "$AR"; do [[ -x "$t" ]] || { echo "ax-audit: $t is missing (build the series' tools first)." >&2; exit 2; }; done
 P=$JAMMER_PID; B=http://127.0.0.1:$JAMMER_PORT/api/v1; H='X-Jammer-Agent: 1'
 mkdir -p "$out"; rm -f "$out"/*.txt(N)
-unnamed=0; states=0; died=0; unfilled=0; unread=0
+unnamed=0; states=0; died=0; unfilled=0; unread=0; manual=0
 crashes() { ls ~/Library/Logs/DiagnosticReports 2>/dev/null | grep -c -i "^Jammer\|^Jämmer"; }
 crashes0=$(crashes)
 
@@ -95,6 +95,24 @@ if [[ "${3:-}" == note ]]; then
 fi
 audit "splash with the text for an agent" splash.agent.ax
 key 'key code 53'
+
+# The manual against the menus as they are (English only, where the manual's words are): build/menus lists every
+# item with its shortcut, scripts/check-manual.py holds the manual and the FAQ to it, and the kept copy
+# (Config/menus-en.txt, which the commit gate reads) must be what the app has. Left out because they change:
+# the system's Window menu, Services and what macOS adds to Edit and View (Writing Tools, AutoFill, Dictation, Emoji,
+# Full Screen: they differ from Mac to Mac), the recent files, and Undo and Redo, whose titles name the step.
+if [[ "${JAMMER_LANG:-en}" == en ]]; then
+  [[ -x "$root/build/menus" ]] || xcrun swiftc -O -o "$root/build/menus" "$root/scripts/menus/main.swift" 2>/dev/null
+  perl -e 'alarm 60; exec @ARGV' "$root/build/menus" $P 2>/dev/null \
+    | grep -v "^Window › \|^Jämmer › Services\|^File › Open Recent › \|^Edit › Undo\|^Edit › Redo\|^Edit › Writing Tools\|^Edit › AutoFill\|^Edit › Start Dictation\|^Edit › Emoji \|^View › Enter Full Screen" > "$out/menus-live.txt"
+  if [[ ! -s "$out/menus-live.txt" ]]; then echo "MANUAL   the menus couldn't be read"; manual=1
+  else
+    if report=$("$root/scripts/check-manual.py" "$out/menus-live.txt"); then echo "ok       $report"; else echo "$report" | sed 's/^/    /'; echo "MANUAL   the manual names menu items or shortcuts the app doesn't have (above)"; manual=1; fi
+    if [[ ! -f "$root/Config/menus-en.txt" ]]; then cp "$out/menus-live.txt" "$root/Config/menus-en.txt"; echo "ok       the kept copy of the menus written for the first time (Config/menus-en.txt)"
+    elif cmp -s "$out/menus-live.txt" "$root/Config/menus-en.txt"; then echo "ok       the kept copy of the menus is what the app has"
+    else diff "$out/menus-live.txt" "$root/Config/menus-en.txt" | head -12 | sed 's/^/    /'; echo "MANUAL   the menus differ from Config/menus-en.txt (above): copy $out/menus-live.txt there if the change is meant"; manual=1; fi
+  fi
+fi
 
 if [[ -f "$speech" && -f "$music" ]]; then
   DOC=$(open_audio "$speech" Reading); sleep 1
@@ -179,5 +197,5 @@ fi
 
 echo
 new=$(( $(crashes) - crashes0 ))
-echo "$states states read; $unnamed controls without a name; the app died $died time(s); $new new crash report(s); $unread read(s) incomplete; $unfilled state(s) could not be filled. Listings in $out"
-(( died == 0 && unnamed == 0 && unfilled == 0 && unread == 0 && new == 0 ))
+echo "$states states read; $unnamed controls without a name; the app died $died time(s); $new new crash report(s); $unread read(s) incomplete; $unfilled state(s) could not be filled; the manual against the menus: $( (( manual == 0 )) && echo holds || echo differs). Listings in $out"
+(( died == 0 && unnamed == 0 && unfilled == 0 && unread == 0 && new == 0 && manual == 0 ))

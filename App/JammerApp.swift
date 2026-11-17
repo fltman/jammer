@@ -76,12 +76,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // registers it in this process only, so a plugin that is not installed on the Mac can be tried in
         // the app (the sidechain test plugin, docs/LICENSES.md "Used in tests only"). Nothing is installed.
         if let path = UserDefaults.standard.string(forKey: "registerAudioUnit") { DebugAudioUnit.register(path) }
+        // `-asRelease YES`: what a release has, and no more, for the manual's pictures (scripts/site-shots.sh). It
+        // leaves off what follows here and the CLAP/VST 3 helpers (HostedPluginsController.available).
+        let asRelease = UserDefaults.standard.bool(forKey: "asRelease")
         // Automation is in debug builds only until lanes are shown and drawn in the window (docs/MIXER.md):
         // what changes how a project sounds without being seen isn't shipped.
-        Operations.automation = true
+        Operations.automation = !asRelease
         // Dialogue-gated loudness: in debug builds only until Anders has measured the test files in a
         // reference meter and the difference is written in the manual.
-        Operations.dialogueLoudness = true
+        Operations.dialogueLoudness = !asRelease
         #endif
         NSApp.mainMenu = buildMenu()
         // Our own "open documents" handler: AppKit hands document-based apps' opens straight

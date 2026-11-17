@@ -96,6 +96,8 @@ final class TranscriptPanel: NSView, NSTextViewDelegate {
         empty.textColor = .secondaryLabelColor
         empty.font = .systemFont(ofSize: 12)
         empty.alignment = .center
+        // It wraps to the panel's width rather than asking for its text's.
+        empty.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
         let stack = NSStackView(views: [header, scroll, empty])
         stack.orientation = .vertical

@@ -18,7 +18,7 @@ Window size and position are remembered too.
 
 ## Models
 
-![Settings, Models: KB-Whisper small and medium, Parakeet and the speaker model, each with size, license and a Download or Remove button](../screens/models.webp)
+![Settings, Models: KB-Whisper small and medium, Parakeet, the speaker model and the two separation models, each with size, license and a Download or Remove button](../screens/models.webp)
 
 **Jämmer › Settings… › Models** (⌘,) lists the speech models Jämmer can use. Each shows what it's for, its download size and its license before you download it, and each can be removed again:
 

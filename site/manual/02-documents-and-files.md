@@ -51,7 +51,7 @@ When each speaker recorded their own side (a "double-ender"), choose **File › 
 
 ## Editing a clip for Flimmer
 
-![A linked document: the title bar reads interview.wav, For Flimmer, Command-S saves back](../screens/linked.webp)
+![A linked document: the title bar reads clip.wav, For Flimmer, ⌘S saves back](../screens/linked.webp)
 
 When Flimmer sends a clip's sound to Jämmer ("Edit in Jämmer"), it opens as a linked document: the window says **clip.wav · For Flimmer – ⌘S saves back**. Edit as usual, then **File › Save Back to clip.wav** (⌘S) writes the result into that same file, in the same format, sample rate and bit depth, and Flimmer picks it up. Plugins are included, as in an export. WAV files keep their Broadcast Wave and iXML data and other chunks, and get your markers as cue points; AIFF and FLAC are written by the system's encoder, which keeps the audio but not their own extra metadata.
 

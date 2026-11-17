@@ -1,6 +1,6 @@
 # Mixer
 
-![The Mixer window: two tracks, each with a mute box, a level slider, a pan slider, where it goes and its sends; a VCA group at −6 dB with its Members menu open and both tracks ticked; under them the master with its level and its limiter box](../screens/mixer.webp)
+![The Mixer window: two tracks, each with a mute box, a level slider, a pan slider, where it goes and its sends; a VCA group at −6 dB with both tracks in it, which each track's line under its fader says; under them the master with its level and its limiter box](../screens/mixer.webp)
 
 **Audio › Mixer…** (⌥⌘X) shows every track as a strip: mute, level, pan, and where it goes. It is a window of its own beside the document, so the timeline stays in reach while it is open; Space plays and stops from it, ⌘Z undoes in it as in the document, and it closes with the document. Use it to set the balance between tracks, to place a track to the left or the right, and to gather tracks on a bus.
 

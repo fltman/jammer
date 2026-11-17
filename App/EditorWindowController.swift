@@ -50,12 +50,24 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         stack.spacing = 0
         stack.alignment = .width
         stack.setHuggingPriority(.defaultHigh, for: .vertical)
+        // The timeline and the transcript the stack's whole width, required: the stack's own alignment gave way after
+        // some edits (a fade in) and the transcript panel shrank to its one-line label, against the right edge (seen
+        // 2026-11-17). The transport and the status bar keep their own width, centered.
+        for row in [timeline, transcript] as [NSView] { row.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true }
         transport.setContentHuggingPriority(.required, for: .vertical)
         statusBar.setContentHuggingPriority(.required, for: .vertical)
         timeline.setContentHuggingPriority(.defaultLow, for: .vertical)
         let assistantHost = NSHostingView(rootView: AssistantView(model: assistant))
         assistantHost.widthAnchor.constraint(greaterThanOrEqualToConstant: 260).isActive = true
+        // Its width is ours (at least 260, preferably 320), not what SwiftUI offers: with the field focused, the
+        // field editor of a vertical text field made the panel's least width about 600 pt (seen 2026-11-17).
+        assistantHost.sizingOptions = []
         assistantHost.isHidden = !UserDefaults.standard.bool(forKey: "assistant.visible")
+        // A split view starts its panes at the sizes of their frames, and a hosting view's first frame is its
+        // content's ideal size: the assistant's intro sentence made that about 600 pt, which the panel's holding
+        // priority then kept (seen 2026-11-17). Both start at a size of ours: the panel 320 pt.
+        stack.frame = NSRect(x: 0, y: 0, width: 800, height: 600)
+        assistantHost.frame = NSRect(x: 0, y: 0, width: 320, height: 600)
         let split = NSSplitView()
         split.isVertical = true
         split.dividerStyle = .thin
@@ -64,10 +76,12 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         split.setHoldingPriority(.defaultLow, forSubviewAt: 0)
         split.setHoldingPriority(.defaultHigh, forSubviewAt: 1)
         window.contentView = split
-        DispatchQueue.main.async { split.setPosition(split.frame.width - 320, ofDividerAt: 0) }
         window.center()
         window.setFrameAutosaveName("JammerEditor")
         window.makeFirstResponder(timeline.firstResponderView)
+        // Where the keyboard is when the window first becomes key: the timeline (Space plays), never the
+        // assistant's field, which otherwise won that race now and then (seen 2026-11-17).
+        window.initialFirstResponder = timeline.firstResponderView
     }
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
@@ -105,6 +119,12 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
 
     func windowDidBecomeKey(_ notification: Notification) {
         window?.makeFirstResponder(timeline.firstResponderView)
+        // Again once SwiftUI has done its part: in a window opened while the app is active, it gave the
+        // assistant's field the keyboard right after this (seen 2026-11-17 on the second document opened).
+        DispatchQueue.main.async { [weak self] in
+            guard let self, let window = self.window, window.isKeyWindow else { return }
+            window.makeFirstResponder(self.timeline.firstResponderView)
+        }
     }
 
     func windowWillClose(_ notification: Notification) { closeMixer(); session.stop() }

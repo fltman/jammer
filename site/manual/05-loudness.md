@@ -61,5 +61,5 @@ Good to know:
 
 - It says what was measured against the requirements as they read on that date. It never says a file is approved: only ACX does that, and ACX also asks for things no meter sees (one chapter per file with its header read out, opening and closing credits, a retail sample).
 - The check is made on the MP3 as ACX wants it, so export it the same way: **File › Export Audio…**, **MP3 192 kbit/s**, and **Sample rate 44.1 kHz** when the document is at another rate.
-- To bring a chapter into the range, use **Audio › Normalize** or a gain to set the level and **Limit Peaks** with a ceiling a little under −3 dBTP (say −3.5) to leave room for what the MP3 encoder adds, then check again.
+- To bring a chapter into the range, use **Audio › Normalize to −16 LUFS (podcast)** (or another normalize in the Audio menu) or a gain to set the level and **Limit Peaks** with a ceiling a little under −3 dBTP (say −3.5) to leave room for what the MP3 encoder adds, then check again.
 

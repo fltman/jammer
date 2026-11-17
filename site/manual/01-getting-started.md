@@ -6,7 +6,7 @@ Jämmer is an audio editor for speech, restoration and post-production. This cha
 
 ## The first launch
 
-When Jämmer starts, a splash shows a line of text **for your agent**. You only need it if you want an AI agent to work in Jämmer (see [Agents](07-agents.md)). Click **Close** to continue. Untick **Show at launch** if you don't want it every time; **Help › Agent Access** brings it back.
+When Jämmer starts, a splash shows a line of text **for your agent**. You only need it if you want an AI agent to work in Jämmer (see [Agents](07-agents.md)). Click **Close** to continue. Untick **Show at launch** if you don't want it every time; **Help › Agent Access…** brings it back.
 
 ## Open a recording
 

@@ -14,7 +14,13 @@ enum HostedPluginsController {
     static var probe: URL? { Bundle.main.url(forAuxiliaryExecutable: "jammer-plugin-probe") }
     static var helper: URL? { Bundle.main.url(forAuxiliaryExecutable: "jammer-plugin-host") }
     /// False when this copy of the app was built without the helpers: only Audio Units then.
-    static var available: Bool { InsertUnits.external != nil && probe != nil && helper != nil && Confinement.available }
+    static var available: Bool {
+        #if DEBUG
+        // A debug copy started as a release has it (`-asRelease YES`, for the manual's pictures): no helpers, as with JAMMER_CLAP = NO.
+        if UserDefaults.standard.bool(forKey: "asRelease") { return false }
+        #endif
+        return InsertUnits.external != nil && probe != nil && helper != nil && Confinement.available
+    }
     private(set) static var scanning = false
 
     /// At launch: what the last scan found is usable at once; new and changed bundles are looked at in the background.
