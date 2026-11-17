@@ -166,6 +166,7 @@ final class AutomationLanesView: NSView {
             let percent = String(Int((abs(v) * 100).rounded()))
             return v < 0 ? L10n.text("automation.value.left", percent) : L10n.text("automation.value.right", percent)
         case .mute: return v >= 0.5 ? L10n.text("automation.value.muted") : L10n.text("automation.value.heard")
+        case .plugin: return v.formatted(.number.precision(.fractionLength(0...2)))
         }
     }
     /// What the lane is, and what comes on top of its line.
@@ -173,6 +174,7 @@ final class AutomationLanesView: NSView {
         let group = lane.group.flatMap { project.vca($0)?.name } ?? ""
         var text: String
         switch lane.param {
+        case .plugin: text = ""     // not drawn in the timeline yet
         case .send:
             text = sendCaption(lane.strip, lane: true)
         case .gain:
@@ -645,7 +647,7 @@ final class AutomationLanesView: NSView {
             let gone: String
             switch shown {
             case .send: gone = L10n.text("automation.removed.send", name)
-            case .gain: gone = L10n.text("automation.removed.gain", name)
+            case .gain, .plugin: gone = L10n.text("automation.removed.gain", name)
             case .pan: gone = L10n.text("automation.removed.pan", name)
             case .mute: gone = L10n.text("automation.removed.mute", name)
             }
@@ -686,7 +688,7 @@ final class AutomationLanesView: NSView {
             let name = rowList[i].name
             switch lane.param {
             case .send: e.setAccessibilityLabel(L10n.text("automation.ax.lane.send", name))
-            case .gain: e.setAccessibilityLabel(L10n.text("automation.ax.lane.gain", name))
+            case .gain, .plugin: e.setAccessibilityLabel(L10n.text("automation.ax.lane.gain", name))
             case .pan: e.setAccessibilityLabel(L10n.text("automation.ax.lane.pan", name))
             case .mute: e.setAccessibilityLabel(L10n.text("automation.ax.lane.mute", name))
             }

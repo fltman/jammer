@@ -327,6 +327,7 @@ private struct MixerStrip: View {
             case .pan: text = L10n.text("mixer.automation.pan", points)
             case .mute: text = L10n.text("mixer.automation.mute", points)
             case .send: text = L10n.text("mixer.automation.send", points)
+            case .plugin: text = L10n.text("mixer.automation.plugin", points, lane.parameter ?? "")
             }
             return lane.enabled ? text : L10n.text("mixer.automation.off", text)
         }

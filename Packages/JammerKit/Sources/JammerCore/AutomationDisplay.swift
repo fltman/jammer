@@ -58,6 +58,7 @@ extension Automation {
             return 0.3 * (v - gainRange.lowerBound) / (-24 - gainRange.lowerBound)
         case .pan: return (1 - min(1, max(-1, value))) / 2
         case .mute: return min(1, max(0, value))
+        case .plugin: return 0.5      // a plugin's parameter has its own range: not drawn on this scale
         }
     }
     /// The value at a height: the other way round.
@@ -70,6 +71,7 @@ extension Automation {
             return gainRange.lowerBound + h / 0.3 * (-24 - gainRange.lowerBound)
         case .pan: return 1 - 2 * h
         case .mute: return h
+        case .plugin: return 0
         }
     }
 }
@@ -96,6 +98,7 @@ extension Project {
             case .gain: if let c = gainCurve(of: strip) { return made(c.frames, c.db, plays: true) }
             case .pan: if let c = panCurve(of: strip) { return made(c.frames, c.values, plays: true) }
             case .send: if let to, let c = sendCurve(from: strip, to: to) { return made(c.frames, c.db, plays: true) }
+            case .plugin: break       // shown from its own points, below
             case .mute:
                 if let c = muteCurve(of: strip) {
                     let lanes = [own, groups].compactMap { $0 }.filter(\.enabled)

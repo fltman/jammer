@@ -102,6 +102,14 @@ void jm_plan_add_bus_send(jm_plan *_Nonnull plan, int32_t bus, int32_t to, float
 int64_t jm_plan_total_latency(const jm_plan *_Nonnull plan);
 int64_t jm_plan_compensation(const jm_plan *_Nonnull plan, bool bus, int32_t index);
 /// Sorts and freezes the plan. Must be called before rendering or publishing.
+/// Automation of one parameter of a plugin on a strip (`kind` 0 a track, 1 a bus, 2 the master): the
+/// unit's place in the strip's chain, the unit's own number for the parameter (an Audio Unit's parameter
+/// id), and points (frame on the timeline, value in the parameter's own unit) with a straight line
+/// between them, the first value before the first point and the last after the last. The parameter is
+/// set once every 512 frames, before those frames are worked, to the line's value where they enter the
+/// strip's plugins; so what is rendered depends only on the place on the timeline. Before finalize.
+void jm_plan_add_param_curve(jm_plan *_Nonnull plan, int32_t kind, int32_t index, int32_t unit, uint32_t parameter,
+                             const int64_t *_Nonnull frames, const float *_Nonnull values, int32_t count);
 void jm_plan_finalize(jm_plan *_Nonnull plan);
 /// Lets `plan` go on from where `previous` has got to, instead of starting afresh: when both are
 /// finalized, have the very same plugin chains and graphs of the same shape (a mute, a level, a pan or a
@@ -156,6 +164,10 @@ jm_unit *_Nonnull jm_unit_create_processor(int32_t channels, void *_Nullable con
                                                                     int32_t channels, int32_t frames),
                                            void (*_Nullable reset)(void *_Nullable context),
                                            void (*_Nullable release)(void *_Nullable context));
+/// Gives a processor unit parameters that a lane can set: `control` is called with the unit's context,
+/// the parameter's number and its value, before the block the value holds for, on the thread that
+/// renders (never the device thread). An Audio Unit needs none: its parameters are set on the unit itself.
+void jm_unit_set_control(jm_unit *_Nonnull unit, void (*_Nonnull control)(void *_Nullable context, uint32_t parameter, float value));
 void jm_unit_release(jm_unit *_Nullable unit);
 
 typedef struct jm_chain jm_chain;

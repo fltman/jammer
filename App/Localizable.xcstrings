@@ -1129,6 +1129,18 @@
         }
       }
     },
+    "mixer.automation.plugin": {
+      "comment": "Part of a strip’s automation line. %1$@ is “4 points”, %2$@ the parameter’s identifier in the plugin.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ on a plugin’s parameter (%2$@)"
+          }
+        }
+      }
+    },
     "mixer.automation.points": {
       "comment": "A count of automation points. Used inside the lines below as the first part.",
       "extractionState": "manual",

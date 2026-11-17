@@ -393,3 +393,73 @@ struct PlanContinuationTests {
         #expect(!jm_plan_continue_from(e.pointer, b.pointer))
     }
 }
+
+/// A stand-in for a plugin with a parameter: it multiplies by a gain that a lane can set (parameter 7).
+final class GainPlugin {
+    var gain: Float = 1
+    var sets: [Float] = []
+    func unit(channels: Int32 = 2) -> OpaquePointer {
+        let u = jm_unit_create_processor(channels, Unmanaged.passRetained(self).toOpaque(), { ctx, input, output, channels, frames in
+            let me = Unmanaged<GainPlugin>.fromOpaque(ctx!).takeUnretainedValue()
+            for i in 0..<Int(channels) * Int(frames) { output[i] = input[i] * me.gain }
+            return true
+        }, { _ in }, { ctx in Unmanaged<GainPlugin>.fromOpaque(ctx!).release() })
+        jm_unit_set_control(u, { ctx, parameter, value in
+            let me = Unmanaged<GainPlugin>.fromOpaque(ctx!).takeUnretainedValue()
+            if parameter == 7 { me.gain = value; me.sets.append(value) }
+        })
+        return u
+    }
+}
+
+@Suite("Mixer: automation of a plugin's parameter")
+struct ParameterCurveTests {
+    static let n = MixerGraphTests.n
+    static func plan(_ source: OpaquePointer, _ plugin: GainPlugin, points: [(Int64, Float)], onBus: Bool = false) -> OpaquePointer {
+        let plan = jm_plan_create(2, 48_000)
+        let t = jm_plan_add_track(plan, 1, false)
+        jm_plan_add_clip(plan, t, jm_plan_add_source(plan, source), 0, 0, Int64(n), 1, 0, 0, JM_FADE_LINEAR)
+        let c = jm_chain_create(2, 0)
+        let u = plugin.unit()
+        jm_chain_add(c, u, 0)
+        jm_unit_release(u)
+        if onBus {
+            let bus = jm_plan_add_bus(plan, 1, false, 1, 1)
+            jm_plan_set_track_route(plan, t, bus, 1, 1)
+            jm_plan_set_bus_chain(plan, bus, c)
+            jm_plan_add_param_curve(plan, 1, bus, 0, 7, points.map(\.0), points.map(\.1), Int32(points.count))
+        } else {
+            jm_plan_set_chain(plan, t, c)
+            jm_plan_add_param_curve(plan, 0, t, 0, 7, points.map(\.0), points.map(\.1), Int32(points.count))
+        }
+        jm_chain_release(c)
+        jm_plan_finalize(plan)
+        return plan
+    }
+
+    @Test("A lane on a plugin's parameter: the parameter has the line's value at the start of every 512 frames, on a track and on a bus, and a render from the middle gives the same samples as the whole")
+    func parameterFollowsTheLine() {
+        let source = MixerGraphTests.source(220)
+        defer { jm_source_release(source) }
+        let dry = MixerGraphTests.render({ let p = jm_plan_create(2, 48_000); _ = MixerGraphTests.track(p, source); jm_plan_finalize(p); return p }())
+        let points: [(Int64, Float)] = [(2_048, 1), (10_240, 0.25)]
+        func want(_ frame: Int) -> Float {
+            let start = Int64(frame / 512 * 512)            // the block the frame is in
+            if start <= 2_048 { return 1 }
+            if start >= 10_240 { return 0.25 }
+            return 1 + (0.25 - 1) * Float(start - 2_048) / Float(10_240 - 2_048)
+        }
+        for onBus in [false, true] {
+            let plugin = GainPlugin()
+            let plan = Self.plan(source, plugin, points: points, onBus: onBus)
+            let out = MixerGraphTests.render(plan)
+            #expect((0..<Self.n).allSatisfy { abs(out[$0 * 2] - dry[$0 * 2] * want($0)) < 1e-7 }, "on a \(onBus ? "bus" : "track")")
+            #expect(plugin.sets.first == 1 && plugin.sets.last == 0.25 && plugin.sets.count >= Self.n / 512)
+            // From the middle: the same samples, whatever the plugin's parameter was left at.
+            let from = 6_000
+            let part = MixerGraphTests.render(plan, from: from, frames: Self.n - from)
+            #expect(part == Array(out[(from * 2)...]), "a render from the middle, on a \(onBus ? "bus" : "track")")
+            jm_plan_release(plan)
+        }
+    }
+}

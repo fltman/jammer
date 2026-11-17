@@ -94,6 +94,14 @@ void Chain::stream(float *interleaved, const KeyFeed *keys, size_t keyCount) {
         for (int32_t c = 0; c < channels; ++c) interleaved[size_t(i * channels + c)] = a_[size_t(c * q + i)];
 }
 
+void Chain::control(size_t unit, uint32_t parameter, float value) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (unit >= units.size()) return;
+    Unit &u = *units[unit].unit;
+    if (u.unit) AudioUnitSetParameter(u.unit, AudioUnitParameterID(parameter), kAudioUnitScope_Global, 0, value, 0);
+    else if (u.control) u.control(u.context, parameter, value);
+}
+
 void Chain::restart() {
     std::lock_guard<std::mutex> lock(mutex_);
     reset();
@@ -228,6 +236,8 @@ jm_unit *jm_unit_create_processor(int32_t channels, void *context, bool (*proces
     u->release = release;
     return new jm_unit{std::move(u)};
 }
+
+void jm_unit_set_control(jm_unit *unit, void (*control)(void *, uint32_t, float)) { unit->ptr->control = control; }
 
 void jm_unit_release(jm_unit *unit) { delete unit; }
 

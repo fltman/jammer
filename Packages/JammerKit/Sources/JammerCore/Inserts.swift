@@ -230,6 +230,9 @@ public protocol InsertUnit: AnyObject, Sendable {
     func set(_ identifier: String, to value: Double) throws
     var factoryPresets: [String] { get }
     func loadPreset(_ name: String) throws
+    /// The plugin's own number for a parameter (by identifier or display name), when a lane can set it
+    /// while the plugin runs; nil when it can't (a plugin in a helper process, for now).
+    func address(of identifier: String) -> UInt32?
     /// Whether the plugin has a sidechain input that Jämmer can feed a key.
     var hasKeyInput: Bool { get }
     /// Why it can't be given a key although it has the input, in words; nil when it can or has none.
@@ -237,6 +240,7 @@ public protocol InsertUnit: AnyObject, Sendable {
 }
 
 public extension InsertUnit {
+    func address(of identifier: String) -> UInt32? { nil }
     var hasKeyInput: Bool { false }
     var keyRefusal: String? { nil }
 }
@@ -434,6 +438,14 @@ public final class PluginInstance: InsertUnit, @unchecked Sendable {
         }
     }
 
+    /// An Audio Unit's parameters are set on the unit itself while it runs, by the number it gives them.
+    public func address(of identifier: String) -> UInt32? {
+        let all = au.parameterTree?.allParameters ?? []
+        let p = all.first(where: { $0.keyPath == identifier }) ?? all.first(where: { $0.identifier == identifier })
+            ?? all.first(where: { $0.displayName.caseInsensitiveCompare(identifier) == .orderedSame })
+        return p.flatMap { UInt32(exactly: $0.address) }
+    }
+
     /// Sets a parameter by key path (or display name). Refuses values outside its range.
     public func set(_ identifier: String, to value: Double) throws {
         let all = au.parameterTree?.allParameters ?? []
@@ -487,6 +499,9 @@ public protocol ChainProvider: AnyObject {
     func masterChain(for master: Master) -> OpaquePointer?
     /// The place in a strip's chain of the unit for `insert`, when that unit runs and can take a key.
     func keyUnit(of insert: UUID, among inserts: [Insert]) -> Int32?
+    /// Where a lane on a plugin's parameter is to be set: the unit's place in the strip's chain and the
+    /// plugin's own number for the parameter. nil when the plugin isn't running or can't be set that way.
+    func parameterPlace(of insert: UUID, among inserts: [Insert], identifier: String) -> (unit: Int32, parameter: UInt32)?
 }
 
 public extension ChainProvider {
@@ -495,6 +510,7 @@ public extension ChainProvider {
     func attachChain(for bus: Bus, to plan: OpaquePointer, index: Int32) -> Int64? { nil }
     func masterChain(for master: Master) -> OpaquePointer? { nil }
     func keyUnit(of insert: UUID, among inserts: [Insert]) -> Int32? { nil }
+    func parameterPlace(of insert: UUID, among inserts: [Insert], identifier: String) -> (unit: Int32, parameter: UInt32)? { nil }
 }
 
 /// The running instances for a project's inserts and the chains built from them. One
@@ -639,6 +655,14 @@ public final class InsertHost: ChainProvider, @unchecked Sendable {
 
     public func masterChain(for master: Master) -> OpaquePointer? {
         lock.withLock { chainLocked(for: Master.id, inserts: master.inserts) }
+    }
+
+    public func parameterPlace(of insert: UUID, among inserts: [Insert], identifier: String) -> (unit: Int32, parameter: UInt32)? {
+        lock.withLock {
+            let running = inserts.filter { !$0.bypass && entries[$0.id] != nil }
+            guard let at = running.firstIndex(where: { $0.id == insert }), let number = entries[insert]?.instance.address(of: identifier) else { return nil }
+            return (Int32(at), number)
+        }
     }
 
     public func keyUnit(of insert: UUID, among inserts: [Insert]) -> Int32? {

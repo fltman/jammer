@@ -172,6 +172,20 @@ void jm_plan_set_master(jm_plan *plan, float gain, jm_chain *chain, jm_chain *li
     p.masterLimiter = limiter ? limiter->ptr : nullptr;
 }
 
+void jm_plan_add_param_curve(jm_plan *plan, int32_t kind, int32_t index, int32_t unit, uint32_t parameter, const int64_t *frames, const float *values, int32_t count) {
+    Plan &p = *plan->ptr;
+    if (p.finalized || count <= 0 || unit < 0) return;
+    ParamCurve pc;
+    pc.unit = unit;
+    pc.parameter = parameter;
+    pc.curve.kind = Curve::kAmplitude;   // a straight line; only read point by point, never applied to the sound
+    pc.curve.frames.assign(frames, frames + count);
+    pc.curve.db.assign(values, values + count);
+    if (kind == 0 && index >= 0 && size_t(index) < p.tracks.size()) p.tracks[size_t(index)].params.push_back(std::move(pc));
+    else if (kind == 1 && index >= 0 && size_t(index) < p.buses.size()) p.buses[size_t(index)].params.push_back(std::move(pc));
+    else if (kind == 2) p.masterParams.push_back(std::move(pc));
+}
+
 void jm_plan_set_curve(jm_plan *plan, int32_t kind, int32_t index, int32_t what, const int64_t *frames, const float *values, int32_t count) {
     Plan &p = *plan->ptr;
     if (p.finalized || count <= 0 || !frames || !values || what < 0 || what > 2) return;

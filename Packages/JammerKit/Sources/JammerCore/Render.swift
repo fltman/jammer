@@ -256,6 +256,19 @@ public enum PlanCompiler {
         for t in project.tracks { if let i = trackIndex[t.id] { curve(t.id, kind: 0, index: i) } }
         for b in project.buses { if let i = busIndex[b.id] { curve(b.id, kind: 1, index: i) } }
         curve(Master.id, kind: 2, index: 0)
+        // Lanes on plugins' parameters: where the plugin runs and can be set while it does (see InsertUnit.address).
+        if let inserts {
+            func parameters(_ strip: UUID, kind: Int32, index: Int32) {
+                let on = project.inserts(of: strip)
+                for lane in project.pluginLanes(of: strip) {
+                    guard let insert = lane.insert, let name = lane.parameter, let place = inserts.parameterPlace(of: insert, among: on, identifier: name) else { continue }
+                    jm_plan_add_param_curve(plan, kind, index, place.unit, place.parameter, lane.points.map(\.frame), lane.points.map { Float($0.value) }, Int32(lane.points.count))
+                }
+            }
+            for t in project.tracks { if let i = trackIndex[t.id] { parameters(t.id, kind: 0, index: i) } }
+            for b in project.buses { if let i = busIndex[b.id] { parameters(b.id, kind: 1, index: i) } }
+            parameters(Master.id, kind: 2, index: 0)
+        }
         // The master, when it does anything: its plugins (with a provider), its gain, its limiter last.
         let master = project.master
         if !master.isDefault {

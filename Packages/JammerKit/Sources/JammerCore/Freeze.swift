@@ -127,8 +127,10 @@ extension Project {
     func freezeContext(for strip: UUID) -> Project? {
         var p = self
         p.master = Master()
-        // The strip's own lanes come after the frozen file, like its fader; the master's are not in it either.
-        p.automation.removeAll { $0.strip == strip || $0.strip == Master.id }
+        // The strip's own level, pan, mute and send lanes come after the frozen file, like its fader; the
+        // master's are not in it either. A lane on one of the strip's plugins is in the file: it is part
+        // of what the plugins make of the sound.
+        p.automation.removeAll { ($0.strip == strip && $0.param != .plugin) || $0.strip == Master.id }
         let sink = Bus(id: Self.frozenSink, name: "sink", isMuted: true)
         if let t = p.tracks.firstIndex(where: { $0.id == strip }) {
             p.tracks[t].gainDB = 0; p.tracks[t].pan = 0; p.tracks[t].isMuted = false

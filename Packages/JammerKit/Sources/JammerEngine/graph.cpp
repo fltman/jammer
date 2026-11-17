@@ -74,6 +74,9 @@ void Curve::apply(const float *in, float *out, int64_t at, int64_t n, int32_t ch
 
 Graph::Graph(const Plan &plan) : channels_(plan.channels) {
     const size_t nt = plan.tracks.size(), nb = plan.buses.size();
+    params_ = !plan.masterParams.empty();
+    for (const Track &t : plan.tracks) params_ = params_ || !t.params.empty();
+    for (const Bus &b : plan.buses) params_ = params_ || !b.params.empty();
     busLatency.assign(nb, 0);
     for (size_t b = 0; b < nb; ++b) {
         if (!plan.buses[b].chain) continue;
@@ -192,8 +195,18 @@ void Graph::reset(const Plan &plan, int64_t start) {
     directAt_ = 0;
     // What comes out of the graph at its time g belongs to the timeline at g − total. To hand over the
     // timeline from `start`, it begins a run-in before that and throws the run-in and the lateness away.
-    cursor_ = start - preroll_;
-    discard_ = preroll_ + total + masterLatency;
+    // A plan with a plugin's parameter automated works in blocks that lie on the timeline's own grid
+    // (the parameter is set once a block, so where the blocks fall decides what is heard): it begins at
+    // the block before the run-in and throws the frames up to it away as well. Every other plan begins
+    // exactly where it always did.
+    int64_t begin = start - preroll_, extra = 0;
+    if (params_) {
+        const int64_t aligned = begin >= 0 ? begin / kQuantum * kQuantum : -((-begin + kQuantum - 1) / kQuantum * kQuantum);
+        extra = begin - aligned;
+        begin = aligned;
+    }
+    cursor_ = begin;
+    discard_ = preroll_ + total + masterLatency + extra;
     readPos_ = start;
     fifo_.clear();
     fifoHead_ = 0;
@@ -238,7 +251,7 @@ bool Graph::sameShape(const Graph &o) const {
         }
         return true;
     };
-    if (channels_ != o.channels_ || total != o.total || masterLatency != o.masterLatency || preroll_ != o.preroll_ || plain_ != o.plain_) return false;
+    if (channels_ != o.channels_ || total != o.total || masterLatency != o.masterLatency || preroll_ != o.preroll_ || plain_ != o.plain_ || params_ != o.params_) return false;
     if (order_ != o.order_ || nodeIn_ != o.nodeIn_ || nodeOut_ != o.nodeOut_ || masterChainLatency_ != o.masterChainLatency_) return false;
     if (directLine_.size() != o.directLine_.size() || bus_.size() != o.bus_.size() || keyBuffers_.size() != o.keyBuffers_.size()) return false;
     for (size_t i = 0; i < keyBuffers_.size(); ++i) {
@@ -359,7 +372,11 @@ void Graph::produce(const Plan &plan, Renderer &renderer) {
                 // The track's own audio, taken as much earlier as the node is late (so that it meets its
                 // keys), through its plugins with those keys.
                 renderer.renderTrack(plan, int32_t(t), cursor_ - nodeIn_[t], q, strip_.data());
-                if (track.chain) track.chain->stream(strip_.data(), feeds_[t].data(), feeds_[t].size());
+                if (track.chain) {
+                    // The plugins' automated parameters, as they stand where this block enters the strip.
+                    for (const ParamCurve &pc : track.params) track.chain->control(size_t(pc.unit), pc.parameter, float(pc.curve.dbAt(cursor_ - nodeIn_[t])));
+                    track.chain->stream(strip_.data(), feeds_[t].data(), feeds_[t].size());
+                }
             }
             // The fader's automation: read at the strip's own place on the timeline, which is the graph's
             // time less how late the strip is where it leaves. A send before the fader doesn't have it.
@@ -387,7 +404,10 @@ void Graph::produce(const Plan &plan, Renderer &renderer) {
             const size_t b = size_t(n) - nt;
             const Bus &bus = plan.buses[b];
             float *sum = bus_[b].data();
-            if (bus.chain) bus.chain->stream(sum, feeds_[size_t(n)].data(), feeds_[size_t(n)].size());
+            if (bus.chain) {
+                for (const ParamCurve &pc : bus.params) bus.chain->control(size_t(pc.unit), pc.parameter, float(pc.curve.dbAt(cursor_ - nodeIn_[size_t(n)])));
+                bus.chain->stream(sum, feeds_[size_t(n)].data(), feeds_[size_t(n)].size());
+            }
             if (bus.mute) std::memset(sum, 0, samples * sizeof(float));
             // Into a copy: an edge may add to a bus later in the order, never to this one.
             std::memcpy(strip_.data(), sum, samples * sizeof(float));
@@ -411,7 +431,10 @@ void Graph::produce(const Plan &plan, Renderer &renderer) {
         }
     }
     // The master: its plugins, its gain, and the limiter last of all.
-    if (plan.masterChain) plan.masterChain->stream(mix_.data());
+    if (plan.masterChain) {
+        for (const ParamCurve &pc : plan.masterParams) plan.masterChain->control(size_t(pc.unit), pc.parameter, float(pc.curve.dbAt(cursor_ - total)));
+        plan.masterChain->stream(mix_.data());
+    }
     if (plan.masterGain != 1.0f)
         for (float &x : mix_) x *= plan.masterGain;
     {

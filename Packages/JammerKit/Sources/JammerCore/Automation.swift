@@ -20,7 +20,9 @@ public struct AutomationLane: Codable, Hashable, Sendable {
     /// What a lane moves (docs/MIXER.md, "Automation"): a strip's level, pan or mute, or the level of one
     /// of its sends (`to` then names the bus the send goes to). A VCA group has a level and a mute, and
     /// its lanes are added to its members' when the plan is made, as its fader is.
-    public enum Param: String, Codable, Sendable, CaseIterable { case gain, pan, mute, send }
+    /// `plugin`: one parameter of one plugin on the strip (`insert` and `parameter` then say which), in the
+    /// parameter's own unit, a straight line between points.
+    public enum Param: String, Codable, Sendable, CaseIterable { case gain, pan, mute, send, plugin }
     public enum Shape: String, Codable, Sendable { case linear, hold }
 
     /// The track, bus or VCA group, or `Master.id`.
@@ -28,16 +30,21 @@ public struct AutomationLane: Codable, Hashable, Sendable {
     public var param: Param
     /// For a send's level: the bus the send goes to.
     public var to: UUID?
+    /// For a plugin's parameter: the insert's id on the strip, and the parameter's identifier in that plugin.
+    public var insert: UUID?
+    public var parameter: String?
     public var shape: Shape
     /// False: kept, but not heard.
     public var enabled: Bool
     /// Sorted by frame, at most one at a frame.
     public var points: [AutomationPoint]
 
-    public init(strip: UUID, param: Param = .gain, to: UUID? = nil, shape: Shape = .linear, enabled: Bool = true, points: [AutomationPoint]) {
+    public init(strip: UUID, param: Param = .gain, to: UUID? = nil, insert: UUID? = nil, parameter: String? = nil, shape: Shape = .linear, enabled: Bool = true, points: [AutomationPoint]) {
         self.strip = strip
         self.param = param
         self.to = to
+        self.insert = insert
+        self.parameter = parameter
         self.shape = shape
         self.enabled = enabled
         self.points = points
@@ -70,6 +77,8 @@ public enum Automation {
         case .gain, .send: gainRange
         case .pan: Mixer.panRange
         case .mute: 0...1
+        // (A plugin's parameter has its own range, which only the plugin knows; the step that writes the lane asks it.)
+        case .plugin: -Double.greatestFiniteMagnitude...Double.greatestFiniteMagnitude
         }
     }
     static func unit(of param: AutomationLane.Param) -> String {
@@ -77,13 +86,14 @@ public enum Automation {
         case .gain, .send: "a gain is \(Int(gainRange.lowerBound)) to \(Int(gainRange.upperBound)) dB"
         case .pan: "a pan is −1 (left) to 1 (right)"
         case .mute: "a mute is 1 (muted) or 0 (heard)"
+        case .plugin: "a plugin's parameter has its own range"
         }
     }
     /// The longest timeline a point may be on: 24 hours at 192 kHz.
     public static let maxFrame: Frame = 24 * 3600 * 192_000
 
     public enum Failure: Error, LocalizedError, Equatable {
-        case noStrip(String), notBuilt(String), badValue(String), tooMany, mono, noPan, noSend(String), groupHasNoPan
+        case noStrip(String), notBuilt(String), badValue(String), tooMany, mono, noPan, noSend(String), groupHasNoPan, noInsert
 
         public var reason: String {
             switch self {
@@ -93,7 +103,7 @@ public enum Automation {
             case .tooMany: "too_many"
             case .mono: "needs_stereo"
             case .noPan, .groupHasNoPan: "bad_request"
-            case .noSend: "not_found"
+            case .noSend, .noInsert: "not_found"
             }
         }
         public var errorDescription: String? {
@@ -104,6 +114,7 @@ public enum Automation {
             case .noPan: "the master has a level to automate, not a pan, a mute or a send."
             case .groupHasNoPan: "a VCA group has a level and a mute to automate, not a pan or a send."
             case .noSend(let to): "that strip has no send to \(to); make the send first (set_send)."
+            case .noInsert: "that strip has no plugin with that id; a parameter lane names a plugin on the strip (`insert`) and one of its parameters (`parameter`)."
             case .badValue(let m): m
             case .tooMany: "a lane can have \(Automation.maxPoints) points at most."
             }
@@ -119,6 +130,7 @@ extension Project {
     public var liveLanes: [AutomationLane] {
         automation.filter { l in
             guard !l.points.isEmpty, canAutomate(l.strip) else { return false }
+            if l.param == .plugin { return l.insert.map { hasInsert($0, on: l.strip) } == true && l.parameter?.isEmpty == false }
             return l.param != .send || l.to.map { hasSend(from: l.strip, to: $0) } == true
         }
     }
@@ -126,13 +138,20 @@ extension Project {
     public func hasSend(from strip: UUID, to: UUID) -> Bool {
         (tracks.first { $0.id == strip }?.sends ?? bus(strip)?.sends ?? []).contains { $0.to == to }
     }
+    /// The plugins on a strip: a track's, a bus's or the master's.
+    public func inserts(of strip: UUID) -> [Insert] {
+        strip == Master.id ? master.inserts : tracks.first { $0.id == strip }?.inserts ?? bus(strip)?.inserts ?? []
+    }
+    func hasInsert(_ insert: UUID, on strip: UUID) -> Bool { inserts(of: strip).contains { $0.id == insert } }
+    /// The enabled lanes on a strip's plugins' parameters.
+    public func pluginLanes(of strip: UUID) -> [AutomationLane] { liveLanes.filter { $0.strip == strip && $0.param == .plugin && $0.enabled } }
     /// The VCA group a track or bus belongs to, if any.
     func group(of strip: UUID) -> UUID? { tracks.first { $0.id == strip }?.vca ?? bus(strip)?.vca }
 
     public func lanes(of strip: UUID) -> [AutomationLane] { liveLanes.filter { $0.strip == strip } }
 
-    public func lane(strip: UUID, param: AutomationLane.Param, to: UUID? = nil) -> AutomationLane? {
-        liveLanes.first { $0.strip == strip && $0.param == param && $0.to == to }
+    public func lane(strip: UUID, param: AutomationLane.Param, to: UUID? = nil, insert: UUID? = nil, parameter: String? = nil) -> AutomationLane? {
+        liveLanes.first { $0.strip == strip && $0.param == param && $0.to == to && $0.insert == insert && $0.parameter == parameter }
     }
 
     /// What the engine is given for a strip's level: the enabled gain lane's points, or nil. A strip in a
@@ -206,10 +225,19 @@ extension Project {
     /// included); points outside the range are never touched. A lane left without points is gone.
     /// Refused, with the name of what was wrong: a strip that isn't there, a point before 0 or after the
     /// document's end, a value outside the fader's range, two points at one frame, too many points.
-    public mutating func setAutomation(strip: UUID, param: AutomationLane.Param = .gain, to: UUID? = nil, points new: [AutomationPoint],
+    /// For a plugin's parameter (`param` plugin): `insert` and `parameter` say which, and `values` is the
+    /// range the plugin itself gives for it (asked of the plugin by whoever writes the lane; without it the
+    /// values are taken as they are, and the plugin holds them to its range when they are set).
+    public mutating func setAutomation(strip: UUID, param: AutomationLane.Param = .gain, to: UUID? = nil, insert: UUID? = nil, parameter: String? = nil,
+                                       values: ClosedRange<Double>? = nil, points new: [AutomationPoint],
                                        range: ClosedRange<Frame>? = nil, shape: AutomationLane.Shape? = nil, enabled: Bool? = nil) throws {
         guard canAutomate(strip) else { throw Automation.Failure.noStrip(strip.uuidString) }
-        if strip == Master.id, param != .gain { throw Automation.Failure.noPan }
+        if param == .plugin {
+            guard vca(strip) == nil, let insert, hasInsert(insert, on: strip), parameter?.isEmpty == false else { throw Automation.Failure.noInsert }
+        } else if insert != nil || parameter != nil {
+            throw Automation.Failure.badValue("`insert` and `parameter` name a plugin's parameter and go with param plugin only.")
+        }
+        if strip == Master.id, param != .gain, param != .plugin { throw Automation.Failure.noPan }
         if vca(strip) != nil, param == .pan || param == .send { throw Automation.Failure.groupHasNoPan }
         if param == .send {
             guard let to, hasSend(from: strip, to: to) else { throw Automation.Failure.noSend(to.flatMap { bus($0)?.name } ?? "that bus") }
@@ -221,14 +249,14 @@ extension Project {
         if let shape, shape != (param == .mute ? .hold : .linear) {
             throw Automation.Failure.badValue(param == .mute ? "a mute lane holds each value until the next point (shape hold)." : "a \(param.rawValue) lane goes in a straight line between points (shape linear).")
         }
-        let allowed = Automation.range(of: param)
+        let allowed = values ?? Automation.range(of: param)
         let end = length
         for (i, p) in new.enumerated() {
             guard p.frame >= 0, p.frame <= end else {
                 throw Automation.Failure.badValue("points[\(i)] is at \(seconds(p.frame)) s, outside the document (0 to \(seconds(end)) s).")
             }
             guard p.value.isFinite, allowed.contains(p.value), param != .mute || p.value == 0 || p.value == 1 else {
-                throw Automation.Failure.badValue("points[\(i)] has the value \(p.value); \(Automation.unit(of: param)).")
+                throw Automation.Failure.badValue("points[\(i)] has the value \(p.value); \(values.map { "the parameter takes \($0.lowerBound.formatted()) to \($0.upperBound.formatted())" } ?? Automation.unit(of: param)).")
             }
             if let r = range, !r.contains(p.frame) {
                 throw Automation.Failure.badValue("points[\(i)] is at \(seconds(p.frame)) s, outside the range given (\(seconds(r.lowerBound)) to \(seconds(r.upperBound)) s).")
@@ -238,21 +266,23 @@ extension Project {
         for (a, b) in zip(sorted, sorted.dropFirst()) where a.frame == b.frame {
             throw Automation.Failure.badValue("two points are at \(seconds(a.frame)) s; a lane has one value at a time.")
         }
-        var lane = lane(strip: strip, param: param, to: to) ?? AutomationLane(strip: strip, param: param, to: to, shape: param == .mute ? .hold : .linear, points: [])
+        var lane = lane(strip: strip, param: param, to: to, insert: insert, parameter: parameter)
+            ?? AutomationLane(strip: strip, param: param, to: to, insert: insert, parameter: parameter, shape: param == .mute ? .hold : .linear, points: [])
         if let range { lane.points = (lane.points.filter { !range.contains($0.frame) } + sorted).sorted { $0.frame < $1.frame } }
         else { lane.points = sorted }
         if let shape { lane.shape = shape }
         if let enabled { lane.enabled = enabled }
         guard lane.points.count <= Automation.maxPoints else { throw Automation.Failure.tooMany }
-        automation.removeAll { $0.strip == strip && $0.param == param && $0.to == to }
+        automation.removeAll { $0.strip == strip && $0.param == param && $0.to == to && $0.insert == insert && $0.parameter == parameter }
         if !lane.points.isEmpty { automation.append(lane) }
     }
 
     /// Takes a lane's points away: all of them, or those inside `range`. Answers how many went.
     @discardableResult
-    public mutating func clearAutomation(strip: UUID, param: AutomationLane.Param, to: UUID? = nil, range: ClosedRange<Frame>? = nil) throws -> Int {
+    public mutating func clearAutomation(strip: UUID, param: AutomationLane.Param, to: UUID? = nil, insert: UUID? = nil, parameter: String? = nil,
+                                         range: ClosedRange<Frame>? = nil) throws -> Int {
         guard canAutomate(strip) else { throw Automation.Failure.noStrip(strip.uuidString) }
-        guard let i = automation.firstIndex(where: { $0.strip == strip && $0.param == param && $0.to == to }) else { return 0 }
+        guard let i = automation.firstIndex(where: { $0.strip == strip && $0.param == param && $0.to == to && $0.insert == insert && $0.parameter == parameter }) else { return 0 }
         let before = automation[i].points.count
         if let range { automation[i].points.removeAll { range.contains($0.frame) } } else { automation[i].points = [] }
         let gone = before - automation[i].points.count

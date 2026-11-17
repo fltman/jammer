@@ -107,7 +107,7 @@ struct AutomationStepTests {
             #expect(said(["strip": strip, "to": .string(UUID().uuidString), "points": Self.pairs([(1, 0)])]).contains("\"to\" goes with param send only"))
             #expect(said(["strip": strip, "param": .string("pan"), "points": Self.pairs([(1, 1.5)])]).contains("points[0] has the value 1.5; a pan is −1 (left) to 1 (right)"))
             #expect(said(["strip": strip, "param": .string("mute"), "points": Self.pairs([(1, 0.5)])]).contains("points[0] has the value 0.5; a mute is 1 (muted) or 0 (heard)"))
-            #expect(said(["strip": .string("master"), "param": .string("mute"), "points": Self.pairs([(1, 1)])]).contains("\"param\" is gain for the master"))
+            #expect(said(["strip": .string("master"), "param": .string("mute"), "points": Self.pairs([(1, 1)])]).contains("\"param\" is gain or plugin for the master"))
             var withGroup = s.project
             let group = try! withGroup.addVCA(name: "V"), bus = try! withGroup.addBus(name: "B")
             try! withGroup.setSend(from: withGroup.tracks[0].id, to: bus.id)
@@ -161,6 +161,46 @@ struct AutomationStepTests {
             #expect(Self.run(&plain, "align_tracks", ["reference": .string(p.tracks[0].id.uuidString), "window": .number(10)]).warnings.isEmpty)
             // A delete that closes the timeline moves the lane with the sound: no warning.
             #expect(Self.run(&s, "delete", ["start": .number(0.2), "end": .number(0.4)]).warnings.isEmpty)
+        }
+    }
+
+    @Test("A lane on a plugin's parameter, by step: the plugin by its name, the parameter by its name, kept by the plugin's own identifier; refused with the reason where the plugin or the parameter isn't there, a value is outside the parameter's range, or the fields are missing")
+    func pluginParameter() throws {
+        Operations.$automationForThisTask.withValue(true) {
+            var s = Self.state()
+            let track = s.project.tracks[0].id
+            s.project.tracks[0].inserts = [Insert(plugin: PluginID("aufx/lpas/appl")!, name: "AULowpass")]
+            let insert = s.project.tracks[0].inserts[0].id
+            // By name, and by the parameter's display name.
+            let made = Self.run(&s, "set_automation", ["strip": .string(track.uuidString), "param": .string("plugin"), "insert": .string("AULowpass"),
+                                                       "parameter": .string("cutoff frequency"), "points": Self.pairs([(0, 20_000), (8, 300)])])
+            #expect(made.status == .done && made.info["points"] == 2, "\(made.error ?? "")")
+            let lane = s.project.pluginLanes(of: track).first
+            #expect(lane?.insert == insert && lane?.parameter?.isEmpty == false && lane?.points.map(\.value) == [20_000, 300])
+            // Again by the identifier it was kept by: the same lane, not a second one.
+            let again = Self.run(&s, "set_automation", ["strip": .string(track.uuidString), "param": .string("plugin"), "insert": .string(insert.uuidString),
+                                                        "parameter": .string(lane?.parameter ?? ""), "points": Self.pairs([(0, 10_000)])])
+            #expect(again.status == .done && s.project.pluginLanes(of: track).count == 1 && s.project.pluginLanes(of: track)[0].points.count == 1)
+            // Refused, each with what is wrong.
+            func refused(_ params: [String: JSONValue], _ words: String, reason: String? = nil) {
+                var all: [String: JSONValue] = ["strip": .string(track.uuidString), "param": .string("plugin"), "points": Self.pairs([(0, 1_000)])]
+                for (k, v) in params { all[k] = v }
+                let r = Self.run(&s, "set_automation", all)
+                #expect(r.status == .failed && (r.error ?? "").contains(words), "\(words): \(r.error ?? "not refused")")
+                if let reason { #expect(r.reason == reason, "\(r.reason ?? "")") }
+            }
+            refused([:], "\"insert\" and \"parameter\" are needed")
+            refused(["insert": .string("Nothing"), "parameter": .string("x")], "no plugin Nothing", reason: "not_found")
+            refused(["insert": .string("AULowpass"), "parameter": .string("warmth")], "no parameter warmth", reason: "not_found")
+            refused(["insert": .string("AULowpass"), "parameter": .string("cutoff frequency"), "points": Self.pairs([(0, 9e9)])], "the parameter takes")
+            let stray = Self.run(&s, "set_automation", ["strip": .string(track.uuidString), "insert": .string("AULowpass"), "points": Self.pairs([(0, 0)])])
+            #expect(stray.status == .failed && (stray.error ?? "").contains("go with param plugin only"))
+            // Switched off and cleared.
+            let off = Self.run(&s, "set_automation", ["strip": .string(track.uuidString), "param": .string("plugin"), "insert": .string("AULowpass"),
+                                                      "parameter": .string("cutoff frequency"), "points": Self.pairs([]), "enabled": .bool(false)])
+            #expect(off.status == .done && s.project.pluginLanes(of: track).isEmpty && s.project.liveLanes.count == 1, "\(off.error ?? "")")
+            let gone = Self.run(&s, "clear_automation", ["strip": .string(track.uuidString), "param": .string("plugin"), "insert": .string("AULowpass"), "parameter": .string("cutoff frequency")])
+            #expect(gone.status == .done && gone.info["removed"] == 1 && s.project.liveLanes.isEmpty, "\(gone.error ?? "")")
         }
     }
 }

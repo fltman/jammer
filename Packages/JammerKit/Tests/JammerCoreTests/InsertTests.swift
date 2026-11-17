@@ -122,6 +122,48 @@ struct InsertTests {
         #expect(db(blocks, wet) < -100, "blocks against one piece: \(db(blocks, wet)) dB")
     }
 
+    @Test("A lane on an Audio Unit's parameter: Apple's low-pass closed from 20 kHz to 300 Hz over three seconds makes the noise fall away as it plays, the same from a seek, and the lane is refused where it can't be set")
+    func parameterLane() async throws {
+        let dir = TempDir()
+        var (p, pool) = try project(dir, level: 0.3)
+        p.tracks[0].inserts = [Insert(plugin: Self.lowpass, name: "AULowpass")]
+        let insert = p.tracks[0].inserts[0].id, track = p.tracks[0].id
+        let host = await InsertHost.make(for: p)
+        let unit = try #require(host.instance(insert))
+        let cutoff = try #require(unit.parameters.first)        // the cutoff is the low-pass's first parameter
+        #expect(unit.address(of: cutoff.identifier) != nil)
+        let rms = { (x: ArraySlice<Float>) in (x.reduce(0.0) { $0 + Double($1 * $1) } / Double(x.count)).squareRoot() }
+        // Open all the way: what the lane starts from.
+        try unit.set(cutoff.identifier, to: 20_000)
+        let open = PlanCompiler.compile(p, pool: pool, inserts: host).render(from: 0, frames: Int(p.length))
+        // The lane: 20 kHz at the start, 300 Hz at the end.
+        try p.setAutomation(strip: track, param: .plugin, insert: insert, parameter: cutoff.identifier, values: cutoff.min...cutoff.max,
+                            points: [AutomationPoint(frame: 0, value: 20_000), AutomationPoint(frame: p.length, value: 300)])
+        #expect(p.pluginLanes(of: track).count == 1 && p.usesAutomation)
+        let plan = PlanCompiler.compile(p, pool: pool, inserts: host)
+        let closing = plan.render(from: 0, frames: Int(p.length))
+        let half = Int(sr * 0.5) * 2
+        #expect(rms(closing[0..<half]) > rms(open[0..<half]) * 0.8, "the first half second is still nearly open")
+        #expect(rms(closing[(closing.count - half)...]) < rms(open[(open.count - half)...]) * 0.45, "the last half second is closed down (from about 3.6 kHz to 300 Hz: under a third of the open level)")
+        // Falling all the way: each second quieter than the one before.
+        let second = Int(sr) * 2
+        #expect(rms(closing[second..<(2 * second)]) < rms(closing[0..<second]) && rms(closing[(2 * second)..<(3 * second)]) < rms(closing[second..<(2 * second)]))
+        // From a seek: the parameter is where the lane has it there, whatever the plugin was left at.
+        let at = Int(sr * 2)
+        let seeked = plan.render(from: Frame(at), frames: Int(sr * 0.9))
+        #expect(db(seeked, Array(closing[(at * 2)..<((at + Int(sr * 0.9)) * 2)])) < -60, "after a seek: \(db(seeked, Array(closing[(at * 2)..<((at + Int(sr * 0.9)) * 2)]))) dB")
+        // Switched off, the lane is kept and not heard; a lane for a plugin that isn't on the strip, or outside the parameter's range, is refused.
+        try p.setAutomation(strip: track, param: .plugin, insert: insert, parameter: cutoff.identifier, points: p.pluginLanes(of: track)[0].points, enabled: false)
+        #expect(p.pluginLanes(of: track).isEmpty && p.lane(strip: track, param: .plugin, insert: insert, parameter: cutoff.identifier) != nil)
+        #expect(throws: Automation.Failure.noInsert) { try p.setAutomation(strip: track, param: .plugin, insert: UUID(), parameter: "0", points: [AutomationPoint(frame: 0, value: 1)]) }
+        #expect(throws: Automation.Failure.self) {
+            try p.setAutomation(strip: track, param: .plugin, insert: insert, parameter: cutoff.identifier, values: cutoff.min...cutoff.max, points: [AutomationPoint(frame: 0, value: 1e9)])
+        }
+        // The plugin taken off the strip: its lane is no longer a lane of the project (and isn't saved).
+        p.tracks[0].inserts = []
+        #expect(p.liveLanes.isEmpty)
+    }
+
     @Test("Seeking pre-rolls, and the block size doesn't change the output")
     func seekAndBlocks() async throws {
         let dir = TempDir()

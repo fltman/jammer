@@ -63,6 +63,9 @@ struct Unit {
     const float *key = nullptr;
     bool keyBus = false;
     bool (*processKeyed)(void *context, const float *in, const float *key, float *out, int32_t channels, int32_t frames) = nullptr;
+    /// A parameter set from a lane, before the block it holds for. An Audio Unit takes it itself
+    /// (AudioUnitSetParameter on its global scope); a processor takes it here, if it has parameters at all.
+    void (*control)(void *context, uint32_t parameter, float value) = nullptr;
     ~Unit();
 };
 
@@ -99,6 +102,8 @@ struct Chain {
     /// One quantum of interleaved audio through the units, in place. What comes out is as late as the
     /// units make it (`latency` frames); the mixer graph lines the paths up and hides the lateness.
     void stream(float *interleaved, const KeyFeed *keys = nullptr, size_t keyCount = 0);
+    /// Sets a parameter of one unit (its place among the units) for the quantum that comes next.
+    void control(size_t unit, uint32_t parameter, float value);
     /// Starts the units afresh (a seek).
     void restart();
 
@@ -139,6 +144,15 @@ struct Curve {
     void apply(const float *in, float *out, int64_t at, int64_t n, int32_t channels) const;
 };
 
+/// Automation of one parameter of one plugin on a strip: the value the parameter has at each place on
+/// the strip's timeline, a straight line between points. Set once a quantum (512 frames), before the
+/// quantum is worked, to the line's value at the quantum's first frame as it enters the strip's plugins.
+struct ParamCurve {
+    int32_t unit;        // its place in the strip's chain
+    uint32_t parameter;  // the unit's own number for it
+    Curve curve;         // read with dbAt: a straight line in the parameter's own unit
+};
+
 struct Send {
     int32_t bus;
     float gain;
@@ -160,6 +174,7 @@ struct Track {
     /// together), so that a level under a hand has a strip to be put on. The sound is the same.
     bool live = false;
     std::shared_ptr<Chain> chain;
+    std::vector<ParamCurve> params;
     std::vector<Send> sends;
     /// Where the track goes: a bus (its index), or -1 for the output. With pan: the gain of the left
     /// and of the right channel (1 and 1 at the centre).
@@ -178,6 +193,7 @@ struct Bus {
     std::vector<Send> sends;
     /// Plugins on the bus, after the sum and before the fader.
     std::shared_ptr<Chain> chain;
+    std::vector<ParamCurve> params;
 };
 
 /// The mixer with plugins on buses. A plugin on a bus makes what leaves the bus late by its latency,
@@ -257,6 +273,8 @@ private:
     /// renderer has always done it, so that such a project gives the bits it always gave. That sum then
     /// waits like any other path for the longest one.
     bool plain_ = false;
+    /// Some plugin's parameter is automated in the plan (see reset).
+    bool params_ = false;
     std::vector<float> direct_, directLine_;
     size_t directAt_ = 0;
     bool sameShape(const Graph &o) const;
@@ -295,6 +313,7 @@ struct Plan {
     /// The master: the sum of everything → its plugins → its gain → its limiter, last of all.
     float masterGain = 1.0f;
     std::shared_ptr<Chain> masterChain, masterLimiter;
+    std::vector<ParamCurve> masterParams;
     /// Automation of the master's level: after its plugins, with its gain, before the limiter.
     Curve masterCurve;
     std::vector<Clip> clips; // sorted by start once finalized
