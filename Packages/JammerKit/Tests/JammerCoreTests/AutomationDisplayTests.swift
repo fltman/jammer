@@ -135,4 +135,48 @@ struct AutomationDisplayTests {
         #expect(mute.moving([1, 2], byFrames: 50, byValue: 1, limit: 10_000).points == Self.pts([(0, 0), (550, 1), (950, 0)]))
         #expect(lane.moving([], byFrames: 50, byValue: 1, limit: 10_000) == lane && lane.moving([9], byFrames: 50, byValue: 1, limit: 10_000) == lane)
     }
+
+    @Test("A pass written from a fader: the line is within 0.1 dB of what was heard at every frame of it, in far fewer points; outside the stretch the lane is what it was, at every frame; a pass of nothing changes nothing")
+    func written() {
+        // What a hand does over 30 s, as the engine would have put it on: a value a block (512 frames), wandering.
+        var heard: [AutomationPoint] = []
+        var v = -6.0, seed: UInt64 = 42
+        func random() -> Double { seed = seed &* 6364136223846793005 &+ 1442695040888963407; return Double(seed >> 33) / Double(1 << 31) - 0.5 }
+        var drift = 0.0
+        for k in 0..<2_800 {
+            if k % 90 == 0 { drift = random() * 0.25 }
+            v = min(12, max(-40, v + drift + random() * 0.02))
+            heard.append(AutomationPoint(frame: 100_000 + Frame(k) * 512, value: v))
+        }
+        let old = AutomationLane(strip: UUID(), points: Self.pts([(0, -3), (50_000, -3), (400_000, -12), (3_000_000, 0)]))
+        let (lane, used) = old.written(heard)
+        #expect(used == Automation.writeTolerance)
+        // Within the tolerance at every frame that was heard, and between them (the engine goes straight from one block's value to the next).
+        var worst = 0.0
+        for (i, h) in heard.enumerated() {
+            worst = max(worst, abs(lane.value(at: h.frame)! - h.value))
+            if i > 0 { let mid = (heard[i - 1].frame + h.frame) / 2; worst = max(worst, abs(lane.value(at: mid)! - (heard[i - 1].value + h.value) / 2)) }
+        }
+        #expect(worst <= Automation.writeTolerance + 1e-9, "worst \(worst) dB")
+        #expect(lane.points.count < 400 && lane.points.count > 10, "\(lane.points.count) points for \(heard.count) heard")
+        // Outside the stretch: the same level as before at every frame looked at, right up to its edges.
+        let a = heard.first!.frame, b = heard.last!.frame
+        for f in [Frame(0), 49_999, 50_000, 75_000, a - 2, a - 1, b + 1, b + 2, 2_000_000, 3_000_000, 4_000_000] {
+            #expect(abs(lane.value(at: f)! - old.value(at: f)!) < 1e-9, "at \(f)")
+        }
+        #expect(lane.points.map(\.frame) == lane.points.map(\.frame).sorted() && Set(lane.points.map(\.frame)).count == lane.points.count)
+        // Where there was no lane: nothing is added outside the stretch, before it or after it.
+        let fresh = AutomationLane(strip: UUID(), points: []).written(heard).lane
+        #expect(fresh.value(at: a - 1) == 0 && fresh.value(at: 0) == 0 && fresh.value(at: b + 1) == 0 && fresh.value(at: 9_000_000) == 0)
+        #expect(abs(fresh.value(at: heard[1_000].frame)! - heard[1_000].value) <= Automation.writeTolerance)
+        // A pass of nothing; and a pass of one value.
+        #expect(old.written([]).lane == old)
+        let one = old.written([AutomationPoint(frame: 200_000, value: -20)]).lane
+        #expect(one.value(at: 200_000) == -20 && abs(one.value(at: 199_999)! - old.value(at: 199_999)!) < 1e-9 && abs(one.value(at: 200_001)! - old.value(at: 200_001)!) < 1e-9)
+        // A steady hand is two points; and a pass too long for a lane is thinned further, and says so.
+        #expect(Automation.thinned((0..<1_000).map { AutomationPoint(frame: Frame($0), value: -6) }, tolerance: 0.1).count == 2)
+        let wild = (0..<40_000).map { AutomationPoint(frame: Frame($0) * 64, value: $0 % 2 == 0 ? -1 : 1) }
+        let long = AutomationLane(strip: UUID(), points: []).written(wild)
+        #expect(long.lane.points.count <= Automation.maxPoints && long.tolerance > Automation.writeTolerance)
+    }
 }

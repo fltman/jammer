@@ -117,6 +117,14 @@ enum LinkJournalStore {
             if session.document?.isDocumentEdited == true { keep(session) } else { forget(session) }
         }
         queue.sync {}
+        // Whatever else still waits with changes (a document the system's own question at Quit closed
+        // without asking Jämmer) was kept by an orderly quit, not left by a stop: it says so when it comes back.
+        let journal = journal
+        for read in journal.read().entries where read.entry.edited && !read.entry.kept {
+            var entry = read.entry
+            entry.kept = true
+            try? journal.write(entry)
+        }
     }
 
     /// How many entries wait, and how many can't be read (`GET /api/v1/status`).

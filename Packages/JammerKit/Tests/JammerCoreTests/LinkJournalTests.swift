@@ -77,3 +77,28 @@ struct LinkJournalTests {
         #expect(bytes < 16 * 1024 * 1024 && took < .milliseconds(500) && j.read().entries.count == 1)
     }
 }
+
+/// Not a test of anything: writes a long project to a place given in the environment, for checks in the
+/// app that need a document with a two-hour transcript (JAMMER_WRITE_LONG=<package path>, JAMMER_LONG_AUDIO=<wav>).
+@Suite("A long project for the app's checks")
+struct LongProjectForChecks {
+    @Test("Written when asked for", .enabled(if: ProcessInfo.processInfo.environment["JAMMER_WRITE_LONG"] != nil))
+    func write() throws {
+        let env = ProcessInfo.processInfo.environment
+        let package = URL(fileURLWithPath: env["JAMMER_WRITE_LONG"]!), audio = URL(fileURLWithPath: env["JAMMER_LONG_AUDIO"]!)
+        try? FileManager.default.removeItem(at: package)
+        let media = package.appending(path: ProjectPackage.mediaFolderName)
+        try FileManager.default.createDirectory(at: media, withIntermediateDirectories: true)
+        try FileManager.default.copyItem(at: audio, to: media.appending(path: audio.lastPathComponent))
+        var source = SourceRef(name: "long", path: media.appending(path: audio.lastPathComponent).path, info: try AudioFileReader.info(at: audio))
+        source.packagePath = "\(ProjectPackage.mediaFolderName)/\(audio.lastPathComponent)"
+        var p = Project(source: source)
+        let rate = p.sampleRate
+        p.tracks[0].clips = (0..<600).map { Clip(sourceID: source.id, sourceStart: Frame(Double($0) * 12 * rate), start: Frame(Double($0) * 12 * rate), length: Frame(12 * rate)) }
+        p.setTranscript(SourceTranscript(sourceID: source.id, language: "sv-SE", engine: "test",
+                                         words: (0..<20_000).map { i in Word(text: "ord\(i % 97)", start: Frame(Double(i) * 0.36 * rate), end: Frame((Double(i) * 0.36 + 0.3) * rate), confidence: 0.9) }))
+        let wrapper = try ProjectPackage.fileWrapper(p, existingMedia: try FileWrapper(url: media))
+        try wrapper.write(to: package, options: .atomic, originalContentsURL: package)
+        print("long project written: \(package.path)")
+    }
+}

@@ -257,9 +257,9 @@ final class JammerDocument: NSDocument {
     // MARK: Collect and save
 
     /// Set by "Collect Audio and Save"; the next save copies the sources into Media/.
-    private var collectOnSave = false
+    nonisolated(unsafe) private var collectOnSave = false
     nonisolated(unsafe) private var pendingCopies: [ProjectPackage.MediaCopy] = []
-    private var pendingCollected: Project?
+    nonisolated(unsafe) private var pendingCollected: Project?
 
     /// Copies every file the project plays from into the package, then saves.
     /// An untitled project is saved first (the save panel), then collected.
@@ -278,7 +278,44 @@ final class JammerDocument: NSDocument {
         save(nil)
     }
 
-    override func fileWrapper(ofType typeName: String) throws -> FileWrapper {
+    // MARK: Autosaving off the main thread
+
+    /// What an autosave writes, taken on the main thread before the write goes to a thread of its own:
+    /// the document as it stood (a value; taking it copies nothing), its history, and its link.
+    private struct Snapshot { var project: Project; var history: History?; var link: LinkedFile.Record? }
+    private let snapshotLock = NSLock()
+    nonisolated(unsafe) private var snapshotTaken: Snapshot?
+    nonisolated private var snapshot: Snapshot? {
+        get { snapshotLock.lock(); defer { snapshotLock.unlock() }; return snapshotTaken }
+        set { snapshotLock.lock(); snapshotTaken = newValue; snapshotLock.unlock() }
+    }
+    /// How long the last autosave held the main thread, and how long its write took on its own thread (ms), and how many there have been.
+    nonisolated(unsafe) static var autosaveTimes: (main: Double, write: Double, count: Int) = (0, 0, 0)
+    private static let timesLock = NSLock()
+
+    private static func isAutosave(_ op: NSDocument.SaveOperationType) -> Bool {
+        op == .autosaveElsewhereOperation || op == .autosaveAsOperation || op == .autosaveInPlaceOperation
+    }
+    /// An autosave is written on a thread of its own: in a long document the coding alone is tens of
+    /// milliseconds, and it happens a second after every step. (A save the user asks for, and Collect
+    /// Audio and Save, stay where they were: they touch the document's own state as they go.)
+    override func canAsynchronouslyWrite(to url: URL, ofType typeName: String, for saveOperation: NSDocument.SaveOperationType) -> Bool {
+        Self.isAutosave(saveOperation) && !collectOnSave
+    }
+
+    // (Not held to the main thread: an autosave calls it from its own. What it does there touches only the snapshot.)
+    nonisolated override func fileWrapper(ofType typeName: String) throws -> FileWrapper {
+        if !Thread.isMainThread {
+            // An autosave on its own thread: from the snapshot, never from the session.
+            guard let snap = snapshot else { throw CocoaError(.fileWriteUnknown) }
+            let wrapper = try ProjectPackage.fileWrapper(snap.project, existingMedia: mediaWrapper)
+            if let h = snap.history, let data = try? JSONEncoder().encode(h) {
+                let file = FileWrapper(regularFileWithContents: data)
+                file.preferredFilename = Self.historyFile
+                wrapper.addFileWrapper(file)
+            }
+            return wrapper
+        }
         var project = MainActor.assumeIsolated { session?.project ?? pendingProject }
         guard project != nil else { throw CocoaError(.fileWriteUnknown) }
         // What this document plays from now was opened under the user's hand: saving it makes a
@@ -309,14 +346,32 @@ final class JammerDocument: NSDocument {
         return wrapper
     }
 
-    override func write(to url: URL, ofType typeName: String, for saveOperation: NSDocument.SaveOperationType,
+    nonisolated override func write(to url: URL, ofType typeName: String, for saveOperation: NSDocument.SaveOperationType,
                         originalContentsURL absoluteOriginalContentsURL: URL?) throws {
+        let own = !Thread.isMainThread
+        // On its own thread: the snapshot is taken, so the window is let go before the coding starts.
+        if own { unblockUserInteraction() }
+        let began = Date()
+        defer {
+            if own {
+                Self.timesLock.lock()
+                Self.autosaveTimes.write = Date().timeIntervalSince(began) * 1_000
+                Self.autosaveTimes.count += 1
+                let t = Self.autosaveTimes
+                Self.timesLock.unlock()
+                #if DEBUG
+                // For the checks (a test copy started with its output kept): what the autosave cost, and where.
+                NSLog("Jammer: autosave %d held the main thread %.2f ms; written on its own thread in %.1f ms", t.count, t.main, t.write)
+                #endif
+            }
+        }
         try super.write(to: url, ofType: typeName, for: saveOperation, originalContentsURL: absoluteOriginalContentsURL)
         // An autosave of a linked document carries its link, so the document that comes back from it
         // (after a crash, when the window's own state is gone) is still linked. A project the user
         // saves does not: a Jämmer Copy is a project of its own.
         let autosave = saveOperation == .autosaveElsewhereOperation || saveOperation == .autosaveAsOperation || saveOperation == .autosaveInPlaceOperation
-        if autosave, let record = MainActor.assumeIsolated({ session?.linkRecord ?? pendingLink }), let data = try? JSONEncoder().encode(record) {
+        let link = own ? snapshot?.link : MainActor.assumeIsolated({ session?.linkRecord ?? pendingLink })
+        if autosave, let record = link, let data = try? JSONEncoder().encode(record) {
             try? data.write(to: url.appending(path: Self.linkFile))
         }
         // project.json already names the copies; put them in place before the save counts.
@@ -325,7 +380,28 @@ final class JammerDocument: NSDocument {
 
     override func save(to url: URL, ofType typeName: String, for saveOperation: NSDocument.SaveOperationType,
                        completionHandler: @escaping (Error?) -> Void) {
+        if Self.isAutosave(saveOperation) {
+            // Here, on the main thread, what the autosave will write is taken; the write itself goes elsewhere.
+            let began = Date()
+            MainActor.assumeIsolated {
+                if let s = session {
+                    let refused = Set(s.pool.refused.keys).union(s.pool.missing)
+                    ProjectAccess.approve(s.project.sources.filter { !refused.contains($0.id) && $0.packagePath == nil && !$0.path.isEmpty }.map { SourcePool.resolve($0) })
+                    snapshot = Snapshot(project: s.project, history: s.history, link: s.linkRecord)
+                } else if let p = pendingProject {
+                    snapshot = Snapshot(project: p, history: nil, link: pendingLink)
+                }
+            }
+            Self.timesLock.lock()
+            Self.autosaveTimes.main = Date().timeIntervalSince(began) * 1_000
+            Self.timesLock.unlock()
+        }
         super.save(to: url, ofType: typeName, for: saveOperation) { [weak self] error in
+            // (An autosave written on its own thread may answer from there: what follows is the main thread's.)
+            guard Thread.isMainThread else {
+                DispatchQueue.main.async { MainActor.assumeIsolated { if error == nil, let s = self?.session { StorageScanner.note(s) } }; completionHandler(error) }
+                return
+            }
             MainActor.assumeIsolated {
                 guard let self else { return }
                 let collecting = self.collectOnSave

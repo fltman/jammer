@@ -190,3 +190,76 @@ extension Automation {
         return min(range.upperBound, max(range.lowerBound, (v * 1_000).rounded() / 1_000))
     }
 }
+
+// MARK: Written from a fader while the sound plays
+
+extension Automation {
+    /// How far the written line may be from what was heard, in dB.
+    public static let writeTolerance = 0.1
+    /// How long a level takes to go back to the lane when a fader in Touch is let go, in seconds.
+    public static let writeGlide = 0.25
+
+    /// Fewer points for the same line: the straight lines through the points that are kept are never
+    /// more than `tolerance` (in the lane's unit, measured straight up and down, which is how a level is
+    /// heard) from any point that was left out. The first and the last are always kept.
+    ///
+    /// One walk along the points, so a pass of any length costs in proportion to its length (a method
+    /// that splits at the worst point, tried first, took minutes on a long restless pass): from the last
+    /// kept point, each next point is taken as the far end for as long as the line to it stays within
+    /// the tolerance of every point between; when one can't be, the point before it is kept, and the
+    /// walk goes on from there. What "stays within" needs is only the span of slopes that all the points
+    /// so far allow, which narrows as points are passed.
+    public static func thinned(_ points: [AutomationPoint], tolerance: Double) -> [AutomationPoint] {
+        guard points.count > 2 else { return points }
+        var out = [points[0]]
+        var anchor = points[0]
+        var lo = -Double.infinity, hi = Double.infinity      // the slopes from the anchor that every passed point allows
+        var i = 1
+        while i < points.count {
+            let p = points[i]
+            let dt = Double(p.frame - anchor.frame)
+            guard dt > 0 else { i += 1; continue }
+            let slope = (p.value - anchor.value) / dt
+            if slope >= lo && slope <= hi {
+                // The line from the anchor to this point is within the tolerance of all between: it may be the far end.
+                lo = max(lo, (p.value - tolerance - anchor.value) / dt)
+                hi = min(hi, (p.value + tolerance - anchor.value) / dt)
+                i += 1
+            } else {
+                // It can't be: the point before it is kept (the line to that one was within the tolerance), and is the new anchor.
+                anchor = points[i - 1]
+                out.append(anchor)
+                lo = -.infinity
+                hi = .infinity
+            }
+        }
+        if out.last != points[points.count - 1] { out.append(points[points.count - 1]) }
+        return out
+    }
+}
+
+extension AutomationLane {
+    /// The lane after a pass of writing: `heard` is the level the engine put on the strip in the lane's
+    /// place, block by block, in the order it was played (frames rising). Between its first and its last
+    /// frame the lane becomes that line, thinned to within `tolerance` of it; outside that stretch the
+    /// lane is what it was, at every frame, held there by a point just before and just after. A pass of
+    /// nothing changes nothing. If the result would have more points than a lane may, the pass is
+    /// thinned further (the tolerance doubled until it fits), and the tolerance that was used is given back.
+    public func written(_ heard: [AutomationPoint], tolerance: Double = Automation.writeTolerance) -> (lane: AutomationLane, tolerance: Double) {
+        guard let first = heard.first, let last = heard.last, last.frame >= first.frame else { return (self, tolerance) }
+        let outside = points.filter { $0.frame < first.frame - 1 || $0.frame > last.frame + 1 }
+        // What the lane was just outside the stretch (nothing added, where there was no lane).
+        var edges: [AutomationPoint] = []
+        if first.frame > 0 { edges.append(AutomationPoint(frame: first.frame - 1, value: valueOrRest(at: first.frame - 1))) }
+        edges.append(AutomationPoint(frame: last.frame + 1, value: valueOrRest(at: last.frame + 1)))
+        var used = tolerance
+        var inside = Automation.thinned(heard, tolerance: used)
+        while outside.count + edges.count + inside.count > Automation.maxPoints, inside.count > 2 {
+            used *= 2
+            inside = Automation.thinned(heard, tolerance: used)
+        }
+        var out = self
+        out.points = (outside + edges + inside).sorted { $0.frame < $1.frame }
+        return (out, used)
+    }
+}

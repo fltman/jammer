@@ -59,7 +59,7 @@ Jämmer never writes the file by itself: autosave keeps your edits in the docume
 
 If you close the window with changes you haven't saved back, Jämmer asks **Save your changes back to "clip.wav"?** and says how many steps are waiting: **Save Back** writes the file and closes; **Keep for Later** closes the window and keeps the changes in Jämmer; **Discard** gives them up and leaves the file as it was; **Cancel** keeps the document open. It never offers to save a linked document as a new file on its own.
 
-Quitting Jämmer never asks about a linked document. Changes you haven't saved back are kept, and the document opens again the next time Jämmer starts, with **Kept from last time: not saved back yet** in its title bar. Undo starts from there.
+Quitting Jämmer never asks about a linked document. (If another document has unsaved changes, macOS asks about unsaved documents and may count the linked one; whatever you answer there, the linked document's changes are kept.) Changes you haven't saved back are kept, and the document opens again the next time Jämmer starts, with **Kept from last time: not saved back yet** in its title bar. Undo starts from there.
 
 Work that is kept is listed under **File › Linked Files Waiting…**, with the file, the app it is for, how many steps wait and how long ago. **Open** brings it back; **Discard…** asks once, says what is lost, and moves the work to the Trash (the file itself is not touched). Sending the same clip from Flimmer again opens the kept work rather than a fresh copy.
 
