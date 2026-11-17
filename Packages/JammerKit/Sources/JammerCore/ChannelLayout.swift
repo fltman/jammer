@@ -129,10 +129,24 @@ extension ChannelLayout {
     ///
     /// Into a wider layout each source loudspeaker goes to the same loudspeaker; a mono source (a voice) goes
     /// to the centre. A source wider than the document is folded down a layout at a time (`foldStep`).
-    public func matrix(sourceChannels: Int, sourceMask: UInt32?, fieldOrder: Int? = nil) -> [Float]? {
+    public func matrix(sourceChannels: Int, sourceMask: UInt32?, fieldOrder: Int? = nil, sourceOrder: [Speaker]? = nil) -> [Float]? {
         // A file known to be a sound field: its components as they are into a field of its order, otherwise decoded.
         if let fieldOrder, let field = ChannelLayout.ambisonic(order: fieldOrder), field.channels == sourceChannels {
             return field == self ? nil : ChannelLayout.gains(from: field, to: self)
+        }
+        // A file that names its loudspeakers (ADM's chna): each channel to its loudspeaker of the layout they make,
+        // then on into this one; the same matrix as by the mask when the order is the mask's.
+        if let sourceOrder, sourceOrder.count == sourceChannels,
+           let source = ChannelLayout.of(channels: sourceChannels, mask: sourceOrder.reduce(0) { $0 | $1.rawValue }),
+           sourceOrder != source.speakers {
+            let onward = source == self ? nil : ChannelLayout.gains(from: source, to: self)
+            let n = channels
+            var m = [Float](repeating: 0, count: sourceChannels * n)
+            for (k, s) in sourceOrder.enumerated() {
+                guard let j = source.speakers.firstIndex(of: s) else { continue }
+                if let onward { for c in 0..<n { m[k * n + c] = onward[j * n + c] } } else { m[k * n + j] = 1 }
+            }
+            return m
         }
         let source = ChannelLayout.of(channels: sourceChannels, mask: sourceMask)
         if source == self { return nil }

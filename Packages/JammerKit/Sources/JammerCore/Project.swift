@@ -441,7 +441,7 @@ public struct Project: Codable, Equatable, Sendable {
     /// A project with one track playing the whole file.
     public init(source: SourceRef) {
         // A file in a layout this app knows keeps it (a 5.1 file is a 5.1 document); any other is heard as stereo, as before.
-        let layout = ChannelLayout.of(channels: source.info.channels, mask: source.info.channelMask)
+        let layout = ChannelLayout.of(channels: source.info.channels, mask: source.info.channelOrder.map { $0.reduce(0) { $0 | $1.rawValue } } ?? source.info.channelMask)
         self.init(sampleRate: source.info.sampleRate, channels: layout?.channels ?? max(1, min(2, source.info.channels)))
         sources = [source]
         tracks = [Track(name: source.name, clips: [Clip(sourceID: source.id, start: 0, length: source.info.frames)])]

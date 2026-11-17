@@ -40,6 +40,7 @@ Jämmer is MIT. Every third-party component and model is listed here **before** 
 
 | Format | Specification and its terms | What it asks of an implementation |
 |---|---|---|
+| ADM BWF (chna, axml) | ITU-R BS.2088 (BW64, chna's layout), BS.2076 (ADM elements), BS.2094 (common definitions' identifiers); ITU Recommendations, free to read. The identifiers as they stand in the common definitions shipped with the EBU's `ear` (BSD-3-Clause-Clear), read, not copied as code | Identifiers by the common definitions; nothing to attribute. Own code in `ADM.swift`. |
 | CMX 3600 EDL | No owner-published specification. The only copy of the old CMX manual is an unofficial scan on xmil.biz (not read: 43 MB). The related standard, SMPTE ST 258:2004 ("Transfer of Edit Decision Lists", https://pub.smpte.org/pub/st258/st0258-2004_stable2011.pdf, free to read since SMPTE opened its catalogue on 2026-06-17), is a different grammar. Implemented from what vendors document: Autodesk Flame's examples, Avid's EDL Manager guide (2008), Premiere's manual (CS6), and the OTIO CMX adapter's reader (Apache-2.0, read, nothing copied). | Nothing found: no licence, fee or permission. "CMX 3600" is used as the format's name only. |
 | OpenTimelineIO (.otio JSON) | https://github.com/AcademySoftwareFoundation/OpenTimelineIO, Apache-2.0; the file-format specification (docs/tutorials/otio-file-format-specification.md, v0.18.1) carries no separate licence. It recommends the library ("strongly recommended … instead of implementing a separate parser or writer") but doesn't require it. Schema versions written: those of OTIO 0.15–0.18 (Clip.2, Marker.2). | Nothing for implementing. The README: no right to use Pixar's or contributors' trade names; "OpenTimelineIO" is named as the format only. |
 | DAWproject 1.0 | https://github.com/bitwig/dawproject, MIT (Copyright 2020 Bitwig); "The format is version 1.0 and is stable"; Project.xsd and MetaData.xsd. | Nothing; no trademark or compatibility terms in the repository. Bitwig's XSD isn't copied into Jämmer (if it ever is, its MIT notice goes with it). |
@@ -52,6 +53,8 @@ AAF, DDP and ARA2 are not here: AAF and DDP wait for Anders's decisions on agree
 |---|---|
 | ffmpeg (`ebur128` filter) | Independent loudness reference in tests; skipped when absent |
 | afconvert / afinfo (macOS) | Interop tests for WAV/AIFF/AAC |
+| EBU ADM Renderer `ear` 2.1.0 (https://github.com/ebu/ebu_adm_renderer), BSD-3-Clause-Clear; with numpy, scipy, lxml, attrs, ruamel.yaml, six, multipledispatch, setuptools<70 from PyPI | Checks Jämmer's ADM BWF files by rendering them (`ADMTests.ear`, `JAMMER_EAR`). Installed 2026-11-17 by Anders's leave in a venv outside the repository; nothing of it is in the repository or the app. Its common definitions were read for the ADM identifiers. |
+| ITU-R BS.2217-2 compliance files (itu.int, R1102000001), © ITU, all rights reserved | Loudness calibration (`BS2217Tests`, `JAMMER_BS2217`). Fetched 2026-11-17 by Anders's leave into a folder outside the repository; never committed or shipped. |
 
 ## Models: licences read at the source (phase 1)
 

@@ -74,6 +74,9 @@ public struct AudioFileInfo: Sendable, Equatable, Codable {
     public var bext: BroadcastExtension?
     public var ixml: String?
     public var markers: [FileMarker]
+    /// The loudspeaker of each channel as an ADM BWF file's `chna` names it (5.1, 7.1, 7.1.4), when it does:
+    /// it decides over the mask and the channel count (a file without a mask in BS.2051's order).
+    public var channelOrder: [Speaker]?
     /// Set when the header says the file holds more sound than it does (it was cut off):
     /// the number of frames it claims. `frames` is what is really there.
     public var claimedFrames: Int64?
@@ -249,6 +252,9 @@ public enum AudioFileReader {
                                  channelMask: mask, dataOffset: data.offset, frames: data.size / frameBytes,
                                  chunks: chunks, bext: nil, ixml: nil, markers: [])
         if let claimedData, claimedData / frameBytes > info.frames { info.claimedFrames = claimedData / frameBytes }
+        if let c = chunks.first(where: { $0.id == "chna" }), c.size >= 4, c.size < 1 << 20 {
+            info.channelOrder = ADM.speakers(chna: try r.bytes(at: c.offset, count: Int(c.size)), channels: channels)
+        }
         if let b = chunks.first(where: { $0.id == "bext" }), b.size >= 602 {
             info.bext = try parseBext(&r, b)
         }

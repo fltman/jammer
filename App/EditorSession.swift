@@ -1074,9 +1074,11 @@ final class EditorSession {
             }.value
             return nil
         }
-        // A document wider than stereo is written with its layout's channel mask (5.1 as the side pair).
+        // A document wider than stereo is written with its layout's channel mask (5.1 as the side pair), and as
+        // ADM BWF: each track named by its loudspeaker in `chna` and `axml` (ITU-R BS.2088, the common definitions).
         var wav = WAVWriter.Options(encoding: options.encoding, channels: project.channels, sampleRate: project.sampleRate,
                                     channelMask: project.layout.isAmbisonic ? 0 : project.layout.mask, dither: options.dither)
+        if let adm = ADM.chunks(for: project.layout, title: name) { wav.foreignChunks = adm }
         let first = self.project.sources.first?.info
         if asked.lowerBound == 0 {
             if var bext = first?.bext {

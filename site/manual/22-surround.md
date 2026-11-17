@@ -51,7 +51,7 @@ BS.1770 has no loudness for a sound field. In an Ambisonics document loudness is
 
 ## Exporting
 
-- **WAV** keeps all the channels, marked with the layout's loudspeakers (an Ambisonics WAV is marked with none, as AmbiX files are).
+- **WAV** keeps all the channels, marked with the layout's loudspeakers (an Ambisonics WAV is marked with none, as AmbiX files are). A 5.1, 7.1 or 7.1.4 WAV is also an ADM BWF file: it names each channel's loudspeaker the way broadcast and immersive tools read it (ITU-R BS.2076 metadata, checked with the EBU's ADM renderer). Opening such a file, Jämmer uses those names too, so its channels land on the right loudspeakers even when the file has no channel mask.
 - **APAC (MP4)**, Apple's spatial codec, appears in the export's format list for loudspeaker layouts wider than stereo and for Ambisonics.
 - MP3 and Opus aren't offered for these documents.
 

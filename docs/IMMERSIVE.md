@@ -45,7 +45,7 @@ Phase 4 of `docs/PLAN.md`: multichannel up to 7.1.4, ADM BWF, Ambisonics, APAC/A
   - Tested: each coefficient; 7.1.4 into stereo through every step (a top rear reaches the left at 0.7071³); a 5.1 file in a stereo document is heard as L + 0.7071 C + 0.7071 Ls within 10⁻⁶.
 - **Listening:** a document wider than the device is folded down to the device's stereo pair by the same coefficients; a device with enough channels gets one each. Tested on the routing (5.1 onto a stereo pair, onto a four-channel device's chosen pair, 7.1.4 onto two channels).
 - **The loudness meter weights by position** (ITU-R BS.1770-5, Annex 3, Tables 4 and 5): 1.41 for 5.1's surrounds (±110°) and 7.1's sides (±90°), 1.00 for the fronts, 7.1's rears (±135°) and every height, the LFE not measured. Until today 7.1's rears had 1.41 and 7.1.4's LFE was counted. Tested: EBU Tech 3341 case 6 (a 5.0 sine, −28/−24/−30 dBFS) made here from its definition reads −23.0 ±0.1; a tone in each loudspeaker of 5.1, 7.1 and 7.1.4 reads as its weight says (sides +1.49 dB, LFE nothing); a 5.1 programme agrees with ffmpeg's ebur128 within 0.15 LU.
-  - **Not yet calibrated for 7.1 and 7.1.4 against a measured reference.** ffmpeg's ebur128 gives 7.1's rears 1.41 (its source, read today), so it is no reference there. The reference is ITU-R BS.2217's 8- and 12-channel compliance files (`1770Conf-8channels-24LKFS.wav`, `1770Conf-12channels-24LKFS.wav`, free to download from the ITU, "All Rights Reserved", so not to be committed). Fetching them, even once for a local run, is for Anders to say.
+  - **Calibrated for 7.1 and 7.1.4 against ITU-R BS.2217-2** (block J, below): the ITU's 0+7+0 and 4+7+0 compliance files read −23.000, −24.000 and −23.001 LKFS. ffmpeg's ebur128 gives 7.1's rears 1.41 (its source, read 2026-11-17), so it is no reference there.
   - EBU's own test files can't be committed either ("You may not use any EBU Test Sequences for business, commercial or for-profit activities"); the cases are tones defined in Tech 3341's table, so they are made in the tests.
 - **Audio › Layout** (Mono, Stereo, 5.1, 7.1, 7.1.4, the document's ticked) and the step `set_layout`: a value of the document, undone like any other; nothing converted. `layout` in `GET …/documents/{id}`.
 
@@ -115,6 +115,26 @@ In a layout wider than stereo the timeline draws a clip through the same matrix 
 - **Nothing on the audio thread allocates:** the quadrature's directions, weights and harmonics are made when the plan is built; `-Werror=function-effects` holds the turn's matrix and the curve's lookup (marked `JM_NONBLOCKING` here) to that, and refused the curve's lookup until it was marked.
 - **Not built:** head tracking (it would drive these three angles; it waits for an entitlement with the app's signing), and a turn of a whole Ambisonics bus.
 
+### Block J (2026-11-17, by Anders's leave): loudness calibrated against BS.2217, and ADM BWF
+
+**BS.2217.** Report ITU-R BS.2217-2 (10/2016), "Compliance material for Recommendation ITU-R BS.1770", read at the ITU: each file shall read its value within ±0.1 LKFS. Its files fetched from itu.int (the report's link, R1102000001) into a folder outside the repository ("All rights reserved"; not committed); `BS2217Tests` runs when `JAMMER_BS2217=<folder>` is set.
+
+| File (BS.2217-2) | The report | Jämmer |
+|---|---|---|
+| Mono Voice+Music −23 / −24 | −23.0 / −24.0 | −22.991 / −23.994 |
+| Stereo VinL+R −23 / −24 | −23.0 / −24.0 | −22.979 / −23.976 |
+| 6ch VinCntr −24; VinL+R −23 / −24; VinL-R-C −23 / −24 | as named | −23.977; −22.989 / −23.988; −22.986 / −23.976 |
+| 8 channels (0+7+0) −23 / −24 | −23.0 / −24.0 | −23.000 / −24.000 |
+| 12 channels (4+7+0) −23 | −23.0 | −23.001 |
+
+- **The files have no channel mask**, and their order is the report's, BS.2051's: L R C LFE **Lss Rss Lrs Rrs** (then Tfl Tfr Tbl Tbr), the sides before the rears. Jämmer reads a WAV without a mask in the mask's order (L R C LFE **Lrs Rrs Lss Rss**, as ffmpeg does), so the test moves the channels as a mask would. Read in the mask's order the 8-channel files give −22.919 / −23.927 (inside ±0.1 by 0.01) and the 12-channel one −23.106 (outside): the rears would get the sides' 1.41. Which order a file without a mask means is not settled by any standard read (WAV's own convention has none past stereo); it is put to Anders. An ADM BWF file says it in `chna` (below).
+- The 10-channel (4+5+0) and 24-channel (9+10+3) files are layouts Jämmer has no document for; not measured.
+
+**ADM BWF (D3).** A WAV export of a 5.1, 7.1 or 7.1.4 document is now an ADM BWF file: besides its mask, a `chna` chunk names each track by the common definitions' track format and the layout's pack format, and an `axml` chunk (EBU Core 2016 namespace) holds one programme, one content and one object with every track (ITU-R BS.2088's chunks, BS.2076's elements). The packs are the common definitions' (ITU-R BS.2094): 5.1 `AP_00010003`, 7.1 with its rears at ±135° `AP_0001000f` ("7.1back", 0+7+0), 7.1.4 `AP_00010017` (4+7+0); 5.1's surrounds are the ±110° channels, 7.1's sides ±90°, the heights ±45° and ±135° at 30° up, as Jämmer places them. Read in the common definitions as the EBU's renderer ships them (`2094_common_definitions.xml`); nothing of its code used. Written as RIFF under 4 GB and RF64 above, as before (the renderer reads both).
+- **Read back:** a file's `chna`, when it names every channel once by a loudspeaker of 5.1, 7.1 or 7.1.4, decides the order over the mask and the channel count, so a file in BS.2051's order without a mask plays each channel from its own loudspeaker. A `chna` that doesn't (a track twice, a channel missing, another loudspeaker, an object) is ignored and the file read as before. The chunks of a source are kept in its file, as all foreign chunks are; an export writes its own.
+- **Checked with the EBU's ADM renderer** (`ear` 2.1.0, BSD-3-Clause-Clear, installed by Anders's leave in a venv outside the repository with an existing Python 3.11 and `setuptools<70` for its `pkg_resources`; `JAMMER_EAR=<path to ear-render>`): with `--strict` it reads each of Jämmer's three beds and renders it to its own layout (0+5+0, 0+7+0, 4+7+0) channel for channel, difference 0.0 on 24-bit files. **Through the app:** a 7.1.4 document named `Bed & "Atmos"` exported as WAV by the agent API, rendered by `ear-render --strict -s 4+7+0`, gives back the source's channels exactly (0.0), the name escaped in `axml`.
+- **Not built:** objects (a placed track as an ADM object with its position over time), Ambisonics as ADM (HOA type), reading an ADM file's objects. A mono or stereo WAV gets no ADM.
+
 ## The manual
 
 `site/manual/22-surround.md` (2026-11-17): the layout, where each file is heard, placing a track, listening, loudness, exporting, for agents; only what has been tried, and what isn't heard or measured said so.
@@ -124,7 +144,6 @@ In a layout wider than stereo the timeline draws a clip through the same matrix 
 - Per-channel meters in the window, and a line that says the document is heard folded down.
 - A seen GUI pass of a 5.1 document (the menu, the status bar, listening).
 - The panner's place automated over time; buses placed; a spread wider than a pair of loudspeakers for a mono source.
-- ADM BWF (D3): writing is simple, but nothing could check the files without the EBU's ADM renderer (`ear-utils`, Python, BSD-3-Clause-Clear) or libadm/libbw64 (Apache-2.0): fetching and installing either is for Anders to say.
 - Loudness for a field (BS.1770 has none); a field heard by ear on loudspeakers.
 - Head tracking (an entitlement with the app's signing).
 - Overdub with consent (waits for Anders's decision on the voice provider's terms).

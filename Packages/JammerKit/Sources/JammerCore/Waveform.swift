@@ -56,7 +56,7 @@ public enum Waveform {
             let matrix: [Float]? = channels <= 2 ? nil
                 : (t.position != nil && srcCh <= 2) ? Panner.matrix(t.position!, sourceChannels: srcCh, in: project.layout)
                 : ref.fieldOrder != nil ? PlanCompiler.fieldMatrix(ref, track: t, in: project)
-                : project.layout.matrix(sourceChannels: srcCh, sourceMask: ref.info.channelMask)
+                : project.layout.matrix(sourceChannels: srcCh, sourceMask: ref.info.channelMask, sourceOrder: ref.info.channelOrder)
             for c in firstCol...lastCol {
                 let (a, b) = columnRange(c)
                 let lo = Swift.max(clip.start, a), hi = Swift.min(clip.end, b)
