@@ -5,6 +5,8 @@ import Foundation
 /// with `WAVWriter`, which keeps bext, iXML and markers.
 public enum ExportFormat: String, Sendable, Codable, CaseIterable {
     case wav, aiff, flac, alac, aac, opus, mp3
+    /// Apple Positional Audio Codec in MP4: documents in 5.1, 7.1 and 7.1.4 (macOS 26 and later).
+    case apac
 
     /// The formats this build can write (MP3 needs the LAME framework).
     public static var available: [ExportFormat] { allCases.filter { $0 != .mp3 || EncodedWriter.mp3Factory != nil } }
@@ -17,10 +19,11 @@ public enum ExportFormat: String, Sendable, Codable, CaseIterable {
         case .alac, .aac: "m4a"
         case .opus: "opus"
         case .mp3: "mp3"
+        case .apac: "mp4"
         }
     }
 
-    public var isLossless: Bool { self != .aac && self != .opus && self != .mp3 }
+    public var isLossless: Bool { self != .aac && self != .opus && self != .mp3 && self != .apac }
     /// Bit depths a format can store (AAC has none).
     public var bitDepths: [Int] {
         switch self {
@@ -28,7 +31,7 @@ public enum ExportFormat: String, Sendable, Codable, CaseIterable {
         case .aiff: [16, 24]
         case .flac: [16, 24]
         case .alac: [16, 24]
-        case .aac, .opus, .mp3: []
+        case .aac, .opus, .mp3, .apac: []
         }
     }
 }
@@ -90,8 +93,8 @@ public final class EncodedWriter {
 
     public init(url: URL, options: EncodedExportOptions, channels: Int, sampleRate: Double) throws {
         self.channels = channels
-        guard options.format != .wav, options.format != .opus, options.format != .mp3 else {
-            throw ExportError.unsupported("Use WAVWriter for WAV, OggOpusWriter for Opus and mp3Factory for MP3.")
+        guard options.format != .wav, options.format != .opus, options.format != .mp3, options.format != .apac else {
+            throw ExportError.unsupported("Use WAVWriter for WAV, OggOpusWriter for Opus, mp3Factory for MP3 and APACWriter for APAC.")
         }
         if options.format.isLossless, !options.format.bitDepths.contains(options.bitDepth) {
             throw ExportError.unsupported("\(options.format.rawValue.uppercased()) takes \(options.format.bitDepths.map(String.init).joined(separator: " or ")) bits.")
@@ -120,7 +123,7 @@ public final class EncodedWriter {
         case .aac:
             type = kAudioFileM4AType
             dst.mFormatID = kAudioFormatMPEG4AAC
-        case .wav, .opus, .mp3:
+        case .wav, .opus, .mp3, .apac:
             fatalError()
         }
         if options.format != .aiff {
@@ -175,6 +178,10 @@ public final class EncodedWriter {
     /// Renders `range` of a plan into a file in one go.
     public static func export(_ plan: RenderPlan, range: Range<Frame>, to url: URL, options: EncodedExportOptions,
                               progress: (Double) -> Bool = { _ in true }) throws {
+        if options.format == .apac {
+            try APACWriter.export(plan, range: range, to: url, progress: progress)
+            return
+        }
         if options.format == .opus {
             try OggOpusWriter.export(plan, range: range, to: url, bitRate: options.bitRate, chapters: options.chapters)
             _ = progress(1)

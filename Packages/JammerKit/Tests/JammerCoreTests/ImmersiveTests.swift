@@ -1,3 +1,4 @@
+import AVFoundation
 import Foundation
 import JammerEngine
 import Testing
@@ -244,5 +245,71 @@ struct ImmersiveTests {
         var s = p
         s.channels = 2
         #expect(throws: Mixer.Failure.narrow("stereo")) { try s.setTrackPosition(id, azimuth: 30) }
+    }
+
+    @Test("APAC: a 5.1 and a 7.1.4 document written as APAC in MP4 and decoded again by Apple's decoder keep their channel count and their layout, and each channel's tone is loudest in its own channel")
+    func apac() throws {
+        for layout in [ChannelLayout.surround51, .immersive714] {
+            let dir = TempDir()
+            let n = layout.channels, frames = 48_000 * 3
+            // A different tone in each channel but the LFE (low and quiet there).
+            var x = [Float](repeating: 0, count: frames * n)
+            for i in 0..<frames { for c in 0..<n {
+                let f = layout.speakers[c] == .lowFrequency ? 60.0 : 300.0 + 170.0 * Double(c)
+                x[i * n + c] = Float(0.2 * sin(2 * .pi * f * Double(i) / 48_000))
+            } }
+            let src = dir.file("src.wav")
+            let w = try WAVWriter(url: src, options: .init(encoding: .float32, channels: n, sampleRate: 48_000, channelMask: layout.mask))
+            try w.write(x)
+            try w.finish()
+            let p = Project(source: SourceRef(name: "src", path: src.path, info: try AudioFileReader.info(at: src)))
+            #expect(p.layout == layout)
+            let out = dir.file("out.mp4")
+            try APACWriter.export(PlanCompiler.compile(p, pool: SourcePool()), range: 0..<p.length, to: out)
+            let file = try AVAudioFile(forReading: out)
+            #expect(Int(file.processingFormat.channelCount) == n, "\(layout.rawValue): \(file.processingFormat.channelCount) channels")
+            #expect(file.fileFormat.streamDescription.pointee.mFormatID == kAudioFormatAPAC)
+            let buffer = try #require(AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: AVAudioFrameCount(file.length)))
+            try file.read(into: buffer)
+            let got = Int(buffer.frameLength)
+            #expect(got > frames / 2)
+            // Each channel holds its own tone: correlate every decoded channel with every source tone.
+            for c in 0..<n where layout.speakers[c] != .lowFrequency {
+                let data = buffer.floatChannelData![c]
+                var best = -1, bestE = 0.0
+                for k in 0..<n where layout.speakers[k] != .lowFrequency {
+                    let f = 300.0 + 170.0 * Double(k)
+                    var re = 0.0, im = 0.0
+                    for i in stride(from: 4_800, to: min(got, frames) - 4_800, by: 1) {
+                        let v = Double(data[i]); let a = 2 * .pi * f * Double(i) / 48_000
+                        re += v * cos(a); im += v * sin(a)
+                    }
+                    let e = re * re + im * im
+                    if e > bestE { bestE = e; best = k }
+                }
+                #expect(best == c, "\(layout.rawValue): channel \(c) (\(layout.speakers[c].short)) holds the tone of channel \(best)")
+            }
+        }
+    }
+
+    @Test("The waveform shows a clip where it is heard: in 5.1 a voice in C only, a placed voice at Ls only, a 5.1 file in its six rows; in stereo as before")
+    func waveformWhereHeard() throws {
+        let dir = TempDir()
+        var p = Project(source: try file(dir, "six.wav", channels: 6))
+        let voice = try file(dir, "voice.wav", channels: 1)
+        p.sources.append(voice)
+        p.tracks.append(Track(name: "Voice", clips: [Clip(sourceID: voice.id, start: 0, length: 9_600)]))
+        func rows(_ track: Int) -> [Bool] {
+            Waveform.columns(p, track: track, start: 0, framesPerColumn: 960, count: 10, peaks: [:], pool: SourcePool()).map { $0.contains { $0 != .empty && $0.max > 0.001 } }
+        }
+        #expect(rows(1) == [false, false, true, false, false, false], "a voice in C")
+        #expect(rows(0).filter { $0 }.count == 6, "the 5.1 file in its six rows")
+        try p.setTrackPosition(p.tracks[1].id, azimuth: 110)
+        #expect(rows(1) == [false, false, false, false, true, false], "placed at Ls")
+        var s = p
+        s.channels = 2
+        s.tracks[1].position = nil
+        let stereo = Waveform.columns(s, track: 1, start: 0, framesPerColumn: 960, count: 10, peaks: [:], pool: SourcePool())
+        #expect(stereo.count == 2 && stereo.allSatisfy { $0.contains { $0 != .empty } }, "mono in both rows of a stereo document, as before")
     }
 }

@@ -1230,6 +1230,10 @@ enum AgentRouter {
                 throw APIError.badRequest("bitRate for mp3 must be 64000, 96000, 128000, 160000, 192000, 256000 or 320000.")
             }
             encoded = EncodedExportOptions(format: .mp3, bitRate: rate)
+        case .apac:
+            if obj["bitDepth"] != nil || obj["bitRate"] != nil { throw APIError.badRequest("apac takes no bitDepth or bitRate; the encoder chooses its rate.") }
+            guard session.project.channels > 2 else { throw APIError.badRequest("apac export is for documents in 5.1, 7.1 or 7.1.4.") }
+            encoded = EncodedExportOptions(format: .apac)
         case .opus:
             if obj["bitDepth"] != nil { throw APIError.badRequest("opus has no bitDepth; use bitRate.") }
             guard session.project.channels <= 2 else { throw APIError.badRequest("opus export takes mono or stereo documents.") }
@@ -1313,7 +1317,7 @@ enum AgentRouter {
             headers["X-Jammer-Master-Limiter"] = String(format: "ceiling=%.2f; truePeak=%.2f; margin=%.2f", l.ceilingDB, l.truePeakDB, l.marginDB)
         }
         let data = try Data(contentsOf: tmp, options: .mappedIfSafe)
-        let types: [ExportFormat: String] = [.wav: "audio/wav", .aiff: "audio/aiff", .flac: "audio/flac", .alac: "audio/mp4", .aac: "audio/mp4", .opus: "audio/ogg", .mp3: "audio/mpeg"]
+        let types: [ExportFormat: String] = [.wav: "audio/wav", .aiff: "audio/aiff", .flac: "audio/flac", .alac: "audio/mp4", .aac: "audio/mp4", .opus: "audio/ogg", .mp3: "audio/mpeg", .apac: "audio/mp4"]
         return Response(status: 200, contentType: types[format] ?? "application/octet-stream", body: data, extraHeaders: headers)
     }
 }

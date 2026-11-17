@@ -69,9 +69,24 @@ Phase 4 of `docs/PLAN.md`: multichannel up to 7.1.4, ADM BWF, Ambisonics, APAC/A
 
 The document's audio output and its plugin host were made once, for the channel count the document had when it was opened. After Audio › Layout changed the count, the engine would have been handed a plan of another width than its ring. Now both are made again when the count changes (playback stops, plugins start again). Seen: the layout changed while playing, then stereo and 5.1 played again without underruns.
 
+### D6, first part (2026-11-17): APAC export
+
+- **APAC in MP4** for documents in 5.1, 7.1 and 7.1.4 (`APACWriter`; File › Export's format list offers "APAC (MP4)" for those documents, and no MP3 or Opus; the API's `format: "apac"`). Written through AudioToolbox with the encoder of macOS 26 and later, the channels as a bed in the layout tag whose order is the document's; the settings Apple's APAC paper (June 2025) asks for: content source 38 ("Traditional professional AV offline encoded content such as stereo and multichannel"), the loudness/DRC configuration Movie (the paper: "None should not be utilized"), a sync packet every 75 packets. The encoder chooses the bit rate.
+  - AVAssetWriter was tried first and refuses every content source but Apple's own (1–10: "content source must be between AVAudioContentSource_AppleCapture_Traditional and AVAudioContentSource_ApplePassthrough"), which would label this as Apple's content; AudioToolbox takes the third-party values, as the paper's own `afconvert -u csrc 36` example does.
+  - A loudness delivery target is not measured through APAC (it carries its own loudness metadata, which a decoder applies).
+- **Tested:** a 5.1 and a 7.1.4 document written, decoded again by Apple's decoder: the channel count, the format, and every channel's tone loudest in its own channel. **In the app:** a 5.1 document exported through the API; `afinfo` reads "6 ch, 48000 Hz, apac … Channel layout: 5.1 (L R C LFE Ls Rs)"; a stereo document is refused in words. **Not seen:** the export panel's format list (a script couldn't read it).
+- **Not built:** Ambisonics and objects in APAC (no Ambisonics documents yet; Jämmer has no objects); ASAF (Apple publishes no authoring interface for it).
+
+### The waveform where the sound is heard (2026-11-17)
+
+In a layout wider than stereo the timeline draws a clip through the same matrix as its sound: a voice in the C row only, a placed voice at its loudspeakers, a wider source folded down into the document's rows (as the envelope of the summed parts). Seen before the change: a voice placed at Ls was drawn in L and R. Tested on the columns; not yet seen in the window.
+
 ## Not built
 
 - Per-channel meters in the window, and a line that says the document is heard folded down.
 - A seen GUI pass of a 5.1 document (the menu, the status bar, listening).
 - The panner's place automated over time; buses placed; a spread wider than a pair of loudspeakers for a mono source.
-- Everything from D3 on.
+- ADM BWF (D3): writing is simple, but nothing could check the files without the EBU's ADM renderer (`ear-utils`, Python, BSD-3-Clause-Clear) or libadm/libbw64 (Apache-2.0): fetching and installing either is for Anders to say.
+- Ambisonics documents (D4).
+- Head tracking (an entitlement with the app's signing).
+- Overdub with consent (waits for Anders's decision on the voice provider's terms).

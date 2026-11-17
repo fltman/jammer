@@ -621,7 +621,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         panel.allowedContentTypes = [.wav, .aiff, UTType("org.xiph.flac") ?? .audio, .mpeg4Audio, UTType(filenameExtension: "opus") ?? .audio, .mp3]
         panel.allowsOtherFileTypes = true
         panel.nameFieldStringValue = session.name + ".wav"
-        let model = ExportChoices(hasSelection: session.selection != nil)
+        let model = ExportChoices(hasSelection: session.selection != nil, wide: session.project.channels > 2)
         panel.accessoryView = NSHostingView(rootView: ExportAccessory(model: model))
         panel.beginSheetModal(for: window) { [weak self] response in
             guard response == .OK, let chosen = panel.url, let self else { return }
@@ -828,7 +828,9 @@ final class ExportChoices {
         case wav16 = "WAV 16-bit", wav24 = "WAV 24-bit", wavFloat = "WAV 32-bit float", aiff24 = "AIFF 24-bit",
              flac16 = "FLAC 16-bit", flac24 = "FLAC 24-bit", alac24 = "Apple Lossless (ALAC) 24-bit", aac = "AAC 192 kbit/s", opus = "Opus 96 kbit/s (Ogg)", mp3 = "MP3 160 kbit/s",
              // What ACX asks for at the least ("192 kbps or higher CBR").
-             mp3High = "MP3 192 kbit/s"
+             mp3High = "MP3 192 kbit/s",
+             // 5.1, 7.1 and 7.1.4 documents: Apple's spatial codec in MP4.
+             apac = "APAC (MP4)"
         var encoded: EncodedExportOptions? {
             switch self {
             case .wav16, .wav24, .wavFloat: nil
@@ -840,6 +842,7 @@ final class ExportChoices {
             case .opus: .init(format: .opus, bitRate: 96_000)
             case .mp3: .init(format: .mp3, bitRate: 160_000)
             case .mp3High: .init(format: .mp3, bitRate: 192_000)
+            case .apac: .init(format: .apac)
             }
         }
         var encoding: WAVWriter.Encoding { self == .wav16 ? .int16 : (self == .wavFloat ? .float32 : .int24) }
@@ -859,9 +862,20 @@ final class ExportChoices {
     var sampleRate = 0.0
     var selectionOnly = false
     let hasSelection: Bool
-    init(hasSelection: Bool) {
+    /// A document wider than stereo: APAC is offered and MP3 and Opus (mono and stereo only) are not.
+    let wide: Bool
+    init(hasSelection: Bool, wide: Bool = false) {
         self.hasSelection = hasSelection
+        self.wide = wide
         selectionOnly = hasSelection
+        if wide, [.mp3, .mp3High, .opus].contains(choice) { choice = .wav24 }
+        if !wide, choice == .apac { choice = .wav24 }
+    }
+    var offered: [Choice] {
+        Choice.allCases.filter { c in
+            if (c == .mp3 || c == .mp3High) && EncodedWriter.mp3Factory == nil { return false }
+            return wide ? ![.mp3, .mp3High, .opus].contains(c) : c != .apac
+        }
     }
 }
 
@@ -871,7 +885,7 @@ struct ExportAccessory: View {
     var body: some View {
         Form {
             Picker(L10n.text("batch.format"), selection: $model.choice) {
-                ForEach(ExportChoices.Choice.allCases.filter { ($0 != .mp3 && $0 != .mp3High) || EncodedWriter.mp3Factory != nil }, id: \.self) { Text($0.rawValue).tag($0) }
+                ForEach(model.offered, id: \.self) { Text($0.rawValue).tag($0) }
             }
             Picker(L10n.text("export.sampleRate"), selection: $model.sampleRate) {
                 Text(L10n.text("export.sampleRate.same")).tag(0.0)

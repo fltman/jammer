@@ -78,5 +78,6 @@ extension EncodedWriter {
 extension ExportFormat {
     /// Lossy formats: the encoder changes the loudness, so the delivered file is measured and
     /// corrected. (A file that can't be read back is left as encoded and reported as unmeasured.)
-    public var loudnessIsCompensated: Bool { !isLossless }
+    /// (APAC carries its own loudness and DRC metadata, which a decoder applies; a delivery target isn't measured through it.)
+    public var loudnessIsCompensated: Bool { !isLossless && self != .apac }
 }

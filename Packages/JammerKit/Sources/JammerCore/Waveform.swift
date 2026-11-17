@@ -51,12 +51,48 @@ public enum Waveform {
                 rawStart = lo
                 raw = pool.read(ref, from: clip.sourceStart + (lo - clip.start), count: Int(hi - lo))
             }
+            // In a layout wider than stereo the clip is drawn where it is heard: through the same matrix as the
+            // sound (the panner's for a placed track, else the layouts'), so a voice shows in C, not in every row.
+            let matrix: [Float]? = channels <= 2 ? nil
+                : (t.position != nil && srcCh <= 2) ? Panner.matrix(t.position!, sourceChannels: srcCh, in: project.layout)
+                : project.layout.matrix(sourceChannels: srcCh, sourceMask: ref.info.channelMask)
             for c in firstCol...lastCol {
                 let (a, b) = columnRange(c)
                 let lo = Swift.max(clip.start, a), hi = Swift.min(clip.end, b)
                 guard hi > lo else { continue }
                 let mid = (lo + hi) / 2 - clip.start
                 let g = gain * fadeGain(clip, mid)
+                if let matrix {
+                    // Each source channel's range, then each document channel's as the sum of its parts' ranges
+                    // (an envelope: the real sum lies inside it).
+                    var ranges: [(Float, Float)?] = []
+                    for sc in 0..<srcCh {
+                        if usePeaks, let index {
+                            let s0 = clip.sourceStart + (lo - clip.start)
+                            ranges.append(index.minMax(channel: sc, s0..<(s0 + (hi - lo))))
+                        } else {
+                            let i0 = Int(lo - rawStart), i1 = Swift.min(Int(hi - rawStart), raw.count / srcCh)
+                            guard i0 < i1 else { ranges.append(nil); continue }
+                            var mn = Float.greatestFiniteMagnitude, mx = -Float.greatestFiniteMagnitude
+                            for i in i0..<i1 { let v = raw[i * srcCh + sc]; mn = Swift.min(mn, v); mx = Swift.max(mx, v) }
+                            ranges.append((mn, mx))
+                        }
+                    }
+                    for ch in 0..<channels {
+                        var mn: Float = 0, mx: Float = 0, any = false
+                        for sc in 0..<srcCh {
+                            let m = matrix[sc * channels + ch] * g
+                            guard m != 0, let (p, q) = ranges[sc] else { continue }
+                            any = true
+                            mn += Swift.min(m * p, m * q); mx += Swift.max(m * p, m * q)
+                        }
+                        guard any else { continue }
+                        var col = out[ch][c]
+                        if col == .empty { col = Column(min: mn, max: mx) } else { col.min = Swift.min(col.min, mn); col.max = Swift.max(col.max, mx) }
+                        out[ch][c] = col
+                    }
+                    continue
+                }
                 for ch in 0..<channels {
                     let sc = srcCh == 1 ? 0 : ch
                     guard sc < srcCh else { continue }
