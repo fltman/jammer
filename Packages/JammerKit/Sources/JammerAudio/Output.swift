@@ -293,7 +293,7 @@ public final class AudioOutput {
         var callback = AURenderCallbackStruct(inputProc: jm_engine_au_render, inputProcRefCon: UnsafeMutableRawPointer(engine))
         try check(AudioUnitSetProperty(unit, kAudioUnitProperty_SetRenderCallback, kAudioUnitScope_Input, 0, &callback,
                                        UInt32(MemoryLayout<AURenderCallbackStruct>.size)), "connect the engine")
-        try check(AudioUnitInitialize(unit), "initialise the output")
+        try check(AudioUnitInitialize(unit), "initialize the output")
         return unit
     }
 }

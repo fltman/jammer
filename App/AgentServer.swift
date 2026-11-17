@@ -388,7 +388,7 @@ enum AgentRouter {
                 let project = session.project, pool = session.pool
                 let found = await Task.detached(priority: .userInitiated) { Result { try Rhythm.estimate(project, range: range, tracks: named, pool: pool) } }.value
                 var body: [String: Any] = ["start": seconds(session, range.lowerBound), "end": seconds(session, range.upperBound),
-                                           "analysedSeconds": min(session.project.seconds(Frame(range.count)), Rhythm.maxSeconds)]
+                                           "analyzedSeconds": min(session.project.seconds(Frame(range.count)), Rhythm.maxSeconds)]
                 let offset = session.project.seconds(range.lowerBound)
                 switch found {
                 case .success(let e):

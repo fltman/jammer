@@ -332,7 +332,7 @@ public enum FlimmerSend {
                 case "done": return job["result"] as? [String: Any] ?? [:]
                 case "failed":
                     throw FlimmerSend.explain(status: 422, error: job["error"] as? [String: Any] ?? [:], items: items)
-                case "cancelled": throw Failure("cancelled", "The job was cancelled in Flimmer; nothing was changed there.")
+                case "cancelled", "canceled": throw Failure("canceled", "The job was canceled in Flimmer; nothing was changed there.") // not a shown text: "cancelled" is Flimmer's own job word, taken either way
                 default: try await Task.sleep(for: .seconds(pollInterval))
                 }
             }

@@ -7,7 +7,7 @@
 ## Level, pan and mute
 
 - **Level** is the track's gain, from −60 to +12 dB on the slider. Let go of the slider and the change is made; one drag is one undo step.
-- **Pan** places a track between left and right in a stereo document. In the centre the track is left exactly as it is. Towards one side, that side stays as it is and the other falls away, so panning never makes anything louder and can't clip. A mono document has no pan.
+- **Pan** places a track between left and right in a stereo document. In the center the track is left exactly as it is. Toward one side, that side stays as it is and the other falls away, so panning never makes anything louder and can't clip. A mono document has no pan.
 - **Mute** silences the strip. A muted track is left out of exports too.
 
 ## Buses
@@ -94,7 +94,7 @@ Everything goes through the master last. At the bottom of the mixer it has a lev
 
 ## What stays the same
 
-- A document without buses, with every pan in the centre, plays and exports exactly as it did before there was a mixer, sample for sample.
+- A document without buses, with every pan in the center, plays and exports exactly as it did before there was a mixer, sample for sample.
 - Repairs, echo, ducking and the limiter work on a track's own sound; its pan and its bus apply afterwards, as they do to everything the track plays.
 - The limiter (**Audio › Limit Peaks…**) listens to the mix as the buses make it, without the plugins: they come after it, on tracks and on buses, and Jämmer says so when there are any.
 

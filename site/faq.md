@@ -8,7 +8,7 @@ macOS 27 or later on a Mac with Apple silicon.
 
 ## Is it free?
 
-Yes. Jämmer is free and open source under the MIT licence. The source code will be on GitHub when it's released. If you want to support the work, you can do so on [Patreon](https://www.patreon.com/AndersBjarby).
+Yes. Jämmer is free and open source under the MIT license. The source code will be on GitHub when it's released. If you want to support the work, you can do so on [Patreon](https://www.patreon.com/AndersBjarby).
 
 ## Does it cost anything to use the AI features?
 
@@ -28,11 +28,11 @@ No. Jämmer doesn't rely on any service run by us. Models are fetched from their
 
 ## Which models does it use, and how big are they?
 
-Noise reduction (DeepFilterNet 3, 8 MB) ships inside the app. The rest are optional downloads under **Jämmer › Settings… › Models**, each shown with its size and licence before you download it, and removable there: KB-Whisper small (175 MB) or medium (539 MB) for the most accurate Swedish transcription, Parakeet TDT 0.6B v3 (about 630 MB) for 25 European languages, the speaker model (about 20 MB), and the two stem models (146 MB for music, 122 MB for soundtracks). Without any download, transcription uses the Mac's own recogniser. The assistant uses the model built into macOS.
+Noise reduction (DeepFilterNet 3, 8 MB) ships inside the app. The rest are optional downloads under **Jämmer › Settings… › Models**, each shown with its size and license before you download it, and removable there: KB-Whisper small (175 MB) or medium (539 MB) for the most accurate Swedish transcription, Parakeet TDT 0.6B v3 (about 630 MB) for 25 European languages, the speaker model (about 20 MB), and the two stem models (146 MB for music, 122 MB for soundtracks). Without any download, transcription uses the Mac's own recognizer. The assistant uses the model built into macOS.
 
 ## Why no HTDemucs stem separation?
 
-Because its weights aren't free to use. The Demucs code is MIT, but its author has said that the trained weights aren't covered by that licence and are for research only, and they were trained on a non-commercial dataset. Jämmer only ships and downloads models whose licence allows everyone to use them, so stem separation uses Spleeter's 4-stem model from Deezer (MIT) instead. It's older and separates less cleanly, but it's yours to use for anything.
+Because its weights aren't free to use. The Demucs code is MIT, but its author has said that the trained weights aren't covered by that license and are for research only, and they were trained on a non-commercial dataset. Jämmer only ships and downloads models whose license allows everyone to use them, so stem separation uses Spleeter's 4-stem model from Deezer (MIT) instead. It's older and separates less cleanly, but it's yours to use for anything.
 
 ## Which files can I open?
 

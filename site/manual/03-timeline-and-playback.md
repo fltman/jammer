@@ -61,7 +61,7 @@ Edits act on all tracks at once, like a waveform editor.
 
 Playback starts at the selection if there is one, otherwise at the playhead, and stops at the end. If you edit while playing, you hear the change straight away. The volume slider in the transport bar only affects playback in Jämmer, not exports.
 
-Jämmer plays through the Mac's current output device and follows it when you switch in Control Centre or System Settings. If the device runs at another sample rate than the project, Jämmer converts while it plays and leaves the device's setting alone. Exports are always at the project's rate and aren't affected.
+Jämmer plays through the Mac's current output device and follows it when you switch in Control Center or System Settings. If the device runs at another sample rate than the project, Jämmer converts while it plays and leaves the device's setting alone. Exports are always at the project's rate and aren't affected.
 
 ## Spectrogram
 

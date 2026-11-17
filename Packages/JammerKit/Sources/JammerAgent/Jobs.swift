@@ -7,7 +7,10 @@ import Foundation
 /// POST that starts one answers 202 with it; GET /api/v1/jobs/{id} reads it;
 /// DELETE /api/v1/jobs/{id} cancels it. Running jobs are listed in /api/v1/status.
 public struct Job: Sendable, Equatable {
-    public enum Status: String, Sendable { case queued, running, done, failed, cancelled }
+    public enum Status: String, Sendable { case queued, running, done, failed
+        /// Written the American way in the API ("canceled"), as the interface's English is.
+        case cancelled = "canceled"
+    }
 
     public var id: String
     public var kind: String

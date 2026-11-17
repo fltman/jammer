@@ -97,7 +97,7 @@ def check(root, require=None):
 
 # The interface's English is American, as Apple's (the-apps/SIBLINGS.md, "Språk"): Center, Color, Gray,
 # Canceled. Looked for in the catalogue's English and in the texts written in the app's code. A literal
-# that is one word of code (a key, a field of the agent API such as "analysedSeconds") is not a text.
+# that is one word of code (a key, a field of the agent API such as "analyzedSeconds") is not a text.
 BRITISH = re.compile(r'\b(centre|colour|grey|cancell(?:ed|ing)|behaviour|favour|normalis|organis|recognis|licence|analys(?:e|ed|ing)\b|catalogue|labelled|travell|programme|metre)', re.I)
 def british(root, strings):
     faults = []
@@ -106,14 +106,24 @@ def british(root, strings):
         for _, text in units(loc):
             m = BRITISH.search(text)
             if m: faults.append(f'{key} (en): "{m.group(1)}" is the British form; the interface\'s English is American')
-    app = os.path.join(root, 'App')
-    for name in sorted(os.listdir(app)):
-        if not name.endswith('.swift'): continue
-        for n, row in enumerate(open(os.path.join(app, name), encoding='utf-8'), 1):
-            for lit in re.findall(r'"((?:[^"\\]|\\.)*)"', row.split('//')[0]):
-                if re.fullmatch(r'[A-Za-z][A-Za-z0-9_.\-]*', lit) and not lit[0].isupper(): continue
-                m = BRITISH.search(re.sub(r'\\\([^)]*\)', '', lit))
-                if m: faults.append(f'App/{name}:{n}: "{m.group(1)}" is the British form; the interface\'s English is American')
+    # The app's texts, and the agent API's (its descriptions, its guide, its field names: all American since 2026-11-17).
+    for base in ('App', os.path.join('Packages', 'JammerKit', 'Sources', 'JammerAgent')):
+        folder = os.path.join(root, base)
+        if not os.path.isdir(folder): continue
+        for name in sorted(os.listdir(folder)):
+            if not name.endswith('.swift'): continue
+            block = False
+            for n, row in enumerate(open(os.path.join(folder, name), encoding='utf-8'), 1):
+                if 'not a shown text:' in row: continue
+                found = None
+                if row.count('"""') % 2: block = not block
+                elif block: found = BRITISH.search(row)          # a long text (the guide)
+                else:
+                    for lit in re.findall(r'"((?:[^"\\]|\\.)*)"', row.split(' //')[0]):
+                        # One lowercase word of code is a name; in the API's own files a field name is checked too.
+                        if re.fullmatch(r'[a-z][a-z0-9_.\-]*', lit) and base == 'App': continue
+                        found = found or BRITISH.search(re.sub(r'\\\([^)]*\)', '', lit))
+                if found: faults.append(f'{base}/{name}:{n}: "{found.group(1)}" is the British form; the interface\'s and the API\'s English is American')
     return faults
 
 # Logic must not hang on a text the user sees (the-apps/SIBLINGS.md, "Språk"): a status line, a title, a
@@ -179,7 +189,7 @@ def self_test(root):
             'a decision made on the status line\'s words': (None, None, 'if session.status == "Uploading the files" { ask() }\n'),
         }
         bad = []
-        clean = run(None, 'App/Code.swift\n', 'Text(L10n.text("a.one", x)); Text("\\(n)")\nif title == "Fcpxml" { } // not a shown text: the format\'s own word\nif op.name == "limit" { }\nlet f = info["analysedSeconds"]\n')
+        clean = run(None, 'App/Code.swift\n', 'Text(L10n.text("a.one", x)); Text("\\(n)")\nif title == "Fcpxml" { } // not a shown text: the format\'s own word\nif op.name == "limit" { }\nlet f = info["analyzedSeconds"]\n')
         if clean: bad.append('the clean copy was faulted: ' + '; '.join(clean))
         for name, (mutate, moved, extra) in plants.items():
             if not run(mutate, moved, extra): bad.append('not caught: ' + name)

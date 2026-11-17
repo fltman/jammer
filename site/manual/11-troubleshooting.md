@@ -3,7 +3,7 @@
 ## I hear nothing
 
 - Check the volume slider in Jämmer's transport bar; it's separate from the Mac's volume.
-- Check that the right output device is chosen in Control Centre › Sound. Jämmer follows the Mac's current output.
+- Check that the right output device is chosen in Control Center › Sound. Jämmer follows the Mac's current output.
 
 ## "1 missing file(s)" in the status bar
 
