@@ -16,7 +16,7 @@ import JammerEngine
 /// back to the default-output audio unit, which converts by itself.
 @MainActor
 public final class AudioOutput {
-    public enum Path: String, Sendable { case hal, audioUnit }
+    public enum Path: String, Sendable { case hal, audioUnit, binaural }
 
     public let channels: Int
     public let sampleRate: Double
@@ -33,6 +33,16 @@ public final class AudioOutput {
     private var device = AudioObjectID(kAudioObjectUnknown)
     private var procID: AudioDeviceIOProcID?
     private var unit: AudioUnit?
+    /// The spatial mixer between the engine and the output unit, while listening binaurally.
+    private var spatialMixer: AudioUnit?
+    /// Listening on headphones through the spatial mixer (a document wider than stereo only). Changing it
+    /// rebuilds the way to the device and carries on where it was.
+    public var binaural = false {
+        didSet {
+            guard binaural != oldValue, channels > 2 else { return }
+            rebuild()
+        }
+    }
     private var listeners: [(AudioObjectID, AudioObjectPropertyAddress, AudioObjectPropertyListenerBlock)] = []
 
     public init(channels: Int, sampleRate: Double) {
@@ -116,6 +126,15 @@ public final class AudioOutput {
     private func startDevice() throws {
         if isRunning { return }
         if procID == nil && unit == nil {
+            if binaural, channels > 2, let layout = ChannelLayout.standard(channels: channels) {
+                do {
+                    try openBinaural(layout)
+                } catch {
+                    tearDown()
+                    binaural = false
+                    throw error
+                }
+            } else {
             do {
                 try openHAL()
             } catch {
@@ -123,6 +142,7 @@ public final class AudioOutput {
                 unit = try makeUnit()
                 path = .audioUnit
                 deviceName = Self.defaultDevice().flatMap(Self.name)
+            }
             }
         }
         if let procID {
@@ -142,6 +162,10 @@ public final class AudioOutput {
         if let unit {
             AudioComponentInstanceDispose(unit)
             self.unit = nil
+        }
+        if let spatialMixer {
+            AudioComponentInstanceDispose(spatialMixer)
+            self.spatialMixer = nil
         }
         for (i, l) in listeners.enumerated().reversed() where l.0 == device && device != kAudioObjectUnknown {
             var a = l.1
@@ -170,6 +194,35 @@ public final class AudioOutput {
         listen(id, kAudioDevicePropertyNominalSampleRate)
         listen(id, kAudioDevicePropertyStreamConfiguration)
         listen(id, kAudioDevicePropertyDeviceIsAlive)
+    }
+
+    /// The way to the device changed (binaural on or off): rebuild and carry on where we were.
+    private func rebuild() { deviceChanged() }
+
+    /// Engine → spatial mixer (the document's channels as a bed, rendered for headphones) → the default output.
+    private func openBinaural(_ layout: ChannelLayout) throws {
+        var none: Int32 = 0
+        jm_engine_set_output(engine, sampleRate, &none, &none, &none, nil, 0)
+        let mixer = try Binaural.makeMixer(layout: layout, rate: sampleRate,
+                                           callback: AURenderCallbackStruct(inputProc: jm_engine_au_render, inputProcRefCon: UnsafeMutableRawPointer(engine)))
+        spatialMixer = mixer
+        var desc = AudioComponentDescription(componentType: kAudioUnitType_Output, componentSubType: kAudioUnitSubType_DefaultOutput,
+                                             componentManufacturer: kAudioUnitManufacturer_Apple, componentFlags: 0, componentFlagsMask: 0)
+        guard let comp = AudioComponentFindNext(nil, &desc) else { throw OutputError("No default output device.") }
+        var u: AudioUnit?
+        try check(AudioComponentInstanceNew(comp, &u), "open the output")
+        guard let out = u else { throw OutputError("No default output device.") }
+        unit = out
+        var stereo = Binaural.format(2, sampleRate)
+        try check(AudioUnitSetProperty(out, kAudioUnitProperty_StreamFormat, kAudioUnitScope_Input, 0, &stereo,
+                                       UInt32(MemoryLayout<AudioStreamBasicDescription>.size)), "set the format")
+        var connection = AudioUnitConnection(sourceAudioUnit: mixer, sourceOutputNumber: 0, destInputNumber: 0)
+        try check(AudioUnitSetProperty(out, kAudioUnitProperty_MakeConnection, kAudioUnitScope_Input, 0, &connection,
+                                       UInt32(MemoryLayout<AudioUnitConnection>.size)), "connect the spatial mixer")
+        try check(AudioUnitInitialize(mixer), "initialize the spatial mixer")
+        try check(AudioUnitInitialize(out), "initialize the output")
+        path = .binaural
+        deviceName = Self.defaultDevice().flatMap(Self.name)
     }
 
     /// The default device, its rate or its layout changed: rebuild and carry on where we were.

@@ -59,6 +59,16 @@ Phase 4 of `docs/PLAN.md`: multichannel up to 7.1.4, ADM BWF, Ambisonics, APAC/A
 - **The mixer:** a track's strip in a wider document has an azimuth slider (left to the left, either end behind) and a menu with its place in words ("Left 110°", "Own loudspeakers"), the height in 7.1.4 (0°, 15°, 30°), and Back on Own Loudspeakers.
 - **Tested:** the gains on each loudspeaker's direction, halfway between two, behind; constant power and no LFE at every 7.5° in 5.1, 7.1 and 7.1.4; heights at 30° and above, and halfway at 15°; the default place equals the old routing; a voice placed at 110° plays in Ls sample for sample and nowhere else; saved and read back; out of range refused. **Seen:** the mixer with a voice placed at 110° ("Left 110°", the slider to the left), the layout menu's words.
 
+### D5, first part (2026-11-17): binaural listening, without head tracking
+
+- **Audio › Listen on Headphones (Binaural)** (a setting of the app, ticked when on; for documents wider than stereo): the engine feeds Apple's spatial mixer (`AUSpatialMixer`) with the document's channels as a bed (`kSpatialMixerSourceMode_AmbienceBed`, each channel from its loudspeaker's direction by the bus's channel layout: 5.1 as `MPEG_5_1_A`, 7.1 as `WAVE_7_1`, 7.1.4 as `CICP_19`, the tags whose order is the WAV order), rendered for headphones (`kSpatializationAlgorithm_UseOutputType`, `kSpatialMixerOutputType_Headphones`), and the mixer feeds the default output. Nothing of it runs in Jämmer's code on the audio thread: the engine's render callback is the same one the output unit uses. Listening only: exports and meters are the document's channels.
+- **Tested** offline (the mixer rendered from a test, no device): a tone in 5.1's left surround is more than 3 dB louder at the left ear, the right surround at the right, the centre within 1 dB at both, 7.1.4's left top front at the left ear. **In the app:** playback through it with no underrun, the menu's tick, back to loudspeakers. **Not heard:** the test copy's output is silent; how it sounds is for Anders with headphones.
+- **Head tracking is not built.** It needs the `com.apple.developer.coremotion.head-pose` entitlement (macOS 15) and `NSMotionUsageDescription`; an entitlement goes with the app's signing, which is Anders's.
+
+### A fault found and mended on the way (2026-11-17)
+
+The document's audio output and its plugin host were made once, for the channel count the document had when it was opened. After Audio › Layout changed the count, the engine would have been handed a plan of another width than its ring. Now both are made again when the count changes (playback stops, plugins start again). Seen: the layout changed while playing, then stereo and 5.1 played again without underruns.
+
 ## Not built
 
 - Per-channel meters in the window, and a line that says the document is heard folded down.

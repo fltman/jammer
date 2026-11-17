@@ -61,7 +61,7 @@ final class EditorSession {
         get { UserDefaults.standard.bool(forKey: "plugins.safeMode") }
         set { UserDefaults.standard.set(newValue, forKey: "plugins.safeMode") }
     }
-    @ObservationIgnored let output: AudioOutput
+    @ObservationIgnored private(set) var output: AudioOutput
     @ObservationIgnored private var timer: Timer?
     @ObservationIgnored private var peakTasks: [UUID: Task<Void, Never>] = [:]
 
@@ -75,20 +75,39 @@ final class EditorSession {
             isRestricted = true
             pool.restrict(ProjectAccess.rule(package: package))
         }
-        output = AudioOutput(channels: project.channels, sampleRate: project.sampleRate)
+        output = Self.makeOutput(project, volume: 1)
         inserts = InsertHost(channels: project.channels, sampleRate: project.sampleRate, outOfProcess: Self.pluginSafeMode)
         plan = PlanCompiler.compile(project, pool: pool)
         output.setPlan(plan)
         output.setGain(volume)
+        history = try? History(root: project)
+        loadPeaks()
+        syncInserts()
+    }
+
+    /// The way to the device for a document: its channels and rate, listening binaurally when chosen and
+    /// the document is wider than stereo.
+    static func makeOutput(_ project: Project, volume: Float) -> AudioOutput {
+        let output = AudioOutput(channels: project.channels, sampleRate: project.sampleRate)
+        output.setGain(volume)
+        output.binaural = UserDefaults.standard.bool(forKey: "listen.binaural")
         #if DEBUG
         // A test copy is started with `-silentOutput YES` (scripts/with-app.sh always passes it): the
         // engine plays, meters and counts as usual and hands the device silence. What it would have
         // handed over is counted instead, so "what was heard" can be measured without a sound.
         if Self.silentOutput { output.setSilent(true) }
         #endif
-        history = try? History(root: project)
-        loadPeaks()
-        syncInserts()
+        return output
+    }
+
+    /// Listening on headphones through Apple's spatial mixer (documents wider than stereo). A setting of the
+    /// app, not of the document; every open document follows it.
+    static var binaural: Bool {
+        get { UserDefaults.standard.bool(forKey: "listen.binaural") }
+        set {
+            UserDefaults.standard.set(newValue, forKey: "listen.binaural")
+            for s in AgentRegistry.shared.sessions { s.output.binaural = newValue }
+        }
     }
 
     /// Brings the playing units in line with the document's inserts (new, removed,
@@ -439,6 +458,14 @@ final class EditorSession {
         project = newProject
         if let s = selection { selection = s.clamped(to: 0..<max(1, project.length)) }
         playhead = min(playhead, project.length)
+        if project.channels != before.channels {
+            // Another layout: the engine and the plugins are made for a channel count, so both are made again
+            // (playback stops; the plugins start again with the new count).
+            if isPlaying { stop() }
+            output = Self.makeOutput(project, volume: volume)
+            inserts = InsertHost(channels: project.channels, sampleRate: project.sampleRate, outOfProcess: Self.pluginSafeMode)
+            pluginsVersion += 1
+        }
         plan = PlanCompiler.compile(project.listening(solo: solo), pool: pool, inserts: inserts, ridable: mixerAhead != nil, limiters: limiters)
         output.setPlan(plan)
         version += 1

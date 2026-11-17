@@ -310,6 +310,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             item(L10n.text("audio.mixer"), #selector(EditorWindowController.showMixer(_:)), "x", [.command, .option]),
             item(L10n.text("audio.plugins"), #selector(EditorWindowController.showPlugins(_:)), "p", [.command, .option, .shift]),
             item(L10n.text("menu.picture"), #selector(EditorWindowController.showPicture(_:)), ""),
+            item(L10n.text("menu.listen.binaural"), #selector(EditorWindowController.toggleBinaural(_:)), ""),
             // The document's loudspeakers: a value of the document, undone like any other change.
             submenu(L10n.text("menu.layout"), ChannelLayout.allCases.map { l in
                 op(l == .mono ? L10n.text("menu.layout.mono") : l == .stereo ? L10n.text("menu.layout.stereo") : l.rawValue, "set_layout", ["layout": .string(l.rawValue)])

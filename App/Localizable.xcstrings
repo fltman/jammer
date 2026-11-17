@@ -8599,6 +8599,42 @@
         }
       }
     },
+    "listen.binaural.off": {
+      "comment": "Status line after turning binaural listening off.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Listening on loudspeakers again: a document wider than the device is folded down."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lyssnar i högtalare igen: ett dokument bredare än enheten viks ned."
+          }
+        }
+      }
+    },
+    "listen.binaural.on": {
+      "comment": "Status line after turning binaural listening on.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Listening on headphones: documents wider than stereo are rendered binaurally. Exports are unchanged."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lyssnar i hörlurar: dokument bredare än stereo återges binauralt. Exporter ändras inte."
+          }
+        }
+      }
+    },
     "loudness.done": {
       "comment": "Status line. %1$@ the action’s title, %2$@ the loudness, %3$@ the gain with its sign.",
       "extractionState": "manual",
@@ -8883,6 +8919,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Stereo"
+          }
+        }
+      }
+    },
+    "menu.listen.binaural": {
+      "comment": "Menu item (a tick when on): play a document wider than stereo through Apple’s spatial mixer for headphones. Listening only; exports are unchanged.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Listen on Headphones (Binaural)"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lyssna i hörlurar (binauralt)"
           }
         }
       }

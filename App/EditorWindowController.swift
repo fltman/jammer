@@ -428,6 +428,12 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
 
     private var pictureWindow: PictureWindow?
     /// The film beside the sound, in a window of its own: it follows the playhead.
+    /// Listening on headphones through Apple's spatial mixer, for documents wider than stereo.
+    @objc func toggleBinaural(_ sender: Any?) {
+        EditorSession.binaural.toggle()
+        session.say(EditorSession.binaural ? L10n.text("listen.binaural.on") : L10n.text("listen.binaural.off"), .info)
+    }
+
     @objc func showPicture(_ sender: Any?) {
         if let w = pictureWindow { w.makeKeyAndOrderFront(nil); return }
         let w = PictureWindow(contentRect: NSRect(x: 0, y: 0, width: 640, height: 400), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
@@ -693,6 +699,10 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         if item.action == #selector(sendToFlimmer(_:)) { return session.project.imported?.app == "flimmer" }
         if item.action == #selector(showRestore(_:)) {
             return session.project.length > 0 && !(JobRegistry.shared.latest("restore", document: session.agentID).map { !$0.isFinished } ?? false)
+        }
+        if item.action == #selector(toggleBinaural(_:)) {
+            item.state = EditorSession.binaural ? .on : .off
+            return session.project.channels > 2
         }
         if item.action == #selector(performOperation(_:)), let op = (item.representedObject as? OperationItem)?.op {
             // The document's layout has its tick.
