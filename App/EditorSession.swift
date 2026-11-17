@@ -429,6 +429,7 @@ final class EditorSession {
     func reloadAudio() { replace(with: project) }
 
     private func replace(with newProject: Project) {
+        let before = project
         var newProject = newProject
         if !collected.isEmpty {
             for i in newProject.sources.indices {
@@ -447,8 +448,22 @@ final class EditorSession {
         if linkRecord != nil { stepsNotSavedBack += 1 }
         noteInLinkJournal()
         autosaveSoon()
-        // Keep playing: restart where we are so the change is heard at once.
-        if isPlaying { try? output.play(from: output.playhead) }
+        if isPlaying {
+            // A change to the mix alone (a mute, a level, a pan, a send, a lane) goes on in the engine
+            // from where the sound is: nothing is restarted, so no plugin's tail is cut, and it is heard
+            // when the ring has played up to it (a few blocks while the mixer window is in use, up to a
+            // third of a second otherwise). A change to what is on the timeline is heard at once, by
+            // starting again from the playhead, as before.
+            if before.tracks.map(\.clips) == project.tracks.map(\.clips), before.sources == project.sources {
+                #if DEBUG
+                if UserDefaults.standard.bool(forKey: "stepProbe") {
+                    NSLog("Jammer: a mix change while playing: heard in %.0f ms (the ring is %@), %lld plans gone on so far", output.buffered * 1_000, mixerAhead == nil ? "long" : "short", output.continued)
+                }
+                #endif
+            } else {
+                try? output.play(from: output.playhead)
+            }
+        }
     }
 
     /// Runs steps from the menu, the palette or an agent. All or nothing: a
@@ -562,6 +577,58 @@ final class EditorSession {
     /// rendered: each is a gap that was heard. (The engine counts nothing finer: a block that was late
     /// but in time for the card isn't heard and isn't counted.)
     var underruns: Int64 { max(0, output.underruns - underrunsAtStart) }
+
+    // MARK: A hand on the mixer
+
+    /// How far ahead the engine renders while the mixer window is in use, in seconds; nil: the whole ring.
+    /// 20 ms to begin with. If the render thread can't keep that without dropouts it is stepped up, to 40
+    /// and then 80 ms, and the mixer window says which holds, rather than let the sound stutter.
+    private(set) var mixerAhead: Double?
+    /// Dropouts since the ring was made short this time.
+    private(set) var mixerDropouts: Int64 = 0
+    static let mixerAheadSteps = [0.02, 0.04, 0.08]
+    @ObservationIgnored private var aheadStep = 0
+    @ObservationIgnored private var dropoutsSeen: Int64 = 0
+    @ObservationIgnored private var aheadWatch: Timer?
+    @ObservationIgnored private var aheadRelease: DispatchWorkItem?
+
+    /// The mixer window came to the front (true) or left it (false; the ring is long again half a second later).
+    func mixerInUse(_ on: Bool) {
+        aheadRelease?.cancel()
+        aheadRelease = nil
+        if on {
+            guard mixerAhead == nil else { return }
+            aheadStep = 0
+            mixerDropouts = 0
+            dropoutsSeen = output.underruns
+            mixerAhead = Self.mixerAheadSteps[0]
+            output.setAhead(seconds: Self.mixerAheadSteps[0])
+            aheadWatch = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+                MainActor.assumeIsolated { self?.watchDropouts() }
+            }
+        } else {
+            let work = DispatchWorkItem { [weak self] in
+                guard let self else { return }
+                aheadWatch?.invalidate()
+                aheadWatch = nil
+                mixerAhead = nil
+                output.setAhead(seconds: 0)
+            }
+            aheadRelease = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
+        }
+    }
+    private func watchDropouts() {
+        let now = output.underruns
+        guard isPlaying, now > dropoutsSeen else { dropoutsSeen = now; return }
+        mixerDropouts += now - dropoutsSeen
+        dropoutsSeen = now
+        if aheadStep < Self.mixerAheadSteps.count - 1 {
+            aheadStep += 1
+            mixerAhead = Self.mixerAheadSteps[aheadStep]
+            output.setAhead(seconds: Self.mixerAheadSteps[aheadStep])
+        }
+    }
     @ObservationIgnored private var underrunsAtStart: Int64 = 0
 
     func play(from frame: Frame? = nil) {

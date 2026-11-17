@@ -1009,6 +1009,54 @@
         }
       }
     },
+    "mixer.ahead": {
+      "comment": "Mixer window, while playing. %@ is a whole number of milliseconds.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "While this window is in front, a change here is heard about %@ ms after it is made."
+          }
+        }
+      }
+    },
+    "mixer.ahead.dropouts": {
+      "comment": "How many times the sound dropped out.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld dropout"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld dropouts"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "mixer.ahead.stepped": {
+      "comment": "Mixer window, after the engine stepped its distance up. %1$@ milliseconds, %2$@ is “3 dropouts”.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This Mac couldn’t keep the sound whole that close to the playhead with this document (%2$@), so a change here is now heard about %1$@ ms after it is made."
+          }
+        }
+      }
+    },
     "mixer.automation.forGroup": {
       "comment": "The line under a VCA group. %@ is the whole automation line.",
       "extractionState": "manual",

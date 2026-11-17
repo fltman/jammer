@@ -153,6 +153,8 @@ struct Engine {
     std::atomic<float> gain{1.0f};
     /// How many frames ahead of the playhead the worker keeps the ring; 0: all of it.
     std::atomic<int64_t> ahead{0};
+    /// How many times a new plan has gone on from the one before it without a reset.
+    std::atomic<int64_t> continued{0};
     std::atomic<float> peaks[kMaxChannels];
     std::atomic<uint64_t> renderedSinceAck{0};
 
@@ -232,7 +234,7 @@ void Engine::run() {
         // A new plan while playing: where it has the same shape as the one before (a mute, a level, a
         // pan), it goes on from that one's state instead of starting afresh, so that no tail is cut.
         if (current != last) {
-            if (current && last && streaming) continuePlan(*current, *last);
+            if (current && last && streaming && continuePlan(*current, *last)) continued.fetch_add(1, std::memory_order_relaxed);
             last = current;
         }
         endFrame.store(current ? current->length : 0, std::memory_order_relaxed);
@@ -408,6 +410,7 @@ bool jm_engine_is_playing(const jm_engine *engine) { return engine->e.playing.lo
 int64_t jm_engine_playhead(const jm_engine *engine) { return engine->e.playhead.load(std::memory_order_relaxed); }
 void jm_engine_set_gain(jm_engine *engine, float gain) { engine->e.gain.store(gain, std::memory_order_relaxed); }
 void jm_engine_set_ahead(jm_engine *engine, int32_t frames) { engine->e.ahead.store(std::max<int32_t>(0, frames), std::memory_order_relaxed); }
+int64_t jm_engine_continued(const jm_engine *engine) { return engine->e.continued.load(std::memory_order_relaxed); }
 int64_t jm_engine_buffered(const jm_engine *engine) {
     return int64_t(engine->e.writePos.load(std::memory_order_acquire) - engine->e.readPos.load(std::memory_order_acquire));
 }

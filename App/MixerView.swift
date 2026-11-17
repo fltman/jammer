@@ -70,6 +70,16 @@ struct MixerSheet: View {
             // As tall as what is in it, up to a limit; only past that does it scroll. A fixed short list cut
             // its last rows off (seen in a picture of the sheet, 2026-11-16).
             .frame(height: min(440, listHeight))
+            // While the sound plays and this window is in front, what is done here is heard within a few blocks.
+            if session.isPlaying, let ahead = session.mixerAhead {
+                let ms = String(Int((ahead * 1_000).rounded()))
+                if ahead > EditorSession.mixerAheadSteps[0] {
+                    StateLine(kind: .warning, text: L10n.text("mixer.ahead.stepped", ms, L10n.count("mixer.ahead.dropouts", Int(session.mixerDropouts))))
+                        .accessibilityIdentifier("mixer.ahead")
+                } else {
+                    StateLine(kind: .info, text: L10n.text("mixer.ahead", ms)).accessibilityIdentifier("mixer.ahead")
+                }
+            }
             if !session.solo.isEmpty {
                 StateLine(kind: .warning, text: "Solo is on (\(session.soloNames.joined(separator: ", "))): only what reaches those strips is heard. It is a way of listening; exports and measurements are not affected, and it isn't saved.")
                     .accessibilityIdentifier("mixer.solo.note")

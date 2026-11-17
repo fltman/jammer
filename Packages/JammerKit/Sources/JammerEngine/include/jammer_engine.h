@@ -233,6 +233,8 @@ void jm_engine_set_silent(jm_engine *_Nonnull engine, bool silent);
 /// soon. Changing it never skips or repeats a frame and touches nothing that makes the sound; what it
 /// costs is the render thread's margin against a dropout.
 void jm_engine_set_ahead(jm_engine *_Nonnull engine, int32_t frames);
+/// How many times a plan given while playing has gone on from the one before it without a reset.
+int64_t jm_engine_continued(const jm_engine *_Nonnull engine);
 /// Frames rendered and not yet played.
 int64_t jm_engine_buffered(const jm_engine *_Nonnull engine);
 void jm_engine_tap(jm_engine *_Nonnull engine, bool on);

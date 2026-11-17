@@ -69,6 +69,13 @@ public final class AudioOutput {
         return (n, 10 * log10(e / Double(n * Int64(channels))))
     }
     public func setGain(_ gain: Float) { jm_engine_set_gain(engine, gain) }
+    /// How far ahead of the playhead the engine renders, in seconds; 0 is the whole ring (about a third
+    /// of a second). Short while a hand is on the mixer: a change is then heard that soon.
+    public func setAhead(seconds: Double) { jm_engine_set_ahead(engine, Int32(max(0, seconds) * sampleRate)) }
+    /// Seconds rendered and not yet played: how long a change to the plan takes to be heard from now.
+    public var buffered: Double { Double(jm_engine_buffered(engine)) / sampleRate }
+    /// How many plans have gone on from the one before without a reset since the engine was made.
+    public var continued: Int64 { jm_engine_continued(engine) }
     public func takePeak(channel: Int) -> Float { jm_engine_take_peak(engine, Int32(channel)) }
 
     public func play(from frame: Frame) throws {

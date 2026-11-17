@@ -850,6 +850,10 @@ final class MixerWindow: NSWindow, NSWindowDelegate {
     // The document's undo: ⌘Z here takes back what was done here or in the timeline, in the one history.
     func windowWillReturnUndoManager(_ window: NSWindow) -> UndoManager? { session?.document?.undoManager }
     override func cancelOperation(_ sender: Any?) { performClose(sender) }
+    // In front: a hand is on the mixer, and what it does should be heard at once.
+    override func becomeKey() { super.becomeKey(); session?.mixerInUse(true) }
+    override func resignKey() { super.resignKey(); session?.mixerInUse(false) }
+    override func close() { session?.mixerInUse(false); super.close() }
     override func keyDown(with event: NSEvent) {
         // (A text field in the window takes its own keys before this is asked.)
         if event.keyCode == 49, event.modifierFlags.intersection([.command, .option, .control]).isEmpty { session?.togglePlay(); return }
