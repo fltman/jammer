@@ -276,13 +276,14 @@ enum AgentRouter {
                 if e.reason == "bad_request" { throw APIError.badRequest(e.message) }
                 throw APIError.unprocessable(e.reason, e.message)
             }
-        case ["api", "v1", "import", "fcpxml"]:
+        case ["api", "v1", "import", "fcpxml"], ["api", "v1", "import", "timeline"]:
             try only("POST")
             guard var body = (try? JSONSerialization.jsonObject(with: r.body)) as? [String: Any] else { throw APIError.badRequest("The body isn't a JSON object.") }
             body[AgentAPI.rationale] = nil   // accepted everywhere, used for nothing
             do {
                 // Like batch: the file and its media must lie in a folder the user allowed in Settings › Agents.
-                let timeline = try TimelineImport.check(body, policy: AgentFolders.policy)
+                let timeline = try TimelineImport.check(body, policy: AgentFolders.policy, formats: s.last == "timeline" ? nil : ["fcpxml", "fcpxmld"],
+                                                        unpackTo: MediaStore.folder.appending(path: "Unpacked"))
                 let opened = try await TimelineImporter.open(timeline)
                 guard let session = opened.session else { throw APIError.internalError("The document window didn't open.") }
                 return .json(["document": detail(session), "import": TimelineImport.json(opened.imported)], status: 201)
@@ -580,6 +581,20 @@ enum AgentRouter {
             case ["export"]:
                 try only("POST")
                 return try await export(session, r)
+            case ["export", "timeline"]:
+                try only("POST")
+                var body = try json(r)
+                body[AgentAPI.rationale] = nil
+                do {
+                    let file = try TimelineExport.make(session.project, name: session.name, body: body, appVersion: appVersion)
+                    var headers = ["Content-Disposition": "attachment; filename=\"\(asciiName(session.name)).\(file.fileExtension)\""]
+                    // One header per note would need repeated headers; they are joined, each ASCII-safe.
+                    if !file.warnings.isEmpty { headers["X-Jammer-Warning"] = file.warnings.map(asciiHeader).joined(separator: " | ") }
+                    return Response(status: 200, contentType: file.contentType, body: file.data, extraHeaders: headers)
+                } catch let e as BatchError {
+                    if e.reason == "bad_request" { throw APIError.badRequest(e.message) }
+                    throw APIError.unprocessable(e.reason, e.message)
+                }
             case ["play"]:
                 try only("POST")
                 guard let w = session.window, w.isVisible, !w.isMiniaturized, w.occlusionState.contains(.visible) else {
@@ -922,6 +937,12 @@ enum AgentRouter {
         // The warning names the temporary file; say the document's name instead.
         let warning = result.warning.map { w in w.replacingOccurrences(of: fileURL.lastPathComponent, with: "The audio") }
         return (source, warning)
+    }
+
+    /// A header-safe line: diacritics folded, anything else outside printable ASCII left out.
+    static func asciiHeader(_ s: String) -> String {
+        let folded = s.applyingTransform(.stripDiacritics, reverse: false) ?? s
+        return String(folded.unicodeScalars.filter { $0.isASCII && $0.value >= 32 && $0.value < 127 }.map(Character.init))
     }
 
     /// A header-safe file name.

@@ -2,7 +2,7 @@
 
 ![A film's sound opened from Flimmer: four tracks, Dialog, Atmosfär, Musik and Video, with yellow markers where each picture starts](../screens/film.webp)
 
-**File › Import Final Cut Pro XML…** opens the sound of a film timeline as a new Jämmer document, so you can clean, level and mix a film's audio with everything Jämmer has. It reads FCPXML, the format Flimmer exports and that Final Cut Pro and DaVinci Resolve also write.
+**File › Import Timeline…** opens the sound of a film timeline as a new Jämmer document, so you can clean, level and mix a film's audio with everything Jämmer has. It reads FCPXML, the format Flimmer exports and that Final Cut Pro and DaVinci Resolve also write, and three more formats (see [Other timeline formats](#other-timeline-formats) below).
 
 ## What you get
 
@@ -28,6 +28,16 @@ Files from Flimmer carry exact times and separate levels for clips and tracks, a
 
 The status bar tells you how many tracks and clips came in and the first of any notes.
 
+## Other timeline formats
+
+**File › Import Timeline…** also reads these, and **File › Export Timeline…** writes them, so a document's clips can go to another program and come back. Nothing is rendered on export: the file names the audio files your clips play, where they are on your Mac.
+
+- **CMX 3600 EDL** (.edl), the edit decision list most editing programs read and write. On import Jämmer asks what frame rate the times are at, since the list doesn't say. A list marked drop-frame starts at 29.97 drop-frame. Audio channels A to A4 become tracks 1 to 4. Each event's file is the one named in its SOURCE FILE, FROM FILE or FROM CLIP comment, or else a file named like the clip or the reel beside the list. Video and black events are left out, and a dissolve comes in as a cut. On export, the times are in the document's timecode, or 25 frames a second from 00:00:00:00 if it has none. An EDL holds four audio tracks and 999 events, and has no levels, fades or markers. The status bar says what was left behind.
+- **OpenTimelineIO** (.otio), the open format from the Academy Software Foundation. The audio tracks are read, with their gaps; video tracks are left out and transitions come in as cuts. Times are written at the document's sample rate, so they come back exact. A clip's gain and fades and a track's level and mute are written in Jämmer's own metadata, so Jämmer reads them back; other programs ignore them.
+- **DAWproject** (.dawproject), the open project format Bitwig published. Audio clips are read with their times (in seconds or in beats at the project's first tempo), fades, track volume and mute. Audio stored inside the project is unpacked into Jämmer's own media folder. Warped (time-stretched) clips, note clips and clips holding other clips are left out, and the status bar says so. On export each track gets its channel with level, pan and mute. The audio is referenced by its path, not copied in. A clip's own gain has no place in the format.
+
+**What these have been tried with:** files Jämmer wrote and read back, and files written by hand to each format's published rules: an EDL as Premiere and Avid write it, OTIO in its older and newer forms, and a DAWproject in beats with audio packed inside. They have not yet been tried with files from Avid, Premiere, DaVinci Resolve, Bitwig or other programs, so check the result against the original.
+
 ## Agents
 
-An agent can do the same with `POST /api/v1/import/fcpxml`, but only for a file in a folder you've allowed under **Jämmer › Settings… › Agents**, and only if the media it uses is in an allowed folder too. See [Agents](07-agents.md).
+An agent can do the same with `POST /api/v1/import/fcpxml`, or `POST /api/v1/import/timeline` for any of the formats, with `rate` for an EDL. It works only for a file in a folder you've allowed under **Jämmer › Settings… › Agents**, and only if the media it uses is in an allowed folder too. `POST …/documents/{id}/export/timeline` with `format` (`edl`, `otio` or `dawproject`) answers with the file, and with what the format couldn't hold in an `X-Jammer-Warning` header. See [Agents](07-agents.md).

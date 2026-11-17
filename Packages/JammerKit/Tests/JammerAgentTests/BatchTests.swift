@@ -217,4 +217,66 @@ struct BatchTests {
         // The menu command has no policy: the user chose the file.
         #expect(try TimelineImport.check(["path": leaks.path], policy: nil).media.count == 1)
     }
+
+    @Test("Timeline import of EDL, OTIO and DAWproject: the same folder rule for each media file; rate for an EDL only; import/fcpxml still reads only FCPXML")
+    func otherTimelines() throws {
+        let dir = try folder()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let outside = FileManager.default.temporaryDirectory.appending(path: "jammer-outside-\(UUID().uuidString)").resolvingSymlinksInPath()
+        try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: outside) }
+        try tone(dir.appending(path: "a.wav"), db: -20)
+        try tone(outside.appending(path: "secret.wav"), db: -20)
+        let policy = FolderPolicy(allowed: [dir])
+        func reason(_ body: [String: Any], formats: [String]? = nil) -> String? {
+            do { _ = try TimelineImport.check(body, policy: policy, formats: formats); return nil } catch { return (error as? BatchError)?.reason }
+        }
+        func edl(_ name: String, _ file: String) throws -> String {
+            let u = dir.appending(path: name)
+            try "TITLE: T\nFCM: NON-DROP FRAME\n\n001  AX       A     C        00:00:00:00 00:00:02:00 01:00:00:00 01:00:02:00\n* SOURCE FILE: \(file)\n".write(to: u, atomically: true, encoding: .utf8)
+            return u.path
+        }
+        let good = try edl("good.edl", "a.wav"), leak = try edl("leak.edl", outside.appending(path: "secret.wav").path)
+        let t = try TimelineImport.check(["path": good, "rate": "24"], policy: policy, formats: nil)
+        #expect(t.media == [dir.appending(path: "a.wav")] && t.timecode?.rate == .fps24 && t.tracks[0].clips[0].duration.seconds == 2)
+        #expect(reason(["path": leak]) == "folder_not_allowed")
+        #expect(reason(["path": good, "rate": "26"]) == "bad_request" && reason(["path": good, "fps": 25]) == "bad_request")
+        #expect(reason(["path": good], formats: ["fcpxml", "fcpxmld"]) == "bad_request", "import/fcpxml reads FCPXML only")
+        // OTIO naming a file outside by file:// URL, and a DAWproject naming one by its absolute path.
+        let otio = dir.appending(path: "t.otio")
+        try Data(#"{"OTIO_SCHEMA":"Timeline.1","tracks":{"OTIO_SCHEMA":"Stack.1","children":[{"OTIO_SCHEMA":"Track.1","kind":"Audio","children":[{"OTIO_SCHEMA":"Clip.2","source_range":{"OTIO_SCHEMA":"TimeRange.1","start_time":{"OTIO_SCHEMA":"RationalTime.1","value":0,"rate":24},"duration":{"OTIO_SCHEMA":"RationalTime.1","value":24,"rate":24}},"media_references":{"DEFAULT_MEDIA":{"OTIO_SCHEMA":"ExternalReference.1","target_url":"SRC"}},"active_media_reference_key":"DEFAULT_MEDIA"}]}]}}"#
+            .replacingOccurrences(of: "SRC", with: URL(fileURLWithPath: outside.appending(path: "secret.wav").path).absoluteString).utf8).write(to: otio)
+        #expect(reason(["path": otio.path]) == "folder_not_allowed")
+        #expect(reason(["path": otio.path, "rate": "25"]) == "bad_request", "rate is for an EDL only")
+        var p = Project(sampleRate: 48_000, channels: 2)
+        let src = SourceRef(name: "secret.wav", path: outside.appending(path: "secret.wav").path, info: try AudioFileReader.info(at: outside.appending(path: "secret.wav")))
+        p.sources = [src]
+        p.tracks = [Track(name: "T", clips: [Clip(sourceID: src.id, start: 0, length: 48_000)])]
+        let daw = dir.appending(path: "t.dawproject")
+        try DAWproject.write(ExchangeTimeline(p, name: "T"), appVersion: "1").data.write(to: daw)
+        #expect(reason(["path": daw.path]) == "folder_not_allowed")
+        #expect(try TimelineImport.check(["path": daw.path], policy: nil, formats: nil).media.count == 1, "the menu command has no policy")
+    }
+
+    @Test("Timeline export: closed body, a known format, refused on an empty document; the bytes are the format's")
+    func timelineExport() throws {
+        let dir = try folder()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try tone(dir.appending(path: "a.wav"), db: -20)
+        var p = Project(sampleRate: 48_000, channels: 2)
+        func reason(_ body: [String: Any], _ p: Project) -> String? {
+            do { _ = try TimelineExport.make(p, name: "x", body: body, appVersion: "1"); return nil } catch { return (error as? BatchError)?.reason }
+        }
+        #expect(reason(["format": "edl"], p) == "empty")
+        let src = SourceRef(name: "a.wav", path: dir.appending(path: "a.wav").path, info: try AudioFileReader.info(at: dir.appending(path: "a.wav")))
+        p.sources = [src]
+        p.tracks = [Track(name: "T", clips: [Clip(sourceID: src.id, start: 0, length: 48_000)])]
+        #expect(reason(["format": "aaf"], p) == "bad_request" && reason(["format": "edl", "path": "/x"], p) == "bad_request" && reason([:], p) == "bad_request")
+        let edl = try TimelineExport.make(p, name: "x", body: ["format": "EDL"], appVersion: "1")
+        #expect(String(decoding: edl.data, as: UTF8.self).hasPrefix("TITLE: x") && edl.fileExtension == "edl")
+        let otio = try TimelineExport.make(p, name: "x", body: ["format": "otio"], appVersion: "1")
+        #expect((try JSONSerialization.jsonObject(with: otio.data) as? [String: Any])?["OTIO_SCHEMA"] as? String == "Timeline.1")
+        let daw = try TimelineExport.make(p, name: "x", body: ["format": "dawproject"], appVersion: "1")
+        #expect(daw.data.prefix(2) == Data("PK".utf8) && daw.contentType == "application/zip")
+    }
 }

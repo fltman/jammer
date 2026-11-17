@@ -42,6 +42,7 @@ extension AgentAPI {
         .init("POST", "/api/v1/plugins/scan", body: ["force"]),
         .init("POST", "/api/v1/batch", body: BatchRequest.fields),
         .init("POST", "/api/v1/import/fcpxml", body: ["path"]),
+        .init("POST", "/api/v1/import/timeline", body: ["path", "rate"]),
         .init("GET", "/api/v1/documents"),
         // The body is the audio itself, or JSON that says where the audio is.
         .init("POST", "/api/v1/documents", query: ["name"], body: ["name", "audio", "upload"]),
@@ -74,6 +75,7 @@ extension AgentAPI {
         .init("GET", doc + "/chapters", query: range),
         .init("POST", doc + "/restore", body: RestoreRequest.fields),
         .init("POST", doc + "/restore/preview", body: RestoreRequest.fields),
+        .init("POST", doc + "/export/timeline", body: ["format"]),
         .init("POST", doc + "/export", body: ["tracks", "format", "bitDepth", "bitRate", "start", "end", "targetLUFS", "compensate", "sampleRate", "dither", "chapters"]),
         .init("POST", doc + "/play", body: ["at"]),
         .init("POST", doc + "/stop"),

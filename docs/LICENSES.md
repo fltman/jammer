@@ -34,6 +34,16 @@ Jämmer is MIT. Every third-party component and model is listed here **before** 
 |---|---|---|---|
 | K-weighting at any sample rate | ITU-R BS.1770 analog prototype; constants as published in libebur128 | Standard / MIT | Reimplemented in `Loudness.swift`, tested against EBU Tech 3341/3342 |
 
+## File formats implemented from their specifications (own code, nothing bundled; read 2026-11-17)
+
+| Format | Specification and its terms | What it asks of an implementation |
+|---|---|---|
+| CMX 3600 EDL | No owner-published specification. The only copy of the old CMX manual is an unofficial scan on xmil.biz (not read: 43 MB). The related standard, SMPTE ST 258:2004 ("Transfer of Edit Decision Lists", https://pub.smpte.org/pub/st258/st0258-2004_stable2011.pdf, free to read since SMPTE opened its catalogue on 2026-06-17), is a different grammar. Implemented from what vendors document: Autodesk Flame's examples, Avid's EDL Manager guide (2008), Premiere's manual (CS6), and the OTIO CMX adapter's reader (Apache-2.0, read, nothing copied). | Nothing found: no licence, fee or permission. "CMX 3600" is used as the format's name only. |
+| OpenTimelineIO (.otio JSON) | https://github.com/AcademySoftwareFoundation/OpenTimelineIO, Apache-2.0; the file-format specification (docs/tutorials/otio-file-format-specification.md, v0.18.1) carries no separate licence. It recommends the library ("strongly recommended … instead of implementing a separate parser or writer") but doesn't require it. Schema versions written: those of OTIO 0.15–0.18 (Clip.2, Marker.2). | Nothing for implementing. The README: no right to use Pixar's or contributors' trade names; "OpenTimelineIO" is named as the format only. |
+| DAWproject 1.0 | https://github.com/bitwig/dawproject, MIT (Copyright 2020 Bitwig); "The format is version 1.0 and is stable"; Project.xsd and MetaData.xsd. | Nothing; no trademark or compatibility terms in the repository. Bitwig's XSD isn't copied into Jämmer (if it ever is, its MIT notice goes with it). |
+
+AAF, DDP and ARA2 are not here: AAF and DDP wait for Anders's decisions on agreements, ARA2 on an SDK to fetch.
+
 ## Test-only tools (not shipped)
 
 | Tool | Use |

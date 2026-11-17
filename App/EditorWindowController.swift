@@ -657,6 +657,43 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         }
     }
 
+    /// File › Export Timeline…: the clips as an EDL, OTIO or DAWproject file for another program; nothing is
+    /// rendered. What the format can't hold is said in the status line.
+    @objc func exportTimeline(_ sender: Any?) {
+        guard let window else { return }
+        let formats = TimelineFormat.allCases
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = formats.compactMap { UTType(filenameExtension: $0.fileExtension) }
+        panel.nameFieldStringValue = session.name + ".otio"
+        let popup = NSPopUpButton(frame: .zero, pullsDown: false)
+        let titles: [TimelineFormat: String] = [.edl: L10n.text("export.timeline.edl"), .otio: L10n.text("export.timeline.otio"), .dawproject: L10n.text("export.timeline.dawproject")]
+        for f in formats { popup.addItem(withTitle: titles[f] ?? f.rawValue) }
+        popup.selectItem(at: formats.firstIndex(of: .otio) ?? 0)
+        popup.setAccessibilityLabel(L10n.text("export.timeline.format"))
+        let chooser = TimelineFormatChooser(panel: panel, formats: formats)
+        popup.target = chooser
+        popup.action = #selector(TimelineFormatChooser.chosen(_:))
+        let label = NSTextField(labelWithString: L10n.text("export.timeline.format"))
+        let row = NSStackView(views: [label, popup])
+        row.edgeInsets = NSEdgeInsets(top: 8, left: 16, bottom: 8, right: 16)
+        panel.accessoryView = row
+        panel.beginSheetModal(for: window) { [weak self] response in
+            withExtendedLifetime(chooser) {}
+            guard response == .OK, let chosen = panel.url, let self else { return }
+            let format = formats[popup.indexOfSelectedItem]
+            let url = chosen.deletingPathExtension().appendingPathExtension(format.fileExtension)
+            do {
+                let file = try TimelineExport.make(self.session.project, name: self.session.name, format: format, appVersion: AgentRouter.appVersion)
+                try file.data.write(to: url, options: .atomic)
+                let done = L10n.text("export.done", url.lastPathComponent)
+                self.session.status = file.warnings.isEmpty ? done
+                    : L10n.text("import.done.notes", done, L10n.count("import.notes", file.warnings.count), file.warnings[0] + (file.warnings.count > 1 ? " …" : ""))
+            } catch {
+                self.session.status = L10n.text("export.failed", (error as? BatchError)?.message ?? error.localizedDescription)
+            }
+        }
+    }
+
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         if item.action == #selector(togglePlayback(_:)) {
             item.title = session.isPlaying ? L10n.text("transport.stop") : L10n.text("transport.play")
@@ -925,5 +962,17 @@ final class MixerWindow: NSWindow, NSWindowDelegate {
         // (A text field in the window takes its own keys before this is asked.)
         if event.keyCode == 49, event.modifierFlags.intersection([.command, .option, .control]).isEmpty { session?.togglePlay(); return }
         super.keyDown(with: event)
+    }
+}
+
+/// Keeps the save panel's file name on the chosen timeline format's extension.
+@MainActor
+final class TimelineFormatChooser: NSObject {
+    let panel: NSSavePanel
+    let formats: [TimelineFormat]
+    init(panel: NSSavePanel, formats: [TimelineFormat]) { self.panel = panel; self.formats = formats }
+    @objc func chosen(_ sender: NSPopUpButton) {
+        let f = formats[sender.indexOfSelectedItem]
+        panel.nameFieldStringValue = (panel.nameFieldStringValue as NSString).deletingPathExtension + "." + f.fileExtension
     }
 }

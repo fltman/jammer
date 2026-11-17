@@ -229,6 +229,25 @@ public enum FCPXMLImport {
         return try read(data, base: url.deletingLastPathComponent(), name: url.deletingPathExtension().lastPathComponent)
     }
 
+    /// Parses an XML file under the same rules as a timeline: no entities, no fetching, a bounded depth and
+    /// size. `rootName`: the element it must start with.
+    static func parseXML(_ data: Data, rootName: String) throws(ImportError) -> Node {
+        guard data.count <= maxBytes else { throw .unreadable("it is \(data.count >> 20) MB, far larger than a timeline file.") }
+        if data.prefix(1 << 20).range(of: Data("<!ENTITY".utf8)) != nil {
+            throw .unreadable("it declares entities, which a timeline doesn't need and Jämmer doesn't follow.")
+        }
+        let parser = XMLParser(data: data)
+        parser.shouldResolveExternalEntities = false
+        let builder = Builder()
+        parser.delegate = builder
+        let parsed = parser.parse()
+        if let refused = builder.refused { throw .unreadable(refused) }
+        guard parsed, let root = builder.root, root.name == rootName else {
+            throw .unreadable(parser.parserError == nil ? "it has no \(rootName) element." : "it isn't well-formed XML (line \(parser.lineNumber)).")
+        }
+        return root
+    }
+
     public static func read(_ data: Data, base: URL, name fallbackName: String) throws(ImportError) -> Timeline {
         guard data.count <= maxBytes else { throw .unreadable("it is \(data.count >> 20) MB, far larger than a timeline file.") }
         // A timeline has no business declaring entities: an internal one can expand to gigabytes, an

@@ -6397,6 +6397,74 @@
         }
       }
     },
+    "export.timeline.dawproject": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DAWproject"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DAWproject"
+          }
+        }
+      }
+    },
+    "export.timeline.edl": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CMX 3600 EDL"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CMX 3600-EDL"
+          }
+        }
+      }
+    },
+    "export.timeline.format": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Format:"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Format:"
+          }
+        }
+      }
+    },
+    "export.timeline.otio": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OpenTimelineIO"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OpenTimelineIO"
+          }
+        }
+      }
+    },
     "export.wavOnly": {
       "comment": "Note in the export options.",
       "extractionState": "manual",
@@ -6541,20 +6609,36 @@
         }
       }
     },
-    "file.importFCPXML": {
-      "comment": "Menu item.",
+    "file.exportTimeline": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Import Final Cut Pro XML…"
+            "value": "Export Timeline…"
           }
         },
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Importera Final Cut Pro XML…"
+            "value": "Exportera tidslinje…"
+          }
+        }
+      }
+    },
+    "file.importTimeline": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import Timeline…"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Importera tidslinje…"
           }
         }
       }
@@ -7309,6 +7393,57 @@
         }
       }
     },
+    "import.edl.rate.import": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Importera"
+          }
+        }
+      }
+    },
+    "import.edl.rate.text": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "An edit decision list doesn’t say its frame rate. Choose the picture’s rate for %@; a list in drop-frame says so in its FCM line, and that is chosen here already."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En redigeringslista säger inte sin bildfrekvens. Välj bildens frekvens för %@; en lista i drop-frame säger det på sin FCM-rad, och då är den redan vald här."
+          }
+        }
+      }
+    },
+    "import.edl.rate.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "At what frame rate are the list’s times?"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Med vilken bildfrekvens är listans tider?"
+          }
+        }
+      }
+    },
     "import.failed.title": {
       "comment": "Alert title.",
       "extractionState": "manual",
@@ -7424,19 +7559,18 @@
       }
     },
     "import.panel.message": {
-      "comment": "Message in the open panel for importing a film timeline.",
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Choose a Final Cut Pro XML file (from Flimmer, Final Cut Pro or DaVinci Resolve). Its sound opens as a new document; the files it uses aren’t changed."
+            "value": "Choose a timeline: Final Cut Pro XML (from Flimmer, Final Cut Pro or DaVinci Resolve), a CMX 3600 EDL, OpenTimelineIO or DAWproject. Its sound opens as a new document; the files it uses aren’t changed."
           }
         },
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Välj en Final Cut Pro XML-fil (från Flimmer, Final Cut Pro eller DaVinci Resolve). Dess ljud öppnas som ett nytt dokument; filerna den använder ändras inte."
+            "value": "Välj en tidslinje: Final Cut Pro XML (från Flimmer, Final Cut Pro eller DaVinci Resolve), en CMX 3600-EDL, OpenTimelineIO eller DAWproject. Dess ljud öppnas som ett nytt dokument; filerna den använder ändras inte."
           }
         }
       }
@@ -11635,6 +11769,23 @@
         }
       }
     },
+    "op.export_timeline.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export Timeline"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exportera tidslinje"
+          }
+        }
+      }
+    },
     "op.fade_in.title": {
       "comment": "The title of the operation fade_in: in the menus, the command palette, the assistant’s plan and as the undo name (“Undo …”). The agent API keeps the English title.",
       "extractionState": "manual",
@@ -11847,6 +11998,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Importera Final Cut Pro XML"
+          }
+        }
+      }
+    },
+    "op.import_timeline.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import Timeline"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Importera tidslinje"
           }
         }
       }
@@ -16689,6 +16857,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "Slagets notvärde"
+          }
+        }
+      }
+    },
+    "timecode.rate": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ fps"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ bilder/s"
+          }
+        }
+      }
+    },
+    "timecode.rate.drop": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ fps drop-frame"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ bilder/s drop-frame"
           }
         }
       }

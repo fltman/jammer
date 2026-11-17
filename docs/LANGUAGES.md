@@ -136,6 +136,10 @@ How an English term is written in Swedish text: unchanged, with a capital only w
 | agent (API) | agent | |
 | on this Mac / on device | på den här Macen | |
 | Requested by Flimmer | Begärt av Flimmer | the API's words stay English in both languages |
+| timeline (a file of one) | tidslinje | added 2026-11-17 (block F); already used in "Tidslinjen kunde inte importeras" |
+| frame rate, fps | bildfrekvens, bilder/s | added 2026-11-17 (block F), for Anders to look at |
+| drop-frame | drop-frame | added 2026-11-17 (block F): the trade's English term, as the rule says |
+| edit decision list, EDL | redigeringslista, EDL | added 2026-11-17 (block F), for Anders to look at |
 
 ## Rules added 2026-11-17 (the series', to be followed when the work gets there)
 
