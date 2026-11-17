@@ -381,7 +381,7 @@ final class AssistantModel {
         // (A price from the provider's own list counts as known. Asked once per provider, not per model.)
         let unknown = UnknownPriceBox(service: "text.\(provider.id)", name: provider.name)
         if choice?.estimate == nil {
-            alert.accessoryView = UnknownPriceBox.accessory([unknown.view])
+            UnknownPriceBox.place([unknown.view], in: alert)
             unknown.gate(alert.buttons[0])
         }
         let yes: Bool

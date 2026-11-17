@@ -145,6 +145,18 @@
         }
       }
     },
+    "automation.caption.empty": {
+      "comment": "Caption on the focused track when it has no lane of the shown kind.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No lane yet. ⌥-click or ⌥Return adds a point"
+          }
+        }
+      }
+    },
     "automation.caption.level": {
       "comment": "Caption of a lane in the timeline. %@ is the fader’s level.",
       "extractionState": "manual",
@@ -237,6 +249,102 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pan lane, in place of the pan slider. Left is up."
+          }
+        }
+      }
+    },
+    "automation.focus.status": {
+      "comment": "Status line when the focus moves to another track’s lane. %@ is the track.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automation: the lane of %@"
+          }
+        }
+      }
+    },
+    "automation.label": {
+      "comment": "The label at the pointer: the time and the value.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@  %2$@"
+          }
+        }
+      }
+    },
+    "automation.label.heard": {
+      "comment": "The label at the pointer on a level lane: time, the lane’s value, and what is heard with the group’s lane and the fader.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@  %2$@ (heard %3$@)"
+          }
+        }
+      }
+    },
+    "automation.point.removed": {
+      "comment": "Status line. %@ is \"3 points\".",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Point removed; %@ left"
+          }
+        }
+      }
+    },
+    "automation.point.status": {
+      "comment": "Status line and VoiceOver when a point is selected, added or moved. Two whole numbers, the time, the value.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Point %1$@ of %2$@: %3$@, %4$@"
+          }
+        }
+      }
+    },
+    "automation.removed.gain": {
+      "comment": "Status line when a lane’s last point was deleted. %@ is the track.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Level lane removed from %@"
+          }
+        }
+      }
+    },
+    "automation.removed.mute": {
+      "comment": "Status line when a lane’s last point was deleted. %@ is the track.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mute lane removed from %@"
+          }
+        }
+      }
+    },
+    "automation.removed.pan": {
+      "comment": "Status line when a lane’s last point was deleted. %@ is the track.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pan lane removed from %@"
           }
         }
       }

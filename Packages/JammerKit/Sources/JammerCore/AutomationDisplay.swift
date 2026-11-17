@@ -124,3 +124,50 @@ extension Project {
         return made(frames, values, plays: isGroup && own.enabled, points: own.points)
     }
 }
+
+// MARK: Changing a lane by hand
+
+extension AutomationLane {
+    /// Where point `i` lands when it is asked to go to `frame` and `value`: never onto or past a
+    /// neighbour (it stops one frame short), never off the timeline (`0...limit`), and never outside
+    /// the values a lane of its kind may have. A mute is 1 or 0.
+    public func placed(_ i: Int, frame: Frame, value: Double, limit: Frame) -> AutomationPoint {
+        let lo = i > 0 ? points[i - 1].frame + 1 : 0
+        let hi = i < points.count - 1 ? points[i + 1].frame - 1 : max(limit, points[i].frame)
+        let range = Automation.range(of: param)
+        let v = param == .mute ? (value >= 0.5 ? 1 : 0) : min(range.upperBound, max(range.lowerBound, value))
+        // Neighbours on the frames next to it: there is nowhere to go in time.
+        guard lo <= hi else { return AutomationPoint(frame: points[i].frame, value: v) }
+        return AutomationPoint(frame: min(max(frame, lo), hi), value: v)
+    }
+    /// The lane with point `i` moved, as `placed` says.
+    public func moving(_ i: Int, frame: Frame, value: Double, limit: Frame) -> AutomationLane {
+        var out = self
+        out.points[i] = placed(i, frame: frame, value: value, limit: limit)
+        return out
+    }
+    /// The lane with a point more, and where it is; nil when there is a point at that frame already.
+    public func adding(frame: Frame, value: Double) -> (lane: AutomationLane, index: Int)? {
+        guard !points.contains(where: { $0.frame == frame }) else { return nil }
+        let range = Automation.range(of: param)
+        let v = param == .mute ? (value >= 0.5 ? 1 : 0) : min(range.upperBound, max(range.lowerBound, value))
+        var out = self
+        let i = points.firstIndex { $0.frame > frame } ?? points.count
+        out.points.insert(AutomationPoint(frame: frame, value: v), at: i)
+        return (out, i)
+    }
+    /// The value the lane has at a frame when it has points, or what a strip without a lane has there:
+    /// nothing added, the centre, heard.
+    public func valueOrRest(at frame: Frame) -> Double { value(at: frame) ?? 0 }
+}
+
+extension Automation {
+    /// A value one step of the keys away: `by` in the lane's own unit, landing on whole steps of
+    /// `grain` (0.1 dB, 1 %), so that the keys give exact values. A mute flips.
+    public static func stepped(_ value: Double, by: Double, grain: Double, _ param: AutomationLane.Param) -> Double {
+        if param == .mute { return value >= 0.5 ? 0 : 1 }
+        let range = range(of: param)
+        let v = ((value + by) / grain).rounded() * grain
+        return min(range.upperBound, max(range.lowerBound, (v * 1_000).rounded() / 1_000))
+    }
+}

@@ -91,4 +91,27 @@ struct AutomationDisplayTests {
         #expect(view.count == 50 && view.shown.count == 20 && view.shown.first?.frame == 5_000)
         #expect(lane.points(in: 2_000_000...3_000_000, limit: 20).count == 0)
     }
+
+    @Test("A point moved by hand stops one frame short of its neighbours, stays on the timeline and inside its values; a point is never added onto another")
+    func byHand() {
+        let lane = AutomationLane(strip: UUID(), points: Self.pts([(100, 0), (200, -6), (300, -12)]))
+        #expect(lane.placed(1, frame: 50, value: -6, limit: 1_000) == AutomationPoint(frame: 101, value: -6))
+        #expect(lane.placed(1, frame: 900, value: -6, limit: 1_000) == AutomationPoint(frame: 299, value: -6))
+        #expect(lane.placed(1, frame: 250, value: 99, limit: 1_000) == AutomationPoint(frame: 250, value: 24))
+        #expect(lane.placed(0, frame: -40, value: -200, limit: 1_000) == AutomationPoint(frame: 0, value: -96))
+        #expect(lane.placed(2, frame: 5_000, value: 0, limit: 1_000) == AutomationPoint(frame: 1_000, value: 0))
+        // With a neighbour on each of the frames beside it, it has nowhere to go in time; its value still moves.
+        let tight = AutomationLane(strip: UUID(), points: Self.pts([(10, 0), (11, 0), (12, 0)]))
+        #expect(tight.placed(1, frame: 500, value: -3, limit: 1_000) == AutomationPoint(frame: 11, value: -3))
+        #expect(lane.moving(1, frame: 0, value: -6, limit: 1_000).points.map(\.frame) == [100, 101, 300])
+        let added = lane.adding(frame: 150, value: -3)
+        #expect(added?.index == 1 && added?.lane.points.map(\.frame) == [100, 150, 200, 300])
+        #expect(lane.adding(frame: 200, value: 0) == nil && lane.adding(frame: 400, value: 0)?.index == 3)
+        let mute = AutomationLane(strip: UUID(), param: .mute, shape: .hold, points: Self.pts([(0, 0), (500, 1)]))
+        #expect(mute.placed(1, frame: 700, value: 0.7, limit: 1_000).value == 1 && mute.adding(frame: 800, value: 0.2)?.lane.points.last?.value == 0)
+        // The keys give exact values.
+        #expect(Automation.stepped(-3.04, by: 0.5, grain: 0.1, .gain) == -2.5 && Automation.stepped(-2.5, by: -0.1, grain: 0.1, .gain) == -2.6)
+        #expect(Automation.stepped(23.9, by: 3, grain: 0.1, .gain) == 24 && Automation.stepped(0.97, by: 0.05, grain: 0.01, .pan) == 1)
+        #expect(Automation.stepped(1, by: 0.5, grain: 0.1, .mute) == 0 && Automation.stepped(0, by: -0.5, grain: 0.1, .mute) == 1)
+    }
 }

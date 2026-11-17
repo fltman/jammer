@@ -57,17 +57,29 @@ final class UnknownPriceBox: NSObject {
         box?.action = #selector(changed)
     }
 
-    /// `views` one under the other, as an alert's accessory view. (An alert puts that view at its very
-    /// edge, left of its text; the inset brings it under the text.)
-    static func accessory(_ views: [NSView]) -> NSView {
+    /// Puts `views` one under the other as the alert's accessory view, with their left edge under the
+    /// left edge of the alert's text. (An alert places its accessory view by its own rules, which differ
+    /// with the view's width; so the difference is measured when the alert is shown.)
+    static func place(_ views: [NSView], in alert: NSAlert) {
         let stack = NSStackView(views: views)
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 10
-        stack.edgeInsets = NSEdgeInsets(top: 0, left: 22, bottom: 0, right: 0)
         let height = views.reduce(0) { $0 + $1.frame.height } + CGFloat(views.count - 1) * 10
-        stack.frame = NSRect(x: 0, y: 0, width: 22 + (views.map(\.frame.width).max() ?? 0), height: height)
-        return stack
+        // Room to move in: the measured inset is at most this.
+        stack.frame = NSRect(x: 0, y: 0, width: 44 + (views.map(\.frame.width).max() ?? 0), height: height)
+        alert.accessoryView = stack
+        // Measured once the alert is on the screen: where it puts the view is only settled then.
+        DispatchQueue.main.async {
+            func find(_ v: NSView) -> NSTextField? {
+                if let f = v as? NSTextField, f.stringValue == alert.informativeText { return f }
+                for s in v.subviews { if let f = find(s) { return f } }
+                return nil
+            }
+            guard stack.window != nil, let content = alert.window.contentView, let text = find(content) else { return }
+            let want = text.convert(text.bounds, to: nil).minX, have = stack.convert(stack.bounds, to: nil).minX
+            stack.edgeInsets = NSEdgeInsets(top: 0, left: min(44, max(0, want - have)), bottom: 0, right: 0)
+        }
     }
 
     /// Keeps `button` disabled until the box is ticked (or was, an earlier time).

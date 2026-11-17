@@ -433,7 +433,8 @@ final class EditorSession {
     }
 
     /// One operation from the menu or the palette; shows failures in the status line.
-    func perform(_ op: String, _ params: [String: JSONValue] = [:]) {
+    /// `saying`: what the status line says when the step went through and has nothing of its own to say.
+    func perform(_ op: String, _ params: [String: JSONValue] = [:], saying: String? = nil) {
         let title = Operations.named(op)?.title ?? op
         Task {
             let r = await run([Step(op: op, params: params)], action: title)
@@ -463,7 +464,7 @@ final class EditorSession {
             } else if let gain = r.first?.info["gainDB"] {
                 status = String(format: "%@: %+.2f dB", title, gain)
             } else {
-                status = nil
+                status = saying
             }
         }
     }

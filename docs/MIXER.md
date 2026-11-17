@@ -234,11 +234,11 @@ Built as the sketch below says, with what was decided on it: the lane is added t
 - **A VCA group** (`strip` is the group's id; `gain` and `mute`, nothing else). How the lanes are added: nothing new in the engine. When the plan is compiled a member's level curve is its own lane plus the group's, **a sum in dB at the points of both** (two straight lines in dB add to a straight line between those points, so the sum is exact), and a member is muted when its own mute lane or the group's says so, with one ramp at each change. Tested as asked: a group lane and a member's own lane give the same samples, bit for bit, as writing the summed values on each member by hand; the same for the group's mute. A strip outside the group is untouched. `level(of:at:)` and `GET …/automation` have the group's lane in what they answer for a member; the mixer answer has `automation` on each VCA; the sheet has a line under the group ("… (for every strip in the group)"). A group's lanes are in what a frozen bus downstream was made from. Removing the group takes its lanes with it.
 - **Steps:** refused before anything runs, with the field's name: `to` missing with send, a send that isn't there, `to` with another param, pan or send on a VCA group.
 - **Hostile files:** a send lane whose send isn't there, and pan or send on a VCA group, are left out.
-- **Still not built:** lanes drawn by hand (the second half of 4, sketched below); written from the fader (5); plugin parameters (6). And not measured in a quiet window: the cost per block.
+- **Still not built:** rows for buses, groups and the master and several points at once (the rest of 4); written from the fader (5); plugin parameters (6). And not measured in a quiet window: the cost per block.
 
 ## Automation, step 4, first half built (2026-11-17): lanes shown in the timeline, in debug builds
 
-Display only: the view takes no clicks. **View › Automation** chooses which kind of lane is drawn over the tracks (Level Lanes, Pan Lanes, Mute Lanes, Hide Lanes), one kind at a time for every track that has one.
+**View › Automation** chooses which kind of lane is drawn over the tracks (Level Lanes, Pan Lanes, Mute Lanes, Hide Lanes), one kind at a time for every track that has one.
 
 - **What is drawn is what the engine is given.** `Project.shownLane(_:of:)` (`JammerCore/AutomationDisplay.swift`) returns the curve from the same calls the plan compiler makes (`gainCurve`, `panCurve`, `muteCurve`, `sendCurve`), not a second reading of the points. So a member of a VCA group has the group's lane in its line (and a member with no lane of its own shows the group's, and says whose it is), and an automated mute shows its 5 ms ramps. A test renders the project and holds the sound to the shown line plus the fader within 0.003 dB at every sample, and the mute and the pan to theirs.
 - **What comes on top is said, not drawn in.** The fader (with the group's fader) is in the lane's caption: "Level lane with the lane of Voices in it, added to the fader (−3.0 dB)". A pan lane says it stands in the slider's place and that left is up.
@@ -249,43 +249,40 @@ Display only: the view takes no clicks. **View › Automation** chooses which ki
 - **VoiceOver:** the timeline has a group "Automation" with one element a lane ("Level automation of Music", with the caption, how many points it has and how many are in view) and under it the points in view, at most 200, each "Point 3 of 5" with its time and value ("0:05.000, −3.0 dB"; "Muted"/"Heard"; "40 % left"). Measured with a lane of 10 000 points and two others: the whole window's tree, 252 lines, read in 0.13 s. With every point in the tree it would be 10 000 elements; the limit is why it isn't.
 - **The mixer sheet:** a strip whose pan a lane steers has its pan slider grey, "Automated" beside it, and a help text that says why and what to do.
 - **Texts** are in the string catalogue from the start (the view's file is on the list of fully moved files).
-- **Not in this half:** buses, VCA groups and the master have no row in the timeline, so their lanes are still only the mixer sheet's line; send lanes are not drawn; nothing can be changed with the pointer or the keys. Seen as pictures: level (own lane with a group's, a plain one through the scale's knee, one switched off), mute, pan, a 10 000-point lane far out and far in, the mixer with the grey slider.
+- **The caption** sits on a plate on the line of the track's name, after it; the name has a plate too, so both are read whatever the waveform does under them.
+- **Not in this half:** buses, VCA groups and the master have no row in the timeline, so their lanes are still only the mixer sheet's line; send lanes are not drawn. Seen as pictures: level (own lane with a group's, a plain one through the scale's knee, one switched off), mute, pan, a 10 000-point lane far out and far in, the mixer with the grey slider.
 
-### The second half, sketched (nothing built): drawing a lane by hand
+### The second half, first part built (2026-11-17): a track's lane drawn by hand, in debug builds
 
-Everything below goes through `set_automation` and `clear_automation`, so that the window can do nothing an agent can't and every change is one undo step with the step's own checks.
+Built from the sketch as the coordinator changed it. Every change is one `set_automation` (the whole lane) or `clear_automation` step: one undo step, with the step's own checks.
 
-**Which lane is being worked on.** One lane has the focus: the kind chosen in View › Automation, on the track that was last clicked or stepped to. Its line is drawn thicker and its points larger; the others stay as now. A track without a lane of that kind shows a faint line at 0 dB (or the centre, or "heard") that takes the first point.
+- **Focus.** One lane has it: the shown kind on the track last clicked or stepped to (a bar at the row's left edge, a thicker line, larger points). A track with no lane of that kind shows a faint line where a first point would go and says how to add one.
+- **The points are the lane's own.** On a member of a VCA group the heard line (own plus group) stays drawn thick, and the own lane is drawn thin beside it with the points on it: what is dragged is what is stored, what is heard is still shown.
+- **Adding.** ⌥-click in the row: a point at the pointer's time. Within 6 points of the line it takes the line's value (nothing heard changes); elsewhere it takes the pointer's height. ⌥Return: a point at the playhead at the line's value. A mute's new point is the other state from there on. **Without ⌥ nothing in the timeline has changed**: a click places the playhead, a drag selects, and a double click selects the clip under the pointer as before (the sketch's double click for a point is gone: it would have taken that over).
+- **Dragging** a point moves time and value; one undo step for the whole drag, sent when the button is let go. ⇧ holds the time, ⌘ holds the value. A mute's point moves sideways only, and a click on it flips it.
+- **Neighbours.** A point stops one frame short of the point on either side (`AutomationLane.placed`); nothing passes and nothing is swallowed.
+- **Snapping** while dragging: to the playhead, markers, the track's clip edges and the selection's ends within 6 points; to 0 dB (or the centre) within 4 points; ⌃ turns both off.
+- **The value at the pointer:** a label with the time and the lane's value while the pointer is on the focused line and while a point is dragged; for a level also what is heard with the group's lane and the fader. The status line says the same for the point just selected, added or moved ("Point 2 of 5: 0:09.558, −8.9 dB"), and VoiceOver is told it.
+- **The last point.** Delete on a lane's last point removes the lane without asking; the status line says "Level lane removed from Music"; one undo brings it back.
 
-**What the points are.** The lane's own points, not the compiled curve's corners: on a member of a VCA group the heard line (own plus group) stays drawn, and the own lane is drawn thinner beside it with the points on it, so that what is dragged is what is stored and what is heard is still shown. A group's own lane is worked on in a row of its own (below).
+| Keys (the timeline has the focus, lanes are shown) | |
+|---|---|
+| ⌥↓, ⌥↑ | The lane of the next or the previous track |
+| ⌥→, ⌥← | Select the next or the previous point; the playhead goes there |
+| ⌥Return | A point at the playhead, at the line's value there |
+| ↑, ↓ (a point selected) | 0.5 dB up or down; a pan 5 % (↑ is left); a mute flips |
+| ⇧↑, ⇧↓ | 0.1 dB; a pan 1 % |
+| ⌥⇧↑, ⌥⇧↓ | 3 dB; a pan 25 % |
+| ⌥⇧→, ⌥⇧← | The point 10 ms later or earlier |
+| ⌘⌥→, ⌘⌥← | The point one frame later or earlier |
+| Delete | Remove the point (the one before it is selected next) |
+| Escape | Nothing selected; the keys are the timeline's again |
 
-**With the pointer.**
-- Click on the focused lane's line or in its row with ⌥ held: a point there, at the line's value at that time (so adding a point never changes the sound). Double-click anywhere in the row: a point at the pointer's time and height.
-- Drag a point: time and value follow. One undo step for the whole drag, sent when the button is let go (as the mixer's sliders are); while dragging, the line is drawn from the would-be lane, compiled the same way.
-- **Past a neighbour:** a point stops one frame short of its neighbours; it never passes them and never lands on one. (Passing would reorder the lane under the pointer; swallowing would lose a point silently.)
-- ⇧ while dragging holds the time and moves only the value; ⌘ holds the value and moves only the time.
-- A mute lane has two heights only: a point is dragged sideways, and clicking it flips it.
-- Click a point: it is selected (⇧-click adds to the selection, a drag across the row with ⌥⇧ selects those inside). Selected points move together, stopping when any of them reaches a neighbour that isn't selected.
-- Without ⌥ a click in the row does what it does today (places the playhead, starts a selection): lanes being shown must not make the timeline harder to use.
+None of them uses ⌃ with ⌥ (VoiceOver's own keys). ↑, ↓, Delete and Escape are only taken while a point is selected; ⌥ with an arrow or Return had no meaning in the timeline before, and no menu item of Jämmer's uses ⌘⌥ with an arrow. The table goes into the manual the day automation is in a Release build (the manual only describes what a user has).
 
-**With the keys alone.** When lanes are shown, ⌥↓ and ⌥↑ move the focus between tracks' lanes (and into the rows below). Then:
-- ⌥→ and ⌥← step to the next and previous point and select it; the playhead goes there, so the place can be heard. VoiceOver says the point's name and value.
-- ⌥Return: a point at the playhead, at the line's value there.
-- ↑ and ↓ on a selected point: 0.5 dB (⇧: 0.1 dB, ⌥⇧: 3 dB); a pan 5 % (⇧: 1 %); a mute flips.
-- ⌥⇧→ and ⌥⇧←: the point 10 ms later or earlier (with ⌃ as well: one frame), stopping short of a neighbour.
-- Delete: the selected points are removed (the lane's last point too; a lane without points is gone, as the step says).
-- Escape: nothing selected; the arrows are the timeline's again.
-The keys are only taken while a point is selected or ⌥ is held, so Space, the arrows and Delete keep their meaning for the timeline otherwise.
+**Tried by script** (`safepointer` drag, click with ⌥, doubleclick; keys through System Events; 34 checks, all as expected): points are found by accessibility id, the row's scale is worked out from two points whose values are known, and each result is read back from `GET …/mixer` and compared with what the drag should give by the scale's inverse. A drag (time within 1.5 points, value within a point's worth); one undo for the whole drag; a drag past a neighbour (lands one frame after it); ⇧ and ⌘ drags; ⌥-click on the line (the line's own value to 0.001 dB) and off it; a drop 4 points from a marker (lands on it); a double click (no point; the clip is selected); a group member (own point moves, the group's lane untouched); the keys alone from no lane to three points, every step size, and back to none with the status line's sentence and one undo; a mute point flipped and dragged sideways. Seen as pictures: a dragged point, added points, a group member with both lines, the keys' selected point, a mute lane.
 
-**Snapping.** In time: to the playhead, to markers, to clip edges and to the selection's ends, within 6 points on the screen, shown by the snap line the timeline already draws; and to the grid when the tempo grid is shown. ⌃ while dragging turns it off. In value: to 0 dB (the centre for a pan) within 4 points, and nothing else; no rounding of values on a drag (the keys give exact tenths).
-
-**The value at the pointer.** While the pointer is over the focused lane, and during a drag, a small label by the pointer says the time and the value there ("0:05.000 −3.0 dB"), and for a level in a group also what is heard with the group and the fader ("heard −9.0 dB"). The same text is the dragged point's VoiceOver value.
-
-**Buses, VCA groups and the master.** A fold-out part under the tracks (View › Automation › Buses and Master) with one thin row for each bus, group and the master that has a lane of the shown kind, and an empty row to start one. No waveform; the same lane view. It takes height from the tracks only while open.
-
-**Send lanes.** Chosen as a kind of their own ("Send Lanes") when a track has sends; with more than one send on a track, the focused track's caption is a menu of them.
-
-**How it is tried by script.** Points are found by accessibility id and their frames (the tree already has them): `safepointer --within timeline.automation drag x0 y0 x1 y1` moves one, `doubleclick` adds one, `click … --opt` adds one on the line. After each, the script reads the lane back from `GET …/mixer` and compares time and value with what the drag should give (the view's scale has an inverse, so the expected value is computed, not eyeballed), reads the point's new VoiceOver value, and undoes once to see the whole drag go. The cases: a plain drag; a drag past a neighbour (stops one frame short); ⇧ and ⌘ drags; a drag with snapping to a marker and with ⌃; the keys alone from an empty lane to three points and back to none; a member of a group (own points move, heard line follows); a mute point flipped. Each state is also looked at as a picture.
+**Not built, and not tried:** several points selected at once (⇧-click, a drag across the row); rows for buses, VCA groups and the master (their lanes are still changed only through the API and shown in the mixer sheet's line); send lanes; snapping to the tempo grid. **Not tried by script:** ⌃ to turn snapping off (safepointer has no ⌃), the label at the pointer (it shows only while the pointer is there), and VoiceOver itself reading the announcements (the tree and the announcement call were checked, not the speech).
 
 **Release.** Automation stays out of Release until both halves have been seen as pictures by the coordinator and in the app by Anders.
 

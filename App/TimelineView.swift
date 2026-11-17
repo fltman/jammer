@@ -26,7 +26,7 @@ final class TimelineView: NSView {
     private let metal: WaveformMetalView
     private let overlay: TimelineOverlay
     private let spectrogram: SpectrogramLayerView
-    private let automation: AutomationLanesView
+    let automation: AutomationLanesView
     /// Which kind of automation lane is drawn over the tracks (View › Automation). nil: none.
     var shownAutomation: AutomationLane.Param? {
         get { automation.shown }
@@ -396,8 +396,11 @@ final class TimelineOverlay: NSView {
                 if c.fadeIn > 0 { drawFade(from: c.start, to: c.start + c.fadeIn, rising: true, y: y, height: laneHeight) }
                 if c.fadeOut > 0 { drawFade(from: c.end - c.fadeOut, to: c.end, rising: false, y: y, height: laneHeight) }
             }
-            let nameAttrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 11, weight: .semibold),
-                                                            .foregroundColor: Theme.text]
+            // On a plate: the name lies over the waveform and must be read whatever is under it.
+            let nameAttrs: [NSAttributedString.Key: Any] = [.font: AutomationLanesView.nameFont, .foregroundColor: NSColor.white]
+            let nameSize = (track.name as NSString).size(withAttributes: nameAttrs)
+            NSColor(white: 0, alpha: 0.6).setFill()
+            NSBezierPath(roundedRect: NSRect(x: 3, y: y + 20, width: nameSize.width + 10, height: nameSize.height + 4), xRadius: 4, yRadius: 4).fill()
             // Below the row where marker flags sit, so a marker near the start doesn't cover it.
             (track.name as NSString).draw(at: NSPoint(x: 8, y: y + 22), withAttributes: nameAttrs)
             if session.peaks.isEmpty, !session.peakProgress.isEmpty, session.project.length > Frame(project.sampleRate * 600) {
@@ -527,6 +530,8 @@ final class TimelineOverlay: NSView {
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
         let p = convert(event.locationInWindow, from: nil)
+        // A click on an automation point (or ⌥-click in a lane) is the lane's; everything else is the timeline's as before.
+        if !areaMode, timeline?.automation.mouseDown(event, at: p) == true { dragAnchor = nil; return }
         let f = frame(at: p)
         if areaMode, p.y >= TimelineView.rulerHeight, event.clickCount == 1, !event.modifierFlags.contains(.shift) {
             let lane = min(max(0, laneIndex(at: p.y)), max(0, project.tracks.count - 1))
@@ -560,6 +565,7 @@ final class TimelineOverlay: NSView {
 
     override func mouseDragged(with event: NSEvent) {
         let p = convert(event.locationInWindow, from: nil)
+        if timeline?.automation.mouseDragged(event, at: p) == true { return }
         if var d = drawing {
             d.points.append(p)
             drawing = d
@@ -579,6 +585,7 @@ final class TimelineOverlay: NSView {
     }
 
     override func mouseUp(with event: NSEvent) {
+        if timeline?.automation.mouseUp(event, at: convert(event.locationInWindow, from: nil)) == true { return }
         if let d = drawing {
             drawing = nil
             if !didDrag {
@@ -620,6 +627,7 @@ final class TimelineOverlay: NSView {
     // MARK: Keys and edit commands
 
     override func keyDown(with event: NSEvent) {
+        if timeline?.automation.key(event) == true { return }
         switch event.keyCode {
         case 49: session.togglePlay() // space
         case 36: session.seek(0) // return

@@ -4,7 +4,8 @@ Not a list of commits: what behaves differently from before, for a user, an agen
 
 ## 2026-11-17
 
-- **Automation lanes are shown in the timeline (debug builds)**: View › Automation draws the level, pan or mute lanes over the tracks, each line taken from the curve the engine is given (a group's lane is in its members' lines, a mute shows its ramps), with the fader said in the caption. Display only. VoiceOver reads each lane and the points in view.
+- **Automation lanes are shown in the timeline (debug builds)**: View › Automation draws the level, pan or mute lanes over the tracks, each line taken from the curve the engine is given (a group's lane is in its members' lines, a mute shows its ramps), with the fader said in the caption. VoiceOver reads each lane and the points in view.
+- **A track's lane can be drawn by hand (debug builds)**: ⌥-click or ⌥Return adds a point, a drag moves it (never past a neighbour), the arrows step it, Delete removes it, and the last point takes the lane with it and says so. Without ⌥ the timeline's clicks are what they were. Track names in the timeline now sit on a plate.
 - **A pan slider that a pan lane steers is grey** and says why.
 - **An unknown price is its own question.** `allowPaid: true` no longer covers a price Jämmer doesn't know: transcribing with `engine` `openai` also needs `allowUnknownPrice: true` and answers 422 `unknown_price` without it (an agent that sent only `allowPaid` is now refused). In the window the sheet's Send is grey until a box is ticked, once per service; the answer is kept under Settings › Paid Services, where it is taken back, and the sheet says the price is unknown every time. A text provider whose list gives no price for the chosen model asks the same way; a price from the provider's own list counts as known.
 - **The word list for Swedish, second round** (`docs/LANGUAGES.md`): terms said in English in a Swedish studio stay English.

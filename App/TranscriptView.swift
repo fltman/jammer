@@ -329,9 +329,9 @@ final class TranscriptPanel: NSView, NSTextViewDelegate {
         This route is built from OpenAI's documentation and has not been tried with a real request. If OpenAI answers with an error, Jämmer shows it as it came.
         """
         let unknown = UnknownPriceBox(service: "openai.transcription", name: "OpenAI")
-        alert.accessoryView = UnknownPriceBox.accessory([pick, unknown.view])
         alert.addButton(withTitle: "Send")
         alert.addButton(withTitle: "Cancel")
+        UnknownPriceBox.place([pick, unknown.view], in: alert)
         unknown.gate(alert.buttons[0])
         let answer: NSApplication.ModalResponse
         if let w = window { answer = await alert.beginSheetModal(for: w) } else { answer = alert.runModal() }
