@@ -17,6 +17,8 @@
 set -u
 id=com.brattoo.jammer.debug.guest
 dry=0; [[ "${1:-}" == "--dry" ]] && dry=1
+# For the script's own test: another folder in place of the home folder and the temporary folder.
+home="${JAMMER_GUEST_CLEAN_ROOT:-$HOME}"; tmp="${JAMMER_GUEST_CLEAN_ROOT:+$JAMMER_GUEST_CLEAN_ROOT/tmp/}"; tmp="${tmp:-${TMPDIR:-/tmp/}}"
 if pgrep -f "build/guest/Jammer.app/Contents/MacOS/Jammer" >/dev/null; then echo "guest-clean: the guest copy is running; quit it first. Nothing was removed." >&2; exit 1; fi
 gone=0
 unlink_one() { if (( dry )); then echo "would remove $1"; else rm -f -- "$1" && echo "removed $1"; fi; gone=$((gone + 1)); }
@@ -28,14 +30,14 @@ tree() { # every file under a folder, then its folders from the deepest up
   find "$root" -depth -type d -print0 | while IFS= read -r -d '' d; do rmdir_one "$d"; done
 }
 echo "--- the guest's data folder"
-tree "$HOME/Library/Application Support/Jammer Debug Guest"
+tree "$home/Library/Application Support/Jammer Debug Guest"
 echo "--- the guest's autosaved documents"
-list="$HOME/Library/Autosave Information/$id.plist"
+list="$home/Library/Autosave Information/$id.plist"
 if [[ -f "$list" ]]; then
   # The paths the list itself names, and only those that lie in the autosave folder.
-  named=$(plutil -convert json -o - "$list" 2>/dev/null | python3 -c '
+  named=$(plutil -convert json -r -o - "$list" 2>/dev/null | AS_ROOT="$home/Library/Autosave Information/" python3 -c '
 import json, sys, os, urllib.parse
-root = os.path.expanduser("~/Library/Autosave Information/")
+root = os.environ["AS_ROOT"]
 def walk(o):
     if isinstance(o, dict):
         for v in o.values(): yield from walk(v)
@@ -51,5 +53,5 @@ except Exception: pass')
   unlink_one "$list"
 else echo "not there: $list"; fi
 echo "--- the guest's saved windows"
-tree "${TMPDIR:-/tmp/}$id.savedState"
+tree "$tmp$id.savedState"
 (( dry )) && echo "guest-clean: nothing was removed (--dry)." || echo "guest-clean: done."

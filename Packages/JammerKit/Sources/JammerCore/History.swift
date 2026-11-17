@@ -25,6 +25,15 @@ public struct History: Codable, Sendable, Equatable {
     public private(set) var pruned: Int
     public var limit: Int
     var blobs: [String: Data]
+    /// The transcripts and the speaker turns of the step before, and their keys: a step that leaves them
+    /// as they were (most do) doesn't code 20 000 words again to find that out. Not saved, and not part
+    /// of what makes two histories equal.
+    private var lastWords: LastWords?
+    private struct LastWords: Sendable { var transcripts: [SourceTranscript]; var turns: [SourceSpeakers]; var tKey: String; var sKey: String }
+    private enum CodingKeys: String, CodingKey { case nodes, current, pruned, limit, blobs }
+    public static func == (a: History, b: History) -> Bool {
+        a.nodes == b.nodes && a.current == b.current && a.pruned == b.pruned && a.limit == b.limit && a.blobs == b.blobs
+    }
 
     public init(root project: Project, action: String = "Open", limit: Int = 500) throws {
         nodes = []
@@ -89,8 +98,14 @@ public struct History: Codable, Sendable, Equatable {
             if blobs[key] == nil { blobs[key] = try (data as NSData).compressed(using: .lzfse) as Data }
             return key
         }
-        let tKey = try store(enc.encode(project.transcripts))
-        let sKey = try store(enc.encode(project.speakerTurns))
+        let tKey: String, sKey: String
+        if let last = lastWords, blobs[last.tKey] != nil, blobs[last.sKey] != nil, last.transcripts == project.transcripts, last.turns == project.speakerTurns {
+            (tKey, sKey) = (last.tKey, last.sKey)
+        } else {
+            tKey = try store(enc.encode(project.transcripts))
+            sKey = try store(enc.encode(project.speakerTurns))
+            lastWords = LastWords(transcripts: project.transcripts, turns: project.speakerTurns, tKey: tKey, sKey: sKey)
+        }
         var bare = project
         bare.transcripts = []
         bare.speakerTurns = []

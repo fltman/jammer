@@ -444,6 +444,7 @@ final class EditorSession {
     /// Runs steps from the menu, the palette or an agent. All or nothing: a
     /// failure leaves the document as it was. One undo step.
     func run(_ steps: [Step], action: String) async -> [StepResult] {
+        let probe0 = Date()
         let start = EditState(project: project, selection: selection, playhead: playhead, clipboard: AppClipboard.content,
                               pool: pool, media: MediaStore.folder)
         let pool = self.pool
@@ -457,7 +458,17 @@ final class EditorSession {
             return (r, s)
         }.value
         guard results.allSatisfy({ $0.status == .done }) else { return results }
+        let probe1 = Date()
         if end.project != project { commit(end.project, action: action) }
+        #if DEBUG
+        if UserDefaults.standard.bool(forKey: "stepProbe") {
+            let probe2 = Date()
+            DispatchQueue.main.async {
+                NSLog("Jammer: step probe: the step itself %.1f ms, taking it into the document %.1f ms, the window after it %.1f ms",
+                      probe1.timeIntervalSince(probe0) * 1_000, probe2.timeIntervalSince(probe1) * 1_000, Date().timeIntervalSince(probe2) * 1_000)
+            }
+        }
+        #endif
         if let last = steps.last, last.op == "loudness_preset", let preset = LoudnessPreset(rawValue: last.params["preset"]?.string ?? "") {
             presetTarget = (.init(integrated: preset.integrated, ceiling: preset.truePeakCeiling), end.project)
         }

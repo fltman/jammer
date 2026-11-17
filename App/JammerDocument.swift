@@ -399,7 +399,7 @@ final class JammerDocument: NSDocument {
         super.save(to: url, ofType: typeName, for: saveOperation) { [weak self] error in
             // (An autosave written on its own thread may answer from there: what follows is the main thread's.)
             guard Thread.isMainThread else {
-                DispatchQueue.main.async { MainActor.assumeIsolated { if error == nil, let s = self?.session { StorageScanner.note(s) } }; completionHandler(error) }
+                DispatchQueue.main.async { completionHandler(error) }
                 return
             }
             MainActor.assumeIsolated {
@@ -417,8 +417,10 @@ final class JammerDocument: NSDocument {
                 }
                 self.pendingCopies = []
                 self.pendingCollected = nil
-                // Saved (also autosaved): where the document is kept is now known, and so is what it uses.
-                if error == nil, let s = self.session { StorageScanner.note(s) }
+                // Saved: where the document is kept is now known, and so is what it uses. (Not at an autosave:
+                // the note goes through every step of the history, and an autosave follows every step; what a
+                // step newly uses is noted when the step is made.)
+                if error == nil, !Self.isAutosave(saveOperation), let s = self.session { StorageScanner.note(s) }
             }
             completionHandler(error)
         }

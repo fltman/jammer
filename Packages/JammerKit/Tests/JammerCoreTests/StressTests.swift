@@ -264,3 +264,31 @@ struct StressTests {
         return true
     }
 }
+
+/// What a step costs in a long document must not grow back (measured 2026-11-17: a fader change took a
+/// second in a two-hour document with a transcript, because three things were done again at every step).
+/// Run with the stress script; the app-side half (the transcript panel, the storage note) is in docs/CHANGES.md.
+@Suite("Stress: a step in a long document", .enabled(if: ProcessInfo.processInfo.environment["JAMMER_STRESS"] != nil))
+struct StepCostStress {
+    @Test("Recording a step that leaves the transcript alone takes a few milliseconds in a two-hour document with 20 000 words")
+    func history() throws {
+        var (p, _) = MixerTests.document()
+        let rate = p.sampleRate, source = p.sources[0]
+        p.tracks = [p.tracks[0]]
+        p.tracks[0].clips = (0..<600).map { Clip(sourceID: source.id, start: Frame(Double($0) * 12 * rate), length: Frame(12 * rate)) }
+        p.setTranscript(SourceTranscript(sourceID: source.id, language: "sv-SE", engine: "test",
+                                         words: (0..<20_000).map { i in Word(text: "ord\(i % 97)", start: Frame(Double(i) * 0.36 * rate), end: Frame((Double(i) * 0.36 + 0.3) * rate), confidence: 0.9) }))
+        var h = try History(root: p)
+        let clock = ContinuousClock()
+        var times: [Duration] = []
+        for i in 1...9 {
+            p.tracks[0].gainDB = -Double(i)
+            times.append(try clock.measure { try h.record(p, action: "Change Track") })
+        }
+        let median = times.sorted()[4]
+        print("a step recorded in the long document: median \(median)")
+        #expect(median < .milliseconds(12), "median \(median)")
+        // And the state that comes back still has its words.
+        #expect(try h.project(of: h.current).transcripts.first?.words.count == 20_000)
+    }
+}

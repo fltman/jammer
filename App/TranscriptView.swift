@@ -158,8 +158,23 @@ final class TranscriptPanel: NSView, NSTextViewDelegate {
         mirrorSelection()
     }
 
+    /// What the text is made from. A step that changes none of it (a fader, a marker, a plugin) leaves the
+    /// text as it is: building 20 000 words again took a quarter of a second at every step.
+    private struct Shown: Equatable {
+        var transcripts: [SourceTranscript]
+        var clips: [[Clip]]
+        var muted: [Bool]
+        var turns: [SourceSpeakers]
+        var speakers: [String]
+    }
+    private var shown: Shown?
+
     private func rebuild() {
         shownVersion = session.version
+        let p = session.project
+        let now = Shown(transcripts: p.transcripts, clips: p.tracks.map(\.clips), muted: p.tracks.map(\.isMuted), turns: p.speakerTurns, speakers: p.speakers)
+        if now == shown { return }
+        shown = now
         // Show the language the transcript is in, once there is one.
         if let lang = session.project.transcripts.first?.language,
            let i = Self.languages.firstIndex(where: { $0.1 == lang }) ?? Self.languages.firstIndex(where: { $0.1.prefix(2) == lang.prefix(2) }) {

@@ -617,7 +617,9 @@ enum AgentRouter {
     static func summary(_ s: EditorSession) -> [String: Any] {
         s.checkLink()
         // Brought back from the journal with changes that were never saved back: said until they are, or are given up.
-        let recovered: [String: Any] = s.recovered ? ["recovered": true] : [:]
+        // (`kept` after a quit or a closed window with work waiting, `recovered` after an unexpected stop: never both. The series' form.)
+        var recovered: [String: Any] = s.recovered ? [s.keptFromBefore ? "kept" : "recovered": true] : [:]
+        if s.wasLinked, s.stepsNotSavedBack > 0, s.document?.isDocumentEdited == true { recovered["unreturnedSteps"] = s.stepsNotSavedBack }
         return ["id": s.agentID, "name": s.name, "duration": seconds(s, s.project.length), "frames": s.project.length,
          "sampleRate": s.project.sampleRate, "channels": s.project.channels, "tracks": s.project.tracks.count,
          "edited": s.document?.isDocumentEdited ?? false, "playing": s.isPlaying, "underruns": s.underruns,
