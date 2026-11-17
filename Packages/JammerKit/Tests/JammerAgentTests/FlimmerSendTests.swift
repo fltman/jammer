@@ -294,6 +294,16 @@ struct FlimmerSendTests {
         #expect(await failure { _ = try await FlimmerSend.send(prepared, client: c) }?.reason == "upload_used")
     }
 
+    @Test("A sibling's job: queued and running are waited on, canceled ends it in either spelling, and a status nobody knows ends the wait with an error")
+    func jobStatuses() {
+        #expect(FlimmerSend.jobState("queued") == .waiting && FlimmerSend.jobState("running") == .waiting)
+        #expect(FlimmerSend.jobState("done") == .done && FlimmerSend.jobState("failed") == .failed)
+        #expect(FlimmerSend.jobState("canceled") == .canceled && FlimmerSend.jobState("cancelled") == .canceled)
+        #expect(FlimmerSend.jobState("paused") == .unknown("paused") && FlimmerSend.jobState(nil) == .unknown("") && FlimmerSend.jobState("Done") == .unknown("Done"))
+        // Jämmer's own word for a stopped job, as the series writes it.
+        #expect(Job.Status.cancelled.rawValue == "canceled")
+    }
+
     @Test("A linked clip that moved sends its offset from the shot; a longer take warns about the next clip")
     func linkedAndOverlap() async throws {
         var (p, pool) = film()

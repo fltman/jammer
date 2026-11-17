@@ -77,6 +77,7 @@ final class AutomationLanesView: NSView {
         let p = session.project
         if rows == .tracks { return p.tracks.map { Row(id: $0.id, name: $0.name, clips: $0.clips) } }
         guard let shown else { return [] }
+        if shown == .send { return p.buses.filter { !$0.sends.isEmpty }.map { Row(id: $0.id, name: $0.name, clips: []) } }
         var out = p.buses.map { Row(id: $0.id, name: $0.name, clips: []) }
         if shown == .gain || shown == .mute { out += p.vcas.map { Row(id: $0.id, name: $0.name, clips: []) } }
         if shown == .gain { out.append(Row(id: Master.id, name: L10n.text("automation.row.master"), clips: [])) }
@@ -99,20 +100,35 @@ final class AutomationLanesView: NSView {
     private var shownProject: Project {
         guard let lane = drag?.lane ?? pending else { return session.project }
         var p = session.project
-        try? p.setAutomation(strip: lane.strip, param: lane.param, points: lane.points)
+        try? p.setAutomation(strip: lane.strip, param: lane.param, to: lane.to, points: lane.points)
         return p
     }
     private var focusedTrack: Row? { rowList[safe: focus] }
+    /// Send lanes: which of a strip's sends is shown, where it has more than one (⌥Tab goes to the next). By the bus it goes to.
+    private var sendShown: [UUID: UUID] = [:]
+    private func sends(of strip: UUID) -> [Send] {
+        project.tracks.first { $0.id == strip }?.sends ?? project.buses.first { $0.id == strip }?.sends ?? []
+    }
+    /// The bus the shown send of a strip goes to, when send lanes are shown and the strip has a send.
+    private func target(_ strip: UUID) -> UUID? {
+        guard shown == .send else { return nil }
+        let all = sends(of: strip)
+        return all.first { $0.to == sendShown[strip] }?.to ?? all.first?.to
+    }
     /// The focused track's own lane of the shown kind, as stored (or as dragged).
     private var ownLane: AutomationLane? {
         guard let shown, let t = focusedTrack else { return nil }
-        if let l = drag?.lane ?? pending, l.strip == t.id, l.param == shown { return l }
-        return project.lane(strip: t.id, param: shown)
+        let to = target(t.id)
+        if shown == .send, to == nil { return nil }
+        if let l = drag?.lane ?? pending, l.strip == t.id, l.param == shown, l.to == to { return l }
+        return project.lane(strip: t.id, param: shown, to: to)
     }
     /// The same, or an empty one to put the first point in.
     private func laneToChange() -> AutomationLane? {
         guard let shown, let t = focusedTrack else { return nil }
-        return ownLane ?? AutomationLane(strip: t.id, param: shown, shape: shown == .mute ? .hold : .linear, points: [])
+        let to = target(t.id)
+        if shown == .send, to == nil { return nil }     // no send, nothing to automate
+        return ownLane ?? AutomationLane(strip: t.id, param: shown, to: to, shape: shown == .mute ? .hold : .linear, points: [])
     }
     /// Where a point of the own lane is drawn. A mute's point sits at the top when the track is heard from there, at the bottom when muted.
     private func place(_ p: AutomationPoint, _ param: AutomationLane.Param, in r: NSRect) -> NSPoint {
@@ -131,7 +147,7 @@ final class AutomationLanesView: NSView {
     private var lanes: [(track: Int, lane: ShownLane)] {
         guard let shown else { return [] }
         let p = shownProject
-        return rowList.enumerated().compactMap { i, t in p.shownLane(shown, of: t.id).map { (i, $0) } }
+        return rowList.enumerated().compactMap { i, t in p.shownLane(shown, of: t.id, to: target(t.id)).map { (i, $0) } }
     }
     private var view: ClosedRange<Frame> {
         let a = Frame(viewport.frame(atX: 0).rounded(.down)), b = Frame(viewport.frame(atX: bounds.width).rounded(.up))
@@ -155,7 +171,9 @@ final class AutomationLanesView: NSView {
         let group = lane.group.flatMap { project.vca($0)?.name } ?? ""
         var text: String
         switch lane.param {
-        case .gain, .send:
+        case .send:
+            text = sendCaption(lane.strip, lane: true)
+        case .gain:
             let fader = Self.valueText(lane.onTopDB, .gain)
             if lane.group != nil, lane.own { text = L10n.text("automation.caption.level.withGroup", group, fader) }
             else if lane.group != nil { text = L10n.text("automation.caption.level.groupOnly", group, fader) }
@@ -167,6 +185,16 @@ final class AutomationLanesView: NSView {
             else { text = L10n.text("automation.caption.mute") }
         }
         if !lane.plays { text = L10n.text("automation.caption.off", text) }
+        return text
+    }
+
+    /// A send's caption: where it goes and its own level, which the lane is added to; and, with more than one send, which of them this is.
+    private func sendCaption(_ strip: UUID, lane: Bool) -> String {
+        let all = sends(of: strip)
+        guard let to = target(strip), let i = all.firstIndex(where: { $0.to == to }) else { return L10n.text("automation.caption.send.none") }
+        let bus = project.buses.first { $0.id == to }?.name ?? ""
+        var text = lane ? L10n.text("automation.caption.send", bus, Self.valueText(all[i].gainDB, .gain)) : L10n.text("automation.caption.send.empty", bus)
+        if all.count > 1 { text = L10n.text("automation.caption.send.which", text, String(i + 1), String(all.count)) }
         return text
     }
 
@@ -196,7 +224,7 @@ final class AutomationLanesView: NSView {
             if !all.contains(where: { $0.track == focus }) {
                 NSColor.systemOrange.withAlphaComponent(0.35).setFill()
                 NSRect(x: 0, y: y(shown == .mute ? 1 : 0, shown, in: r).rounded(), width: bounds.width, height: 1).fill()
-                drawCaption(L10n.text("automation.caption.empty"), track: focus, colour: NSColor.systemOrange.withAlphaComponent(0.8))
+                drawCaption(shown == .send ? sendCaption(list[focus].id, lane: false) : L10n.text("automation.caption.empty"), track: focus, colour: NSColor.systemOrange.withAlphaComponent(0.8))
             }
         }
         for (i, lane) in all {
@@ -289,7 +317,8 @@ final class AutomationLanesView: NSView {
             let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .medium), .foregroundColor: NSColor.white]
             let text = hover.text as NSString
             let size = text.size(withAttributes: attrs)
-            var at = NSPoint(x: hover.at.x + 12, y: hover.at.y - size.height - 10)
+            // Over the tracks the label sits above the point; in a thin row of its own it sits under it, clear of the row's caption.
+            var at = NSPoint(x: hover.at.x + 12, y: rows == .tracks ? hover.at.y - size.height - 10 : hover.at.y + 8)
             at.x = min(at.x, bounds.width - size.width - 10)
             at.y = max(topInset + 2, at.y)
             NSColor(white: 0, alpha: 0.85).setFill()
@@ -330,10 +359,14 @@ final class AutomationLanesView: NSView {
         let name = lane.strip == Master.id ? "master" : lane.strip.uuidString, rate = project.sampleRate
         if lane.points.isEmpty {
             pending = nil
-            session.perform("clear_automation", ["strip": .string(name), "param": .string(lane.param.rawValue)], saying: saying)
+            var params: [String: JSONValue] = ["strip": .string(name), "param": .string(lane.param.rawValue)]
+            if let to = lane.to { params["to"] = .string(to.uuidString) }
+            session.perform("clear_automation", params, saying: saying)
         } else {
-            session.perform("set_automation", ["strip": .string(name), "param": .string(lane.param.rawValue),
-                                               "points": .array(lane.points.map { .array([.number(Double($0.frame) / rate), .number($0.value)]) })], saying: saying)
+            var params: [String: JSONValue] = ["strip": .string(name), "param": .string(lane.param.rawValue)]
+            if let to = lane.to { params["to"] = .string(to.uuidString) }
+            params["points"] = .array(lane.points.map { JSONValue.array([.number(Double($0.frame) / rate), .number($0.value)]) })
+            session.perform("set_automation", params, saying: saying)
         }
         needsDisplay = true
         elements = nil
@@ -541,6 +574,15 @@ final class AutomationLanesView: NSView {
             guard let k = next, lane.points.indices.contains(k) else { NSSound.beep(); return true }
             select(k, seek: true)
             return true
+        case (48, [.option]) where shown == .send:   // ⌥Tab: the strip's next send
+            let all = sends(of: list[focus].id)
+            guard all.count > 1, let now = target(list[focus].id), let i = all.firstIndex(where: { $0.to == now }) else { NSSound.beep(); return true }
+            sendShown[list[focus].id] = all[(i + 1) % all.count].to
+            selected = nil
+            session.status = sendCaption(list[focus].id, lane: ownLane != nil)
+            needsDisplay = true
+            elements = nil
+            return true
         case (36, [.option]):                        // ⌥Return: a point at the playhead, at the line's value there
             guard let lane = laneToChange() else { return true }
             let rest = lane.valueOrRest(at: session.playhead)
@@ -587,7 +629,8 @@ final class AutomationLanesView: NSView {
             let name = list[focus].name
             let gone: String
             switch shown {
-            case .gain, .send: gone = L10n.text("automation.removed.gain", name)
+            case .send: gone = L10n.text("automation.removed.send", name)
+            case .gain: gone = L10n.text("automation.removed.gain", name)
             case .pan: gone = L10n.text("automation.removed.pan", name)
             case .mute: gone = L10n.text("automation.removed.mute", name)
             }
@@ -627,7 +670,8 @@ final class AutomationLanesView: NSView {
             e.setAccessibilityIdentifier(rows == .tracks ? "timeline.automation.lane.\(i)" : "timeline.automation.strip.\(i)")
             let name = rowList[i].name
             switch lane.param {
-            case .gain, .send: e.setAccessibilityLabel(L10n.text("automation.ax.lane.gain", name))
+            case .send: e.setAccessibilityLabel(L10n.text("automation.ax.lane.send", name))
+            case .gain: e.setAccessibilityLabel(L10n.text("automation.ax.lane.gain", name))
             case .pan: e.setAccessibilityLabel(L10n.text("automation.ax.lane.pan", name))
             case .mute: e.setAccessibilityLabel(L10n.text("automation.ax.lane.mute", name))
             }

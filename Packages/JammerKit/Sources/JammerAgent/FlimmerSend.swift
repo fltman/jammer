@@ -328,14 +328,30 @@ public enum FlimmerSend {
             while true {
                 let (_, j) = try await call("GET", "/api/v1/jobs/\(id)", items: items)
                 let job = j["job"] as? [String: Any] ?? [:]
-                switch job["status"] as? String {
-                case "done": return job["result"] as? [String: Any] ?? [:]
-                case "failed":
-                    throw FlimmerSend.explain(status: 422, error: job["error"] as? [String: Any] ?? [:], items: items)
-                case "cancelled", "canceled": throw Failure("canceled", "The job was canceled in Flimmer; nothing was changed there.") // not a shown text: "cancelled" is Flimmer's own job word, taken either way
-                default: try await Task.sleep(for: .seconds(pollInterval))
+                switch FlimmerSend.jobState(job["status"] as? String) {
+                case .done: return job["result"] as? [String: Any] ?? [:]
+                case .failed: throw FlimmerSend.explain(status: 422, error: job["error"] as? [String: Any] ?? [:], items: items)
+                case .canceled: throw Failure("canceled", "The job was canceled in Flimmer; nothing was changed there.")
+                case .unknown(let word):
+                    throw Failure("unknown_status", "Flimmer's job has the status \"\(word)\", which Jämmer doesn't know, so it has stopped waiting for it. Look in Flimmer for whether the change was made.")
+                case .waiting: try await Task.sleep(for: .seconds(pollInterval))
                 }
             }
+        }
+    }
+
+    /// What a sibling's job status means to the one waiting for it (the-apps/SIBLINGS.md §2): the statuses
+    /// are queued, running, done, failed and canceled; "cancelled" is taken as canceled (it was written so
+    /// until 2026-11-17); and anything else ends the wait with an error, because a status nobody knows
+    /// must not be waited on for ever.
+    public enum JobState: Equatable { case waiting, done, failed, canceled, unknown(String) }
+    public static func jobState(_ status: String?) -> JobState {
+        switch status {
+        case "queued", "running": .waiting
+        case "done": .done
+        case "failed": .failed
+        case "canceled", "cancelled": .canceled   // not a shown text: a sibling's job word, in both spellings
+        default: .unknown(status ?? "")
         }
     }
 

@@ -234,7 +234,7 @@ Built as the sketch below says, with what was decided on it: the lane is added t
 - **A VCA group** (`strip` is the group's id; `gain` and `mute`, nothing else). How the lanes are added: nothing new in the engine. When the plan is compiled a member's level curve is its own lane plus the group's, **a sum in dB at the points of both** (two straight lines in dB add to a straight line between those points, so the sum is exact), and a member is muted when its own mute lane or the group's says so, with one ramp at each change. Tested as asked: a group lane and a member's own lane give the same samples, bit for bit, as writing the summed values on each member by hand; the same for the group's mute. A strip outside the group is untouched. `level(of:at:)` and `GET …/automation` have the group's lane in what they answer for a member; the mixer answer has `automation` on each VCA; the sheet has a line under the group ("… (for every strip in the group)"). A group's lanes are in what a frozen bus downstream was made from. Removing the group takes its lanes with it.
 - **Steps:** refused before anything runs, with the field's name: `to` missing with send, a send that isn't there, `to` with another param, pan or send on a VCA group.
 - **Hostile files:** a send lane whose send isn't there, and pan or send on a VCA group, are left out.
-- **Still not built:** send lanes and snapping to the tempo grid (the rest of 4); written from the fader (5); plugin parameters (6). And not measured in a quiet window: the cost per block.
+- **Still not built:** snapping to the tempo grid (the rest of 4); written from the fader (5); plugin parameters (6). And not measured in a quiet window: the cost per block.
 
 ## Automation, step 4, first half built (2026-11-17): lanes shown in the timeline, in debug builds
 
@@ -276,6 +276,7 @@ Built from the sketch as the coordinator changed it. Every change is one `set_au
 | ⌥⇧→, ⌥⇧← | The point 10 ms later or earlier |
 | ⌘⌥→, ⌘⌥← | The point one frame later or earlier |
 | ⇧→, ⇧← | Select the next point after the selected ones too, or the one before them |
+| ⌥Tab (send lanes) | The strip's next send |
 | Delete | Remove the selected points (the one before them is selected next) |
 | Escape | Nothing selected; the keys are the timeline's again |
 
@@ -289,9 +290,50 @@ None of them uses ⌃ with ⌥ (VoiceOver's own keys). ↑, ↓, Delete and Esca
 
 **Several points at once (built the same day).** ⇧-click adds a point to the selected ones or takes it out; a ⌥⇧-drag across the row selects the points in that stretch; ⇧→ and ⇧← take in one more with the keys. A drag of one of them, the arrow keys and Delete then work on all of them, as one piece (`AutomationLane.moving(_:byFrames:byValue:limit:)`): the piece stops when any of its points is a frame short of a neighbour that isn't moving, at an end of the timeline, or when one of its values reaches the edge of what the lane may have, so the distances and the shape are kept. A click on one of several, without moving, selects that one alone. The status line says how many ("3 points selected", "2 points moved"). Tried by script, 13 checks: two points dragged together (same time, same value, the others untouched, one undo), the piece dragged far (stops a frame before the next point, keeps its length), a ⌥⇧-drag selecting three, ↓ on the three, ⇧→ twice and a 10 ms step, Delete on three and one undo; seen as a picture.
 
-**Not built, and not tried:** send lanes; snapping to the tempo grid. **Not tried:** VoiceOver itself reading the announcements (the tree and the announcement call were checked, not the speech; on Anders's list for his own half-minute try). ⌃ against snapping was tried with safepointer's new `--ctrl` (dropped 4 points from a marker, it stays where the pointer was).
+**Send lanes (built the same day).** View › Automation › Send Lanes shows, on every track (and in the rows below, every bus) that has a send, the lane of one of its sends: the first, or the one chosen with ⌥Tab, which goes to the strip's next send. The caption says which bus the send goes to, the send's own level that the lane is added to, and "send 1 of 2, ⌥Tab for the next" when there is more than one. A strip without a send says so and takes no point. Everything else is as for a level. Tried by script (8 checks): ⌥Return on the shown send, ⌥Tab and ⌥Return on the other (the first untouched), ↓, Delete to an empty lane with its sentence, a drag, a track without a send (nothing is made), a bus's send in its row; seen as pictures.
+
+**Not built, and not tried:** snapping to the tempo grid. Not seen: the label under the point in a thin row (moved there after the last picture, where it covered the row's caption). **Not tried:** VoiceOver itself reading the announcements (the tree and the announcement call were checked, not the speech; on Anders's list for his own half-minute try). ⌃ against snapping was tried with safepointer's new `--ctrl` (dropped 4 points from a marker, it stays where the pointer was).
 
 **Release.** Automation stays out of Release until both halves have been seen as pictures by the coordinator and in the app by Anders.
+
+## Automation, step 5, sketched (2026-11-17, nothing built): a lane written from the fader while the sound plays
+
+What it is for: riding a level by ear. The user plays, moves a strip's fader, and what the hand did is a lane afterwards.
+
+**What stands in the way today, and has to be decided first.**
+1. *The mixer is a sheet.* It lies over the window it belongs to; the timeline can't be reached while it is open, and a fader in it is sent when it is let go, as one step. Nothing is heard while it is dragged. Writing from a fader needs a mixer that can stay open beside the timeline while the sound plays. Proposed: the mixer becomes a window of its own (a panel that belongs to its document and can stay open beside it; Jämmer has none like it today, the Plugins sheet is a sheet too), with the same content; Audio › Mixer… opens it. The sheet goes. *This is a change of interface on its own and is asked about below.*
+2. *A fader isn't heard while it moves.* A new plan is made when the value is sent. Proposed, in the engine: a live trim per strip, `jm_engine_set_live_gain(engine, kind, index, db, active)`, an atomic the audio thread reads once a block and ramps to over the block (no allocation, no lock: the rule on the audio thread holds, and the guard is proved by a planted violation as before). While a strip's trim is active, it stands in the lane's place for that strip; when it is let go the lane is back. With the trim at the lane's own value the sound is the same samples as without it (a null test).
+
+**Modes, one per strip, in the mixer window:** Read (as today), Touch, Latch. No mode that writes without a hand on the control.
+- **Touch:** writing begins when the fader is taken hold of during playback and ends when it is let go; from there the level glides back to what the lane had, over 250 ms, so there is no jump.
+- **Latch:** writing begins the same way and goes on at the last value after the fader is let go, until playback stops.
+- Not playing, a fader does what it does today in every mode (it sets the fader, which the lane is added to).
+- A mode is not saved in the document: a project never opens armed. Every strip is in Read when a document opens, and goes back to Read when the mixer window closes.
+- A strip in Touch or Latch says so wherever it is seen: its mode menu in the mixer, a mark on its row's caption in the timeline ("Touch"), and for VoiceOver in the strip's value.
+
+**What is written.** The lane is what is added to the fader, so the fader's rest position stays where it is and the hand's movement away from it is the lane: lane value = where the control is held − the fader. While playing with a lane, the control shows the fader plus the lane (it moves by itself, as a motor fader does); taking hold of it starts from where it is.
+- **In time:** each movement is placed at the frame that was being *heard* when the hand moved (the engine's position less the output's latency), not the frame being computed.
+- **Only the stretch that was ridden changes:** from the frame the control was taken to the frame writing ended (let go plus the glide, or the stop). The lane outside it is not touched, and a point at each end holds it to what it was there (`set_automation` with `start` and `end`, which already leaves the outside alone).
+- **Thinned:** movements are taken every 10 ms and then thinned so that the written line is nowhere more than 0.1 dB from what the hand did (a line-simplification in dB); a slow ride over a minute is tens of points, not thousands. If a pass would still pass the lane's limit of 10 000 points, it is thinned further and the status line says so.
+- **One pass is one undo step**, made when writing ends, through `set_automation` like every other change to a lane. The status line says what was written ("Wrote 14 points on Music, 0:12.4 to 0:31.0"), and VoiceOver is told.
+- **What can be ridden in this step:** the level of a track, a bus, a VCA group and the master. Proposed for the same step if it is cheap once the level works: the pan slider (a pan lane), the Mute box (a mute point where it is clicked during playback) and a send's level. Otherwise each is its own later part.
+
+**With the keys alone.** In the mixer window, with a strip's level in focus and the strip in Touch or Latch: holding ↑ or ↓ while the sound plays rides the level (0.5 dB a repeat, ⇧ 0.1 dB); letting go of the key is letting go of the fader.
+
+**An agent.** Nothing new in the API: an agent writes a lane with `set_automation`, which says exactly what it wants. The modes are interface state and are not offered to an agent (an agent may start playback only in a visible window and never start a recording; a write mode is of that kind).
+
+**Tests.**
+- The pass as a pure function in the core (`Automation.written(pass:into:from:to:glide:tolerance:)`): the lane outside the stretch is the same points; inside, the written line is within the tolerance of the hand's at every frame; Touch ends in a glide back to the old lane, Latch holds to the stop; a pass of nothing changes nothing; the point limit.
+- The engine's live trim: bit for bit the lane's own sound when it stands at the lane's value; a constant trim is the same as that fader; switched on and off in the middle of a block without a click (the ramp).
+- In the app, by script: play, drag a fader with `safepointer drag` (0.4 s), stop; read the lane back: points only inside the stretch that was ridden, the value at its end the one the drag ended on, one undo takes the pass away. Touch and Latch each; the keys alone; a strip left in Read is not written. Pictures of the mixer window with a strip in Touch and of the lane afterwards.
+
+**Release:** with the rest of automation, when it has been seen.
+
+**Questions to the coordinator before anything is built:**
+1. The mixer as a window of its own instead of a sheet: yes? (Without it there is nowhere to ride a fader from while listening.)
+2. Modes not saved in the document, and back to Read when the mixer window closes: yes?
+3. The glide (250 ms) and the thinning (0.1 dB): as fixed values, or as settings?
+4. Pan, mute and sends in this step when they come cheap, or level only?
 
 ## Automation (the sketch of 2026-11-16 that the above was built from)
 

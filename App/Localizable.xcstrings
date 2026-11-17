@@ -97,6 +97,18 @@
         }
       }
     },
+    "automation.ax.lane.send": {
+      "comment": "VoiceOver: a lane. %@ is the strip.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send automation of %@"
+          }
+        }
+      }
+    },
     "automation.ax.point": {
       "comment": "VoiceOver: a point’s name. Both are whole numbers.",
       "extractionState": "manual",
@@ -265,6 +277,54 @@
         }
       }
     },
+    "automation.caption.send": {
+      "comment": "Caption of a send lane. %1$@ is the bus, %2$@ the send’s own level.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send to %1$@: level lane, added to the send’s level (%2$@)"
+          }
+        }
+      }
+    },
+    "automation.caption.send.empty": {
+      "comment": "Caption on the focused row when its send has no lane. %@ is the bus.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send to %@: no lane yet. ⌥-click or ⌥Return adds a point"
+          }
+        }
+      }
+    },
+    "automation.caption.send.none": {
+      "comment": "Caption on the focused row when send lanes are shown and the strip has no send.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No send on this strip, so nothing to automate here"
+          }
+        }
+      }
+    },
+    "automation.caption.send.which": {
+      "comment": "Added to a send lane’s caption when the strip has more than one send. %1$@ is the caption, the others whole numbers.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ · send %2$@ of %3$@, ⌥Tab for the next"
+          }
+        }
+      }
+    },
     "automation.focus.status": {
       "comment": "Status line when the focus moves to another track’s lane. %@ is the track.",
       "extractionState": "manual",
@@ -409,6 +469,18 @@
         }
       }
     },
+    "automation.removed.send": {
+      "comment": "Status line when a send lane’s last point was deleted. %@ is the strip.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send lane removed from %@"
+          }
+        }
+      }
+    },
     "automation.row.master": {
       "comment": "The master’s row among the automation rows.",
       "extractionState": "manual",
@@ -549,6 +621,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pan Lanes"
+          }
+        }
+      }
+    },
+    "menu.view.automation.send": {
+      "comment": "View › Automation.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send Lanes"
           }
         }
       }
