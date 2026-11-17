@@ -647,6 +647,8 @@ enum AgentRouter {
         }]
         d["selection"] = s.selection.map { ["start": seconds(s, $0.lowerBound), "end": seconds(s, $0.upperBound)] } ?? NSNull()
         d["playhead"] = seconds(s, s.playhead)
+        // The picture's timecode, when the document has one: its rate, the timecode the timeline starts at, and where the playhead is in it.
+        d["timecode"] = p.timecode.map { ["rate": $0.rate.rawValue, "start": $0.start.text, "playhead": $0.timecode(at: s.playhead, sampleRate: p.sampleRate).text] as [String: Any] } ?? NSNull()
         d["sources"] = p.sources.map { src -> [String: Any] in
             ["name": src.name, "format": "\(src.info.container.rawValue) \(src.info.sampleFormat.rawValue)",
              "missing": s.pool.missing.contains(src.id)]

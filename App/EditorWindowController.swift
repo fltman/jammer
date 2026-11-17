@@ -699,6 +699,14 @@ struct TransportBar: View {
                 .shadow(color: Theme.neonColor.opacity(0.5), radius: 6)
                 .accessibilityLabel("Playhead")
             Text("/ \(formatTime(session.duration))").font(.system(.callout, design: .monospaced)).foregroundStyle(.secondary)
+            // The picture's timecode at the playhead, when the document has one.
+            if let tc = session.project.timecode {
+                Text(tc.timecode(at: session.playhead, sampleRate: session.project.sampleRate).text)
+                    .font(.system(.callout, design: .monospaced)).foregroundStyle(.secondary)
+                    .accessibilityLabel(L10n.text("transport.timecode.label"))
+                    .accessibilityIdentifier("transport.timecode")
+                    .help(L10n.text("transport.timecode.help", tc.rate.rawValue, tc.start.text))
+            }
             Text(session.project.musicalPosition(at: session.playhead).description)
                 .font(.system(.callout, design: .monospaced))
                 .foregroundStyle(.secondary)

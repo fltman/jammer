@@ -294,6 +294,9 @@ public struct Project: Codable, Equatable, Sendable {
     /// Set when the document was imported from another program's timeline: what came in,
     /// so the way back can say what is missing and whether the timing still holds.
     public var imported: ImportRecord?
+    /// The picture's timecode, when the document is sound for a picture: its frame rate and the timecode
+    /// the timeline starts at. nil: none (a file without it is read by an older Jämmer as it always was).
+    public var timecode: TimecodeSettings?
 
     public struct ImportRecord: Codable, Equatable, Sendable {
         public var app: String
@@ -325,7 +328,7 @@ public struct Project: Codable, Equatable, Sendable {
         self.transcripts = transcripts
     }
 
-    private enum CodingKeys: String, CodingKey { case formatVersion, sampleRate, channels, tracks, markers, sources, tempo, transcripts, speakers, speakerTurns, imported, buses, master, vcas, automation }
+    private enum CodingKeys: String, CodingKey { case formatVersion, sampleRate, channels, tracks, markers, sources, tempo, transcripts, speakers, speakerTurns, imported, timecode, buses, master, vcas, automation }
 
     public func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
@@ -340,6 +343,7 @@ public struct Project: Codable, Equatable, Sendable {
         try c.encode(speakers, forKey: .speakers)
         try c.encode(speakerTurns, forKey: .speakerTurns)
         try c.encodeIfPresent(imported, forKey: .imported)
+        try c.encodeIfPresent(timecode, forKey: .timecode)
         if !buses.isEmpty { try c.encode(buses, forKey: .buses) }
         if !master.isDefault { try c.encode(master, forKey: .master) }
         if !vcas.isEmpty { try c.encode(vcas, forKey: .vcas) }
@@ -366,6 +370,10 @@ public struct Project: Codable, Equatable, Sendable {
         transcripts = try c.decodeIfPresent([SourceTranscript].self, forKey: .transcripts) ?? []
         speakers = try c.decodeIfPresent([String].self, forKey: .speakers) ?? []
         imported = try c.decodeIfPresent(ImportRecord.self, forKey: .imported)
+        // A timecode that can't be read (a rate this app doesn't know, a start that is no time of day) is
+        // left out, not a reason to refuse the project: the sound is the same without it.
+        timecode = (try? c.decodeIfPresent(TimecodeSettings.self, forKey: .timecode)).flatMap { $0 }
+            .flatMap { (0..<(24 * 3_600 * $0.rate.base)).contains($0.startFrames) ? $0 : nil }
         speakerTurns = try c.decodeIfPresent([SourceSpeakers].self, forKey: .speakerTurns) ?? []
     }
 

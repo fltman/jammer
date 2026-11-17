@@ -1416,6 +1416,30 @@
           }
         }
       }
+    },
+    "transport.timecode.help": {
+      "comment": "Help of the timecode readout. The rate, then the start timecode.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The picture’s timecode at the playhead: %1$@ frames a second, the timeline starting at %2$@."
+          }
+        }
+      }
+    },
+    "transport.timecode.label": {
+      "comment": "Accessibility label of the timecode beside the time.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Timecode at the playhead"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

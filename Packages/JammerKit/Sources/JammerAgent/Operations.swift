@@ -340,6 +340,10 @@ public enum Operations {
               params: [.init("at", .seconds, "Position in seconds. Defaults to the selection start, else the playhead."),
                        .init("name", .string, "Marker name.", required: true),
                        .init("duration", .seconds, "Region length in seconds.")]),
+        .init("set_timecode", "Set Timecode", "Gives the document the picture's timecode (SMPTE): the frame rate, and the timecode at the start of the timeline. The document then says where the playhead is in timecode (`timecode` in GET …/documents/{id}), and nothing about the sound changes. rate none takes it away. info has `startFrames`.",
+              params: [.init("rate", .string, "The picture's frame rate. The two ending in df count drop-frame (the clock keeps real time; written with a semicolon before the frames).", required: true,
+                             options: Timecode.Rate.allCases.map(\.rawValue) + ["none"]),
+                       .init("start", .string, "The timecode of the timeline's first frame, as hh:mm:ss:ff (hh:mm:ss;ff for drop-frame). Default 00:00:00:00. A film's sound often starts at 01:00:00:00.")]),
         .init("remove_marker", "Remove Marker", "Removes the markers with this name.",
               params: [.init("name", .string, "Marker name.", required: true)]),
         .init("set_tempo", "Set Tempo", "Sets the tempo, and the time signature when given, from `at` on. Tempo changes move with the audio in ripple edits.",
@@ -1191,6 +1195,23 @@ public enum StepRunner {
         case "add_marker":
             let at = min(frames("at") ?? s.selection?.lowerBound ?? s.playhead, project.length)
             s.project.addMarker(at: at, length: frames("duration") ?? 0, name: p["name"]?.string ?? "Marker")
+        case "set_timecode":
+            let named = p["rate"]?.string ?? ""
+            if named == "none" {
+                guard p["start"] == nil else { throw StepFailure("set_timecode: \"start\" means nothing with rate none.") }
+                s.project.timecode = nil
+                return [:]
+            }
+            guard let rate = Timecode.Rate(rawValue: named) else { throw StepFailure("set_timecode: \"rate\" is one of \(Timecode.Rate.allCases.map(\.rawValue).joined(separator: ", ")), or none.") }
+            var start = 0
+            if let text = p["start"]?.string {
+                guard let t = Timecode(text, rate: rate) else {
+                    throw StepFailure("set_timecode: \"start\": \(text) is not a timecode at \(rate.rawValue) (hh:mm:ss:ff, each two digits\(rate.dropsFrames ? "; at this rate the first \(rate.base / 15) frame numbers of a minute that isn't a tenth minute don't exist" : "")).")
+                }
+                start = t.pictureFrames
+            }
+            s.project.timecode = TimecodeSettings(rate: rate, startFrames: start)
+            return ["startFrames": Double(start)]
         case "remove_marker":
             let name = p["name"]?.string ?? ""
             let before = s.project.markers.count

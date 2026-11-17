@@ -77,6 +77,8 @@ Stem separation with stems as first-class layers, spectral painting tools, dialo
 
 Full mixer (buses, sends, VCA, sidechain, automation, PDC, freeze), ARA2, mastering chain, r8brain SRC and dither, DDP 2.0, own AAF reader, EDL, DAWproject, OTIO, SMPTE timecode, video reference, dialogue-gated loudness profiles.
 
+Of these, as of 2026-11-17: the mixer with buses, sends, VCA, sidechain, delay compensation and freeze, and automation (levels, pan, mute, sends, written from a fader, a plugin's parameter for Audio Units) are in `docs/MIXER.md`; the mastering chain, SRC and dither in `docs/MASTERING.md`; SMPTE timecode as a document's setting and a readout (`docs/CHANGES.md`). Not begun: video reference, dialogue-gated loudness profiles (they need a reference to be measured against before a number is shown, and none has been found yet), ARA2, DDP, AAF, EDL, DAWproject, OTIO (the exchange formats and DDP wait for Anders's decisions on agreements).
+
 ## Phase 4: Immersive
 
 Multichannel up to 7.1.4, ADM BWF, Ambisonics, APAC/ASAF export, binaural monitoring with head tracking, Overdub with consent flow.

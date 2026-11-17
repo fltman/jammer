@@ -203,4 +203,17 @@ struct AutomationStepTests {
             #expect(gone.status == .done && gone.info["removed"] == 1 && s.project.liveLanes.isEmpty, "\(gone.error ?? "")")
         }
     }
+
+    @Test("set_timecode: a rate and a start, read back as timecode; none takes it away; a start that isn't a timecode at the rate is refused with why")
+    func timecode() {
+        var s = Self.state()
+        let made = Self.run(&s, "set_timecode", ["rate": .string("25"), "start": .string("01:00:00:00")])
+        #expect(made.status == .done && made.info["startFrames"] == 90_000 && s.project.timecode?.timecode(at: 48_000 * 10 + 1_920 * 12, sampleRate: 48_000).text == "01:00:10:12")
+        let drop = Self.run(&s, "set_timecode", ["rate": .string("29.97df"), "start": .string("00:01:00;00")])
+        #expect(drop.status == .failed && (drop.error ?? "").contains("don't exist") && s.project.timecode?.rate == .fps25)
+        #expect(Self.run(&s, "set_timecode", ["rate": .string("29.97df"), "start": .string("00:01:00;02")]).status == .done && s.project.timecode?.start.text == "00:01:00;02")
+        #expect(Self.run(&s, "set_timecode", ["rate": .string("none"), "start": .string("00:00:00:00")]).status == .failed)
+        #expect(Self.run(&s, "set_timecode", ["rate": .string("none")]).status == .done && s.project.timecode == nil)
+        #expect(throws: (any Error).self) { try StepRunner.validate(Step(op: "set_timecode", params: ["rate": .string("12")])) }
+    }
 }

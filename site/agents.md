@@ -576,6 +576,15 @@ Adds a marker, or a region when `duration` is given.
 | `name` | string | **Required.** Marker name. |
 | `duration` | seconds | Region length in seconds. |
 
+### `set_timecode`
+
+Gives the document the picture's timecode (SMPTE): the frame rate, and the timecode at the start of the timeline. The document then says where the playhead is in timecode (`timecode` in GET …/documents/{id}), and nothing about the sound changes. rate none takes it away. info has `startFrames`.
+
+| Param | Type | Description |
+|---|---|---|
+| `rate` | string | **Required.** The picture's frame rate. The two ending in df count drop-frame (the clock keeps real time; written with a semicolon before the frames). One of: `23.976`, `24`, `25`, `29.97`, `29.97df`, `30`, `50`, `59.94`, `59.94df`, `60`, `none`. |
+| `start` | string | The timecode of the timeline's first frame, as hh:mm:ss:ff (hh:mm:ss;ff for drop-frame). Default 00:00:00:00. A film's sound often starts at 01:00:00:00. |
+
 ### `remove_marker`
 
 Removes the markers with this name.
