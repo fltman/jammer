@@ -350,6 +350,8 @@ public enum Operations {
               params: [.init("at", .seconds, "Position in seconds. Defaults to the selection start, else the playhead."),
                        .init("name", .string, "Marker name.", required: true),
                        .init("duration", .seconds, "Region length in seconds.")]),
+        .init("set_layout", "Set Layout", "Sets the document's loudspeaker layout. Nothing is converted: every source keeps its own channels and goes into the new layout by its loudspeakers (a voice to the center, a stereo pair to L and R; a wider source folded down by ITU-R BS.775 and the steps docs/IMMERSIVE.md names). A layout wider than stereo has no stereo pan yet: pan values and pan lanes are not used in it, and pan lanes are not saved while the document is wider than stereo. Exports are in the layout. info has `channels`.",
+              params: [.init("layout", .string, "The layout.", required: true, options: ChannelLayout.allCases.map(\.rawValue))]),
         .init("set_timecode", "Set Timecode", "Gives the document the picture's timecode (SMPTE): the frame rate, and the timecode at the start of the timeline. The document then says where the playhead is in timecode (`timecode` in GET …/documents/{id}), and nothing about the sound changes. rate none takes it away. info has `startFrames`.",
               params: [.init("rate", .string, "The picture's frame rate. The two ending in df count drop-frame (the clock keeps real time; written with a semicolon before the frames).", required: true,
                              options: Timecode.Rate.allCases.map(\.rawValue) + ["none"]),
@@ -1239,6 +1241,12 @@ public enum StepRunner {
         case "add_marker":
             let at = min(frames("at") ?? s.selection?.lowerBound ?? s.playhead, project.length)
             s.project.addMarker(at: at, length: frames("duration") ?? 0, name: p["name"]?.string ?? "Marker")
+        case "set_layout":
+            guard let layout = ChannelLayout(rawValue: p["layout"]?.string ?? "") else {
+                throw StepFailure("set_layout: \"layout\" is one of \(ChannelLayout.allCases.map(\.rawValue).joined(separator: ", ")).")
+            }
+            s.project.channels = layout.channels
+            return ["channels": Double(layout.channels)]
         case "set_timecode":
             let named = p["rate"]?.string ?? ""
             if named == "none" {

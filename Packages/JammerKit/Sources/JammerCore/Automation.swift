@@ -94,6 +94,8 @@ public enum Automation {
 
     public enum Failure: Error, LocalizedError, Equatable {
         case noStrip(String), notBuilt(String), badValue(String), tooMany, mono, noPan, noSend(String), groupHasNoPan, noInsert
+        /// Pan automation in a document wider than stereo. The value is the layout.
+        case wide(String)
 
         public var reason: String {
             switch self {
@@ -101,7 +103,7 @@ public enum Automation {
             case .notBuilt: "not_available"
             case .badValue: "bad_request"
             case .tooMany: "too_many"
-            case .mono: "needs_stereo"
+            case .mono, .wide: "needs_stereo"
             case .noPan, .groupHasNoPan: "bad_request"
             case .noSend, .noInsert: "not_found"
             }
@@ -111,6 +113,7 @@ public enum Automation {
             case .noStrip(let id): "there is no track, bus or VCA group with id \(id) (the master is \"master\")."
             case .notBuilt(let what): "automation of \(what) isn't built yet; gain, pan and mute are."
             case .mono: "a mono document has no pan to automate."
+            case .wide(let layout): "a \(layout) document has no stereo pan to automate; its surround panner isn't built yet."
             case .noPan: "the master has a level to automate, not a pan, a mute or a send."
             case .groupHasNoPan: "a VCA group has a level and a mute to automate, not a pan or a send."
             case .noSend(let to): "that strip has no send to \(to); make the send first (set_send)."
@@ -125,6 +128,7 @@ public enum Automation {
             case .noStrip(let id): KeyedMessage("error.automation.noStrip", ["\(id)"])
             case .notBuilt(let what): KeyedMessage("error.automation.notBuilt", ["\(what)"])
             case .mono: KeyedMessage("error.automation.mono")
+            case .wide(let layout): KeyedMessage("error.automation.wide", ["\(layout)"])
             case .noPan: KeyedMessage("error.automation.noPan")
             case .groupHasNoPan: KeyedMessage("error.automation.groupHasNoPan")
             case .noSend(let to): KeyedMessage("error.automation.noSend", ["\(to)"])
@@ -258,7 +262,7 @@ extension Project {
         } else if to != nil {
             throw Automation.Failure.badValue("`to` names a send's bus and goes with a send lane only.")
         }
-        if param == .pan, channels != 2 { throw Automation.Failure.mono }
+        if param == .pan, channels != 2 { throw channels == 1 ? Automation.Failure.mono : Automation.Failure.wide(layout.rawValue) }
         // A mute holds its value until the next point; a level and a pan go in a straight line.
         if let shape, shape != (param == .mute ? .hold : .linear) {
             throw Automation.Failure.badValue(param == .mute ? "a mute lane holds each value until the next point (shape hold)." : "a \(param.rawValue) lane goes in a straight line between points (shape linear).")

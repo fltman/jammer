@@ -223,9 +223,25 @@ public final class AudioOutput {
             guard let pair else { return [Slot(buffer: all[0].0, channel: all[0].1, source: 0)] }
             return [Slot(buffer: pair.0.0, channel: pair.0.1, source: 0), Slot(buffer: pair.1.0, channel: pair.1.1, source: 1)]
         default:
+            // A document wider than stereo on a device with fewer channels than it has: folded down to the
+            // stereo pair for listening, by the same coefficients as a wide source in a stereo document
+            // (ChannelLayout.gains). The document and its exports keep their channels.
+            if all.count < projectChannels, let pair, let layout = ChannelLayout.standard(channels: projectChannels) {
+                let m = ChannelLayout.gains(from: layout, to: .stereo)
+                var out: [Slot] = []
+                for k in 0..<projectChannels {
+                    for (d, dev) in [pair.0, pair.1].enumerated() where m[k * 2 + d] != 0 {
+                        out.append(Slot(buffer: dev.0, channel: dev.1, source: Int32(k), gain: m[k * 2 + d]))
+                    }
+                }
+                return out
+            }
             return all.prefix(projectChannels).enumerated().map { Slot(buffer: $1.0, channel: $1.1, source: Int32($0)) }
         }
     }
+
+    /// Whether a document of this many channels is folded down to fit the default device (for the window to say so).
+    nonisolated static func foldsDown(projectChannels: Int, deviceChannels: Int) -> Bool { projectChannels > 2 && deviceChannels < projectChannels }
 
     // MARK: HAL queries
 

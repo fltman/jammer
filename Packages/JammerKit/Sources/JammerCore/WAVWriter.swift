@@ -195,6 +195,7 @@ public final class WAVWriter {
         case 2: 0x3
         case 6: 0x3F // 5.1
         case 8: 0x63F // 7.1
+        case 12: 0x2D63F // 7.1.4: 7.1 and the four top corners
         default: channels >= 32 ? 0xFFFF_FFFF : (UInt32(1) << UInt32(channels)) - 1
         }
     }

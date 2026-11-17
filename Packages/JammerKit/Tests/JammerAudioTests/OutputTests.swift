@@ -73,4 +73,20 @@ struct DeviceTests {
         #expect(out.underruns == 0)
         out.stopDevice()
     }
+
+    @Test("A 5.1 document on a stereo device is folded down to the pair by BS.775 (C and surrounds at 0.7071, no LFE); on a device with enough channels each goes to its own; 7.1.4 on the pair too")
+    func foldDownToPair() {
+        let six = AudioOutput.slots(projectChannels: 6, streams: [2], stereo: (1, 2))
+        let k: Float = 0.7071
+        #expect(Set(six.map { "\($0.source)>\($0.channel)@\($0.gain)" }) == ["0>0@1.0", "1>1@1.0", "2>0@\(k)", "2>1@\(k)", "4>0@\(k)", "5>1@\(k)"])
+        #expect(!six.contains { $0.source == 3 }, "the LFE isn't in the fold-down")
+        // Onto the device's preferred pair when it has more channels than two but fewer than six.
+        let onPair = AudioOutput.slots(projectChannels: 6, streams: [4], stereo: (3, 4))
+        #expect(Set(onPair.map(\.channel)) == [2, 3])
+        // Enough channels: one each, in order, gain 1.
+        let eight = AudioOutput.slots(projectChannels: 6, streams: [8], stereo: (1, 2))
+        #expect(eight.map(\.source) == [0, 1, 2, 3, 4, 5] && eight.allSatisfy { $0.gain == 1 && $0.channel == $0.source })
+        let twelve = AudioOutput.slots(projectChannels: 12, streams: [2], stereo: nil)
+        #expect(Set(twelve.map(\.source)) == Set([0, 1, 2, 4, 5, 6, 7, 8, 9, 10, 11]) && twelve.allSatisfy { $0.channel < 2 })
+    }
 }

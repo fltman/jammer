@@ -34,6 +34,16 @@ public enum Speaker: UInt32, Sendable, CaseIterable, Codable {
         }
     }
     public var isHeight: Bool { rawValue >= Speaker.topCenter.rawValue }
+    /// Its weight in a loudness measurement (ITU-R BS.1770-5, Annex 3, Table 4): 1.41 in the ear layer from
+    /// 60° to 120° off the front, 1.00 elsewhere, the LFE not included. The side pair is at ±90° (7.1) or
+    /// ±110° (5.1's surrounds), the back pair at ±135°.
+    public var loudnessWeight: Double {
+        switch self {
+        case .lowFrequency: 0
+        case .sideLeft, .sideRight: 1.41
+        default: 1
+        }
+    }
 }
 
 /// The channels of a document: which loudspeaker each channel feeds, in file order. Channel-based only
@@ -80,5 +90,87 @@ public enum ChannelLayout: String, Sendable, CaseIterable, Codable {
             return allCases.first { $0.mask == mask && $0.channels == channels } ?? (channels <= 2 ? standard(channels: channels) : nil)
         }
         return standard(channels: channels)
+    }
+}
+
+extension ChannelLayout {
+    /// How a source's channels go into a document of this layout, as gains [source channel][document channel];
+    /// nil when the old way holds (a document of mono or stereo with a source of one or two channels, or a
+    /// source in exactly this layout), so that those render sample for sample as they always did.
+    ///
+    /// Into a wider layout each source loudspeaker goes to the same loudspeaker; a mono source (a voice) goes
+    /// to the centre. A source wider than the document is folded down a layout at a time (`foldStep`).
+    public func matrix(sourceChannels: Int, sourceMask: UInt32?) -> [Float]? {
+        let source = ChannelLayout.of(channels: sourceChannels, mask: sourceMask)
+        if source == self { return nil }
+        if channels <= 2, sourceChannels <= 2 { return nil }
+        guard let source else {
+            // A source in a layout this app doesn't know: its first channels into the first channels, as before.
+            return channels <= 2 ? nil : (0..<sourceChannels).flatMap { k in (0..<channels).map { Float(k == $0 ? 1 : 0) } }
+        }
+        return ChannelLayout.gains(from: source, to: self)
+    }
+
+    /// The gains from one layout to another, [from channel][to channel].
+    public static func gains(from s: ChannelLayout, to d: ChannelLayout) -> [Float] {
+        let into = d.speakers
+        if s == .mono {
+            // A voice to the centre; where there is none (stereo), to both sides, as a mono source always went.
+            guard let c = into.firstIndex(of: .frontCenter) else { return [Float](repeating: 1, count: d.channels) }
+            return (0..<d.channels).map { Float($0 == c ? 1 : 0) }
+        }
+        if Set(s.speakers).isSubset(of: into) {
+            var m = [Float](repeating: 0, count: s.channels * d.channels)
+            for (k, speaker) in s.speakers.enumerated() { m[k * d.channels + into.firstIndex(of: speaker)!] = 1 }
+            return m
+        }
+        // Wider than the document: one layout down, then on from there.
+        let (next, step) = foldStep(s, toward: d)
+        let rest = gains(from: next, to: d)
+        var m = [Float](repeating: 0, count: s.channels * d.channels)
+        for k in 0..<s.channels { for j in 0..<next.channels where step[k * next.channels + j] != 0 {
+            for c in 0..<d.channels { m[k * d.channels + c] += step[k * next.channels + j] * rest[j * d.channels + c] }
+        } }
+        return m
+    }
+
+    /// One step of a fold-down, from a layout to the next smaller one on the way to `target`:
+    /// - 5.1 to stereo and to mono: ITU-R BS.775-4, Annex 4, Table 2 (L′ = L + 0.7071 C + 0.7071 Ls; mono
+    ///   C′ = 0.7071 L + 0.7071 R + C + 0.5 Ls + 0.5 Rs); the LFE has no column there and is left out.
+    /// - 7.1 to 5.1: the sides and the rears into 5.1's surrounds at 0.707 each (AOMedia IAMF 2.0, Annex A2.2,
+    ///   Ls5 = α·Lss7 + β·Lrs7, mode 2: α = β = 0.707).
+    /// - 7.1.4 to 7.1: each height into the loudspeaker under it at 0.707 (−3 dB): the top fronts into L and
+    ///   R, the top rears into the rears. No standard read gives a height fold into the ear layer; this is
+    ///   Jämmer's own choice, at the −3 dB the others use (docs/IMMERSIVE.md).
+    /// - Stereo to mono (only on the way from a wider layout): BS.775's L and R terms, 0.7071 each.
+    static func foldStep(_ s: ChannelLayout, toward target: ChannelLayout) -> (ChannelLayout, [Float]) {
+        let k: Float = 0.7071
+        func step(_ to: ChannelLayout, _ rules: [(Speaker, Speaker, Float)]) -> (ChannelLayout, [Float]) {
+            var m = [Float](repeating: 0, count: s.channels * to.channels)
+            for (a, b, g) in rules { m[s.speakers.firstIndex(of: a)! * to.channels + to.speakers.firstIndex(of: b)!] += g }
+            return (to, m)
+        }
+        switch s {
+        case .immersive714:
+            return step(.surround71, [(.frontLeft, .frontLeft, 1), (.frontRight, .frontRight, 1), (.frontCenter, .frontCenter, 1),
+                                      (.lowFrequency, .lowFrequency, 1), (.backLeft, .backLeft, 1), (.backRight, .backRight, 1),
+                                      (.sideLeft, .sideLeft, 1), (.sideRight, .sideRight, 1),
+                                      (.topFrontLeft, .frontLeft, k), (.topFrontRight, .frontRight, k),
+                                      (.topBackLeft, .backLeft, k), (.topBackRight, .backRight, k)])
+        case .surround71:
+            return step(.surround51, [(.frontLeft, .frontLeft, 1), (.frontRight, .frontRight, 1), (.frontCenter, .frontCenter, 1),
+                                      (.lowFrequency, .lowFrequency, 1), (.sideLeft, .sideLeft, k), (.backLeft, .sideLeft, k),
+                                      (.sideRight, .sideRight, k), (.backRight, .sideRight, k)])
+        case .surround51 where target == .mono:
+            return step(.mono, [(.frontLeft, .frontCenter, k), (.frontRight, .frontCenter, k), (.frontCenter, .frontCenter, 1),
+                                (.sideLeft, .frontCenter, 0.5), (.sideRight, .frontCenter, 0.5)])
+        case .surround51:
+            return step(.stereo, [(.frontLeft, .frontLeft, 1), (.frontRight, .frontRight, 1), (.frontCenter, .frontLeft, k),
+                                  (.frontCenter, .frontRight, k), (.sideLeft, .frontLeft, k), (.sideRight, .frontRight, k)])
+        case .stereo:
+            return step(.mono, [(.frontLeft, .frontCenter, k), (.frontRight, .frontCenter, k)])
+        case .mono:
+            return (.mono, [1])
+        }
     }
 }

@@ -695,6 +695,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
             return session.project.length > 0 && !(JobRegistry.shared.latest("restore", document: session.agentID).map { !$0.isFinished } ?? false)
         }
         if item.action == #selector(performOperation(_:)), let op = (item.representedObject as? OperationItem)?.op {
+            // The document's layout has its tick.
+            if op == "set_layout" { item.state = (item.representedObject as? OperationItem)?.params["layout"]?.string == session.project.layout.rawValue ? .on : .off }
             let needsRange: Set<String> = ["delete", "silence", "crop", "fade_in", "fade_out", "cut", "copy"]
             return !needsRange.contains(op) || session.selection != nil
         }
@@ -797,7 +799,7 @@ struct StatusBar: View {
             }
             .buttonStyle(.plain)
             .help(L10n.text("status.tempo.help"))
-                        Text(verbatim: "\(Int(session.project.sampleRate)) Hz · " + (session.project.channels == 1 ? L10n.text("format.mono") : session.project.channels == 2 ? L10n.text("format.stereo") : L10n.text("format.channels", String(session.project.channels))))
+                        Text(verbatim: "\(Int(session.project.sampleRate)) Hz · " + (session.project.channels == 1 ? L10n.text("format.mono") : session.project.channels == 2 ? L10n.text("format.stereo") : session.project.layout.rawValue))
         }
         .font(.system(size: 11, design: .monospaced))
         .foregroundStyle(.secondary)

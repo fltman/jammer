@@ -273,4 +273,17 @@ struct AutomationStepTests {
             #expect(own.status == .failed && own.keyed == nil)
         }
     }
+
+    @Test("set_layout: the document's channels follow the layout and nothing else changes; an unknown layout is refused before anything runs")
+    func setLayout() throws {
+        var s = Self.state()
+        let before = s.project
+        let r = Self.run(&s, "set_layout", ["layout": .string("7.1.4")])
+        #expect(r.status == .done && r.info["channels"] == 12 && s.project.layout == .immersive714)
+        var back = s.project
+        back.channels = before.channels
+        #expect(back == before, "only the channels changed")
+        #expect(throws: (any Error).self) { try StepRunner.validate(Step(op: "set_layout", params: ["layout": .string("quad")])) }
+        #expect(Self.run(&s, "set_layout", ["layout": .string("stereo")]).status == .done && s.project.channels == 2)
+    }
 }

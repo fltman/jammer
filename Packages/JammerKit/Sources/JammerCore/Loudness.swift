@@ -71,13 +71,13 @@ public struct LoudnessMeter {
         truePeak = TruePeak(channels: self.channels, sampleRate: sampleRate)
     }
 
-    /// BS.1770 channel weights: L, R, C = 1; LFE excluded; surrounds +1.5 dB.
+    /// BS.1770-5 channel weights by each loudspeaker's position (Annex 3, Tables 4 and 5): 1.41 for the
+    /// surrounds between 60° and 120° in the ear layer (5.1's surrounds at ±110°, 7.1's sides at ±90°), 1.00
+    /// for everything else (the fronts, 7.1's rears at ±135°, every height), and the LFE not measured. Until
+    /// 2026-11-17 7.1's rears had 1.41, as ffmpeg's ebur128 still gives them, and 7.1.4's LFE was counted.
     static func channelWeights(_ n: Int) -> [Double] {
-        switch n {
-        case 6: [1, 1, 1, 0, 1.41, 1.41] // L R C LFE Ls Rs
-        case 8: [1, 1, 1, 0, 1.41, 1.41, 1.41, 1.41] // 7.1
-        default: [Double](repeating: 1, count: n)
-        }
+        guard let layout = ChannelLayout.standard(channels: n), n > 2 else { return [Double](repeating: 1, count: n) }
+        return layout.speakers.map(\.loudnessWeight)
     }
 
     /// The two K-weighting stages (high shelf, then high-pass) for any sample rate,

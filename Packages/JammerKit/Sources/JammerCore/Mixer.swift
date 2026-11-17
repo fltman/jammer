@@ -173,6 +173,8 @@ public enum Mixer {
 
     public enum Failure: Error, LocalizedError, Equatable {
         case noBus(String), loop(String), tooMany, inUse(String, Int), mono, badValue(String), noStrip(String), noSend(String, String), tooManySends(String)
+        /// Pan in a document wider than stereo, before its surround panner is built. The value is the layout.
+        case wide(String)
         case noVCA(String), tooManyVCAs
 
         public var reason: String {
@@ -181,7 +183,7 @@ public enum Mixer {
             case .loop: "routing_loop"
             case .tooMany, .tooManyVCAs: "too_many"
             case .inUse: "in_use"
-            case .mono: "needs_stereo"
+            case .mono, .wide: "needs_stereo"
             case .noStrip, .noSend: "not_found"
             case .tooManySends: "too_many"
             case .badValue: "bad_request"
@@ -194,6 +196,7 @@ public enum Mixer {
             case .tooMany: "a document can have \(Mixer.maxBuses) buses at most."
             case .inUse(let name, let n): "\(n) strip\(n == 1 ? " is" : "s are") routed to \(name). Say where they should go instead with reroute (a bus id, or \"master\"), or route them elsewhere first."
             case .mono: "pan needs a stereo document; this one is mono."
+            case .wide(let layout): "pan is for stereo documents; this one is \(layout), and its surround panner isn't built yet."
             case .noStrip(let id): "there is no track or bus with id \(id)."
             case .noSend(let from, let to): "\(from) has no send to \(to)."
             case .tooManySends(let name): "\(name) already has \(Mixer.maxSends) sends, which is the most a strip can have."
@@ -210,6 +213,7 @@ public enum Mixer {
             case .tooMany: KeyedMessage("error.mixer.tooMany", ["\(Mixer.maxBuses)"])
             case .inUse: nil
             case .mono: KeyedMessage("error.mixer.mono")
+            case .wide(let layout): KeyedMessage("error.mixer.wide", ["\(layout)"])
             case .noStrip(let id): KeyedMessage("error.mixer.noStrip", ["\(id)"])
             case .noSend(let from, let to): KeyedMessage("error.mixer.noSend", ["\(from)", "\(to)"])
             case .tooManySends(let name): KeyedMessage("error.mixer.tooManySends", ["\(name)", "\(Mixer.maxSends)"])
@@ -513,7 +517,7 @@ extension Project {
         }
         if let pan {
             guard Mixer.panRange.contains(pan) else { throw Mixer.Failure.badValue("pan must be −1 (left) to 1 (right).") }
-            guard pan == 0 || channels == 2 else { throw Mixer.Failure.mono }
+            guard pan == 0 || channels == 2 else { throw channels == 1 ? Mixer.Failure.mono : Mixer.Failure.wide(layout.rawValue) }
             buses[i].pan = pan
         }
         if let muted { buses[i].isMuted = muted }
@@ -555,7 +559,7 @@ extension Project {
         guard let t = tracks.firstIndex(where: { $0.id == track }) else { throw EditError.noTrack }
         if let pan {
             guard Mixer.panRange.contains(pan) else { throw Mixer.Failure.badValue("pan must be −1 (left) to 1 (right).") }
-            guard pan == 0 || channels == 2 else { throw Mixer.Failure.mono }
+            guard pan == 0 || channels == 2 else { throw channels == 1 ? Mixer.Failure.mono : Mixer.Failure.wide(layout.rawValue) }
             tracks[t].pan = pan
         }
         if let output {

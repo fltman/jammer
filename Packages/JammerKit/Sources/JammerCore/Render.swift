@@ -227,6 +227,10 @@ public enum PlanCompiler {
                     guard let s = pool.source(for: ref) else { continue }
                     index = jm_plan_add_source(plan, s)
                     indices[ref.id] = index
+                    // Into a layout wider than stereo (or from one): each channel to its loudspeaker.
+                    if let m = project.layout.matrix(sourceChannels: ref.info.channels, sourceMask: ref.info.channelMask) {
+                        m.withUnsafeBufferPointer { jm_plan_set_source_matrix(plan, index, $0.baseAddress!, Int32(ref.info.channels)) }
+                    }
                 }
                 jm_plan_add_clip(plan, track, index, c.sourceStart, c.start, c.length, Float(dbToGain(c.gainDB)),
                                  c.fadeIn, c.fadeOut, c.fadeShape == .linear ? JM_FADE_LINEAR : JM_FADE_EQUAL_POWER)

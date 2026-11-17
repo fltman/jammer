@@ -4867,6 +4867,24 @@
         }
       }
     },
+    "error.automation.wide": {
+      "comment": "An error’s reason, shown in the status line after a step that failed (the agent API says the same in English). %@ is the document’s layout (5.1, 7.1, 7.1.4).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "a %@ document has no stereo pan to automate; its surround panner isn’t built yet."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ett %@-dokument har ingen stereopanorering att automatisera; dess surroundpanorering är inte byggd än."
+          }
+        }
+      }
+    },
     "error.debleed.needsTracks": {
       "comment": "An error’s reason, shown in the status line after a step that failed (the agent API says the same in English). Placeholders are names, ids or numbers.",
       "extractionState": "manual",
@@ -5457,6 +5475,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "ett dokument kan ha högst %@ VCA-grupper."
+          }
+        }
+      }
+    },
+    "error.mixer.wide": {
+      "comment": "An error’s reason, shown in the status line after a step that failed (the agent API says the same in English). %@ is the document’s layout (5.1, 7.1, 7.1.4).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "pan is for stereo documents; this one is %@, and its surround panner isn’t built yet."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "panorering är för stereodokument; det här är %@, och dess surroundpanorering är inte byggd än."
           }
         }
       }
@@ -6627,24 +6663,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Vad som ska skickas"
-          }
-        }
-      }
-    },
-    "format.channels": {
-      "comment": "In the status bar: a number of channels.",
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ ch"
-          }
-        },
-        "sv": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ kan."
           }
         }
       }
@@ -8793,6 +8811,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hjälp"
+          }
+        }
+      }
+    },
+    "menu.layout": {
+      "comment": "Submenu in the Audio menu: the document’s loudspeaker layout (Mono, Stereo, 5.1, 7.1, 7.1.4).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Layout"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Högtalaruppställning"
           }
         }
       }
@@ -11505,6 +11541,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ändra plugin"
+          }
+        }
+      }
+    },
+    "op.set_layout.title": {
+      "comment": "The title of the operation set_layout: in the menus, the command palette, the assistant’s plan and as the undo name (“Undo …”). The agent API keeps the English title.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Set Layout"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ändra högtalaruppställning"
           }
         }
       }

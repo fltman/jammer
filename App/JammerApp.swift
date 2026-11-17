@@ -310,6 +310,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             item(L10n.text("audio.mixer"), #selector(EditorWindowController.showMixer(_:)), "x", [.command, .option]),
             item(L10n.text("audio.plugins"), #selector(EditorWindowController.showPlugins(_:)), "p", [.command, .option, .shift]),
             item(L10n.text("menu.picture"), #selector(EditorWindowController.showPicture(_:)), ""),
+            // The document's loudspeakers: a value of the document, undone like any other change.
+            submenu(L10n.text("menu.layout"), ChannelLayout.allCases.map { l in
+                op(l == .mono ? L10n.text("format.mono") : l == .stereo ? L10n.text("format.stereo") : l.rawValue, "set_layout", ["layout": .string(l.rawValue)])
+            }),
         ]))
         main.addItem(submenu(L10n.text("menu.transport"), [
             // Space and Return are handled by the timeline, so text fields keep them.

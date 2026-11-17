@@ -272,7 +272,13 @@ public struct Project: Codable, Equatable, Sendable {
     /// What a project with automation is saved as: an app that doesn't know automation refuses it,
     /// instead of opening it without its lanes and playing other levels than were saved.
     public static let automationFormatVersion = 3
-    public static let newestFormatVersion = 3
+    /// What a project wider than stereo (5.1, 7.1, 7.1.4) is saved as: an app that only knows mono and stereo
+    /// would put a mono source in every channel, the LFE too, so it refuses the file instead.
+    public static let immersiveFormatVersion = 4
+    public static let newestFormatVersion = 4
+
+    /// The document's loudspeakers. Every layout has its own channel count, so the count says which.
+    public var layout: ChannelLayout { ChannelLayout.standard(channels: channels) ?? .stereo }
 
     public struct NeedsNewer: Error, LocalizedError, Equatable {
         public var version: Int
@@ -344,7 +350,8 @@ public struct Project: Codable, Equatable, Sendable {
 
     public func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
-        try c.encode(usesAutomation ? Self.automationFormatVersion : usesMixer ? Self.mixerFormatVersion : Self.formatVersion, forKey: .formatVersion)
+        try c.encode(channels > 2 ? Self.immersiveFormatVersion : usesAutomation ? Self.automationFormatVersion
+                     : usesMixer ? Self.mixerFormatVersion : Self.formatVersion, forKey: .formatVersion)
         try c.encode(sampleRate, forKey: .sampleRate)
         try c.encode(channels, forKey: .channels)
         try c.encode(tracks, forKey: .tracks)
@@ -376,6 +383,10 @@ public struct Project: Codable, Equatable, Sendable {
         automation = try c.decodeIfPresent([AutomationLane].self, forKey: .automation) ?? []
         sampleRate = try c.decode(Double.self, forKey: .sampleRate)
         channels = try c.decode(Int.self, forKey: .channels)
+        // Only the layouts this app knows: a project with another channel count isn't opened as if it were one.
+        guard ChannelLayout.standard(channels: channels) != nil else {
+            throw DecodingError.dataCorruptedError(forKey: .channels, in: c, debugDescription: "A project has 1, 2, 6, 8 or 12 channels (mono, stereo, 5.1, 7.1, 7.1.4), not \(channels).")
+        }
         tracks = try c.decode([Track].self, forKey: .tracks)
         markers = try c.decode([Marker].self, forKey: .markers)
         sources = try c.decode([SourceRef].self, forKey: .sources)
@@ -396,7 +407,9 @@ public struct Project: Codable, Equatable, Sendable {
 
     /// A project with one track playing the whole file.
     public init(source: SourceRef) {
-        self.init(sampleRate: source.info.sampleRate, channels: max(1, min(2, source.info.channels)))
+        // A file in a layout this app knows keeps it (a 5.1 file is a 5.1 document); any other is heard as stereo, as before.
+        let layout = ChannelLayout.of(channels: source.info.channels, mask: source.info.channelMask)
+        self.init(sampleRate: source.info.sampleRate, channels: layout?.channels ?? max(1, min(2, source.info.channels)))
         sources = [source]
         tracks = [Track(name: source.name, clips: [Clip(sourceID: source.id, start: 0, length: source.info.frames)])]
         markers = source.info.markers.map { Marker(position: $0.position, length: $0.length, name: $0.name) }

@@ -661,6 +661,7 @@ enum AgentRouter {
         }]
         d["selection"] = s.selection.map { ["start": seconds(s, $0.lowerBound), "end": seconds(s, $0.upperBound)] } ?? NSNull()
         d["playhead"] = seconds(s, s.playhead)
+        d["layout"] = p.layout.rawValue
         // The picture's timecode, when the document has one: its rate, the timecode the timeline starts at, and where the playhead is in it.
         d["timecode"] = p.timecode.map { ["rate": $0.rate.rawValue, "start": $0.start.text, "playhead": $0.timecode(at: s.playhead, sampleRate: p.sampleRate).text] as [String: Any] } ?? NSNull()
         // The film beside the sound, when there is one: its file, where on the timeline it starts, and how far into it the playhead is (null before it starts).

@@ -599,6 +599,14 @@ Adds a marker, or a region when `duration` is given.
 | `name` | string | **Required.** Marker name. |
 | `duration` | seconds | Region length in seconds. |
 
+### `set_layout`
+
+Sets the document's loudspeaker layout. Nothing is converted: every source keeps its own channels and goes into the new layout by its loudspeakers (a voice to the center, a stereo pair to L and R; a wider source folded down by ITU-R BS.775 and the steps docs/IMMERSIVE.md names). A layout wider than stereo has no stereo pan yet: pan values and pan lanes are not used in it, and pan lanes are not saved while the document is wider than stereo. Exports are in the layout. info has `channels`.
+
+| Param | Type | Description |
+|---|---|---|
+| `layout` | string | **Required.** The layout. One of: `mono`, `stereo`, `5.1`, `7.1`, `7.1.4`. |
+
 ### `set_timecode`
 
 Gives the document the picture's timecode (SMPTE): the frame rate, and the timecode at the start of the timeline. The document then says where the playhead is in timecode (`timecode` in GET …/documents/{id}), and nothing about the sound changes. rate none takes it away. info has `startFrames`.

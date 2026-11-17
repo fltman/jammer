@@ -43,10 +43,10 @@ struct AutomationTests {
         #expect(p.usesAutomation && json.contains("\"formatVersion\":3") && json.contains("\"automation\""))
         #expect(try JSONDecoder().decode(Project.self, from: Data(json.utf8)) == p)
         // A file marked with a format this build doesn't know is refused in words, not opened without what it has.
-        let newer = json.replacingOccurrences(of: "\"formatVersion\":3", with: "\"formatVersion\":4")
-        #expect(throws: Project.NeedsNewer(version: 4)) { try JSONDecoder().decode(Project.self, from: Data(newer.utf8)) }
-        // (A build from before automation knew formats up to 2 and refuses 3 by the same check.)
-        #expect(Project.automationFormatVersion == 3 && Project.newestFormatVersion == 3)
+        let newer = json.replacingOccurrences(of: "\"formatVersion\":3", with: "\"formatVersion\":\(Project.newestFormatVersion + 1)")
+        #expect(throws: Project.NeedsNewer(version: Project.newestFormatVersion + 1)) { try JSONDecoder().decode(Project.self, from: Data(newer.utf8)) }
+        // (A build from before automation knew formats up to 2 and refuses 3 by the same check; format 4 is a document wider than stereo.)
+        #expect(Project.automationFormatVersion == 3 && Project.immersiveFormatVersion == 4 && Project.newestFormatVersion == 4)
         // Cleared, it is the project it was.
         let cleared = try p.clearAutomation(strip: p.tracks[0].id, param: .gain)
         #expect(cleared == 2)
