@@ -37,14 +37,68 @@ enum LinkJournalStore {
         guard let record = session.linkRecord else { return }
         let id = session.linkEntryID ?? UUID()
         session.linkEntryID = id
-        let project = session.project, name = session.name, edited = session.document?.isDocumentEdited ?? false
+        let project = session.project, name = session.name, edited = session.document?.isDocumentEdited ?? false, steps = session.stepsNotSavedBack
         let n = latest.next(id), journal = journal, latest = latest
         queue.async {
             // A newer state of the same document is already waiting: that one is written, not this.
             guard latest.isLatest(id, n), let data = try? ProjectPackage.encode(project) else { return }
-            do { try journal.write(.init(id: id, record: record, name: name, project: data, edited: edited)) }
+            do { try journal.write(.init(id: id, record: record, name: name, project: data, edited: edited, steps: steps)) }
             catch { NSLog("Jammer: the link journal couldn't be written (%@)", error.localizedDescription) }
         }
+    }
+
+    /// The document's changes are kept for later (the window is closing, or Jämmer is quitting): its
+    /// entry is written now, before anything goes, and says that it was kept on purpose.
+    static func keep(_ session: EditorSession) {
+        guard let record = session.linkRecord, let data = try? ProjectPackage.encode(session.project) else { return }
+        let id = session.linkEntryID ?? UUID()
+        session.linkEntryID = id
+        _ = latest.next(id)
+        let entry = LinkJournal.Entry(id: id, record: record, name: session.name, project: data, edited: true, kept: true, steps: session.stepsNotSavedBack)
+        let journal = journal
+        queue.sync {
+            do { try journal.write(entry) } catch { NSLog("Jammer: the link journal couldn't be written (%@)", error.localizedDescription) }
+        }
+    }
+
+    /// The entries that wait without a window: kept for later, or left by a stop. And the files that can't be read.
+    static func waiting() -> (entries: [LinkJournal.Read], broken: [URL]) {
+        queue.sync {}
+        let found = journal.read()
+        let open = Set(AgentRegistry.shared.sessions.compactMap(\.linkEntryID))
+        return (found.entries.filter { $0.entry.edited && !open.contains($0.entry.id) }, found.broken)
+    }
+
+    /// A waiting entry for this file, if there is one: the same file handed over again opens it, with the work in it.
+    static func waiting(forPath path: String) -> LinkJournal.Read? {
+        waiting().entries.last { URL(fileURLWithPath: $0.entry.record.path).resolvingSymlinksInPath().standardizedFileURL.path == path }
+    }
+
+    /// Given up from the list of waiting files: the entry is moved to the Trash, never deleted.
+    static func discard(_ id: UUID) -> Bool {
+        queue.sync {}
+        do { try journal.trash(id); return true } catch { NSLog("Jammer: a link journal entry couldn't be moved to the Trash (%@)", error.localizedDescription); return false }
+    }
+
+    /// Opens an entry as a document: linked, with its changes, and said in the window.
+    @discardableResult
+    static func open(_ read: LinkJournal.Read, because why: String? = nil) -> JammerDocument? {
+        guard let controller = NSDocumentController.shared as? JammerDocumentController else { return nil }
+        let entry = read.entry
+        let doc = controller.open(read.project, name: entry.name)
+        guard let session = doc.session else { return nil }
+        session.linkEntryID = entry.id
+        session.recovered = true
+        session.keptFromBefore = entry.kept
+        session.stepsNotSavedBack = entry.steps ?? 1
+        session.restoreLink(entry.record)
+        doc.updateChangeCount(.changeDone)
+        // Said after the link's own words (a file that is gone says so first, and this then says the work is here).
+        let requester = entry.record.requester
+        let what = why ?? (entry.kept ? L10n.text("link.kept.status", requester) : L10n.text("link.recovered.status", requester))
+        session.status = session.lostLink == nil ? what : L10n.text("link.recovered.lost", what, session.status ?? "")
+        (doc.windowControllers.first as? EditorWindowController)?.showLink()
+        return doc
     }
 
     /// The document's entry goes: its changes were saved back and it was closed, or the user gave them up.
@@ -59,7 +113,9 @@ enum LinkJournalStore {
     /// Jämmer is quitting: a linked document without changes leaves no entry (it follows the system's
     /// setting like any window). One with changes keeps its entry; everything waiting is written first.
     static func settle() {
-        for session in AgentRegistry.shared.sessions where session.linkEntryID != nil && session.document?.isDocumentEdited != true { forget(session) }
+        for session in AgentRegistry.shared.sessions where session.linkRecord != nil {
+            if session.document?.isDocumentEdited == true { keep(session) } else { forget(session) }
+        }
         queue.sync {}
     }
 
@@ -76,7 +132,6 @@ enum LinkJournalStore {
         let found = journal.read()
         broken = found.broken.count
         for file in found.broken { NSLog("Jammer: a link journal entry couldn't be read and was left as it is: %@", file.path) }
-        guard let controller = NSDocumentController.shared as? JammerDocumentController else { return }
         for read in found.entries {
             let entry = read.entry
             if AgentRegistry.shared.sessions.contains(where: { $0.linkEntryID == entry.id }) { continue }
@@ -102,17 +157,7 @@ enum LinkJournalStore {
                 stale.stopWatchingLink()
                 stale.document?.close()
             }
-            let doc = controller.open(read.project, name: entry.name)
-            guard let session = doc.session else { continue }
-            session.linkEntryID = entry.id
-            session.recovered = true
-            session.restoreLink(entry.record)
-            doc.updateChangeCount(.changeDone)
-            // Said after the link's own words (a file that is gone says so first, and this then says the work is here).
-            let requester = entry.record.requester
-            let what = entry.kept ? L10n.text("link.kept.status", requester) : L10n.text("link.recovered.status", requester)
-            session.status = session.lostLink == nil ? what : L10n.text("link.recovered.lost", what, session.status ?? "")
-            (doc.windowControllers.first as? EditorWindowController)?.showLink()
+            open(read)
         }
     }
 }

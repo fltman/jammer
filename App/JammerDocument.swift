@@ -115,20 +115,34 @@ final class JammerDocument: NSDocument {
         }
         MainActor.assumeIsolated {
             guard let session else { return }
-            let alert = NSAlert()
-            if let link = session.linkedFile {
-                alert.messageText = "Save your changes back to “\(link.fileName)”?"
-                alert.informativeText = "\(link.requester) is waiting for this file. If you don't save, the file stays as it was and the changes are lost."
-                alert.addButton(withTitle: "Save Back")
-            } else {
-                let lost = session.lostLink
-                alert.messageText = "“\(lost?.name ?? "The file")” can't be saved back to \(lost?.requester ?? "the other app")"
-                alert.informativeText = "\(lost?.why ?? "")\n\nSave your changes as a Jämmer project to keep them, or close without saving."
-                alert.addButton(withTitle: "Save a Jämmer Copy…")
+            // Quitting never asks about a linked document: its changes stay in Jämmer's journal, and the
+            // document comes back with them the next time Jämmer starts (the series' way, SIBLINGS.md §6).
+            if (NSDocumentController.shared as? JammerDocumentController)?.reviewingForQuit == true {
+                LinkJournalStore.keep(session)
+                session.keepsLinkEntry = true
+                guard let selector = shouldCloseSelector, let target = delegate as? NSObject else { return }
+                typealias Callback = @convention(c) (AnyObject, Selector, NSDocument, Bool, UnsafeMutableRawPointer?) -> Void
+                unsafeBitCast(target.method(for: selector), to: Callback.self)(target, selector, self, true, contextInfo)
+                return
             }
-            alert.addButton(withTitle: "Don't Save")
-            alert.addButton(withTitle: "Cancel")
-            alert.buttons[1].hasDestructiveAction = true
+            let alert = NSAlert()
+            let requester = session.linkedFile?.requester ?? session.lostLink?.requester ?? ""
+            let lost = L10n.count("link.close.steps", max(1, session.stepsNotSavedBack))
+            if let link = session.linkedFile {
+                alert.messageText = L10n.text("link.close.title", link.fileName)
+                alert.informativeText = L10n.text("link.close.text", requester, lost)
+                alert.addButton(withTitle: L10n.text("link.close.saveBack"))
+            } else {
+                let gone = session.lostLink
+                alert.messageText = L10n.text("link.close.lost.title", gone?.name ?? "", requester)
+                alert.informativeText = L10n.text("link.close.lost.text", gone?.why ?? "", lost)
+                alert.addButton(withTitle: L10n.text("link.close.saveCopy"))
+            }
+            alert.addButton(withTitle: L10n.text("link.close.keep"))
+            alert.addButton(withTitle: L10n.text("link.close.discard"))
+            alert.addButton(withTitle: L10n.text("link.close.cancel"))
+            alert.buttons[2].hasDestructiveAction = true
+            alert.buttons[3].keyEquivalent = "\u{1b}"
             window.makeKeyAndOrderFront(nil)
             alert.beginSheetModal(for: window) { response in
                 MainActor.assumeIsolated {
@@ -140,6 +154,12 @@ final class JammerDocument: NSDocument {
                         session.saveJammerCopy()
                         answer(false)
                     case .alertSecondButtonReturn:
+                        // Kept for later: written into the journal now, found again under File › Linked Files Waiting…
+                        // (and opened by itself the next time Jämmer starts, or when the same file is handed over again).
+                        LinkJournalStore.keep(session)
+                        session.keepsLinkEntry = true
+                        answer(true)
+                    case .alertThirdButtonReturn:
                         // Given up, in so many words: the journal's entry goes with the changes.
                         session.recovered = false
                         LinkJournalStore.forget(session)
@@ -164,7 +184,7 @@ final class JammerDocument: NSDocument {
     override func close() {
         if let session {
             // Closed without changes waiting (saved back, or never changed): its entry in the journal goes.
-            if !isDocumentEdited { LinkJournalStore.forget(session) }
+            if !isDocumentEdited, !session.keepsLinkEntry { LinkJournalStore.forget(session) }
             session.stop()
             AgentRegistry.shared.unregister(session)
         }
@@ -345,6 +365,25 @@ enum OpenFailure {
 
 /// Opens audio files as new projects instead of documents of their own.
 final class JammerDocumentController: NSDocumentController {
+    /// True while the documents are gone through because Jämmer is quitting (not for a window that is closed).
+    private(set) var reviewingForQuit = false
+    private var quitReview: (delegate: AnyObject?, selector: Selector?)?
+    override func reviewUnsavedDocuments(withAlertTitle title: String?, cancellable: Bool, delegate: Any?, didReviewAllSelector: Selector?, contextInfo: UnsafeMutableRawPointer?) {
+        reviewingForQuit = true
+        quitReview = (delegate as AnyObject?, didReviewAllSelector)
+        super.reviewUnsavedDocuments(withAlertTitle: title, cancellable: cancellable, delegate: self,
+                                     didReviewAllSelector: #selector(documentController(_:didReviewAll:contextInfo:)), contextInfo: contextInfo)
+    }
+    /// The going-through is over: the quit goes on, or was called off (then a linked window that is closed later asks again).
+    @objc private func documentController(_ controller: NSDocumentController, didReviewAll: Bool, contextInfo: UnsafeMutableRawPointer?) {
+        reviewingForQuit = false
+        if !didReviewAll { for case let d as JammerDocument in documents { MainActor.assumeIsolated { d.session?.keepsLinkEntry = false } } }
+        guard let (delegate, selector) = quitReview, let target = delegate as? NSObject, let selector else { return }
+        quitReview = nil
+        typealias Callback = @convention(c) (AnyObject, Selector, NSDocumentController, Bool, UnsafeMutableRawPointer?) -> Void
+        unsafeBitCast(target.method(for: selector), to: Callback.self)(target, selector, controller, didReviewAll, contextInfo)
+    }
+
     override func makeDocument(withContentsOf url: URL, ofType typeName: String) throws -> NSDocument {
         guard let type = UTType(typeName), !type.conforms(to: .jammerProject), type.conforms(to: .audio) else {
             return try super.makeDocument(withContentsOf: url, ofType: typeName)

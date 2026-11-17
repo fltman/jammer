@@ -84,7 +84,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
             parts.append("\(link.fileName) · For \(link.requester) – ⌘S saves back")
         }
         // Said in the window for as long as it is so, not only once in the status line.
-        if session.recovered, session.wasLinked { parts.append(L10n.text("link.recovered.subtitle")) }
+        if session.recovered, session.wasLinked { parts.append(session.keptFromBefore ? L10n.text("link.kept.subtitle") : L10n.text("link.recovered.subtitle")) }
         if !session.solo.isEmpty { parts.append("Solo: \(session.soloNames.joined(separator: ", ")) (listening only; exports are not affected)") }
         window?.subtitle = parts.joined(separator: " · ")
     }

@@ -148,6 +148,12 @@ final class EditorSession {
     /// Brought back from the journal when Jämmer started, with changes that were never saved back. True
     /// until they are saved back or given up; the window and `linkedFile.recovered` say so.
     var recovered = false
+    /// …and it had been kept for later on purpose (a window closed, or Jämmer quit), not left by a stop.
+    var keptFromBefore = false
+    /// Steps made since the file was handed over or last saved back: what closing without saving would lose.
+    var stepsNotSavedBack = 0
+    /// The window is closing with its changes kept for later: the journal's entry stays when the document goes.
+    var keepsLinkEntry = false
     /// The document as it now stands into the journal, once the step that is being made is done with
     /// (so that "has changes" is what it is after the step).
     func noteInLinkJournal() {
@@ -412,6 +418,7 @@ final class EditorSession {
         syncInserts()
         loadPeaks()
         document?.invalidateRestorableState()
+        if linkRecord != nil { stepsNotSavedBack += 1 }
         noteInLinkJournal()
         // Keep playing: restart where we are so the change is heard at once.
         if isPlaying { try? output.play(from: output.playhead) }

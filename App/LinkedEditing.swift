@@ -50,6 +50,15 @@ enum LinkedEditing {
         }
         // Open without changes: what the sibling sent now may differ from what was opened then, so the
         // document is opened afresh from the file as it is, in place of the old window.
+        // Work on this file that waits in the journal (kept for later, or left by a stop) is what opens: the
+        // same file handed over again is the same job, not a new one beside it.
+        if let waiting = LinkJournalStore.waiting(forPath: path) {
+            for d in open { d.session?.stopWatchingLink(); d.close() }
+            let doc = LinkJournalStore.open(waiting, because: L10n.text("link.waiting.reopened", url.lastPathComponent, requester))
+            doc?.windowControllers.first?.window?.makeKeyAndOrderFront(nil)
+            NSApp.activate()
+            return true
+        }
         for d in open { d.session?.stopWatchingLink(); d.close() }
         guard let link = LinkedFile(url: url, requester: requester) else {
             NSLog("Jammer: %@ can't be linked (format, bit depth or channels)", url.lastPathComponent)
@@ -107,6 +116,7 @@ extension EditorSession {
                 document?.updateChangeCount(.changeCleared)
                 // Saved back: nothing waits in the journal but the clean document, and it is no longer "recovered".
                 recovered = false
+                stepsNotSavedBack = 0
                 LinkJournalStore.note(self)
                 (window?.windowController as? EditorWindowController)?.showLink()
                 status = "Saved \(link.fileName) for \(link.requester)."

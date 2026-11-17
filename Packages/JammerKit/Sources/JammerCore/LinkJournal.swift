@@ -23,8 +23,11 @@ public struct LinkJournal: Sendable {
         /// The user chose to keep the changes for later when closing the window.
         public var kept: Bool
         public var written: Date
+        /// How many steps have been made since the file was last saved back (or handed over): what would be lost.
+        public var steps: Int?
 
-        public init(id: UUID, record: LinkedFile.Record, name: String, project: Data, edited: Bool, kept: Bool = false, written: Date = Date()) {
+        public init(id: UUID, record: LinkedFile.Record, name: String, project: Data, edited: Bool, kept: Bool = false, written: Date = Date(), steps: Int? = nil) {
+            self.steps = steps
             self.id = id
             self.record = record
             self.name = name

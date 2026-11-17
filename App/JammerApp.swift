@@ -74,6 +74,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc func showSettings(_ sender: Any?) { SettingsWindow.show() }
+    @objc func showLinkedWaiting(_ sender: Any?) { LinkedWaitingWindow.show() }
     @objc func showBatch(_ sender: Any?) { BatchWindow.show() }
     @objc func importTimeline(_ sender: Any?) { TimelineImporter.choose() }
 
@@ -222,6 +223,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             item("Export Audio…", #selector(EditorWindowController.exportAudio(_:)), "e", [.command, .shift]),
             item("Batch…", #selector(AppDelegate.showBatch(_:)), "b", [.command, .option]),
             item("Storage…", #selector(AppDelegate.showStorage(_:)), ""),
+            item(L10n.text("menu.file.linkedWaiting"), #selector(AppDelegate.showLinkedWaiting(_:)), ""),
         ] + sendToFlimmerItems))
         main.addItem(submenu("Edit", [
             item("Undo", Selector(("undo:")), "z"),

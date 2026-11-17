@@ -565,6 +565,138 @@
         }
       }
     },
+    "link.close.cancel": {
+      "comment": "Button.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel"
+          }
+        }
+      }
+    },
+    "link.close.discard": {
+      "comment": "Button.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Discard"
+          }
+        }
+      }
+    },
+    "link.close.keep": {
+      "comment": "Button.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keep for Later"
+          }
+        }
+      }
+    },
+    "link.close.lost.text": {
+      "comment": "%1$@ is why the file can’t be used (a whole sentence), %2$@ is “3 steps not saved back”.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ %2$@. Save them as a Jämmer project, keep them in Jämmer for later (File › Linked Files Waiting…), or discard them."
+          }
+        }
+      }
+    },
+    "link.close.lost.title": {
+      "comment": "Closing a linked document whose file can’t be used. The file, then the app.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“%1$@” can’t be saved back to %2$@"
+          }
+        }
+      }
+    },
+    "link.close.saveBack": {
+      "comment": "Button.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save Back"
+          }
+        }
+      }
+    },
+    "link.close.saveCopy": {
+      "comment": "Button.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save a Jämmer Copy…"
+          }
+        }
+      }
+    },
+    "link.close.steps": {
+      "comment": "How much work a linked document has that isn’t in the file yet.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld step not saved back"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld steps not saved back"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "link.close.text": {
+      "comment": "%1$@ is the app that handed the file over, %2$@ is “3 steps not saved back”.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ is waiting for this file. %2$@. Save Back writes them into the file. Keep for Later closes the window and keeps them in Jämmer (File › Linked Files Waiting…). Discard gives them up; the file stays as it was."
+          }
+        }
+      }
+    },
+    "link.close.title": {
+      "comment": "Closing a linked document with changes. %@ is the file.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save your changes back to “%@”?"
+          }
+        }
+      }
+    },
     "link.kept.status": {
       "comment": "Status line of a linked document whose changes the user chose to keep for later. %@ is the app that handed the file over.",
       "extractionState": "manual",
@@ -572,7 +704,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Kept from last time. The changes are not saved back to %@."
+            "value": "Kept from last time: not saved back to %@ yet. Undo starts from here."
+          }
+        }
+      }
+    },
+    "link.kept.subtitle": {
+      "comment": "In the window’s subtitle of a linked document whose changes were kept for later.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kept from last time: not saved back yet"
           }
         }
       }
@@ -596,7 +740,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Recovered after Jämmer ended unexpectedly. The changes are not saved back to %@."
+            "value": "Recovered after Jämmer ended unexpectedly. The changes are not saved back to %@. Undo starts from here."
           }
         }
       }
@@ -609,6 +753,174 @@
           "stringUnit": {
             "state": "translated",
             "value": "Recovered: not saved back yet"
+          }
+        }
+      }
+    },
+    "link.waiting.about": {
+      "comment": "The top of the Linked Files Waiting window.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Work on files another app handed over, kept for later and not yet saved back. Jämmer also opens these by itself when it starts, and when the same file is handed over again."
+          }
+        }
+      }
+    },
+    "link.waiting.broken": {
+      "comment": "Above the path of a journal file that can’t be read.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A record that can’t be read. Jämmer has left it as it is:"
+          }
+        }
+      }
+    },
+    "link.waiting.discard": {
+      "comment": "Button.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Discard…"
+          }
+        }
+      }
+    },
+    "link.waiting.discard.title": {
+      "comment": "The question before giving up waiting work. %@ is the file.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Discard the work on “%@”?"
+          }
+        }
+      }
+    },
+    "link.waiting.discard.yes": {
+      "comment": "Button.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move to Trash"
+          }
+        }
+      }
+    },
+    "link.waiting.done": {
+      "comment": "Button.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Done"
+          }
+        }
+      }
+    },
+    "link.waiting.lost": {
+      "comment": "What is lost: “3 steps not saved back”, then the app.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ to %2$@ will be moved to the Trash. The file itself stays as it is."
+          }
+        }
+      }
+    },
+    "link.waiting.none": {
+      "comment": "The empty list.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nothing is waiting."
+          }
+        }
+      }
+    },
+    "link.waiting.open": {
+      "comment": "Button.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open"
+          }
+        }
+      }
+    },
+    "link.waiting.reopened": {
+      "comment": "Status line when a file is handed over again while work on it waited. The file, then the app.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ was waiting here with your changes from before. They are not saved back to %2$@ yet. Undo starts from here."
+          }
+        }
+      }
+    },
+    "link.waiting.row": {
+      "comment": "A row: the file, then the app that handed it over.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@, for %2$@"
+          }
+        }
+      }
+    },
+    "link.waiting.row.detail": {
+      "comment": "Under a row: “3 steps not saved back”, then how long ago (“2 hours ago”).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ · %2$@"
+          }
+        }
+      }
+    },
+    "link.waiting.title": {
+      "comment": "Window title.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Linked Files Waiting"
+          }
+        }
+      }
+    },
+    "menu.file.linkedWaiting": {
+      "comment": "File menu.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Linked Files Waiting…"
           }
         }
       }
