@@ -1,0 +1,57 @@
+{
+  "sourceLanguage": "en",
+  "version": "1.0",
+  "strings": {
+    "CFBundleDisplayName": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jämmer"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jämmer"
+          }
+        }
+      }
+    },
+    "NSMotionUsageDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When you choose Follow Head Movements, Jämmer turns what you hear on headphones as your head turns. It reads only your headphones' motion, only while you listen, and keeps nothing."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "När du väljer Följ huvudets rörelser vrider Jämmer det du hör i hörlurarna när du vrider huvudet. Den läser bara hörlurarnas rörelser, bara medan du lyssnar, och sparar ingenting."
+          }
+        }
+      }
+    },
+    "NSSpeechRecognitionUsageDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jämmer transcribes your recordings on this Mac so you can edit them as text. The audio never leaves the Mac."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jämmer transkriberar dina inspelningar på den här Macen så att du kan redigera dem som text. Ljudet lämnar aldrig Macen."
+          }
+        }
+      }
+    }
+  }
+}

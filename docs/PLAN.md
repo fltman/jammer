@@ -83,7 +83,7 @@ Of these, as of 2026-11-17: the mixer with buses, sends, VCA, sidechain, delay c
 
 Multichannel up to 7.1.4, ADM BWF, Ambisonics, APAC/ASAF export, binaural monitoring with head tracking, Overdub with consent flow.
 
-As of 2026-11-17 (`docs/IMMERSIVE.md`): built are documents in 5.1, 7.1 and 7.1.4 with fold-downs and BS.1770-5 weighting, the surround panner, Ambisonics (AmbiX, first to third order), binaural listening through Apple's spatial mixer, and APAC export. Waiting on Anders: ADM BWF (a validator to install), calibration of 7.1/7.1.4 loudness against BS.2217's files (a fetch), head tracking (an entitlement in the signing), Overdub (the voice provider's terms). Not possible for a third party: ASAF authoring (no public interface). Not built: automating a track's place, an Ambisonics decoder to loudspeakers.
+As of 2026-11-17 (`docs/IMMERSIVE.md`): built are documents in 5.1, 7.1 and 7.1.4 with fold-downs and BS.1770-5 weighting (checked against the ITU's BS.2217 files), the surround panner and its lanes, Ambisonics (AmbiX, first to third order) with an AllRAD decoder to loudspeakers and a field's turn, ADM BWF beds (checked with the EBU's renderer), binaural listening through Apple's spatial mixer with the head followed, and APAC export. Waiting on Anders: Overdub (ElevenLabs' clauses on wrappers, model resale and OEM). Not possible for a third party: ASAF authoring (no public interface). Not built: ADM objects, a turn of a whole Ambisonics bus.
 
 ## Deliberately out of scope
 

@@ -85,6 +85,8 @@ Audio › Mixer…	⌥⌘X
 Audio › Plugins…	⌥⇧⌘P
 Audio › Picture…	
 Audio › Listen on Headphones (Binaural)	
+Audio › Follow Head Movements	
+Audio › Center Head	
 Audio › Layout	
 Audio › Layout › Mono	
 Audio › Layout › Stereo	
@@ -110,6 +112,9 @@ View › Automation › Mute Lanes
 View › Automation › Send Lanes	
 View › Automation › Place	
 View › Automation › Height	
+View › Automation › Field Turn	
+View › Automation › Field Front	
+View › Automation › Field Side	
 View › Automation › Plugin Parameters	
 View › Automation › Buses, Groups and Master	
 View › Show Transcript	⌥⌘T

@@ -14099,6 +14099,108 @@
         }
       }
     },
+    "listen.head.centred": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Where you look now is the front."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Det du tittar mot nu är fronten."
+          }
+        }
+      }
+    },
+    "listen.head.denied": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jämmer may not read your headphones’ motion. Allow it in System Settings › Privacy & Security › Motion & Fitness."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jämmer får inte läsa hörlurarnas rörelser. Tillåt det i Systeminställningar › Integritet och säkerhet › Rörelse och träning."
+          }
+        }
+      }
+    },
+    "listen.head.lost": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The headphones’ motion stopped coming (are they connected?). No longer following your head."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hörlurarnas rörelser slutade komma (är de anslutna?). Följer inte längre ditt huvud."
+          }
+        }
+      }
+    },
+    "listen.head.off": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No longer following your head: the sound faces the front again."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Följer inte längre ditt huvud: ljudet är vänt framåt igen."
+          }
+        }
+      }
+    },
+    "listen.head.on": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Following your head: turn it, and the sound stays where it is. Audio › Center Head makes where you look the front."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Följer ditt huvud: vrid det, så ligger ljudet kvar där det är. Ljud › Centrera huvudet gör det du tittar mot till fronten."
+          }
+        }
+      }
+    },
+    "listen.head.unavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This Mac can’t read headphones’ motion."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Den här Macen kan inte läsa hörlurarnas rörelser."
+          }
+        }
+      }
+    },
     "loudness.done": {
       "comment": "Status line. %1$@ the action’s title, %2$@ the loudness, %3$@ the gain with its sign.",
       "extractionState": "manual",
@@ -14489,6 +14591,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "Lyssna i hörlurar (binauralt)"
+          }
+        }
+      }
+    },
+    "menu.listen.followHead": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Follow Head Movements"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Följ huvudets rörelser"
+          }
+        }
+      }
+    },
+    "menu.listen.recenterHead": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Center Head"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Centrera huvudet"
           }
         }
       }

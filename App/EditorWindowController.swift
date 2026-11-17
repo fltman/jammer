@@ -454,6 +454,19 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         session.say(EditorSession.binaural ? L10n.text("listen.binaural.on") : L10n.text("listen.binaural.off"), .info)
     }
 
+    /// Audio › Follow Head Movements: binaural listening turns with headphones that have motion sensors.
+    @objc func toggleFollowHead(_ sender: Any?) {
+        EditorSession.followHead.toggle()
+        if EditorSession.followHead { session.say(L10n.text("listen.head.on"), .info) }
+        else { session.say(L10n.text("listen.head.off"), .info) }
+    }
+
+    /// Audio › Center Head: where the head points now becomes the front.
+    @objc func recenterHead(_ sender: Any?) {
+        HeadTracker.shared.recenter()
+        session.say(L10n.text("listen.head.centred"), .info)
+    }
+
     @objc func showPicture(_ sender: Any?) {
         if let w = pictureWindow { w.makeKeyAndOrderFront(nil); return }
         let w = PictureWindow(contentRect: NSRect(x: 0, y: 0, width: 640, height: 400), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
@@ -764,6 +777,11 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
             item.state = EditorSession.binaural ? .on : .off
             return session.project.channels > 2
         }
+        if item.action == #selector(toggleFollowHead(_:)) {
+            item.state = EditorSession.followHead ? .on : .off
+            return EditorSession.binaural && session.project.channels > 2
+        }
+        if item.action == #selector(recenterHead(_:)) { return EditorSession.followHead }
         if item.action == #selector(performOperation(_:)), let op = (item.representedObject as? OperationItem)?.op {
             // The document's layout has its tick.
             if op == "set_layout", let order = (item.representedObject as? OperationItem)?.params["order"]?.string {

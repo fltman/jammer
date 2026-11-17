@@ -146,6 +146,7 @@ How an English term is written in Swedish text: unchanged, with a capital only w
 | drop-frame | drop-frame | added 2026-11-17 (block F): the trade's English term, as the rule says |
 | edit decision list, EDL | redigeringslista, EDL | added 2026-11-17 (block F), for Anders to look at |
 | sound field, turn (a field), front, side | ljudfält, vrida (vridning), fronten, sidan | added 2026-11-17 (block I), for Anders to look at; the API's yaw, pitch and roll stay as they are |
+| Follow Head Movements, Center Head | Följ huvudets rörelser, Centrera huvudet | added 2026-11-17 (block K); macOS's own question about motion is in App/InfoPlist.xcstrings |
 
 ## Rules added 2026-11-17 (the series', to be followed when the work gets there)
 

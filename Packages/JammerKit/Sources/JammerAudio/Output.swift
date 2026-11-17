@@ -46,6 +46,11 @@ public final class AudioOutput {
         }
     }
     private var listeners: [(AudioObjectID, AudioObjectPropertyAddress, AudioObjectPropertyListenerBlock)] = []
+    /// The listener's head while it is followed (headphones with motion sensors), applied to the spatial mixer;
+    /// nil faces the front. Only listening: the engine, exports and meters never see it.
+    public var head: HeadPose? {
+        didSet { if let spatialMixer { Binaural.setHead(spatialMixer, head ?? HeadPose()) } }
+    }
 
     public init(channels: Int, sampleRate: Double) {
         self.channels = channels
@@ -211,6 +216,7 @@ public final class AudioOutput {
                                            callback: AURenderCallbackStruct(inputProc: jm_engine_au_render, inputProcRefCon: UnsafeMutableRawPointer(engine)),
                                            headphones: headphones)
         spatialMixer = mixer
+        if let head { Binaural.setHead(mixer, head) }
         var desc = AudioComponentDescription(componentType: kAudioUnitType_Output, componentSubType: kAudioUnitSubType_DefaultOutput,
                                              componentManufacturer: kAudioUnitManufacturer_Apple, componentFlags: 0, componentFlagsMask: 0)
         guard let comp = AudioComponentFindNext(nil, &desc) else { throw OutputError(Said("error.output.default_output_device", "No default output device.")) }

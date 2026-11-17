@@ -41,11 +41,11 @@ A track that plays a sound field can be turned round the listener: in the Mixer 
 - On a device with fewer channels than the document, such as the Mac's speakers or headphones, a loudspeaker document is folded down to stereo by the same rules. The document and its exports keep all their channels.
 - **Audio › Listen on Headphones (Binaural)** renders a loudspeaker document for headphones instead, through Apple's spatial mixer. It is a setting for listening only, and every open document follows it.
 - An Ambisonics document is always heard through Apple's spatial mixer: for headphones when that setting is on, for loudspeakers when it is off.
-- Head tracking isn't available.
+- **Audio › Follow Head Movements** (while listening binaurally): with headphones that have motion sensors, such as AirPods Pro, AirPods Max or AirPods (3rd generation and later), the sound stays where it is as you turn your head. macOS asks the first time whether Jämmer may read the headphones' motion; Jämmer reads it only while this is on and keeps nothing. **Audio › Center Head** makes where you look now the front. It is off when Jämmer starts, and turning binaural listening off turns it off too. It changes only what you hear, never the document or an export.
 
 ## Loudness
 
-The loudness meter weights the channels as ITU-R BS.1770-5 does: the surrounds at the sides count a little more, the LFE not at all, rear and height channels like the front. Measured 5.1 agrees with the EBU's test case and with ffmpeg; 7.1 and 7.1.4 have not yet been checked against the ITU's test files.
+The loudness meter weights the channels as ITU-R BS.1770-5 does: the surrounds at the sides count a little more, the LFE not at all, rear and height channels like the front. Measured 5.1 agrees with the EBU's test case and with ffmpeg, and 7.1 and 7.1.4 read the ITU's own test files (ITU-R BS.2217) within 0.001 LU.
 
 BS.1770 has no loudness for a sound field. In an Ambisonics document loudness isn't measured, and normalizing to a loudness, loudness presets, the limiter and an export's loudness target are not offered. Export it for loudspeakers or headphones and measure that.
 

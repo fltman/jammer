@@ -30,13 +30,14 @@ private func bedRender(_ ref: UnsafeMutableRawPointer, _ flags: UnsafeMutablePoi
 @Suite("Binaural listening through the spatial mixer")
 struct BinauralTests {
     /// The energy at the left and the right ear for a tone in one channel of a layout.
-    func ears(_ layout: ChannelLayout, lit: Int, gains: [Float]? = nil) throws -> (left: Double, right: Double) {
+    func ears(_ layout: ChannelLayout, lit: Int, gains: [Float]? = nil, head: HeadPose? = nil) throws -> (left: Double, right: Double) {
         let bed = Bed(channels: layout.channels, lit: lit, gains: gains)
         let ref = Unmanaged.passRetained(bed)
         defer { ref.release() }
         let mixer = try Binaural.makeMixer(layout: layout, rate: 48_000, callback: AURenderCallbackStruct(inputProc: bedRender, inputProcRefCon: ref.toOpaque()))
         defer { AudioComponentInstanceDispose(mixer) }
         try #require(AudioUnitInitialize(mixer) == noErr)
+        if let head { Binaural.setHead(mixer, head) }
         let frames: UInt32 = 512
         var left = [Float](repeating: 0, count: Int(frames)), right = [Float](repeating: 0, count: Int(frames))
         var el = 0.0, er = 0.0
@@ -77,5 +78,24 @@ struct BinauralTests {
             let right = try ears(layout, lit: -1, gains: Ambisonics.encode(azimuth: -90, elevation: 0, order: layout.ambisonicOrder!))
             #expect(left.left > 0 && db(left) > 3 && db(right) < -3, "\(layout.rawValue): left \(db(left)) dB, right \(db(right)) dB")
         }
+    }
+
+    @Test("The head followed: turned left, a voice in front moves to the right ear, turned right to the left ear; looking up, a sound above-left at 45° is more to the side than looking down; tilted to the right shoulder it stays to the left, tilted to the left it comes over the head to the middle (the spatial mixer's convention, measured)")
+    func head() throws {
+        func db(_ e: (left: Double, right: Double)) -> Double { 10 * log10(e.left / e.right) }
+        func with(_ pose: HeadPose, _ layout: ChannelLayout, lit: Int) throws -> Double {
+            try db(ears(layout, lit: lit, head: pose))
+        }
+        let front = try with(HeadPose(), .surround51, lit: 2)
+        #expect(abs(front) < 1, "facing the front: \(front)")
+        let left = try with(HeadPose(yaw: 40), .surround51, lit: 2), right = try with(HeadPose(yaw: -40), .surround51, lit: 2)
+        #expect(left < -3 && right > 3, "head left: \(left) dB, head right: \(right) dB (left ear over right)")
+        // 7.1.4's top front left (45° left, 30° up), channel 8 in the document's order.
+        let up = try with(HeadPose(pitch: 40), .immersive714, lit: 8), down = try with(HeadPose(pitch: -40), .immersive714, lit: 8)
+        #expect(up > down + 1, "looking up \(up) dB, down \(down) dB")
+        let towardRight = try with(HeadPose(roll: 40), .immersive714, lit: 8), towardLeft = try with(HeadPose(roll: -40), .immersive714, lit: 8)
+        #expect(towardRight > 3 && towardLeft < 1, "tilted right \(towardRight) dB, tilted left \(towardLeft) dB")
+        // Out of range is held to the mixer's: a turn of 270° left is 90° right.
+        #expect(Binaural.wrapped(270) == -90 && Binaural.wrapped(-190) == 170)
     }
 }

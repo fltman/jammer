@@ -107,6 +107,29 @@ final class EditorSession {
         set {
             UserDefaults.standard.set(newValue, forKey: "listen.binaural")
             for s in AgentRegistry.shared.sessions { s.output.binaural = newValue }
+            // The head is followed only while listening binaurally.
+            if !newValue, followHead { followHead = false }
+        }
+    }
+
+    /// Following the listener's head with headphones that have motion sensors (HeadTracker): binaural listening
+    /// turns with it. Off until switched on, and not remembered past the app's run, so macOS's question about the
+    /// headphones' motion only comes when it is asked for.
+    static var followHead = false {
+        didSet {
+            guard followHead != oldValue else { return }
+            let tracker = HeadTracker.shared
+            if followHead {
+                tracker.onPose = { pose in for s in AgentRegistry.shared.sessions { s.output.head = pose } }
+                tracker.onProblem = { why in
+                    followHead = false
+                    for s in AgentRegistry.shared.sessions { s.say(why, .error) }
+                }
+                tracker.start()
+            } else {
+                tracker.stop()
+                for s in AgentRegistry.shared.sessions { s.output.head = nil }
+            }
         }
     }
 

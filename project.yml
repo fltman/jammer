@@ -117,6 +117,7 @@ targets:
         NSPrincipalClass: NSApplication
         JammerHomepage: https://jammer.brattoo.com
         NSSpeechRecognitionUsageDescription: Jämmer transcribes your recordings on this Mac so you can edit them as text. The audio never leaves the Mac.
+        NSMotionUsageDescription: When you choose Follow Head Movements, Jämmer turns what you hear on headphones as your head turns. It reads only your headphones' motion, only while you listen, and keeps nothing.
         CFBundleDocumentTypes:
           - CFBundleTypeName: Jammer Project
             CFBundleTypeRole: Editor

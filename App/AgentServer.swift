@@ -683,6 +683,12 @@ enum AgentRouter {
         d["layout"] = p.layout.rawValue
         // A 7.1 or 7.1.4 file that names no loudspeakers: the order it is heard in (set_layout's `order`).
         if let o = p.unmaskedOrder { d["unmaskedOrder"] = o.rawValue }
+        // Listening (read only: an agent can't follow a head or start it): binaural, and the head while followed.
+        if p.channels > 2 {
+            var listening: [String: Any] = ["binaural": EditorSession.binaural, "headFollowed": EditorSession.followHead]
+            if let h = HeadTracker.shared.pose { listening["head"] = ["yaw": h.yaw, "pitch": h.pitch, "roll": h.roll] }
+            d["listening"] = listening
+        }
         // How the sound reaches the device: hal, audioUnit, binaural (the spatial mixer for headphones) or spatialSpeakers
         // (the spatial mixer for loudspeakers, an Ambisonics document); null before the first play.
         d["outputPath"] = s.output.path?.rawValue ?? NSNull()

@@ -100,11 +100,12 @@ key 'key code 53'
 # item with its shortcut, scripts/check-manual.py holds the manual and the FAQ to it, and the kept copy
 # (Config/menus-en.txt, which the commit gate reads) must be what the app has. Left out because they change:
 # the system's Window menu, Services and what macOS adds to Edit and View (Writing Tools, AutoFill, Dictation, Emoji,
-# Full Screen: they differ from Mac to Mac), the recent files, and Undo and Redo, whose titles name the step.
+# Full Screen: they differ from Mac to Mac), the recent files, Undo and Redo, whose titles name the step, and the
+# order of an unmarked 7.1/7.1.4 file, shown only in a document that has one (scripts/check-manual.py excuses it).
 if [[ "${JAMMER_LANG:-en}" == en ]]; then
   [[ -x "$root/build/menus" ]] || xcrun swiftc -O -o "$root/build/menus" "$root/scripts/menus/main.swift" 2>/dev/null
   perl -e 'alarm 60; exec @ARGV' "$root/build/menus" $P 2>/dev/null \
-    | grep -v "^Window › \|^Jämmer › Services\|^File › Open Recent › \|^Edit › Undo\|^Edit › Redo\|^Edit › Writing Tools\|^Edit › AutoFill\|^Edit › Start Dictation\|^Edit › Emoji \|^View › Enter Full Screen" > "$out/menus-live.txt"
+    | grep -v "^Window › \|^Jämmer › Services\|^File › Open Recent › \|^Edit › Undo\|^Edit › Redo\|^Edit › Writing Tools\|^Edit › AutoFill\|^Edit › Start Dictation\|^Edit › Emoji \|^View › Enter Full Screen\|^Audio › Layout › Unmarked File: " > "$out/menus-live.txt"
   if [[ ! -s "$out/menus-live.txt" ]]; then echo "MANUAL   the menus couldn't be read"; manual=1
   else
     if report=$("$root/scripts/check-manual.py" "$out/menus-live.txt"); then echo "ok       $report"; else echo "$report" | sed 's/^/    /'; echo "MANUAL   the manual names menu items or shortcuts the app doesn't have (above)"; manual=1; fi

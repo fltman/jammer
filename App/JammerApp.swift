@@ -319,6 +319,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             item(L10n.text("audio.plugins"), #selector(EditorWindowController.showPlugins(_:)), "p", [.command, .option, .shift]),
             item(L10n.text("menu.picture"), #selector(EditorWindowController.showPicture(_:)), ""),
             item(L10n.text("menu.listen.binaural"), #selector(EditorWindowController.toggleBinaural(_:)), ""),
+            // The head followed while listening binaurally (headphones with motion sensors); off until asked for.
+            item(L10n.text("menu.listen.followHead"), #selector(EditorWindowController.toggleFollowHead(_:)), ""),
+            item(L10n.text("menu.listen.recenterHead"), #selector(EditorWindowController.recenterHead(_:)), ""),
             // The document's loudspeakers: a value of the document, undone like any other change.
             submenu(L10n.text("menu.layout"), ChannelLayout.allCases.map { l in
                 op(L10n.layoutTitle(l), "set_layout", ["layout": .string(l.rawValue)])

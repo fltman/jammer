@@ -6,7 +6,8 @@ import JammerCore
 /// Listening on headphones to a document wider than stereo: Apple's spatial mixer (AUSpatialMixer) takes the
 /// document's channels as a bed, each channel from its loudspeaker's direction (the bus's channel layout),
 /// and renders them for headphones. For listening only: exports and measurements are the document's channels.
-/// No head tracking (it needs an entitlement that has to come with the app's signing).
+/// The head can be followed (`HeadPose`, `Output.head`): the app reads headphones' motion itself and turns the
+/// mixer's listener, which needs no entitlement (the mixer's own head tracking does).
 public enum Binaural {
     /// The channel layout tag whose order is the document's (the WAV order): 5.1 as L R C LFE Ls Rs, 7.1 as
     /// WAVE_7_1 (L R C LFE Rls Rrs Ls Rs), 7.1.4 as CICP_19 (L R C LFE Rls Rrs Lss Rss Vhl Vhr Ltr Rtr).
