@@ -36,9 +36,14 @@ final class AutomationLanesView: NSView {
     var shown: AutomationLane.Param? { didSet { selected = nil; drag = nil; pending = nil; hover = nil; needsDisplay = true; elements = nil } }
     /// The track whose lane is worked on, and the point of its own lane that is selected.
     private(set) var focus = 0
-    private(set) var selected: Int?
+    private(set) var selected: Int? { didSet { if selected == nil { others = [] } } }
+    /// The points selected besides that one. They move, step and go together, as one piece.
+    private var others: Set<Int> = []
+    private var chosen: Set<Int> { selected.map { others.union([$0]) } ?? [] }
+    /// A stretch being dragged out with ⌥⇧ to select the points in it: where it began and where the pointer is.
+    private var marquee: (from: CGFloat, to: CGFloat)?
     /// A point being dragged: the lane as it would be, the point's index, and whether it has moved.
-    private var drag: (lane: AutomationLane, index: Int, moved: Bool)?
+    private var drag: (lane: AutomationLane, index: Int, moved: Bool, origin: AutomationLane)?
     /// The lane as just sent, drawn until the document has it (so the line doesn't jump back for a moment).
     private var pending: AutomationLane?
     /// The label at the pointer: where, and what it says.
@@ -83,7 +88,9 @@ final class AutomationLanesView: NSView {
     func invalidate() {
         if drag == nil { pending = nil }
         focus = min(focus, max(0, rowList.count - 1))
-        if let s = selected, s >= (ownLane?.points.count ?? 0) { selected = nil }
+        let count = ownLane?.points.count ?? 0
+        if let s = selected, s >= count { selected = nil }
+        others = others.filter { $0 < count }
         needsDisplay = true
         elements = nil
     }
@@ -240,11 +247,11 @@ final class AutomationLanesView: NSView {
                 for (k, p) in own.points.enumerated() where range.contains(p.frame) {
                     let at = place(p, lane.param, in: r)
                     let box = NSRect(x: at.x - 4.5, y: at.y - 4.5, width: 9, height: 9)
-                    (k == selected ? NSColor.white : colour).setFill()
+                    (chosen.contains(k) ? NSColor.white : colour).setFill()
                     NSBezierPath(ovalIn: box).fill()
                     NSColor.black.withAlphaComponent(0.6).setStroke()
                     NSBezierPath(ovalIn: box).stroke()
-                    if k == selected {
+                    if chosen.contains(k) {
                         colour.setStroke()
                         let ring = NSBezierPath(ovalIn: box.insetBy(dx: -3, dy: -3))
                         ring.lineWidth = 2
@@ -264,6 +271,14 @@ final class AutomationLanesView: NSView {
                 }
             }
             drawCaption(caption(lane), track: i, colour: colour)
+        }
+        if let m = marquee, project.tracks.indices.contains(focus) || rowList.indices.contains(focus) {
+            let r = area(focus)
+            let box = NSRect(x: min(m.from, m.to), y: r.minY, width: abs(m.to - m.from), height: r.height)
+            NSColor.white.withAlphaComponent(0.12).setFill()
+            box.fill()
+            NSColor.white.withAlphaComponent(0.5).setStroke()
+            NSBezierPath(rect: box.insetBy(dx: 0.5, dy: 0.5)).stroke()
         }
         // The label: at the pointer, or else at the selected point (so a point stepped to with the keys says what it is worth).
         var said = hover
@@ -328,8 +343,17 @@ final class AutomationLanesView: NSView {
         let p = lane.points[i]
         return L10n.text("automation.point.status", String(i + 1), String(lane.points.count), formatTime(Double(p.frame) / project.sampleRate), Self.valueText(p.value, lane.param))
     }
+    /// Says how many points are selected, when it is more than one.
+    private func sayChosen() {
+        let text = L10n.count("automation.points.selected", chosen.count)
+        session.status = text
+        NSAccessibility.post(element: self, notification: .announcementRequested, userInfo: [.announcement: text, .priority: NSAccessibilityPriorityLevel.high.rawValue])
+        needsDisplay = true
+        elements = nil
+    }
     private func select(_ i: Int?, seek: Bool = false) {
         selected = i
+        others = []
         if let i, let lane = ownLane, lane.points.indices.contains(i) {
             if seek { session.seek(lane.points[i].frame) }
             let text = describe(lane, i)
@@ -368,8 +392,34 @@ final class AutomationLanesView: NSView {
         if let own = ownLane, let k = own.points.indices.min(by: { hypot(place(own.points[$0], shown, in: r).x - p.x, place(own.points[$0], shown, in: r).y - p.y)
                                                                     < hypot(place(own.points[$1], shown, in: r).x - p.x, place(own.points[$1], shown, in: r).y - p.y) }),
            hypot(place(own.points[k], shown, in: r).x - p.x, place(own.points[k], shown, in: r).y - p.y) <= 8 {
-            select(k)
-            drag = (own, k, false)
+            if event.modifierFlags.contains(.shift) {
+                // ⇧-click: the point joins the selected ones, or leaves them. Nothing is dragged.
+                if chosen.contains(k) {
+                    var rest = chosen
+                    rest.remove(k)
+                    let first = rest.min()
+                    selected = first
+                    others = rest.filter { $0 != first }
+                } else {
+                    if let was = selected { others.insert(was) }
+                    selected = k
+                }
+                if chosen.count > 1 { sayChosen() } else { let one = selected; select(one) }
+                return true
+            }
+            if chosen.count > 1, chosen.contains(k) {
+                // A click on one of several selected points: they are dragged together.
+                others = chosen.filter { $0 != k }
+                selected = k
+            } else {
+                select(k)
+            }
+            drag = (own, k, false, own)
+            return true
+        }
+        if event.modifierFlags.contains([.option, .shift]), ownLane != nil {
+            // ⌥⇧-drag across the row: the points in that stretch are selected.
+            marquee = (p.x, p.x)
             return true
         }
         guard event.modifierFlags.contains(.option), event.clickCount == 1, let lane = laneToChange() else {
@@ -391,8 +441,9 @@ final class AutomationLanesView: NSView {
         return true
     }
     func mouseDragged(_ event: NSEvent, at p: NSPoint) -> Bool {
+        if let m = marquee { marquee = (m.from, p.x); needsDisplay = true; return true }
         guard let shown, var d = drag else { return false }
-        let r = area(focus), old = d.lane.points[d.index], flags = event.modifierFlags
+        let r = area(focus), old = d.origin.points[d.index], flags = event.modifierFlags
         var frame = Frame(viewport.frame(atX: p.x).rounded())
         var value = Automation.value(atHeight: Double((r.maxY - p.y) / r.height), shown)
         if !flags.contains(.control) {
@@ -402,7 +453,12 @@ final class AutomationLanesView: NSView {
         }
         if flags.contains(.shift) { frame = old.frame }          // ⇧: the value only
         if flags.contains(.command) || shown == .mute { value = old.value }   // ⌘: the time only; a mute is moved sideways
-        d.lane = d.lane.moving(d.index, frame: frame, value: value, limit: project.length)
+        if chosen.count > 1 {
+            // Several: as one piece, by what the pointer has moved the one that is held.
+            d.lane = d.origin.moving(chosen, byFrames: frame - old.frame, byValue: value - old.value, limit: project.length)
+        } else {
+            d.lane = d.origin.moving(d.index, frame: frame, value: value, limit: project.length)
+        }
         d.moved = d.moved || d.lane.points[d.index] != old
         drag = d
         let now = d.lane.points[d.index]
@@ -411,11 +467,24 @@ final class AutomationLanesView: NSView {
         return true
     }
     func mouseUp(_ event: NSEvent, at p: NSPoint) -> Bool {
+        if let m = marquee, let shown {
+            marquee = nil
+            let r = area(focus), lo = min(m.from, m.to), hi = max(m.from, m.to)
+            let inside = (ownLane?.points ?? []).enumerated().filter { (lo...hi).contains(place($0.element, shown, in: r).x) }.map(\.offset)
+            selected = inside.first
+            others = Set(inside.dropFirst())
+            if inside.count > 1 { sayChosen() } else { let one = selected; select(one) }
+            needsDisplay = true
+            return true
+        }
         guard let shown, let d = drag else { return false }
         drag = nil
         hover = nil
         if d.moved {
-            send(d.lane, saying: describe(d.lane, d.index))
+            send(d.lane, saying: chosen.count > 1 ? L10n.count("automation.points.moved", chosen.count) : describe(d.lane, d.index))
+        } else if chosen.count > 1 {
+            // A click on one of several selected points, without moving them: that one alone is selected.
+            select(d.index)
         } else if shown == .mute {
             // A click on a mute's point flips it.
             var lane = d.lane
@@ -483,10 +552,13 @@ final class AutomationLanesView: NSView {
         }
         guard let k = selected, let lane = ownLane, lane.points.indices.contains(k) else { return false }
         let p = lane.points[k]
+        let many = chosen
         func move(frame: Frame = p.frame, value: Double = p.value) {
-            let moved = lane.moving(k, frame: frame, value: value, limit: project.length)
+            // Several selected: all of them by what this one would move, as one piece.
+            let moved = many.count > 1 ? lane.moving(many, byFrames: frame - p.frame, byValue: shown == .mute ? 0 : value - p.value, limit: project.length)
+                : lane.moving(k, frame: frame, value: value, limit: project.length)
             guard moved != lane else { NSSound.beep(); return }
-            send(moved, saying: describe(moved, k))
+            send(moved, saying: many.count > 1 ? L10n.count("automation.points.moved", many.count) : describe(moved, k))
         }
         let up = event.keyCode == 126
         switch (event.keyCode, flags) {
@@ -500,11 +572,18 @@ final class AutomationLanesView: NSView {
             move(frame: p.frame + Frame((0.01 * rate).rounded()) * (event.keyCode == 124 ? 1 : -1))
         case (124, [.option, .command]), (123, [.option, .command]):   // ⌘⌥→ ⌘⌥←: one frame
             move(frame: p.frame + (event.keyCode == 124 ? 1 : -1))
-        case (51, []), (117, []):                    // Delete: the point; the lane's last point takes the lane with it, and the status line says so
+        case (124, [.shift]), (123, [.shift]):       // ⇧→ ⇧←: the next point after the selected ones, or the one before them, is selected too
+            let next = event.keyCode == 124 ? many.max()! + 1 : many.min()! - 1
+            guard lane.points.indices.contains(next) else { NSSound.beep(); return true }
+            others.insert(k)
+            selected = next
+            sayChosen()
+        case (51, []), (117, []):                    // Delete: the selected points; the lane's last point takes the lane with it, and the status line says so
             var less = lane
-            less.points.remove(at: k)
-            // The point before it is selected next (or the first), so the keys alone can go on to an empty lane.
-            selected = less.points.isEmpty ? nil : max(0, k - 1)
+            for i in many.sorted(by: >) { less.points.remove(at: i) }
+            // The point before them is selected next (or the first), so the keys alone can go on to an empty lane.
+            selected = nil
+            selected = less.points.isEmpty ? nil : max(0, many.min()! - 1)
             let name = list[focus].name
             let gone: String
             switch shown {
@@ -532,7 +611,7 @@ final class AutomationLanesView: NSView {
     override func accessibilityLabel() -> String? { rows == .tracks ? L10n.text("automation.ax.group") : L10n.text("automation.ax.group.strips") }
     override func accessibilityIdentifier() -> String { rows == .tracks ? "timeline.automation" : "timeline.automation.strips" }
     override func accessibilityChildren() -> [Any]? {
-        let key = [Double(session.version), viewport.start, viewport.framesPerPoint, Double(bounds.width), Double(bounds.height), Double(focus), Double(selected ?? -1)]
+        let key = [Double(session.version), viewport.start, viewport.framesPerPoint, Double(bounds.width), Double(bounds.height), Double(focus), Double(selected ?? -1), Double(others.reduce(others.count) { $0 &* 31 &+ $1 })]
         if let elements, key == elementsFor { return elements }
         elementsFor = key
         let rate = project.sampleRate
@@ -562,7 +641,7 @@ final class AutomationLanesView: NSView {
                 c.setAccessibilityRole(.staticText)
                 c.setAccessibilityIdentifier("timeline.automation.point")
                 c.setAccessibilityLabel(L10n.text("automation.ax.point", String(k + 1), String(named.points.count)))
-                c.setAccessibilitySelected(own != nil && k == selected)
+                c.setAccessibilitySelected(own != nil && chosen.contains(k))
                 c.setAccessibilityValue(L10n.text("automation.ax.point.value", formatTime(Double(p.frame) / rate), Self.valueText(p.value, lane.param)))
                 let at = own != nil ? place(p, lane.param, in: r) : NSPoint(x: viewport.x(of: Double(p.frame)), y: y(lane.value(at: p.frame), lane.param, in: r))
                 // In the lane's own space, from its bottom left.

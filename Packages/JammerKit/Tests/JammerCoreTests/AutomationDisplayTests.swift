@@ -114,4 +114,25 @@ struct AutomationDisplayTests {
         #expect(Automation.stepped(23.9, by: 3, grain: 0.1, .gain) == 24 && Automation.stepped(0.97, by: 0.05, grain: 0.01, .pan) == 1)
         #expect(Automation.stepped(1, by: 0.5, grain: 0.1, .mute) == 0 && Automation.stepped(0, by: -0.5, grain: 0.1, .mute) == 1)
     }
+
+    @Test("Several points moved together go as one piece: it stops a frame short of a neighbour that isn't moving, at the timeline's ends and at the edge of the values, and keeps its shape")
+    func together() {
+        let lane = AutomationLane(strip: UUID(), points: Self.pts([(100, 0), (200, -6), (300, -12), (400, -3), (500, 0)]))
+        // The middle two, to the right: the piece stops with its last point one frame before the point at 400, which is not moving.
+        #expect(lane.moving([1, 2], byFrames: 500, byValue: 0, limit: 10_000).points.map(\.frame) == [100, 299, 399, 400, 500])
+        #expect(lane.moving([1, 2], byFrames: -500, byValue: 0, limit: 10_000).points.map(\.frame) == [100, 101, 201, 400, 500])
+        // Two that aren't beside each other: each is held by its own neighbours, and the tighter one decides.
+        #expect(lane.moving([1, 3], byFrames: 500, byValue: 0, limit: 10_000).points.map(\.frame) == [100, 299, 300, 499, 500])
+        // All of them: only the timeline's ends hold them.
+        #expect(lane.moving([0, 1, 2, 3, 4], byFrames: -1_000, byValue: 0, limit: 10_000).points.map(\.frame) == [0, 100, 200, 300, 400])
+        #expect(lane.moving([0, 1, 2, 3, 4], byFrames: 1_000, byValue: 0, limit: 700).points.map(\.frame) == [300, 400, 500, 600, 700])
+        // Values: the piece stops when its highest reaches the top (or its lowest the bottom); the differences stay.
+        #expect(lane.moving([1, 2], byFrames: 0, byValue: 100, limit: 10_000).points.map(\.value) == [0, 24, 18, -3, 0])
+        #expect(lane.moving([1, 2], byFrames: 0, byValue: -100, limit: 10_000).points.map(\.value) == [0, -90, -96, -3, 0])
+        #expect(lane.moving([1, 2], byFrames: 10, byValue: 1.5, limit: 10_000).points[1...2].map { [$0.value] } == [[-4.5], [-10.5]])
+        // A mute's values stay; nothing chosen, or an index that isn't there, changes nothing.
+        let mute = AutomationLane(strip: UUID(), param: .mute, shape: .hold, points: Self.pts([(0, 0), (500, 1), (900, 0)]))
+        #expect(mute.moving([1, 2], byFrames: 50, byValue: 1, limit: 10_000).points == Self.pts([(0, 0), (550, 1), (950, 0)]))
+        #expect(lane.moving([], byFrames: 50, byValue: 1, limit: 10_000) == lane && lane.moving([9], byFrames: 50, byValue: 1, limit: 10_000) == lane)
+    }
 }

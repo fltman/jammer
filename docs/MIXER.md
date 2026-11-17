@@ -234,7 +234,7 @@ Built as the sketch below says, with what was decided on it: the lane is added t
 - **A VCA group** (`strip` is the group's id; `gain` and `mute`, nothing else). How the lanes are added: nothing new in the engine. When the plan is compiled a member's level curve is its own lane plus the group's, **a sum in dB at the points of both** (two straight lines in dB add to a straight line between those points, so the sum is exact), and a member is muted when its own mute lane or the group's says so, with one ramp at each change. Tested as asked: a group lane and a member's own lane give the same samples, bit for bit, as writing the summed values on each member by hand; the same for the group's mute. A strip outside the group is untouched. `level(of:at:)` and `GET …/automation` have the group's lane in what they answer for a member; the mixer answer has `automation` on each VCA; the sheet has a line under the group ("… (for every strip in the group)"). A group's lanes are in what a frozen bus downstream was made from. Removing the group takes its lanes with it.
 - **Steps:** refused before anything runs, with the field's name: `to` missing with send, a send that isn't there, `to` with another param, pan or send on a VCA group.
 - **Hostile files:** a send lane whose send isn't there, and pan or send on a VCA group, are left out.
-- **Still not built:** several points at once and send lanes (the rest of 4); written from the fader (5); plugin parameters (6). And not measured in a quiet window: the cost per block.
+- **Still not built:** send lanes and snapping to the tempo grid (the rest of 4); written from the fader (5); plugin parameters (6). And not measured in a quiet window: the cost per block.
 
 ## Automation, step 4, first half built (2026-11-17): lanes shown in the timeline, in debug builds
 
@@ -275,7 +275,8 @@ Built from the sketch as the coordinator changed it. Every change is one `set_au
 | ⌥⇧↑, ⌥⇧↓ | 3 dB; a pan 25 % |
 | ⌥⇧→, ⌥⇧← | The point 10 ms later or earlier |
 | ⌘⌥→, ⌘⌥← | The point one frame later or earlier |
-| Delete | Remove the point (the one before it is selected next) |
+| ⇧→, ⇧← | Select the next point after the selected ones too, or the one before them |
+| Delete | Remove the selected points (the one before them is selected next) |
 | Escape | Nothing selected; the keys are the timeline's again |
 
 None of them uses ⌃ with ⌥ (VoiceOver's own keys). ↑, ↓, Delete and Escape are only taken while a point is selected; ⌥ with an arrow or Return had no meaning in the timeline before, and no menu item of Jämmer's uses ⌘⌥ with an arrow. The table goes into the manual the day automation is in a Release build (the manual only describes what a user has).
@@ -286,7 +287,9 @@ None of them uses ⌃ with ⌥ (VoiceOver's own keys). ↑, ↓, Delete and Esca
 
 **The label** is also shown at the selected point, so a point stepped to with the keys says its time and value where it is (and that is how the label was seen as a picture). **The status line** gives what was just done its whole width; the selection's text gives way first.
 
-**Not built, and not tried:** several points selected at once (⇧-click, a drag across the row); send lanes; snapping to the tempo grid. **Not tried:** VoiceOver itself reading the announcements (the tree and the announcement call were checked, not the speech; on Anders's list for his own half-minute try). ⌃ against snapping was tried with safepointer's new `--ctrl` (dropped 4 points from a marker, it stays where the pointer was).
+**Several points at once (built the same day).** ⇧-click adds a point to the selected ones or takes it out; a ⌥⇧-drag across the row selects the points in that stretch; ⇧→ and ⇧← take in one more with the keys. A drag of one of them, the arrow keys and Delete then work on all of them, as one piece (`AutomationLane.moving(_:byFrames:byValue:limit:)`): the piece stops when any of its points is a frame short of a neighbour that isn't moving, at an end of the timeline, or when one of its values reaches the edge of what the lane may have, so the distances and the shape are kept. A click on one of several, without moving, selects that one alone. The status line says how many ("3 points selected", "2 points moved"). Tried by script, 13 checks: two points dragged together (same time, same value, the others untouched, one undo), the piece dragged far (stops a frame before the next point, keeps its length), a ⌥⇧-drag selecting three, ↓ on the three, ⇧→ twice and a 10 ms step, Delete on three and one undo; seen as a picture.
+
+**Not built, and not tried:** send lanes; snapping to the tempo grid. **Not tried:** VoiceOver itself reading the announcements (the tree and the announcement call were checked, not the speech; on Anders's list for his own half-minute try). ⌃ against snapping was tried with safepointer's new `--ctrl` (dropped 4 points from a marker, it stays where the pointer was).
 
 **Release.** Automation stays out of Release until both halves have been seen as pictures by the coordinator and in the app by Anders.
 

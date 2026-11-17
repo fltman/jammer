@@ -239,7 +239,7 @@ final class AssistantModel {
     func cancelPending() {
         pending = nil
         pendingImpact = nil
-        messages.append(Message(role: .note, text: "Cancelled; nothing changed."))
+        messages.append(Message(role: .note, text: "Canceled; nothing changed."))
     }
 
     /// Steps (and macros) run together as one undo step; jobs and measurements run in

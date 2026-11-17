@@ -325,6 +325,54 @@
         }
       }
     },
+    "automation.points.moved": {
+      "comment": "Status line: several points were moved together.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld point moved"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld points moved"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "automation.points.selected": {
+      "comment": "Status line and VoiceOver: how many points of a lane are selected.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld point selected"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld points selected"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "automation.removed.gain": {
       "comment": "Status line when a lane’s last point was deleted. %@ is the track.",
       "extractionState": "manual",
@@ -380,7 +428,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Centre"
+            "value": "Center"
           }
         }
       }

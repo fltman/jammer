@@ -92,6 +92,28 @@ def check(root, require=None):
                     if re.search(r'[A-Za-zÅÄÖåäö]{2}', re.sub(r'\\\([^)]*\)', '', text)):
                         faults.append(f'{path}:{n}: text for the user written in the code: "{text[:60]}"')
     faults += text_logic(root)
+    faults += british(root, strings)
+    return faults
+
+# The interface's English is American, as Apple's (the-apps/SIBLINGS.md, "Språk"): Center, Color, Gray,
+# Canceled. Looked for in the catalogue's English and in the texts written in the app's code. A literal
+# that is one word of code (a key, a field of the agent API such as "analysedSeconds") is not a text.
+BRITISH = re.compile(r'\b(centre|colour|grey|cancell(?:ed|ing)|behaviour|favour|normalis|organis|recognis|licence|analys(?:e|ed|ing)\b|catalogue|labelled|travell|programme|metre)', re.I)
+def british(root, strings):
+    faults = []
+    for key, entry in sorted(strings.items()):
+        loc = entry.get('localizations', {}).get('en', {})
+        for _, text in units(loc):
+            m = BRITISH.search(text)
+            if m: faults.append(f'{key} (en): "{m.group(1)}" is the British form; the interface\'s English is American')
+    app = os.path.join(root, 'App')
+    for name in sorted(os.listdir(app)):
+        if not name.endswith('.swift'): continue
+        for n, row in enumerate(open(os.path.join(app, name), encoding='utf-8'), 1):
+            for lit in re.findall(r'"((?:[^"\\]|\\.)*)"', row.split('//')[0]):
+                if re.fullmatch(r'[A-Za-z][A-Za-z0-9_.\-]*', lit) and not lit[0].isupper(): continue
+                m = BRITISH.search(re.sub(r'\\\([^)]*\)', '', lit))
+                if m: faults.append(f'App/{name}:{n}: "{m.group(1)}" is the British form; the interface\'s English is American')
     return faults
 
 # Logic must not hang on a text the user sees (the-apps/SIBLINGS.md, "Språk"): a status line, a title, a
@@ -151,11 +173,13 @@ def self_test(root):
             'a count asked for as a text': (None, None, 'let e = L10n.text("a.count", 2)\n'),
             'user text in a file listed as moved': (None, 'App/Code.swift\n', 'Text("Hello there")\n'),
             'an alert text in a file listed as moved': (None, 'App/Code.swift\n', 'alert.messageText = "Send it?"\n'),
+            'a British form in the catalogue': (lambda s: s['a.one']['localizations']['en']['stringUnit'].update(value='Centre %@'), None, ''),
+            'a British form in a text in the code': (None, None, 'note("Cancelled; nothing changed.")\n'),
             'a colour chosen by a line\'s first word': (None, None, 'let c = line.hasPrefix("Warning") ? red : green\n'),
             'a decision made on the status line\'s words': (None, None, 'if session.status == "Uploading the files" { ask() }\n'),
         }
         bad = []
-        clean = run(None, 'App/Code.swift\n', 'Text(L10n.text("a.one", x)); Text("\\(n)")\nif title == "Fcpxml" { } // not a shown text: the format\'s own word\nif op.name == "limit" { }\n')
+        clean = run(None, 'App/Code.swift\n', 'Text(L10n.text("a.one", x)); Text("\\(n)")\nif title == "Fcpxml" { } // not a shown text: the format\'s own word\nif op.name == "limit" { }\nlet f = info["analysedSeconds"]\n')
         if clean: bad.append('the clean copy was faulted: ' + '; '.join(clean))
         for name, (mutate, moved, extra) in plants.items():
             if not run(mutate, moved, extra): bad.append('not caught: ' + name)

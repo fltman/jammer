@@ -17,7 +17,7 @@ struct MixerSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Mixer").font(.title2.bold())
-            Text("Tracks go to the output, or to a bus that gathers several of them under one level. A document without buses, with every pan in the centre, plays exactly as it always did.")
+            Text("Tracks go to the output, or to a bus that gathers several of them under one level. A document without buses, with every pan in the center, plays exactly as it always did.")
                 .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             ScrollView {
                 VStack(alignment: .leading, spacing: 6) {
@@ -315,7 +315,7 @@ private struct MixerStrip: View {
         }
         return parts.isEmpty ? nil : L10n.text("mixer.automation.line", parts.joined(separator: L10n.text("mixer.automation.separator")))
     }
-    static func panText(_ p: Double) -> String { p == 0 ? "Centre" : "\(Int((abs(p) * 100).rounded())) % \(p < 0 ? "left" : "right")" }
+    static func panText(_ p: Double) -> String { p == 0 ? "Center" : "\(Int((abs(p) * 100).rounded())) % \(p < 0 ? "left" : "right")" }
 
     /// What is heard when the strip is in a group: the slider is the strip's own level, and this says
     /// the level with the group's, or that the group's mute is why it is silent.

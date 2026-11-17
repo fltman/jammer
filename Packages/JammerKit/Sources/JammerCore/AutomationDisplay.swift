@@ -146,6 +146,25 @@ extension AutomationLane {
         out.points[i] = placed(i, frame: frame, value: value, limit: limit)
         return out
     }
+    /// The lane with several points moved together, by the same time and the same value: as one piece.
+    /// The piece stops when any of its points is one frame short of a neighbour that isn't moving, or
+    /// at an end of the timeline, or when one of its values reaches the edge of what the lane may have;
+    /// so the points keep their distances and their shape, and nothing passes anything. A mute's values stay.
+    public func moving(_ indices: Set<Int>, byFrames: Frame, byValue: Double, limit: Frame) -> AutomationLane {
+        let chosen = indices.filter { points.indices.contains($0) }.sorted()
+        guard !chosen.isEmpty else { return self }
+        var lo = Frame.min, hi = Frame.max
+        for i in chosen {
+            if !indices.contains(i - 1) { lo = max(lo, (i > 0 ? points[i - 1].frame + 1 : 0) - points[i].frame) }
+            if !indices.contains(i + 1) { hi = min(hi, (i < points.count - 1 ? points[i + 1].frame - 1 : max(limit, points[i].frame)) - points[i].frame) }
+        }
+        let df = lo <= hi ? min(max(byFrames, lo), hi) : 0
+        let range = Automation.range(of: param), values = chosen.map { points[$0].value }
+        let dv = param == .mute ? 0 : min(max(byValue, range.lowerBound - values.min()!), range.upperBound - values.max()!)
+        var out = self
+        for i in chosen { out.points[i] = AutomationPoint(frame: points[i].frame + df, value: points[i].value + dv) }
+        return out
+    }
     /// The lane with a point more, and where it is; nil when there is a point at that frame already.
     public func adding(frame: Frame, value: Double) -> (lane: AutomationLane, index: Int)? {
         guard !points.contains(where: { $0.frame == frame }) else { return nil }
