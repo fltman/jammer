@@ -21272,56 +21272,53 @@
         }
       }
     },
-    "pluginSettings.ask.load": {
-      "comment": "Alert button.",
+    "pluginSettings.ask.loadConfined": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Load Settings"
+            "value": "Load in Separate Processes"
           }
         },
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Läs in inställningar"
+            "value": "Ladda i separata processer"
           }
         }
       }
     },
-    "pluginSettings.ask.row": {
-      "comment": "A row in the list of plugins a project brings settings for. %1$@ is the plugin, %2$@ the track or bus.",
+    "pluginSettings.ask.rowKind": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "• %1$@ on “%2$@”"
+            "value": "• %1$@ (%2$@) on “%3$@”"
           }
         },
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "• %1$@ på ”%2$@”"
+            "value": "• %1$@ (%2$@) på ”%3$@”"
           }
         }
       }
     },
-    "pluginSettings.ask.text": {
-      "comment": "Alert text. %1$@ is the document, %2$@ the list of plugins.",
+    "pluginSettings.ask.textConfined": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "“%1$@” brings saved settings for:\n\n%2$@\n\nSettings are data the plugin reads, and they weren’t made in this Jämmer. If the project is your own, or you trust where it came from, load them. Otherwise open it without: those plugins aren’t started and their tracks play without them."
+            "value": "“%1$@” brings saved settings for:\n\n%2$@\n\nSettings are data the plugin reads, and they weren’t made in this Jämmer. If you load them, each of these plugins runs in a process of its own, so a plugin that misreads them can’t take Jämmer down with it; that costs a little more of the computer. Otherwise open the project without them: those plugins aren’t started."
           }
         },
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "”%1$@” har med sig sparade inställningar för:\n\n%2$@\n\nInställningar är data som pluginen läser, och de gjordes inte i den här Jämmer. Om projektet är ditt eget, eller om du litar på var det kommer ifrån, läs in dem. Annars öppnar du det utan: de pluginerna startas inte och deras spår spelar utan dem."
+            "value": "”%1$@” har med sig sparade inställningar för:\n\n%2$@\n\nInställningar är data som pluginen läser, och de gjordes inte i den här Jämmer. Laddar du dem körs var och en av de här pluginerna i en egen process, så att en plugin som läser dem fel inte kan dra med sig Jämmer; det kostar lite mer av datorn. Annars öppnar du projektet utan dem: de pluginerna startas inte."
           }
         }
       }
@@ -21362,8 +21359,109 @@
         }
       }
     },
-    "pluginSettings.loaded": {
-      "comment": "Status line.",
+    "pluginSettings.kind.au": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Audio Unit %1$@, maker %2$@"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Audio Unit %1$@, tillverkare %2$@"
+          }
+        }
+      }
+    },
+    "pluginSettings.kind.clap": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CLAP, in a helper process"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CLAP, i ett hjälpprogram"
+          }
+        }
+      }
+    },
+    "pluginSettings.kind.effect": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "effect"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "effekt"
+          }
+        }
+      }
+    },
+    "pluginSettings.kind.instrument": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "instrument"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "instrument"
+          }
+        }
+      }
+    },
+    "pluginSettings.kind.musicEffect": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "music effect"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "musikeffekt"
+          }
+        }
+      }
+    },
+    "pluginSettings.kind.vst3": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VST 3, in a helper process"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VST 3, i ett hjälpprogram"
+          }
+        }
+      }
+    },
+    "pluginSettings.loadedConfined": {
       "extractionState": "manual",
       "localizations": {
         "en": {
@@ -21372,13 +21470,13 @@
               "one": {
                 "stringUnit": {
                   "state": "translated",
-                  "value": "Loaded the project’s settings into %lld plugin."
+                  "value": "Loaded the project’s settings into %lld plugin, which runs in a process of its own."
                 }
               },
               "other": {
                 "stringUnit": {
                   "state": "translated",
-                  "value": "Loaded the project’s settings into %lld plugins."
+                  "value": "Loaded the project’s settings into %lld plugins, each in a process of its own."
                 }
               }
             }
@@ -21390,13 +21488,13 @@
               "one": {
                 "stringUnit": {
                   "state": "translated",
-                  "value": "Läste in projektets inställningar i %lld plugin."
+                  "value": "Laddade projektets inställningar i %lld plugin, som körs i en egen process."
                 }
               },
               "other": {
                 "stringUnit": {
                   "state": "translated",
-                  "value": "Läste in projektets inställningar i %lld pluginer."
+                  "value": "Laddade projektets inställningar i %lld pluginer, var och en i en egen process."
                 }
               }
             }

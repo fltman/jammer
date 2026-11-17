@@ -262,8 +262,18 @@ public enum InsertUnits {
     /// nil: every state is loaded (tests, tools).
     nonisolated(unsafe) public static var withheld: (@Sendable (_ plugin: PluginID, _ state: Data) -> Bool)?
 
+    /// Settings from elsewhere that the user allowed only out of process (Anders, 2026-11-18): an Audio Unit
+    /// that gets them runs in a process of its own (as in Safe Mode) whatever the app's setting is, so a
+    /// plugin that a crafted project makes misbehave takes only that process down. nil: no such settings.
+    nonisolated(unsafe) public static var confined: (@Sendable (_ plugin: PluginID, _ state: Data) -> Bool)?
+
     static func check(_ plugin: PluginID, _ state: Data?) throws {
         if let state, let withheld, withheld(plugin, state) { throw PluginError.withheld(plugin.description) }
+    }
+
+    /// Whether an Audio Unit with `state` runs out of process: the app's Safe Mode, or settings that may only load there.
+    public static func runsOutOfProcess(_ plugin: PluginID, state: Data?, safeMode: Bool) -> Bool {
+        safeMode || (state.map { s in confined?(plugin, s) ?? false } ?? false)
     }
 
     static func makeExternal(_ plugin: PluginID, channels: Int, sampleRate: Double, state: Data?) throws -> any InsertUnit {
@@ -280,14 +290,16 @@ public enum InsertUnits {
             // Starting a helper process can take a moment: not on the caller's thread.
             return try await Task.detached(priority: .userInitiated) { try makeExternal(plugin, channels: channels, sampleRate: sampleRate, state: state) }.value
         }
-        return try await PluginInstance.make(plugin, channels: channels, sampleRate: sampleRate, state: state, outOfProcess: outOfProcess)
+        return try await PluginInstance.make(plugin, channels: channels, sampleRate: sampleRate, state: state,
+                                             outOfProcess: runsOutOfProcess(plugin, state: state, safeMode: outOfProcess))
     }
 
     /// The same, waiting on this thread (background only).
     public static func makeBlocking(_ plugin: PluginID, channels: Int, sampleRate: Double, state: Data? = nil, outOfProcess: Bool = false) throws -> any InsertUnit {
         try check(plugin, state)
         if plugin.format != .au { return try makeExternal(plugin, channels: channels, sampleRate: sampleRate, state: state) }
-        return try PluginInstance.makeBlocking(plugin, channels: channels, sampleRate: sampleRate, state: state, outOfProcess: outOfProcess)
+        return try PluginInstance.makeBlocking(plugin, channels: channels, sampleRate: sampleRate, state: state,
+                                               outOfProcess: runsOutOfProcess(plugin, state: state, safeMode: outOfProcess))
     }
 }
 

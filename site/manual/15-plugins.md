@@ -38,5 +38,5 @@ The agent API can list the installed plugins, add and remove them, set parameter
 A project saves each plugin's settings, and settings are data that the plugin reads. Settings made in your own Jämmer are simply loaded. When a project brings settings that weren't made here (a project someone sent you, or your own from another Mac), Jämmer asks first: "This project wants to load settings into …", with the plugins listed.
 
 - **Open Without Them** is the safe answer for a project you don't know: those plugins aren't started, and their tracks play without them. Nothing in the project is changed.
-- **Load Settings** starts the plugins with the project's settings, and doesn't ask about those settings again.
+- **Load in Separate Processes** starts the plugins with the project's settings, each in a process of its own, so a plugin that misreads them can't take Jämmer down with it. It costs a little more of the computer. Jämmer doesn't ask about those settings again, and a plugin that started this way stays in its own process, also with the settings it makes afterwards. The question names each plugin's kind and maker.
 

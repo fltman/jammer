@@ -233,6 +233,28 @@ struct InsertTests {
         func contains(_ d: Data) -> Bool { lock.withLock { states.contains(d) } }
     }
 
+    @Test("Settings from elsewhere that the user allowed load only out of process (Anders, 2026-11-18): the Audio Unit runs in a process of its own with them, in its own process with settings made here, and in Safe Mode always out")
+    func confinedSettings() async throws {
+        let maker = try await PluginInstance.make(Self.lowpass, channels: 2, sampleRate: sr)
+        try maker.set("global.0", to: 317.5)
+        let foreign = try #require(maker.captureState())
+        try maker.set("global.0", to: 9_871.5)
+        let own = try #require(maker.captureState())
+        InsertUnits.confined = { _, state in Self.held.contains(state) }
+        Self.held.set([foreign])
+        defer { Self.held.set([]); InsertUnits.confined = nil }
+        #expect(InsertUnits.runsOutOfProcess(Self.lowpass, state: foreign, safeMode: false))
+        #expect(!InsertUnits.runsOutOfProcess(Self.lowpass, state: own, safeMode: false) && !InsertUnits.runsOutOfProcess(Self.lowpass, state: nil, safeMode: false))
+        #expect(InsertUnits.runsOutOfProcess(Self.lowpass, state: own, safeMode: true))
+        let out = try #require(try await InsertUnits.make(Self.lowpass, channels: 2, sampleRate: 48_000, state: foreign) as? PluginInstance)
+        #expect(!out.avUnit.auAudioUnit.isLoadedInProcess, "settings from elsewhere: a process of its own")
+        #expect(abs((out.parameters.first { $0.identifier == "global.0" }?.value ?? 0) - 317.5) < 0.01, "with those settings")
+        let here = try #require(try await InsertUnits.make(Self.lowpass, channels: 2, sampleRate: 48_000, state: own) as? PluginInstance)
+        #expect(here.avUnit.auAudioUnit.isLoadedInProcess, "settings made here: in Jämmer's process, as before")
+        let blocking = try #require(try InsertUnits.makeBlocking(Self.lowpass, channels: 2, sampleRate: 48_000, state: foreign) as? PluginInstance)
+        #expect(!blocking.avUnit.auAudioUnit.isLoadedInProcess)
+    }
+
     @Test("Settings that haven't been allowed are not loaded into a plugin: not at the start, not into a running one, until they are allowed")
     func withheldSettings() async throws {
         let dir = TempDir()
