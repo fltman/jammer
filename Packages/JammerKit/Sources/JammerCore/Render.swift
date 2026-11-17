@@ -192,7 +192,7 @@ public enum PlanCompiler {
     /// A field's matrix with no turn, always given (its components one for one when the document is the field).
     static func fieldBase(_ ref: SourceRef, in project: Project) -> [Float] {
         let n = ref.info.channels, out = project.channels
-        if let m = project.layout.matrix(sourceChannels: n, sourceMask: ref.info.channelMask, fieldOrder: ref.fieldOrder, sourceOrder: ref.info.channelOrder) { return m }
+        if let m = project.layout.matrix(sourceChannels: n, sourceMask: ref.info.channelMask, fieldOrder: ref.fieldOrder, sourceOrder: ref.speakerOrder) { return m }
         return (0..<n).flatMap { k in (0..<out).map { Float(k == $0 ? 1 : 0) } }
     }
 
@@ -326,7 +326,7 @@ public enum PlanCompiler {
                     index = jm_plan_add_source(plan, s)
                     indices[ref.id] = index
                     // Into a layout wider than stereo (or from one): each channel to its loudspeaker.
-                    if let m = project.layout.matrix(sourceChannels: ref.info.channels, sourceMask: ref.info.channelMask, fieldOrder: ref.fieldOrder, sourceOrder: ref.info.channelOrder) {
+                    if let m = project.layout.matrix(sourceChannels: ref.info.channels, sourceMask: ref.info.channelMask, fieldOrder: ref.fieldOrder, sourceOrder: ref.speakerOrder) {
                         m.withUnsafeBufferPointer { jm_plan_set_source_matrix(plan, index, $0.baseAddress!, Int32(ref.info.channels)) }
                     }
                 }

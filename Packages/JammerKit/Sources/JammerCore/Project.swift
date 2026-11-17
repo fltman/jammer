@@ -21,6 +21,23 @@ public struct SourceRef: Codable, Hashable, Sendable, Identifiable {
     /// The file is a sound field (AmbiX) of this order: set when its document was made Ambisonics of that order,
     /// or by `set_track` `field`. Nothing in a WAV says so. Into loudspeakers a field is decoded (AllRAD).
     public var fieldOrder: Int?
+    /// How a file of 8 or 12 channels with no channel mask and no ADM names is heard: in BS.2051's order (sides
+    /// before rears; Anders, 2026-11-17, and what a user's file opened from now gets, `opened()`) or in the WAV
+    /// mask's (rears before sides). nil is the WAV mask's, as every project saved before had it, and as every
+    /// file Jämmer writes itself is.
+    public var unmaskedOrder: ChannelOrder?
+
+    /// Whether nothing in the file says its loudspeakers' order: 7.1 or 7.1.4 without a mask or ADM's chna.
+    /// (5.1 is the same in both orders.)
+    public var needsOrder: Bool {
+        (info.channelMask ?? 0) == 0 && info.channelOrder == nil && fieldOrder == nil && (info.channels == 8 || info.channels == 12)
+    }
+    /// The order the file is heard in when it isn't the document layout's own: from ADM, or by the choice above.
+    public var speakerOrder: [Speaker]? {
+        if let named = info.channelOrder { return named }
+        guard needsOrder, unmaskedOrder == .bs2051 else { return nil }
+        return ChannelOrder.bs2051(channels: info.channels)
+    }
 
     public func withRepairs(_ r: [String]?) -> SourceRef {
         var s = self
@@ -37,8 +54,39 @@ public struct SourceRef: Codable, Hashable, Sendable, Identifiable {
         self.originalPath = originalPath
     }
 
-    public static func == (a: SourceRef, b: SourceRef) -> Bool { a.id == b.id && a.path == b.path }
+    /// A user's own file, opened as it is: when it doesn't say its loudspeakers' order, heard in BS.2051's
+    /// (Anders, 2026-11-17). Files Jämmer writes itself (frozen tracks, repairs, a decoded MP3 or FLAC) are in
+    /// the document's own order, the WAV mask's, and keep nil.
+    public func opened() -> SourceRef {
+        var s = self
+        if s.needsOrder { s.unmaskedOrder = .bs2051 }
+        return s
+    }
+
+    /// The same file, heard the same way: a change of how it is heard (a field's order, the order of a file without
+    /// a mask) is a change of the project, which the window keeps and undoes. (Until 2026-11-17 only the id and
+    /// the path were compared, so a step that changed nothing else, set_track `field` alone, was dropped.)
+    public static func == (a: SourceRef, b: SourceRef) -> Bool {
+        a.id == b.id && a.path == b.path && a.fieldOrder == b.fieldOrder && a.unmaskedOrder == b.unmaskedOrder
+    }
     public func hash(into h: inout Hasher) { h.combine(id) }
+}
+
+/// The order of a 7.1 or 7.1.4 file's channels when the file doesn't say it.
+public enum ChannelOrder: String, Codable, Sendable, CaseIterable {
+    /// The WAV mask's bits in rising order: L R C LFE Lrs Rrs Lss Rss (Ltf Rtf Ltr Rtr), as ffmpeg reads it.
+    case wav
+    /// ITU-R BS.2051's: L R C LFE Lss Rss Lrs Rrs (Ltf Rtf Ltr Rtr), the sides first, as the ITU's own files.
+    case bs2051
+
+    static func bs2051(channels: Int) -> [Speaker]? {
+        let ear: [Speaker] = [.frontLeft, .frontRight, .frontCenter, .lowFrequency, .sideLeft, .sideRight, .backLeft, .backRight]
+        switch channels {
+        case 8: return ear
+        case 12: return ear + [.topFrontLeft, .topFrontRight, .topBackLeft, .topBackRight]
+        default: return nil
+        }
+    }
 }
 
 public enum FadeShape: String, Codable, Sendable, CaseIterable { case linear, equalPower }
@@ -292,7 +340,19 @@ public struct Project: Codable, Equatable, Sendable {
     /// What a project with a sound field marked as such, or turned, is saved as: an app before it would play a
     /// field's components straight into loudspeakers, so it refuses the file instead.
     public static let fieldFormatVersion = 5
-    public static let newestFormatVersion = 5
+    /// What a project with a file heard in BS.2051's order is saved as: an app before it would hear the file's
+    /// sides and rears the other way round, so it refuses the file instead.
+    public static let orderFormatVersion = 6
+    public static let newestFormatVersion = 6
+
+    /// A file without a mask heard in BS.2051's order.
+    public var usesOrder: Bool { sources.contains { $0.needsOrder && $0.unmaskedOrder == .bs2051 } }
+    /// The files whose order is a choice (7.1 or 7.1.4 without a mask or ADM), and the choice of the first.
+    public var unmaskedOrder: ChannelOrder? { sources.first { $0.needsOrder }.map { $0.unmaskedOrder ?? .wav } }
+    /// Hears every file that doesn't say its order in this one.
+    public mutating func setUnmaskedOrder(_ o: ChannelOrder) {
+        for i in sources.indices where sources[i].needsOrder { sources[i].unmaskedOrder = o }
+    }
 
     /// A source marked as a sound field, a track turned, or a lane that turns one.
     public var usesFields: Bool {
@@ -383,7 +443,7 @@ public struct Project: Codable, Equatable, Sendable {
 
     public func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
-        try c.encode(usesFields ? Self.fieldFormatVersion : channels > 2 ? Self.immersiveFormatVersion : usesAutomation ? Self.automationFormatVersion
+        try c.encode(usesOrder ? Self.orderFormatVersion : usesFields ? Self.fieldFormatVersion : channels > 2 ? Self.immersiveFormatVersion : usesAutomation ? Self.automationFormatVersion
                      : usesMixer ? Self.mixerFormatVersion : Self.formatVersion, forKey: .formatVersion)
         try c.encode(sampleRate, forKey: .sampleRate)
         try c.encode(channels, forKey: .channels)
@@ -441,7 +501,7 @@ public struct Project: Codable, Equatable, Sendable {
     /// A project with one track playing the whole file.
     public init(source: SourceRef) {
         // A file in a layout this app knows keeps it (a 5.1 file is a 5.1 document); any other is heard as stereo, as before.
-        let layout = ChannelLayout.of(channels: source.info.channels, mask: source.info.channelOrder.map { $0.reduce(0) { $0 | $1.rawValue } } ?? source.info.channelMask)
+        let layout = ChannelLayout.of(channels: source.info.channels, mask: source.speakerOrder.map { $0.reduce(0) { $0 | $1.rawValue } } ?? source.info.channelMask)
         self.init(sampleRate: source.info.sampleRate, channels: layout?.channels ?? max(1, min(2, source.info.channels)))
         sources = [source]
         tracks = [Track(name: source.name, clips: [Clip(sourceID: source.id, start: 0, length: source.info.frames)])]

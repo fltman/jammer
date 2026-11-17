@@ -26,12 +26,15 @@ for line in open(sys.argv[1] if len(sys.argv) > 1 else os.path.join(root, "Confi
 tops = {p.split(" › ")[0] for p in menus}
 
 # Written with › but not menu items: Settings' tabs and what is inside them, items whose title carries a file's name,
-# items only a window that edits a linked file has, and Undo and Redo, whose titles name the step.
+# items only a window that edits a linked file has (or a document with a file of open channel order), and Undo and
+# Redo, whose titles name the step.
 def excused(path):
     parts = path.split(" › ")
     if parts[0] == "Jämmer" and len(parts) > 2 and parts[1] in ("Settings", "Settings…"): return True   # Jämmer › Settings… › Agents
     if path.startswith("File › Save Back to "): return True        # "Save Back to clip.wav"
     if path == "File › Save a Jämmer Copy…": return True           # only in a window that edits a file linked from Flimmer
+    # Only in a document with a 7.1 or 7.1.4 file that names no loudspeakers (seen in such a window, 2026-11-17).
+    if path in ("Audio › Layout › Unmarked File: Sides First (ITU-R BS.2051)", "Audio › Layout › Unmarked File: Rears First (WAV Order)"): return True
     if path in ("Edit › Undo", "Edit › Redo"): return True
     return False
 

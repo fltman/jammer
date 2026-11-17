@@ -464,6 +464,12 @@ final class JammerDocumentController: NSDocumentController {
         unsafeBitCast(target.method(for: selector), to: Callback.self)(target, selector, controller, didReviewAll, contextInfo)
     }
 
+    /// What the status line says of a 7.1 or 7.1.4 file that names no loudspeakers: the order it is heard in.
+    static func orderNote(_ s: SourceRef) -> String? {
+        guard s.needsOrder else { return nil }
+        return s.unmaskedOrder == .bs2051 ? L10n.text("status.unmasked.bs2051", s.name) : L10n.text("status.unmasked.wav", s.name)
+    }
+
     override func makeDocument(withContentsOf url: URL, ofType typeName: String) throws -> NSDocument {
         guard let type = UTType(typeName), !type.conforms(to: .jammerProject), type.conforms(to: .audio) else {
             return try super.makeDocument(withContentsOf: url, ofType: typeName)
@@ -472,7 +478,7 @@ final class JammerDocumentController: NSDocumentController {
         do { result = try AudioImporter.importFile(url, mediaFolder: MediaStore.folder) } catch { throw OpenFailure.saying(error) }
         let doc = JammerDocument()
         doc.pendingProject = Project(source: result.source)
-        doc.pendingStatus = result.warning
+        doc.pendingStatus = [result.warning, Self.orderNote(result.source)].compactMap { $0 }.joined(separator: " ").nilIfEmpty
         // The user picked this file: a project saved from it may read it again.
         MainActor.assumeIsolated { ProjectAccess.approve([url]) }
         doc.displayName = url.deletingPathExtension().lastPathComponent
@@ -491,4 +497,9 @@ final class JammerDocumentController: NSDocumentController {
         doc.showWindows()
         return doc
     }
+}
+
+extension String {
+    /// nil for an empty string (lines joined from parts that may all be missing).
+    var nilIfEmpty: String? { isEmpty ? nil : self }
 }

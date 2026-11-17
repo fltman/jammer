@@ -681,6 +681,8 @@ enum AgentRouter {
         d["selection"] = s.selection.map { ["start": seconds(s, $0.lowerBound), "end": seconds(s, $0.upperBound)] } ?? NSNull()
         d["playhead"] = seconds(s, s.playhead)
         d["layout"] = p.layout.rawValue
+        // A 7.1 or 7.1.4 file that names no loudspeakers: the order it is heard in (set_layout's `order`).
+        if let o = p.unmaskedOrder { d["unmaskedOrder"] = o.rawValue }
         // How the sound reaches the device: hal, audioUnit, binaural (the spatial mixer for headphones) or spatialSpeakers
         // (the spatial mixer for loudspeakers, an Ambisonics document); null before the first play.
         d["outputPath"] = s.output.path?.rawValue ?? NSNull()
@@ -871,13 +873,29 @@ enum AgentRouter {
     }
 
     private static func createDocument(_ r: AgentAPI.Request) async throws -> Response {
-        let (source, warning) = try await importedSource(r)
+        // ?order=bs2051|wav: how a 7.1 or 7.1.4 file that names no loudspeakers is heard (set_layout's `order`).
+        var order: ChannelOrder?
+        if let name = r.query["order"] {
+            guard let o = ChannelOrder(rawValue: name) else {
+                throw APIError.badRequest("order is one of \(ChannelOrder.allCases.map(\.rawValue).joined(separator: ", ")), not \"\(name.prefix(40))\".")
+            }
+            order = o
+        }
+        var (source, warning) = try await importedSource(r)
+        if let order {
+            guard source.needsOrder else {
+                // The bytes were saved for this document only (Jämmer's media folder): not kept for one that isn't made.
+                try? FileManager.default.removeItem(atPath: source.path)
+                throw APIError.badRequest("order means nothing for this file: it isn't 7.1 or 7.1.4 without a channel mask or ADM (a file that names its loudspeakers is heard by them).")
+            }
+            source.unmaskedOrder = order
+        }
         guard let controller = NSDocumentController.shared as? JammerDocumentController else {
             throw APIError.internalError("The document controller isn't Jämmer's.")
         }
         let doc = controller.open(Project(source: source), name: source.name)
         guard let session = doc.session else { throw APIError.internalError("The document window didn't open.") }
-        if let warning { session.status = warning }
+        if let note = [warning, JammerDocumentController.orderNote(source)].compactMap({ $0 }).joined(separator: " ").nilIfEmpty { session.status = note }
         // A sibling that makes a document is shown too, not only one that changes it.
         if let sib = r.headers["x-sibling"]?.lowercased() { session.status = L10n.text("status.requestedBy", siblingNames[sib] ?? sib) }
         var answer: [String: Any] = ["document": detail(session)]

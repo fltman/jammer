@@ -614,11 +614,12 @@ Adds a marker, or a region when `duration` is given.
 
 ### `set_layout`
 
-Sets the document's loudspeaker layout. Nothing is converted: every source keeps its own channels and goes into the new layout by its loudspeakers (a voice to the center, a stereo pair to L and R; a wider source folded down by ITU-R BS.775 and the steps docs/IMMERSIVE.md names). A layout wider than stereo has no stereo pan yet: pan values and pan lanes are not used in it, and pan lanes are not saved while the document is wider than stereo. Exports are in the layout. info has `channels`.
+Sets the document's loudspeaker layout. Nothing is converted: every source keeps its own channels and goes into the new layout by its loudspeakers (a voice to the center, a stereo pair to L and R; a wider source folded down by ITU-R BS.775 and the steps docs/IMMERSIVE.md names). A layout wider than stereo has no stereo pan yet: pan values and pan lanes are not used in it, and pan lanes are not saved while the document is wider than stereo. Exports are in the layout. `order` says how a 7.1 or 7.1.4 file that names no loudspeakers (no channel mask, no ADM chna) is heard; a file that names them is always heard by them. info has `channels`, `fields` and `unmaskedFiles` (how many files the order is a choice for).
 
 | Param | Type | Description |
 |---|---|---|
-| `layout` | string | **Required.** The layout. One of: `mono`, `stereo`, `5.1`, `7.1`, `7.1.4`, `ambix1`, `ambix2`, `ambix3`. |
+| `layout` | string | The layout. Leave it out to change only the order. One of: `mono`, `stereo`, `5.1`, `7.1`, `7.1.4`, `ambix1`, `ambix2`, `ambix3`. |
+| `order` | string | How a 7.1 or 7.1.4 file without a channel mask or ADM is heard: bs2051 (ITU-R BS.2051, the sides before the rears: L R C LFE Lss Rss Lrs Rrs; what a file opened now gets) or wav (the WAV mask's, the rears first: L R C LFE Lrs Rrs Lss Rss). Only the hearing changes, not the file. One of: `wav`, `bs2051`. |
 
 ### `set_timecode`
 

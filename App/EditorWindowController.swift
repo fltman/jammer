@@ -766,6 +766,15 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         }
         if item.action == #selector(performOperation(_:)), let op = (item.representedObject as? OperationItem)?.op {
             // The document's layout has its tick.
+            if op == "set_layout", let order = (item.representedObject as? OperationItem)?.params["order"]?.string {
+                // The order of a file that names no loudspeakers: offered only when the document has one, and the
+                // separator above the two with them.
+                let open = session.project.unmaskedOrder
+                item.isHidden = open == nil
+                if let menu = item.menu, let i = menu.items.firstIndex(of: item), i > 0, menu.items[i - 1].isSeparatorItem { menu.items[i - 1].isHidden = open == nil }
+                item.state = open?.rawValue == order ? .on : .off
+                return open != nil
+            }
             if op == "set_layout" { item.state = (item.representedObject as? OperationItem)?.params["layout"]?.string == session.project.layout.rawValue ? .on : .off }
             let needsRange: Set<String> = ["delete", "silence", "crop", "fade_in", "fade_out", "cut", "copy"]
             return !needsRange.contains(op) || session.selection != nil

@@ -14423,6 +14423,40 @@
         }
       }
     },
+    "menu.layout.order.bs2051": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unmarked File: Sides First (ITU-R BS.2051)"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Omärkt fil: sidorna först (ITU-R BS.2051)"
+          }
+        }
+      }
+    },
+    "menu.layout.order.wav": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unmarked File: Rears First (WAV Order)"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Omärkt fil: de bakre först (WAV-ordning)"
+          }
+        }
+      }
+    },
     "menu.layout.stereo": {
       "comment": "Menu item in Audio › Layout.",
       "extractionState": "manual",
@@ -23222,6 +23256,40 @@
         }
       }
     },
+    "status.unmasked.bs2051": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ has no channel mask: its channels are heard in ITU-R BS.2051’s order, the sides before the rears. Audio › Layout changes it."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ har ingen kanalmask: kanalerna hörs i ITU-R BS.2051:s ordning, sidorna före de bakre. Ljud › Högtalaruppställning ändrar det."
+          }
+        }
+      }
+    },
+    "status.unmasked.wav": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ has no channel mask: its channels are heard in the WAV order, the rears before the sides. Audio › Layout changes it."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ har ingen kanalmask: kanalerna hörs i WAV-ordningen, de bakre före sidorna. Ljud › Högtalaruppställning ändrar det."
+          }
+        }
+      }
+    },
     "stems.done": {
       "comment": "Status line. %@ is the list of stems (the model’s own names).",
       "extractionState": "manual",
@@ -25142,6 +25210,57 @@
           "stringUnit": {
             "state": "translated",
             "value": "set_layout: \"layout\" är en av %@."
+          }
+        }
+      }
+    },
+    "step.set_layout.no_unmasked": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "set_layout: no file in this document leaves its loudspeakers’ order open (a 7.1 or 7.1.4 file without a channel mask or ADM); a file that names them is heard by them."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "set_layout: ingen fil i dokumentet lämnar högtalarnas ordning öppen (en 7.1- eller 7.1.4-fil utan kanalmask eller ADM); en fil som namnger dem hörs efter dem."
+          }
+        }
+      }
+    },
+    "step.set_layout.nothing": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "set_layout: give \"layout\", \"order\" or both."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "set_layout: ange \"layout\", \"order\" eller båda."
+          }
+        }
+      }
+    },
+    "step.set_layout.order_one": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "set_layout: \"order\" is one of %@."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "set_layout: \"order\" är en av %@."
           }
         }
       }

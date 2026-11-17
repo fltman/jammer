@@ -49,7 +49,7 @@ public enum AudioImporter {
         }
         if let info = own, sampleRate == nil || sampleRate == info.sampleRate {
             let bookmark = try? url.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil)
-            return Result(source: SourceRef(name: name, path: url.path, bookmark: bookmark, info: info), decoded: false, warning: ownWarning)
+            return Result(source: SourceRef(name: name, path: url.path, bookmark: bookmark, info: info).opened(), decoded: false, warning: ownWarning)
         }
         let (decodedURL, claimedSeconds) = try decode(url, to: mediaFolder, sampleRate: sampleRate, limit: maxDecodedBytes ?? decodedLimit(in: mediaFolder), progress: progress)
         var info: AudioFileInfo

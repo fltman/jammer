@@ -6,8 +6,9 @@ import Testing
 /// value within ±0.1 LKFS (file-based). The files are the ITU's ("All rights reserved"), so they are not in the
 /// repository: fetched once by Anders's leave (2026-11-17) and pointed at with JAMMER_BS2217=<folder>.
 /// The 8- and 12-channel files carry no channel mask; their order is the report's (BS.2051: L R C LFE Lss Rss
-/// Lrs Rrs, then Tfl Tfr Tbl Tbr), which puts the sides before the rears. Jämmer's 7.1 and 7.1.4 are in the
-/// WAV mask's order (rears before sides), so the test moves the channels to Jämmer's order, as a mask would.
+/// Lrs Rrs, then Tfl Tfr Tbl Tbr), which puts the sides before the rears: what a file without a mask is heard
+/// as when opened (`SourceRef.opened()`, Anders's choice). The test reads them as the app does, through a
+/// project's render, and measures what the document plays.
 @Suite("BS.2217: the ITU's compliance files for BS.1770", .enabled(if: ProcessInfo.processInfo.environment["JAMMER_BS2217"] != nil))
 struct BS2217Tests {
     static let folder = URL(fileURLWithPath: ProcessInfo.processInfo.environment["JAMMER_BS2217"] ?? "/nonexistent")
@@ -33,13 +34,13 @@ struct BS2217Tests {
         throw CocoaError(.fileReadCorruptFile)
     }
 
-    /// The report's order into Jämmer's: Lss Rss (4, 5) and Lrs Rrs (6, 7) change places.
-    static func toJammer(_ x: [Float], channels n: Int) -> [Float] {
-        guard n == 8 || n == 12 else { return x }
-        let from = (0..<n).map { $0 == 4 ? 6 : $0 == 5 ? 7 : $0 == 6 ? 4 : $0 == 7 ? 5 : $0 }
-        var y = x
-        for f in 0..<x.count / n { for c in 0..<n { y[f * n + c] = x[f * n + from[c]] } }
-        return y
+    /// The file opened as a document is, in the order chosen, and what the document plays.
+    static func played(_ name: String, order: ChannelOrder?) throws -> (samples: [Float], channels: Int) {
+        let url = folder.appendingPathComponent(name)
+        var ref = SourceRef(name: name, path: url.path, info: try AudioFileReader.info(at: url)).opened()
+        if let order, ref.needsOrder { ref.unmaskedOrder = order }
+        let p = Project(source: ref)
+        return (PlanCompiler.compile(p, pool: SourcePool()).render(from: 0, frames: Int(ref.info.frames)), p.channels)
     }
 
     static func integrated(_ x: [Float], channels n: Int) -> Double? {
@@ -61,13 +62,17 @@ struct BS2217Tests {
     @Test("Mono, stereo, 5.1, 7.1 (0+7+0) and 7.1.4 (4+7+0): each file reads its value within ±0.1 LKFS", arguments: cases)
     func compliance(_ c: (String, Double)) throws {
         let (raw, n) = try Self.read(c.0)
-        let ours = try #require(Self.integrated(Self.toJammer(raw, channels: n), channels: n))
+        let (x, docChannels) = try Self.played(c.0, order: nil)
+        #expect(docChannels == n)
+        let ours = try #require(Self.integrated(x, channels: n))
         print("BS2217 \(c.0): \(String(format: "%.3f", ours)) (the report: \(c.1))")
         #expect(abs(ours - c.1) <= 0.1, "\(c.0): \(ours)")
         if n == 8 || n == 12 {
-            // Read in the WAV mask's order instead (what Jämmer does with a file that has no mask): said, not held.
-            let asIs = Self.integrated(raw, channels: n) ?? .nan
-            print("BS2217 \(c.0) in the mask's order: \(String(format: "%.3f", asIs))")
+            // Heard in the WAV order instead (the other choice): said, not held; the same as the raw file measured.
+            let (w, _) = try Self.played(c.0, order: .wav)
+            let asIs = Self.integrated(w, channels: n) ?? .nan
+            #expect(abs(asIs - (Self.integrated(raw, channels: n) ?? .nan)) < 1e-9)
+            print("BS2217 \(c.0) in the WAV order: \(String(format: "%.3f", asIs))")
         }
     }
 }

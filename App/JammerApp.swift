@@ -322,7 +322,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // The document's loudspeakers: a value of the document, undone like any other change.
             submenu(L10n.text("menu.layout"), ChannelLayout.allCases.map { l in
                 op(L10n.layoutTitle(l), "set_layout", ["layout": .string(l.rawValue)])
-            }),
+            } + [
+                // How a 7.1 or 7.1.4 file that names no loudspeakers is heard; shown only when the document has one.
+                NSMenuItem.separator(),
+                op(L10n.text("menu.layout.order.bs2051"), "set_layout", ["order": .string(ChannelOrder.bs2051.rawValue)]),
+                op(L10n.text("menu.layout.order.wav"), "set_layout", ["order": .string(ChannelOrder.wav.rawValue)]),
+            ]),
         ]))
         main.addItem(submenu(L10n.text("menu.transport"), [
             // Space and Return are handled by the timeline, so text fields keep them.

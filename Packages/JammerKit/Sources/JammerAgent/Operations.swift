@@ -361,8 +361,10 @@ public enum Operations {
               params: [.init("at", .seconds, "Position in seconds. Defaults to the selection start, else the playhead."),
                        .init("name", .string, "Marker name.", required: true),
                        .init("duration", .seconds, "Region length in seconds.")]),
-        .init("set_layout", "Set Layout", "Sets the document's loudspeaker layout. Nothing is converted: every source keeps its own channels and goes into the new layout by its loudspeakers (a voice to the center, a stereo pair to L and R; a wider source folded down by ITU-R BS.775 and the steps docs/IMMERSIVE.md names). A layout wider than stereo has no stereo pan yet: pan values and pan lanes are not used in it, and pan lanes are not saved while the document is wider than stereo. Exports are in the layout. info has `channels`.",
-              params: [.init("layout", .string, "The layout.", required: true, options: ChannelLayout.allCases.map(\.rawValue))]),
+        .init("set_layout", "Set Layout", "Sets the document's loudspeaker layout. Nothing is converted: every source keeps its own channels and goes into the new layout by its loudspeakers (a voice to the center, a stereo pair to L and R; a wider source folded down by ITU-R BS.775 and the steps docs/IMMERSIVE.md names). A layout wider than stereo has no stereo pan yet: pan values and pan lanes are not used in it, and pan lanes are not saved while the document is wider than stereo. Exports are in the layout. `order` says how a 7.1 or 7.1.4 file that names no loudspeakers (no channel mask, no ADM chna) is heard; a file that names them is always heard by them. info has `channels`, `fields` and `unmaskedFiles` (how many files the order is a choice for).",
+              params: [.init("layout", .string, "The layout. Leave it out to change only the order.", options: ChannelLayout.allCases.map(\.rawValue)),
+                       .init("order", .string, "How a 7.1 or 7.1.4 file without a channel mask or ADM is heard: bs2051 (ITU-R BS.2051, the sides before the rears: L R C LFE Lss Rss Lrs Rrs; what a file opened now gets) or wav (the WAV mask's, the rears first: L R C LFE Lrs Rrs Lss Rss). Only the hearing changes, not the file.",
+                             options: ChannelOrder.allCases.map(\.rawValue))]),
         .init("set_timecode", "Set Timecode", "Gives the document the picture's timecode (SMPTE): the frame rate, and the timecode at the start of the timeline. The document then says where the playhead is in timecode (`timecode` in GET …/documents/{id}), and nothing about the sound changes. rate none takes it away. info has `startFrames`.",
               params: [.init("rate", .string, "The picture's frame rate. The two ending in df count drop-frame (the clock keeps real time; written with a semicolon before the frames).", required: true,
                              options: Timecode.Rate.allCases.map(\.rawValue) + ["none"]),
@@ -1328,13 +1330,28 @@ public enum StepRunner {
             let at = min(frames("at") ?? s.selection?.lowerBound ?? s.playhead, project.length)
             s.project.addMarker(at: at, length: frames("duration") ?? 0, name: p["name"]?.string ?? "Marker")
         case "set_layout":
-            guard let layout = ChannelLayout(rawValue: p["layout"]?.string ?? "") else {
-                throw StepFailure(Said("step.set_layout.layout_one", "set_layout: \"layout\" is one of %@.", "\(ChannelLayout.allCases.map(\.rawValue).joined(separator: ", "))"))
+            guard p["layout"] != nil || p["order"] != nil else {
+                throw StepFailure(Said("step.set_layout.nothing", "set_layout: give \"layout\", \"order\" or both."))
             }
-            s.project.channels = layout.channels
-            // A document made Ambisonics says what its files of that size are: sound fields of its order.
-            if let order = layout.ambisonicOrder { s.project.markFields(order: order) }
-            return ["channels": Double(layout.channels), "fields": Double(s.project.sources.filter { $0.fieldOrder != nil }.count)]
+            if let name = p["order"]?.string {
+                guard let order = ChannelOrder(rawValue: name) else {
+                    throw StepFailure(Said("step.set_layout.order_one", "set_layout: \"order\" is one of %@.", ChannelOrder.allCases.map(\.rawValue).joined(separator: ", ")))
+                }
+                guard s.project.unmaskedOrder != nil else {
+                    throw StepFailure(Said("step.set_layout.no_unmasked", "set_layout: no file in this document leaves its loudspeakers' order open (a 7.1 or 7.1.4 file without a channel mask or ADM); a file that names them is heard by them."))
+                }
+                s.project.setUnmaskedOrder(order)
+            }
+            if let name = p["layout"]?.string {
+                guard let layout = ChannelLayout(rawValue: name) else {
+                    throw StepFailure(Said("step.set_layout.layout_one", "set_layout: \"layout\" is one of %@.", "\(ChannelLayout.allCases.map(\.rawValue).joined(separator: ", "))"))
+                }
+                s.project.channels = layout.channels
+                // A document made Ambisonics says what its files of that size are: sound fields of its order.
+                if let order = layout.ambisonicOrder { s.project.markFields(order: order) }
+            }
+            return ["channels": Double(s.project.channels), "fields": Double(s.project.sources.filter { $0.fieldOrder != nil }.count),
+                    "unmaskedFiles": Double(s.project.sources.filter(\.needsOrder).count)]
         case "set_timecode":
             let named = p["rate"]?.string ?? ""
             if named == "none" {
