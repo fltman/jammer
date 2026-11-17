@@ -454,6 +454,8 @@ Changes one bus: its name, gain, pan, mute, or where it goes. A route that would
 | `pan` | number | −1 (left) to 1 (right), 0 the center. Stereo documents only. |
 | `muted` | boolean | True to mute everything that goes through the bus. |
 | `output` | string | The id of the bus this one feeds, or "master" for the output. |
+| `azimuth` | number | In a loudspeaker layout wider than stereo: the bus's whole image turned round the listener, in degrees, positive to the left (each channel re-panned from its loudspeaker's direction plus the turn; the LFE as it is). Not in mono, stereo or Ambisonics. |
+| `turned` | boolean | false takes the turn away. |
 
 ### `set_send`
 

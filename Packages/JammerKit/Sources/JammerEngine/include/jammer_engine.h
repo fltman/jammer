@@ -83,6 +83,9 @@ void jm_plan_set_source_matrix(jm_plan *_Nonnull plan, int32_t source, const flo
 /// left; an elevation above 0 puts it in the height layer), or an Ambisonics order (1–3) with no loudspeakers.
 void jm_plan_set_pan_layout(jm_plan *_Nonnull plan, int32_t order, const int32_t *_Nullable channels,
                             const double *_Nullable azimuths, const double *_Nullable elevations, int32_t count);
+/// A bus's image turned round the listener (degrees over the timeline; one point for a fixed turn), in a
+/// loudspeaker layout set with jm_plan_set_pan_layout first.
+void jm_plan_set_bus_turn(jm_plan *_Nonnull plan, int32_t bus, const int64_t *_Nonnull frames, const float *_Nonnull values, int32_t count);
 /// A mono or stereo source placed by the surround panner: its azimuth and elevation over the timeline (straight
 /// lines between points, degrees; one point for a fixed place) and a stereo source's width.
 void jm_plan_set_source_placement(jm_plan *_Nonnull plan, int32_t source,

@@ -72,6 +72,43 @@ void Curve::apply(const float *in, float *out, int64_t at, int64_t n, int32_t ch
     }
 }
 
+/// A bus's image turned by an azimuth: each channel with a direction re-panned from it plus the turn (the
+/// panner's own gains), others (the LFE) as they are. Worked out at the timeline's grid points and ramped
+/// between them, as a track's moving place.
+void Graph::turnImage(const PanLayout &layout, const Curve &turn, const float *in, float *out, int64_t at, int64_t q) const {
+    constexpr int32_t kMax = 32;
+    const int32_t n = std::min(channels_, kMax);
+    float m0[kMax][kMax], m1[kMax][kMax];
+    auto matrix = [&](int64_t t, float m[kMax][kMax]) {
+        const double by = turn.dbAt(t);
+        for (int32_t k = 0; k < n; ++k) {
+            const double az = size_t(k) < layout.channelAzimuth.size() ? layout.channelAzimuth[size_t(k)] : NAN;
+            if (std::isnan(az)) { for (int32_t d = 0; d < n; ++d) m[k][d] = d == k ? 1.0f : 0.0f; continue; }
+            layout.gains(az + by, layout.channelElevation[size_t(k)], m[k], n);
+        }
+    };
+    int64_t i = 0;
+    while (i < q) {
+        const int64_t t = at + i, g = (t / Chain::kQuantum) * Chain::kQuantum;
+        const int64_t len = std::min(q - i, g + Chain::kQuantum - t);
+        matrix(g, m0);
+        matrix(g + Chain::kQuantum, m1);
+        for (int64_t j = 0; j < len; ++j, ++i) {
+            const float u = float(t + j - g) / float(Chain::kQuantum);
+            const float *x = in + i * channels_;
+            float *y = out + i * channels_;
+            for (int32_t d = 0; d < channels_; ++d) y[d] = 0.0f;
+            for (int32_t k = 0; k < n; ++k) {
+                if (x[k] == 0.0f) continue;
+                for (int32_t d = 0; d < n; ++d) {
+                    const float gg = m0[k][d] + (m1[k][d] - m0[k][d]) * u;
+                    if (gg != 0.0f) y[d] += x[k] * gg;
+                }
+            }
+        }
+    }
+}
+
 Graph::Graph(const Plan &plan) : channels_(plan.channels) {
     const size_t nt = plan.tracks.size(), nb = plan.buses.size();
     params_ = !plan.masterParams.empty();
@@ -176,6 +213,7 @@ Graph::Graph(const Plan &plan) : channels_(plan.channels) {
     strip_.assign(size_t(kQuantum * channels_), 0.0f);
     faded_.assign(size_t(kQuantum * channels_), 0.0f);
     sent_.assign(size_t(kQuantum * channels_), 0.0f);
+    turned_.assign(size_t(kQuantum * channels_), 0.0f);
     mix_.assign(size_t(kQuantum * channels_), 0.0f);
     bus_.assign(nb, std::vector<float>(size_t(kQuantum * channels_), 0.0f));
 }
@@ -420,6 +458,7 @@ void Graph::produce(const Plan &plan, Renderer &renderer) {
                 if (trimmed) post = faded_.data();
                 if (!replaced && !bus.curve.empty()) { bus.curve.apply(post, faded_.data(), at, q, channels_); post = faded_.data(); }
                 if (!bus.panCurve.empty()) { bus.panCurve.apply(post, faded_.data(), at, q, channels_); post = faded_.data(); }
+                if (!bus.turn.empty()) { turnImage(plan.panLayout, bus.turn, post, turned_.data(), at, q); post = turned_.data(); }
             }
             for (Edge &e : busEdges_[b]) {
                 if (e.main || e.keyNode >= 0) { send(e, post, bus.gain * bus.panL, bus.gain * bus.panR, q); continue; }

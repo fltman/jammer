@@ -292,7 +292,9 @@ public enum Operations {
                        .init("gainDB", .number, "The bus's gain in dB: the new value.", range: -96...24),
                        .init("pan", .number, "−1 (left) to 1 (right), 0 the center. Stereo documents only.", range: -1...1),
                        .init("muted", .boolean, "True to mute everything that goes through the bus."),
-                       .init("output", .string, "The id of the bus this one feeds, or \"master\" for the output.")]),
+                       .init("output", .string, "The id of the bus this one feeds, or \"master\" for the output."),
+                       .init("azimuth", .number, "In a loudspeaker layout wider than stereo: the bus's whole image turned round the listener, in degrees, positive to the left (each channel re-panned from its loudspeaker's direction plus the turn; the LFE as it is). Not in mono, stereo or Ambisonics.", range: -180...180),
+                       .init("turned", .boolean, "false takes the turn away.")]),
         .init("set_send", "Set Send", "Sends a copy of a track or a bus to a bus, at a level of its own: for a shared reverb, a parallel compressor, a headphone mix. One send per pair; giving it again changes it, and `remove` takes it away. After the fader by default (the copy follows the strip's level and pan); with `pre` it is taken before them. A send that would lead a bus back into itself is refused (reason routing_loop).",
               params: [.init("from", .string, "The id of the track or bus the copy is taken from.", required: true),
                        .init("to", .string, "The id of the bus it goes to.", required: true),
@@ -747,8 +749,9 @@ public enum StepRunner {
             guard project.channels > 2 else {
                 throw StepFailure("\(step.op): azimuth and elevation are a track's place in a document wider than stereo; this one is \(project.layout.rawValue). Use pan.", reason: "needs_surround")
             }
-            guard let id = stripID, project.tracks.contains(where: { $0.id == id }) else {
-                throw StepFailure("\(step.op): azimuth and elevation are a track's place; \(name == "master" ? "the master" : "a bus or a VCA group") has none.", reason: "needs_surround")
+            let onBus = param == .azimuth && stripID.map { project.bus($0) != nil } == true && !project.layout.isAmbisonic
+            guard let id = stripID, project.tracks.contains(where: { $0.id == id }) || onBus else {
+                throw StepFailure("\(step.op): azimuth and elevation are a track's place, and azimuth a bus's turn in a loudspeaker layout; \(name == "master" ? "the master" : "this strip") has neither.", reason: "needs_surround")
             }
         }
         let allowed = Automation.range(of: param)
@@ -1071,6 +1074,12 @@ public enum StepRunner {
             if let m = p["muted"], case .bool(let v) = m { muted = v }
             do { try s.project.setBus(id, name: p["name"]?.string, gainDB: p["gainDB"]?.double, pan: p["pan"]?.double, muted: muted, output: try route(p["output"], "set_bus")) }
             catch let e as Mixer.Failure { throw StepFailure("set_bus: " + (e.errorDescription ?? ""), reason: e.reason, keyed: e.keyed) }
+            var turned: Bool?
+            if let v = p["turned"], case .bool(let b) = v { turned = b }
+            if p["azimuth"] != nil || turned != nil {
+                do { try s.project.setBusTurn(id, azimuth: p["azimuth"]?.double, turned: turned) }
+                catch let e as Mixer.Failure { throw StepFailure("set_bus: " + (e.errorDescription ?? ""), reason: e.reason, keyed: e.keyed) }
+            }
         case "set_send":
             guard let from = UUID(uuidString: p["from"]?.string ?? ""), let to = UUID(uuidString: p["to"]?.string ?? "") else {
                 throw StepFailure("set_send: from is a track or bus id and to is a bus id.", reason: "not_found")

@@ -276,7 +276,11 @@ extension Project {
         if param == .pan, channels != 2 { throw channels == 1 ? Automation.Failure.mono : Automation.Failure.wide(layout.rawValue) }
         if param == .azimuth || param == .elevation {
             guard channels > 2 else { throw Automation.Failure.noPlace("a \(layout.rawValue) document") }
-            guard tracks.contains(where: { $0.id == strip }) else { throw Automation.Failure.noPlace(strip == Master.id ? "the master" : "that strip") }
+            // A track's place; a bus's turn (azimuth only, in a loudspeaker layout).
+            let onBus = param == .azimuth && bus(strip) != nil && !layout.isAmbisonic
+            guard tracks.contains(where: { $0.id == strip }) || onBus else {
+                throw Automation.Failure.noPlace(strip == Master.id ? "the master" : bus(strip) != nil ? "a bus (its turn is an azimuth, in a loudspeaker layout)" : "that strip")
+            }
         }
         // A mute holds its value until the next point; a level and a pan go in a straight line.
         if let shape, shape != (param == .mute ? .hold : .linear) {

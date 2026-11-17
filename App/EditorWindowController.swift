@@ -669,7 +669,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         }
         if item.action == #selector(showAutomation(_:)) {
             item.state = (item.representedObject as? String) == timeline.shownAutomation?.rawValue ? .on : .off
-            return true
+            // Place and height are a track's in a document wider than stereo only.
+            return !["azimuth", "elevation"].contains(item.representedObject as? String ?? "") || session.project.channels > 2
         }
         if item.action == #selector(toggleStripLanes(_:)) {
             item.state = timeline.showsStripLanes ? .on : .off

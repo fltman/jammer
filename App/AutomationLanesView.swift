@@ -108,6 +108,39 @@ final class AutomationLanesView: NSView {
     private var focusedTrack: Row? { rowList[safe: focus] }
     /// Send lanes: which of a strip's sends is shown, where it has more than one (⌥Tab goes to the next). By the bus it goes to.
     private var sendShown: [UUID: UUID] = [:]
+    /// Plugin parameter lanes: which of a strip's is shown (⌥Tab goes to the next), by its plugin and parameter.
+    private var pluginShown: [UUID: AutomationLane] = [:]
+    /// The plugin parameter lane shown on a strip: the one chosen, or its first.
+    private func pluginTarget(_ strip: UUID) -> AutomationLane? {
+        guard shown == .plugin else { return nil }
+        let all = project.lanes(of: strip).filter { $0.param == .plugin }
+        return all.first { $0.insert == pluginShown[strip]?.insert && $0.parameter == pluginShown[strip]?.parameter } ?? all.first
+    }
+    /// A plugin parameter's range, as the running plugin gives it (0 to 1 when it isn't running).
+    private func pluginRange(_ lane: AutomationLane?) -> ClosedRange<Double> {
+        guard let lane, let insert = lane.insert, let unit = session.inserts.instance(insert),
+              let p = unit.parameters.first(where: { $0.identifier == lane.parameter }), p.max > p.min else { return 0...1 }
+        return Double(p.min)...Double(p.max)
+    }
+    /// The name a running plugin gives a lane's parameter, and the plugin's name on the strip.
+    private func pluginNames(_ lane: AutomationLane) -> (parameter: String, plugin: String) {
+        let insert = project.inserts(of: lane.strip).first { $0.id == lane.insert }
+        let name = lane.insert.flatMap { session.inserts.instance($0) }?.parameters.first { $0.identifier == lane.parameter }?.name
+        return (name ?? lane.parameter ?? "", insert?.name ?? "")
+    }
+    /// The row an area belongs to.
+    private func row(of r: NSRect) -> Int { Int(((r.midY - topInset) / laneHeight).rounded(.down)) }
+    /// Where a value sits in a row's height: a plugin's parameter by its own range, every other kind by its scale.
+    private func height(_ value: Double, _ param: AutomationLane.Param, in r: NSRect) -> Double {
+        guard param == .plugin else { return Automation.height(of: value, param) }
+        let g = pluginRange(rowList[safe: row(of: r)].flatMap { pluginTarget($0.id) })
+        return (min(g.upperBound, max(g.lowerBound, value)) - g.lowerBound) / (g.upperBound - g.lowerBound)
+    }
+    private func valueAt(height h: Double, _ param: AutomationLane.Param, in r: NSRect) -> Double {
+        guard param == .plugin else { return Automation.value(atHeight: h, param) }
+        let g = pluginRange(rowList[safe: row(of: r)].flatMap { pluginTarget($0.id) })
+        return g.lowerBound + min(1, max(0, h)) * (g.upperBound - g.lowerBound)
+    }
     private func sends(of strip: UUID) -> [Send] {
         project.tracks.first { $0.id == strip }?.sends ?? project.buses.first { $0.id == strip }?.sends ?? []
     }
@@ -122,14 +155,18 @@ final class AutomationLanesView: NSView {
         guard let shown, let t = focusedTrack else { return nil }
         let to = target(t.id)
         if shown == .send, to == nil { return nil }
-        if let l = drag?.lane ?? pending, l.strip == t.id, l.param == shown, l.to == to { return l }
-        return project.lane(strip: t.id, param: shown, to: to)
+        let pl = pluginTarget(t.id)
+        if shown == .plugin, pl == nil { return nil }
+        if let l = drag?.lane ?? pending, l.strip == t.id, l.param == shown, l.to == to, l.insert == pl?.insert, l.parameter == pl?.parameter { return l }
+        return project.lane(strip: t.id, param: shown, to: to, insert: pl?.insert, parameter: pl?.parameter)
     }
     /// The same, or an empty one to put the first point in.
     private func laneToChange() -> AutomationLane? {
         guard let shown, let t = focusedTrack else { return nil }
         let to = target(t.id)
         if shown == .send, to == nil { return nil }     // no send, nothing to automate
+        // A plugin's parameter lane is made by a step (which parameter can't be told by a click); here it is drawn and changed.
+        if shown == .plugin { return ownLane }
         return ownLane ?? AutomationLane(strip: t.id, param: shown, to: to, shape: shown == .mute ? .hold : .linear, points: [])
     }
     /// Where a point of the own lane is drawn. A mute's point sits at the top when the track is heard from there, at the bottom when muted.
@@ -144,12 +181,15 @@ final class AutomationLanesView: NSView {
         NSRect(x: 0, y: topInset + CGFloat(track) * laneHeight + margin, width: bounds.width, height: max(1, laneHeight - 2 * margin))
     }
     private func y(_ value: Double, _ param: AutomationLane.Param, in r: NSRect) -> CGFloat {
-        r.maxY - CGFloat(Automation.height(of: value, param)) * r.height
+        r.maxY - CGFloat(height(value, param, in: r)) * r.height
     }
     private var lanes: [(track: Int, lane: ShownLane)] {
         guard let shown else { return [] }
         let p = shownProject
-        return rowList.enumerated().compactMap { i, t in p.shownLane(shown, of: t.id, to: target(t.id)).map { (i, $0) } }
+        return rowList.enumerated().compactMap { i, t in
+            let pl = pluginTarget(t.id)
+            return p.shownLane(shown, of: t.id, to: target(t.id), insert: pl?.insert, parameter: pl?.parameter).map { (i, $0) }
+        }
     }
     private var view: ClosedRange<Frame> {
         let a = Frame(viewport.frame(atX: 0).rounded(.down)), b = Frame(viewport.frame(atX: bounds.width).rounded(.up))
@@ -176,7 +216,8 @@ final class AutomationLanesView: NSView {
         let group = lane.group.flatMap { project.vca($0)?.name } ?? ""
         var text: String
         switch lane.param {
-        case .plugin: text = ""     // not drawn in the timeline yet
+        case .plugin:
+            if let l = pluginTarget(lane.strip) { let n = pluginNames(l); text = L10n.text("automation.caption.plugin", n.parameter, n.plugin) } else { text = "" }
         case .send:
             text = sendCaption(lane.strip, lane: true)
         case .gain:
@@ -369,10 +410,12 @@ final class AutomationLanesView: NSView {
             pending = nil
             var params: [String: JSONValue] = ["strip": .string(name), "param": .string(lane.param.rawValue)]
             if let to = lane.to { params["to"] = .string(to.uuidString) }
+            if let insert = lane.insert, let parameter = lane.parameter { params["insert"] = .string(insert.uuidString); params["parameter"] = .string(parameter) }
             session.perform("clear_automation", params, saying: saying)
         } else {
             var params: [String: JSONValue] = ["strip": .string(name), "param": .string(lane.param.rawValue)]
             if let to = lane.to { params["to"] = .string(to.uuidString) }
+            if let insert = lane.insert, let parameter = lane.parameter { params["insert"] = .string(insert.uuidString); params["parameter"] = .string(parameter) }
             params["points"] = .array(lane.points.map { JSONValue.array([.number(Double($0.frame) / rate), .number($0.value)]) })
             session.perform("set_automation", params, saying: saying)
         }
@@ -467,7 +510,7 @@ final class AutomationLanesView: NSView {
         let value: Double
         if shown == .mute { value = rest >= 0.5 ? 0 : 1 }
         else if abs(y(rest, shown, in: r) - p.y) <= 6 { value = rest }
-        else { value = Automation.value(atHeight: Double((r.maxY - p.y) / r.height), shown) }
+        else { value = valueAt(height: Double((r.maxY - p.y) / r.height), shown, in: r) }
         guard let added = lane.adding(frame: frame, value: value) else { NSSound.beep(); return true }
         selected = added.index
         send(added.lane, saying: describe(added.lane, added.index))
@@ -478,11 +521,11 @@ final class AutomationLanesView: NSView {
         guard let shown, var d = drag else { return false }
         let r = area(focus), old = d.origin.points[d.index], flags = event.modifierFlags
         var frame = Frame(viewport.frame(atX: p.x).rounded())
-        var value = Automation.value(atHeight: Double((r.maxY - p.y) / r.height), shown)
+        var value = valueAt(height: Double((r.maxY - p.y) / r.height), shown, in: r)
         if !flags.contains(.control) {
             frame = snapped(frame)
             // 0 dB, or the centre, within 4 points.
-            if shown != .mute, abs(y(0, shown, in: r) - p.y) <= 4 { value = 0 }
+            if shown != .mute, shown != .plugin, abs(y(0, shown, in: r) - p.y) <= 4 { value = 0 }
         }
         if flags.contains(.shift) { frame = old.frame }          // ⇧: the value only
         if flags.contains(.command) || shown == .mute { value = old.value }   // ⌘: the time only; a mute is moved sideways
@@ -595,6 +638,17 @@ final class AutomationLanesView: NSView {
             guard let k = next, lane.points.indices.contains(k) else { NSSound.beep(); return true }
             select(k, seek: true)
             return true
+        case (48, [.option]) where shown == .plugin:   // ⌥Tab: the strip's next plugin parameter lane
+            let all = project.lanes(of: list[focus].id).filter { $0.param == .plugin }
+            guard all.count > 1, let now = pluginTarget(list[focus].id),
+                  let i = all.firstIndex(where: { $0.insert == now.insert && $0.parameter == now.parameter }) else { NSSound.beep(); return true }
+            pluginShown[list[focus].id] = all[(i + 1) % all.count]
+            selected = nil
+            let names = pluginNames(all[(i + 1) % all.count])
+            session.status = L10n.text("automation.caption.plugin", names.parameter, names.plugin)
+            needsDisplay = true
+            elements = nil
+            return true
         case (48, [.option]) where shown == .send:   // ⌥Tab: the strip's next send
             let all = sends(of: list[focus].id)
             guard all.count > 1, let now = target(list[focus].id), let i = all.firstIndex(where: { $0.to == now }) else { NSSound.beep(); return true }
@@ -651,7 +705,8 @@ final class AutomationLanesView: NSView {
             let gone: String
             switch shown {
             case .send: gone = L10n.text("automation.removed.send", name)
-            case .gain, .plugin: gone = L10n.text("automation.removed.gain", name)
+            case .gain: gone = L10n.text("automation.removed.gain", name)
+            case .plugin: gone = L10n.text("automation.removed.plugin", name)
             case .pan: gone = L10n.text("automation.removed.pan", name)
             case .mute: gone = L10n.text("automation.removed.mute", name)
             case .azimuth: gone = L10n.text("automation.removed.azimuth", name)
@@ -694,7 +749,8 @@ final class AutomationLanesView: NSView {
             let name = rowList[i].name
             switch lane.param {
             case .send: e.setAccessibilityLabel(L10n.text("automation.ax.lane.send", name))
-            case .gain, .plugin: e.setAccessibilityLabel(L10n.text("automation.ax.lane.gain", name))
+            case .gain: e.setAccessibilityLabel(L10n.text("automation.ax.lane.gain", name))
+            case .plugin: e.setAccessibilityLabel(L10n.text("automation.ax.lane.plugin", pluginTarget(lane.strip).map { pluginNames($0).parameter } ?? "", name))
             case .pan: e.setAccessibilityLabel(L10n.text("automation.ax.lane.pan", name))
             case .mute: e.setAccessibilityLabel(L10n.text("automation.ax.lane.mute", name))
             case .azimuth: e.setAccessibilityLabel(L10n.text("automation.ax.lane.azimuth", name))

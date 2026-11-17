@@ -155,8 +155,8 @@ final class JobRegistry {
             // presenting one speaker as the answer.
             let single = !byTrack && minSpeakers == nil && results.contains { $0.names.count == 1 }
             let hint = "Only one speaker was found. If more people talk, run it again with the number of speakers: the model often merges voices that sound alike."
-            session?.status = single
-                ? L10n.text("speakers.found.single")
+            session?.status = diarized.speakers.isEmpty ? L10n.text("speakers.found.none")
+                : single ? L10n.text("speakers.found.single")
                 : L10n.count("speakers.found", diarized.speakers.count)
             job.status = .done
             job.progress = 1

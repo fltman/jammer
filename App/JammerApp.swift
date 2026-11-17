@@ -324,7 +324,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Which lanes the timeline draws. Hidden where automation is (debug builds, until lanes can be drawn by hand too).
         let kinds: [(String?, String)] = [(nil, L10n.text("menu.view.automation.none")), ("gain", L10n.text("menu.view.automation.gain")),
                                           ("pan", L10n.text("menu.view.automation.pan")), ("mute", L10n.text("menu.view.automation.mute")),
-                                          ("send", L10n.text("menu.view.automation.send"))]
+                                          ("send", L10n.text("menu.view.automation.send")),
+                                          // A track's place and height (documents wider than stereo).
+                                          ("azimuth", L10n.text("menu.view.automation.azimuth")), ("elevation", L10n.text("menu.view.automation.elevation")),
+                                          ("plugin", L10n.text("menu.view.automation.plugin"))]
         let automationMenu = submenu(L10n.text("menu.view.automation"), kinds.map { kind, title in
             let i = item(title, #selector(EditorWindowController.showAutomation(_:)))
             i.representedObject = kind

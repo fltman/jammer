@@ -395,10 +395,13 @@ final class TimelineOverlay: NSView {
         defer { drawArea() } // the drawn spectrogram area, on top
         let rate = project.sampleRate
         let h = TimelineView.rulerHeight
-        // Ruler ticks: pick a step that leaves ~90 pt between labels.
+        // Ruler ticks: pick a step that leaves ~90 pt between labels (with a timecode, ~115 pt for its eleven
+        // characters, and never less than a tenth of a second, so that no two labels name the same picture frame).
         let secondsPerPoint = viewport.framesPerPoint / rate
+        let timecode = project.timecode
         let steps: [Double] = [0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1_800, 3_600]
-        let step = steps.first { $0 / secondsPerPoint >= 90 } ?? 7_200
+            .filter { timecode == nil || $0 >= 0.1 }
+        let step = steps.first { $0 / secondsPerPoint >= (timecode == nil ? 90 : 115) } ?? 7_200
         let first = floor(viewport.start / rate / step) * step
         let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .regular),
                                                     .foregroundColor: Theme.text]
@@ -410,7 +413,9 @@ final class TimelineOverlay: NSView {
             NSRect(x: x, y: h - 8, width: 1, height: 8).fill()
             NSColor(white: 1, alpha: 0.035).setFill()
             NSRect(x: x, y: h, width: 1, height: bounds.height - h).fill()
-            let label = step < 1 ? formatTime(t) : formatTime(t, millis: false)
+            // The picture's timecode at the tick, when the document has one; else the time.
+            let label = timecode.map { $0.timecode(at: Frame((t * rate).rounded()), sampleRate: rate).text }
+                ?? (step < 1 ? formatTime(t) : formatTime(t, millis: false))
             (label as NSString).draw(at: NSPoint(x: x + 3, y: 4), withAttributes: attrs)
             for sub in 1..<5 {
                 let sx = viewport.x(of: (t + step * Double(sub) / 5) * rate)

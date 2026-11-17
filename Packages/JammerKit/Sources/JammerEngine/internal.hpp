@@ -150,6 +150,8 @@ struct PanLayout {
     struct Speaker { int32_t channel; double azimuth; };
     int32_t order = 0;              // AmbiX order; 0 for loudspeakers
     std::vector<Speaker> ear, top;  // by azimuth, rising
+    /// Each document channel's direction, for turning a bus's image (NaN azimuth: no direction, the LFE).
+    std::vector<double> channelAzimuth, channelElevation;
     bool empty() const { return order == 0 && ear.empty(); }
     /// Gains per document channel (`out`, `channels` long, zeroed here) for a mono sound from a direction.
     void gains(double azimuth, double elevation, float *out, int32_t channels) const JM_NONBLOCKING;
@@ -212,6 +214,9 @@ struct Bus {
     /// Plugins on the bus, after the sum and before the fader.
     std::shared_ptr<Chain> chain;
     std::vector<ParamCurve> params;
+    /// The bus's image turned round the listener by an azimuth over time (degrees): each loudspeaker's
+    /// channel re-panned from its direction plus the turn. Empty: not turned.
+    Curve turn;
 };
 
 /// The mixer with plugins on buses. A plugin on a bus makes what leaves the bus late by its latency,
@@ -250,6 +255,8 @@ public:
     std::vector<int64_t> trackDelay;        // added to each track's own way out
     std::vector<int64_t> busDelay;          // added to each bus's own way out
 
+    /// A bus's image turned by an azimuth (see Bus::turn).
+    void turnImage(const PanLayout &layout, const Curve &turn, const float *in, float *out, int64_t at, int64_t q) const;
 private:
     static constexpr int64_t kQuantum = Chain::kQuantum;
     std::mutex mutex_;
@@ -271,7 +278,7 @@ private:
     /// time is ahead of the timeline there, which is where the strip's automation is read.
     std::vector<int64_t> nodeOut_;
     int64_t masterChainLatency_ = 0;
-    std::vector<float> faded_, sent_;
+    std::vector<float> faded_, sent_, turned_;
     /// A level under a hand, per node (and the master last): the value the block before ended on, and a
     /// two-point line from it to this block's, applied as a lane's piece is.
     std::vector<float> liveLast_;

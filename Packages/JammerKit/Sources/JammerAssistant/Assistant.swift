@@ -110,10 +110,15 @@ public enum AssistantCatalog {
     /// (Buses are named to the model by name, and `set_bus` and `remove_bus` take the name. Sends are not offered yet.)
     public static let stepsNotForAssistant: Set<String> = ["set_layout", "set_timecode", "go_to_timecode", "set_video_reference", "remove_video_reference", "add_insert", "set_insert", "remove_insert", "spectral_edit", "set_track", "set_group", "set_automation", "clear_automation"]
 
+    /// Parameters the assistant isn't given on the steps it has: a bus's turn in a surround document (surround
+    /// isn't the assistant's yet; its tools stay as they were evaluated).
+    public static let paramsNotForAssistant: Set<String> = ["azimuth", "turned"]
+
     /// Own actions: every step (but the above), the useful endpoints, and the macros.
     public static var actions: [AssistantAction] {
         let endpointNames: Set<String> = ["transcribe", "restore", "analyze_restoration", "measure_loudness", "freeze", "unfreeze"]
-        return Operations.all.filter { !stepsNotForAssistant.contains($0.name) }.map { AssistantAction(name: $0.name, description: $0.description, params: $0.params, kind: .step,
+        return Operations.all.filter { !stepsNotForAssistant.contains($0.name) }.map { AssistantAction(name: $0.name, description: $0.description,
+                                                    params: $0.params.filter { !paramsNotForAssistant.contains($0.name) }, kind: .step,
                                                     destructive: destructiveNames.contains($0.name)) }
             + Operations.endpoints.filter { endpointNames.contains($0.name) }.map {
                 // The assistant transcribes on this Mac: sending audio to a paid service is the user's own

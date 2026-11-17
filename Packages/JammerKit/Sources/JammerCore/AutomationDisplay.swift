@@ -84,8 +84,11 @@ extension Automation {
 extension Project {
     /// The lane of one kind to show on a strip, or nil when nothing of that kind is written for it (nor,
     /// for a level or a mute, for its VCA group). A VCA group itself is shown with its own lane.
-    public func shownLane(_ param: AutomationLane.Param, of strip: UUID, to: UUID? = nil) -> ShownLane? {
-        let own = lane(strip: strip, param: param, to: param == .send ? to : nil)
+    public func shownLane(_ param: AutomationLane.Param, of strip: UUID, to: UUID? = nil, insert: UUID? = nil, parameter: String? = nil) -> ShownLane? {
+        let own = lane(strip: strip, param: param, to: param == .send ? to : nil,
+                       insert: param == .plugin ? insert : nil, parameter: param == .plugin ? parameter : nil)
+        // A plugin's parameter and a track's place are applied as written: switched on, they play.
+        let direct = param == .plugin || param == .azimuth || param == .elevation
         let isGroup = vca(strip) != nil
         let groupID = param == .gain || param == .mute ? group(of: strip) : nil
         let groups = groupID.flatMap { lane(strip: $0, param: param) }.flatMap { $0.enabled ? $0 : nil }
@@ -120,7 +123,7 @@ extension Project {
         // Switched off, a pan in a document that isn't stereo, or a group's own lane: the points as written.
         guard let own else { return nil }
         guard param == .mute else {
-            return made(own.points.map(\.frame), own.points.map { Float($0.value) }, plays: isGroup && own.enabled, points: own.points)
+            return made(own.points.map(\.frame), own.points.map { Float($0.value) }, plays: (isGroup || direct) && own.enabled, points: own.points)
         }
         // A mute as written holds each value until the next point: a step, drawn as one (no ramp is claimed).
         var frames: [Int64] = [], values: [Float] = []

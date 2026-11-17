@@ -35,6 +35,10 @@ public struct Bus: Codable, Hashable, Sendable, Identifiable {
     public var vca: UUID?
     /// Set while the bus is frozen: played from a file of what it summed, through its plugins.
     public var frozen: Frozen?
+    /// In a loudspeaker layout wider than stereo: the bus's whole image turned round the listener, in degrees
+    /// (positive to the left). A bus carries every channel already placed by its tracks, so it isn't placed
+    /// from one direction as a track is: it is turned. nil: as its tracks placed it.
+    public var azimuth: Double?
 
     public init(id: UUID = UUID(), name: String, gainDB: Double = 0, pan: Double = 0, isMuted: Bool = false, output: UUID? = nil, sends: [Send] = []) {
         self.id = id
@@ -46,7 +50,7 @@ public struct Bus: Codable, Hashable, Sendable, Identifiable {
         self.sends = sends
     }
 
-    private enum CodingKeys: String, CodingKey { case id, name, gainDB, pan, isMuted, output, sends, inserts, vca, frozen }
+    private enum CodingKeys: String, CodingKey { case id, name, gainDB, pan, isMuted, output, sends, inserts, vca, frozen, azimuth }
     public func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(id, forKey: .id)
@@ -59,10 +63,12 @@ public struct Bus: Codable, Hashable, Sendable, Identifiable {
         if !inserts.isEmpty { try c.encode(inserts, forKey: .inserts) }
         try c.encodeIfPresent(vca, forKey: .vca)
         try c.encodeIfPresent(frozen, forKey: .frozen)
+        try c.encodeIfPresent(azimuth, forKey: .azimuth)
     }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(UUID.self, forKey: .id)
+        azimuth = (try? c.decodeIfPresent(Double.self, forKey: .azimuth)).flatMap { $0 }.flatMap { $0.isFinite && abs($0) <= 180 ? $0 : nil }
         vca = try c.decodeIfPresent(UUID.self, forKey: .vca)
         frozen = try c.decodeIfPresent(Frozen.self, forKey: .frozen)
         name = try c.decode(String.self, forKey: .name)
@@ -507,6 +513,17 @@ extension Project {
         let b = Bus(name: trimmed, output: output)
         buses.append(b)
         return b
+    }
+
+    /// Turns a bus's image round the listener (`turned: false` takes the turn away). Loudspeaker layouts wider than stereo only.
+    public mutating func setBusTurn(_ id: UUID, azimuth: Double? = nil, turned: Bool? = nil) throws {
+        guard let i = buses.firstIndex(where: { $0.id == id }) else { throw Mixer.Failure.noBus(id.uuidString) }
+        guard channels > 2, !layout.isAmbisonic else { throw Mixer.Failure.narrow(layout.rawValue) }
+        if turned == false, azimuth == nil { buses[i].azimuth = nil; return }
+        if let azimuth {
+            guard azimuth.isFinite, abs(azimuth) <= 180 else { throw Mixer.Failure.badValue("azimuth is −180 to 180.") }
+            buses[i].azimuth = azimuth
+        }
     }
 
     public mutating func setBus(_ id: UUID, name: String? = nil, gainDB: Double? = nil, pan: Double? = nil, muted: Bool? = nil, output: UUID?? = nil) throws {

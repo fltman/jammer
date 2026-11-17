@@ -63,8 +63,15 @@ public final class FluidDiarizer: SpeakerDiarizer, @unchecked Sendable {
         } catch {
             throw DiarizationError.model("The diarisation model couldn't be loaded from \(source.host() ?? source.absoluteString): \(error.localizedDescription)")
         }
-        let result = try await manager.process(audio: mono16k) { done, total in
-            progress(total > 0 ? Double(done) / Double(total) : 0)
+        let result: DiarizationResult
+        do {
+            result = try await manager.process(audio: mono16k) { done, total in
+                progress(total > 0 ? Double(done) / Double(total) : 0)
+            }
+        } catch OfflineDiarizationError.noSpeechDetected {
+            // No speech is an answer (no speakers), not a failure: music, an empty room.
+            progress(1)
+            return []
         }
         return result.segments.map { DiarizedSegment(speaker: $0.speakerId, start: Double($0.startTimeSeconds), end: Double($0.endTimeSeconds)) }
     }

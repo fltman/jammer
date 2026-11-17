@@ -149,9 +149,23 @@ void jm_plan_set_pan_layout(jm_plan *plan, int32_t order, const int32_t *channel
         if (channels[i] < 0 || channels[i] >= plan->ptr->channels) continue;
         (elevations[i] > 0 ? l.top : l.ear).push_back({channels[i], azimuths[i]});
     }
+    l.channelAzimuth.assign(size_t(plan->ptr->channels), NAN);
+    l.channelElevation.assign(size_t(plan->ptr->channels), 0.0);
+    for (int32_t i = 0; i < count; ++i) {
+        if (channels[i] < 0 || channels[i] >= plan->ptr->channels) continue;
+        l.channelAzimuth[size_t(channels[i])] = azimuths[i];
+        l.channelElevation[size_t(channels[i])] = elevations[i];
+    }
     auto byAzimuth = [](const PanLayout::Speaker &a, const PanLayout::Speaker &b) { return a.azimuth < b.azimuth; };
     std::sort(l.ear.begin(), l.ear.end(), byAzimuth);
     std::sort(l.top.begin(), l.top.end(), byAzimuth);
+}
+
+void jm_plan_set_bus_turn(jm_plan *plan, int32_t bus, const int64_t *frames, const float *values, int32_t count) {
+    Plan &p = *plan->ptr;
+    if (bus < 0 || size_t(bus) >= p.buses.size() || count < 1 || p.panLayout.order > 0) return;
+    p.buses[size_t(bus)].turn.frames.assign(frames, frames + count);
+    p.buses[size_t(bus)].turn.db.assign(values, values + count);
 }
 
 void jm_plan_set_source_placement(jm_plan *plan, int32_t source, const int64_t *az_frames, const float *az_values, int32_t az_count,

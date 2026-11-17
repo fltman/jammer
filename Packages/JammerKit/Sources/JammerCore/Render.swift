@@ -212,6 +212,14 @@ public enum PlanCompiler {
                 let index = jm_plan_add_bus(plan, Float(dbToGain(fader.gainDB)), fader.muted, pan.0, pan.1)
                 busIndex[b.id] = index
                 if let inserts, b.inserts.contains(where: { !$0.bypass }) { inserts.attachChain(for: b, to: plan, index: index) }
+                // A bus's image turned round the listener: fixed, or by its azimuth lane.
+                let turnLane = project.lane(strip: b.id, param: .azimuth).flatMap { $0.enabled && !$0.points.isEmpty ? $0 : nil }
+                if project.channels > 2, !project.layout.isAmbisonic, b.azimuth != nil || turnLane != nil {
+                    setPanLayout(plan, project.layout)
+                    var f: [Int64] = turnLane?.points.map { Int64($0.frame) } ?? [0]
+                    var v: [Float] = turnLane?.points.map { Float($0.value) } ?? [Float(b.azimuth ?? 0)]
+                    jm_plan_set_bus_turn(plan, index, &f, &v, Int32(f.count))
+                }
             }
             for b in project.buses {
                 guard let from = busIndex[b.id] else { continue }

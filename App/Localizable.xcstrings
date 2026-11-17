@@ -2875,6 +2875,24 @@
         }
       }
     },
+    "automation.ax.lane.plugin": {
+      "comment": "Accessibility label of a plugin parameter lane. %1$@ is the parameter, %2$@ the strip.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ automation of %2$@"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@-automation för %2$@"
+          }
+        }
+      }
+    },
     "automation.ax.lane.role": {
       "comment": "VoiceOver: what kind of thing a lane is.",
       "extractionState": "manual",
@@ -3201,6 +3219,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Panoreringsbana, i panoreringsreglagets ställe. Vänster är upp."
+          }
+        }
+      }
+    },
+    "automation.caption.plugin": {
+      "comment": "Caption of a plugin parameter lane. %1$@ is the parameter’s name, %2$@ the plugin’s.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ on %2$@, from the plugin’s lowest value at the bottom to its highest at the top. ⌥Tab: the next parameter."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ på %2$@, från pluginens lägsta värde längst ned till dess högsta överst. ⌥Tab: nästa parameter."
           }
         }
       }
@@ -3537,6 +3573,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Panoreringsbanan borttagen från %@"
+          }
+        }
+      }
+    },
+    "automation.removed.plugin": {
+      "comment": "Status line. %@ is the strip.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Parameter lane removed from %@"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Parameterbanan borttagen från %@"
           }
         }
       }
@@ -9193,6 +9247,42 @@
         }
       }
     },
+    "menu.view.automation.azimuth": {
+      "comment": "Menu item in View › Automation: show each track’s place lane (where it is heard from, in a document wider than stereo).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Place"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Placering"
+          }
+        }
+      }
+    },
+    "menu.view.automation.elevation": {
+      "comment": "Menu item in View › Automation: show each track’s height lane.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Height"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Höjd"
+          }
+        }
+      }
+    },
     "menu.view.automation.gain": {
       "comment": "View › Automation.",
       "extractionState": "manual",
@@ -9261,6 +9351,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Panoreringsbanor"
+          }
+        }
+      }
+    },
+    "menu.view.automation.plugin": {
+      "comment": "Menu item in View › Automation: show each strip’s plugin parameter lane.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plugin Parameters"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pluginparametrar"
           }
         }
       }
@@ -10749,6 +10857,114 @@
           "stringUnit": {
             "state": "translated",
             "value": "Spår"
+          }
+        }
+      }
+    },
+    "mixer.turn.ax": {
+      "comment": "Accessibility label of a bus’s turn slider. %@ is the bus.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn of %@"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vridning för %@"
+          }
+        }
+      }
+    },
+    "mixer.turn.help": {
+      "comment": "Help of a bus’s turn slider in a surround document.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turns the bus’s whole image round the listener: everything on it moves together, the LFE stays."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vrider bussens hela bild runt lyssnaren: allt på den flyttas tillsammans, LFE ligger kvar."
+          }
+        }
+      }
+    },
+    "mixer.turn.left": {
+      "comment": "A bus turned to the left. %@ is degrees.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turned %@° left"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vriden %@° vänster"
+          }
+        }
+      }
+    },
+    "mixer.turn.none": {
+      "comment": "A bus whose image is not turned.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not turned"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inte vriden"
+          }
+        }
+      }
+    },
+    "mixer.turn.off": {
+      "comment": "Menu item: take the bus’s turn away.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not Turned"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inte vriden"
+          }
+        }
+      }
+    },
+    "mixer.turn.right": {
+      "comment": "A bus turned to the right. %@ is degrees.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turned %@° right"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vriden %@° höger"
           }
         }
       }
@@ -14901,6 +15117,24 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "speakers.found.none": {
+      "comment": "Status line after Find Speakers on audio with no speech in it.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No speech was found, so there are no speakers."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inget tal hittades, så det finns inga talare."
           }
         }
       }

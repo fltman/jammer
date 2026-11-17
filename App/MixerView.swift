@@ -69,7 +69,9 @@ struct MixerSheet: View {
                                    sends: b.sends, sendTargets: project.buses.filter { $0.id != b.id && !leadsBack(from: $0.id, to: b.id) }.map { ($0.id, $0.name) },
                                    change: { session.perform("set_bus", ["bus": .string(b.id.uuidString)].merging($0) { $1 }) },
                                    send: { session.perform("set_send", ["from": .string(b.id.uuidString)].merging($0) { $1 }) },
-                                   remove: { session.perform("remove_bus", ["bus": .string(b.id.uuidString), "reroute": .string(b.output?.uuidString ?? "master")]) })
+                                   remove: { session.perform("remove_bus", ["bus": .string(b.id.uuidString), "reroute": .string(b.output?.uuidString ?? "master")]) },
+                                   // A bus is turned, not placed: its tracks have placed its channels already.
+                                   place: b.azimuth.map { SurroundPosition(azimuth: $0) }, placeable: project.channels > 2 && !project.layout.isAmbisonic)
                     }
                     Text(L10n.text("mixer.vcas")).font(.headline).padding(.top, 8)
                     if project.vcas.isEmpty { Text(L10n.text("mixer.vcas.none")).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }
@@ -333,6 +335,11 @@ struct MixerStrip: View {
     @State private var dragging = false
 
     /// A place in words: "Own loudspeakers", "Center", "Left 30°", "Right 110°", "Behind", with the height when there is one.
+    /// A bus's turn in words: "Not turned", "Turned 30° left".
+    static func turnText(_ p: SurroundPosition?) -> String {
+        guard let a = p?.azimuth, abs(a) >= 0.5 else { return L10n.text("mixer.turn.none") }
+        return a > 0 ? L10n.text("mixer.turn.left", L10n.number(a, 0)) : L10n.text("mixer.turn.right", L10n.number(-a, 0))
+    }
     static func placeText(_ p: SurroundPosition?) -> String {
         guard let p else { return L10n.text("mixer.place.own") }
         let a = p.azimuth
@@ -487,18 +494,22 @@ struct MixerStrip: View {
                     }
                 })
                 .frame(width: 90)
-                .help(L10n.text("mixer.place.help"))
-                .accessibilityLabel(L10n.text("mixer.place.ax", name))
-                .accessibilityValue(Text(Self.placeText(place)))
+                .help(kind == "bus" ? L10n.text("mixer.turn.help") : L10n.text("mixer.place.help"))
+                .accessibilityLabel(kind == "bus" ? L10n.text("mixer.turn.ax", name) : L10n.text("mixer.place.ax", name))
+                .accessibilityValue(Text(kind == "bus" ? Self.turnText(place) : Self.placeText(place)))
                 .accessibilityIdentifier("mixer.strip.azimuth")
-                Menu(Self.placeText(place)) {
+                Menu(kind == "bus" ? Self.turnText(place) : Self.placeText(place)) {
                     if heights {
                         ForEach([0.0, 15, 30], id: \.self) { up in
                             Button((place?.elevation == up ? "✓ " : "") + L10n.text("mixer.place.elevation", L10n.number(up, 0))) { change(["elevation": .number(up)]) }
                         }
                         Divider()
                     }
-                    Button(L10n.text("mixer.place.off")) { change(["placed": .bool(false)]) }.disabled(place == nil)
+                    if kind == "bus" {
+                        Button(L10n.text("mixer.turn.off")) { change(["turned": .bool(false)]) }.disabled(place == nil)
+                    } else {
+                        Button(L10n.text("mixer.place.off")) { change(["placed": .bool(false)]) }.disabled(place == nil)
+                    }
                 }
                 .menuStyle(.borderlessButton).font(.caption).frame(width: 128, alignment: .leading)
                 .accessibilityIdentifier("mixer.strip.place")

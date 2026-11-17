@@ -366,4 +366,30 @@ struct ImmersiveTests {
         print("moving place, 80° in 2 s, against the ideal path, relative to the level: \(straight) along the line, \(corner) at its end")
         #expect(straight < 2e-5 && corner < 2e-3, "\(straight), \(corner)")
     }
+
+    @Test("A bus turned: a voice on L through a bus turned 80° to the left plays from Ls (110°) only; the LFE goes through as it is; a turn by lane glides; refused in stereo and in Ambisonics")
+    func busTurn() throws {
+        let dir = TempDir()
+        var (p, tone) = try movingDoc(dir)
+        let n = tone.count
+        try p.addBus(name: "Group", output: nil)
+        let bus = p.buses[0].id
+        try p.setTrackRoute(p.tracks[0].id, output: .some(bus))
+        try p.setTrackPosition(p.tracks[0].id, azimuth: 30)       // on L
+        try p.setBusTurn(bus, azimuth: 80)                        // L (30°) turned to 110°: Ls
+        let out = PlanCompiler.compile(p, pool: SourcePool()).render(from: 0, frames: n)
+        var onLs: Float = 0, elsewhere: Float = 0
+        for i in 0..<n { for c in 0..<6 { if c == 4 { onLs = max(onLs, abs(out[i * 6 + c] - tone[i])) } else { elsewhere = max(elsewhere, abs(out[i * 6 + c])) } } }
+        #expect(onLs < 1e-5 && elsewhere < 1e-5, "\(onLs), \(elsewhere)")
+        // By lane: 0° to 80°, starting on L and ending on Ls.
+        try p.setAutomation(strip: bus, param: .azimuth, points: [AutomationPoint(frame: 0, value: 0), AutomationPoint(frame: Frame(n), value: 80)])
+        let moving = PlanCompiler.compile(p, pool: SourcePool()).render(from: 0, frames: n)
+        #expect(abs(moving[0] - tone[0]) < 1e-5 && abs(moving[(n - 1) * 6 + 4] - tone[n - 1]) < 2e-3)
+        #expect(throws: Automation.Failure.self) { try p.setAutomation(strip: bus, param: .elevation, points: [AutomationPoint(frame: 0, value: 10)]) }
+        var s = p
+        s.channels = 2
+        #expect(throws: Mixer.Failure.self) { try s.setBusTurn(bus, azimuth: 10) }
+        s.channels = 4
+        #expect(throws: Mixer.Failure.self) { try s.setBusTurn(bus, azimuth: 10) }
+    }
 }
