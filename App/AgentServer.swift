@@ -735,6 +735,8 @@ enum AgentRouter {
         }
         let tracks = p.tracks.map { t -> [String: Any] in
             ["id": t.id.uuidString, "name": t.name, "gainDB": t.gainDB, "pan": t.pan, "muted": t.isMuted, "output": to(t.output), "sends": sends(t.sends),
+             // In a document wider than stereo: the track's place by the surround panner (null: its sources on their own loudspeakers).
+             "position": t.position.map { ["azimuth": $0.azimuth, "elevation": $0.elevation, "width": $0.width] as [String: Any] } ?? NSNull(),
              "vca": t.vca?.uuidString ?? NSNull(), "heard": heard(t.gainDB, t.isMuted, t.vca), "frozen": frozen(t.frozen), "automation": lanes(t.id),
              "latencySamples": t.frozen == nil ? own(t.inserts) : 0, "compensationSamples": plan.compensation(bus: false, index: p.tracks.firstIndex { $0.id == t.id } ?? 0)]
         }

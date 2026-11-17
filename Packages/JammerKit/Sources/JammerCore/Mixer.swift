@@ -175,6 +175,8 @@ public enum Mixer {
         case noBus(String), loop(String), tooMany, inUse(String, Int), mono, badValue(String), noStrip(String), noSend(String, String), tooManySends(String)
         /// Pan in a document wider than stereo, before its surround panner is built. The value is the layout.
         case wide(String)
+        /// A surround position in a document that is mono or stereo. The value is the layout.
+        case narrow(String)
         case noVCA(String), tooManyVCAs
 
         public var reason: String {
@@ -184,6 +186,7 @@ public enum Mixer {
             case .tooMany, .tooManyVCAs: "too_many"
             case .inUse: "in_use"
             case .mono, .wide: "needs_stereo"
+            case .narrow: "needs_surround"
             case .noStrip, .noSend: "not_found"
             case .tooManySends: "too_many"
             case .badValue: "bad_request"
@@ -196,7 +199,8 @@ public enum Mixer {
             case .tooMany: "a document can have \(Mixer.maxBuses) buses at most."
             case .inUse(let name, let n): "\(n) strip\(n == 1 ? " is" : "s are") routed to \(name). Say where they should go instead with reroute (a bus id, or \"master\"), or route them elsewhere first."
             case .mono: "pan needs a stereo document; this one is mono."
-            case .wide(let layout): "pan is for stereo documents; this one is \(layout), and its surround panner isn't built yet."
+            case .wide(let layout): "pan is for stereo documents; this one is \(layout). Place a track with azimuth instead."
+            case .narrow(let layout): "a place by azimuth is for documents wider than stereo; this one is \(layout). Use pan."
             case .noStrip(let id): "there is no track or bus with id \(id)."
             case .noSend(let from, let to): "\(from) has no send to \(to)."
             case .tooManySends(let name): "\(name) already has \(Mixer.maxSends) sends, which is the most a strip can have."
@@ -214,6 +218,7 @@ public enum Mixer {
             case .inUse: nil
             case .mono: KeyedMessage("error.mixer.mono")
             case .wide(let layout): KeyedMessage("error.mixer.wide", ["\(layout)"])
+            case .narrow(let layout): KeyedMessage("error.mixer.narrow", ["\(layout)"])
             case .noStrip(let id): KeyedMessage("error.mixer.noStrip", ["\(id)"])
             case .noSend(let from, let to): KeyedMessage("error.mixer.noSend", ["\(from)", "\(to)"])
             case .tooManySends(let name): KeyedMessage("error.mixer.tooManySends", ["\(name)", "\(Mixer.maxSends)"])
@@ -553,6 +558,20 @@ extension Project {
         for t in tracks.indices { tracks[t].sends.removeAll { $0.to == id } }
         for o in buses.indices { buses[o].sends.removeAll { $0.to == id } }
         buses.removeAll { $0.id == id }
+    }
+
+    /// Places a track by the surround panner (or takes it out with `placed: false`). Values left out keep the
+    /// track's current place, or the default (the center, level, 60° wide).
+    public mutating func setTrackPosition(_ track: UUID, azimuth: Double? = nil, elevation: Double? = nil, width: Double? = nil, placed: Bool? = nil) throws {
+        guard let i = tracks.firstIndex(where: { $0.id == track }) else { throw Mixer.Failure.noStrip(track.uuidString) }
+        guard channels > 2 else { throw Mixer.Failure.narrow(layout.rawValue) }
+        if placed == false, azimuth == nil, elevation == nil, width == nil { tracks[i].position = nil; return }
+        var p = tracks[i].position ?? SurroundPosition()
+        if let azimuth { p.azimuth = azimuth }
+        if let elevation { p.elevation = elevation }
+        if let width { p.width = width }
+        guard p.isValid else { throw Mixer.Failure.badValue("azimuth is −180 to 180, elevation 0 to 90, width 0 to 180.") }
+        tracks[i].position = p
     }
 
     public mutating func setTrackRoute(_ track: UUID, pan: Double? = nil, output: UUID?? = nil) throws {

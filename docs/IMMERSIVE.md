@@ -49,8 +49,19 @@ Phase 4 of `docs/PLAN.md`: multichannel up to 7.1.4, ADM BWF, Ambisonics, APAC/A
   - EBU's own test files can't be committed either ("You may not use any EBU Test Sequences for business, commercial or for-profit activities"); the cases are tones defined in Tech 3341's table, so they are made in the tests.
 - **Audio › Layout** (Mono, Stereo, 5.1, 7.1, 7.1.4, the document's ticked) and the step `set_layout`: a value of the document, undone like any other; nothing converted. `layout` in `GET …/documents/{id}`.
 
+- **Seen in the app** (2026-11-17, a 5.1 WAV with a tone in each channel): it opens as 5.1 and the status bar says "5.1"; Audio › Layout lists Mono, Stereo, 5.1, 7.1, 7.1.4 with 5.1 ticked; choosing Stereo and ⌘Z brings it back; two seconds of playback on the Mac's stereo output, folded down, with no underrun; the mixer's description wraps to a narrow window.
+
+### D2, first part (2026-11-17): the surround panner
+
+- **A track's place** (`SurroundPosition`: azimuth, elevation, width) in a layout wider than stereo, by the angles of ITU-R BS.2051-3 (azimuth positive to the left; read at the source: "positive values rotate to the left"). The loudspeakers' nominal directions from its tables: fronts ±30°, 5.1's surrounds ±110°, 7.1's sides ±90° and rears ±135°, 7.1.4's heights at ±45° and ±135°, 30° up.
+- **The panner** (`Panner`): vector base amplitude panning (V. Pulkki, J. Audio Eng. Soc. 45(6), 1997) between the two loudspeakers of a layer that enclose the direction, scaled to constant power; where there are heights, the ear layer and the height layer crossfaded by elevation at constant power from 0° to 30°; above 30° the sound stays in the height layer (there is no loudspeaker overhead). The LFE is never fed. A mono source is placed at the azimuth; a stereo source's two sides at azimuth ± width/2. On a loudspeaker's own direction only that loudspeaker sounds, so the default place (0°, 60° wide) gives exactly the old routing: a voice in C, a pair in L and R. A source of more than two channels on a placed track stays on its own loudspeakers.
+- **Steps:** `set_track` takes `azimuth`, `elevation`, `width`, and `placed: false` to take a track out of the panner; refused in mono and stereo ("Use pan"), and pan is refused in a wider document ("Place a track with azimuth instead"), in both languages. `position` on each track in `GET …/mixer`.
+- **The mixer:** a track's strip in a wider document has an azimuth slider (left to the left, either end behind) and a menu with its place in words ("Left 110°", "Own loudspeakers"), the height in 7.1.4 (0°, 15°, 30°), and Back on Own Loudspeakers.
+- **Tested:** the gains on each loudspeaker's direction, halfway between two, behind; constant power and no LFE at every 7.5° in 5.1, 7.1 and 7.1.4; heights at 30° and above, and halfway at 15°; the default place equals the old routing; a voice placed at 110° plays in Ls sample for sample and nowhere else; saved and read back; out of range refused. **Seen:** the mixer with a voice placed at 110° ("Left 110°", the slider to the left), the layout menu's words.
+
 ## Not built
 
 - Per-channel meters in the window, and a line that says the document is heard folded down.
 - A seen GUI pass of a 5.1 document (the menu, the status bar, listening).
-- Everything from D2 on.
+- The panner's place automated over time; buses placed; a spread wider than a pair of loudspeakers for a mono source.
+- Everything from D3 on.

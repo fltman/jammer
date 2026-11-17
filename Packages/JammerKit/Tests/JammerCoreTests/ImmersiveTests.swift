@@ -192,4 +192,57 @@ struct ImmersiveTests {
         }
         #expect(worst < 1e-6, "\(worst)")
     }
+
+    @Test("The panner: on a loudspeaker's own direction only that loudspeaker; between two, both at constant power; the LFE never; heights by elevation; a default place gives the old routing exactly")
+    func panner() {
+        let five = ChannelLayout.surround51
+        func power(_ g: [Float]) -> Float { g.reduce(0) { $0 + $1 * $1 } }
+        #expect(Panner.gains(azimuth: 0, elevation: 0, in: five) == [0, 0, 1, 0, 0, 0])
+        #expect(Panner.gains(azimuth: 30, elevation: 0, in: five) == [1, 0, 0, 0, 0, 0])
+        #expect(Panner.gains(azimuth: 110, elevation: 0, in: five) == [0, 0, 0, 0, 1, 0])
+        #expect(Panner.gains(azimuth: -110, elevation: 0, in: five) == [0, 0, 0, 0, 0, 1])
+        // Halfway between L (30°) and Ls (110°): both, equal, at constant power; nothing elsewhere.
+        let mid = Panner.gains(azimuth: 70, elevation: 0, in: five)
+        #expect(abs(mid[0] - mid[4]) < 1e-5 && abs(power(mid) - 1) < 1e-5 && mid[1] == 0 && mid[2] == 0 && mid[3] == 0 && mid[5] == 0)
+        // Behind, between the surrounds; and every direction keeps constant power and leaves the LFE alone.
+        let back = Panner.gains(azimuth: 180, elevation: 0, in: five)
+        #expect(abs(back[4] - back[5]) < 1e-5 && back[4] > 0)
+        for a in stride(from: -180.0, through: 180, by: 7.5) {
+            for layout in [ChannelLayout.surround51, .surround71, .immersive714] {
+                let g = Panner.gains(azimuth: a, elevation: 0, in: layout)
+                #expect(abs(power(g) - 1) < 1e-4 && g[3] == 0, "\(layout.rawValue) at \(a)")
+            }
+        }
+        // Heights: at 30° up only the height layer, halfway between both, above 30° it stays.
+        let top = ChannelLayout.immersive714
+        #expect(Panner.gains(azimuth: 45, elevation: 30, in: top) == Panner.gains(azimuth: 45, elevation: 70, in: top))
+        let up = Panner.gains(azimuth: 45, elevation: 30, in: top)
+        #expect(up[8] == 1 && up.enumerated().allSatisfy { $0.offset == 8 || $0.element == 0 })
+        let half = Panner.gains(azimuth: 135, elevation: 15, in: top)
+        #expect(abs(half[4] - half[10]) < 1e-5 && abs(power(half) - 1) < 1e-5)
+        // The default place: a mono source in C, a stereo source in L and R, exactly as the old routing.
+        #expect(Panner.matrix(SurroundPosition(), sourceChannels: 1, in: five) == ChannelLayout.gains(from: .mono, to: five))
+        #expect(Panner.matrix(SurroundPosition(), sourceChannels: 2, in: five) == ChannelLayout.gains(from: .stereo, to: five))
+    }
+
+    @Test("A track placed at the left surround plays its voice there and nowhere else; refused in a stereo document; out of range refused; placed: false takes it back; saved and read back")
+    func placedTrack() throws {
+        let dir = TempDir()
+        var p = Project(source: try file(dir, "six.wav", channels: 6))
+        let voice = try file(dir, "voice.wav", channels: 1)
+        p.sources.append(voice)
+        p.tracks = [Track(name: "Voice", clips: [Clip(sourceID: voice.id, start: 0, length: 9_600)])]
+        let id = p.tracks[0].id
+        try p.setTrackPosition(id, azimuth: 110)
+        let out = PlanCompiler.compile(p, pool: SourcePool()).render(from: 0, frames: 9_600)
+        let v = try samples(voice)
+        #expect(channel(out, 4, of: 6) == v && [0, 1, 2, 3, 5].allSatisfy { channel(out, $0, of: 6).allSatisfy { $0 == 0 } })
+        #expect(try JSONDecoder().decode(Project.self, from: try JSONEncoder().encode(p)).tracks[0].position == SurroundPosition(azimuth: 110))
+        #expect(throws: Mixer.Failure.self) { try p.setTrackPosition(id, elevation: 120) }
+        try p.setTrackPosition(id, placed: false)
+        #expect(p.tracks[0].position == nil)
+        var s = p
+        s.channels = 2
+        #expect(throws: Mixer.Failure.narrow("stereo")) { try s.setTrackPosition(id, azimuth: 30) }
+    }
 }

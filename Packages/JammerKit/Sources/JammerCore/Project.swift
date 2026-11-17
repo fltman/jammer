@@ -151,6 +151,9 @@ public struct Track: Codable, Hashable, Sendable, Identifiable {
     public var vca: UUID?
     /// Set while the track is frozen: played from a file made through its plugins (see `Frozen`).
     public var frozen: Frozen?
+    /// Where the track's mono or stereo sound is placed in a layout wider than stereo (the surround panner).
+    /// nil: each source on its own loudspeakers (a voice in C, a pair in L and R). Not used in mono or stereo.
+    public var position: SurroundPosition?
 
     public init(id: UUID = UUID(), name: String, clips: [Clip] = [], gainDB: Double = 0, isMuted: Bool = false, inserts: [Insert] = []) {
         self.id = id
@@ -161,7 +164,7 @@ public struct Track: Codable, Hashable, Sendable, Identifiable {
         self.inserts = inserts
     }
 
-    private enum CodingKeys: String, CodingKey { case id, name, clips, gainDB, isMuted, inserts, group, origin, ducked, pan, output, sends, vca, frozen }
+    private enum CodingKeys: String, CodingKey { case id, name, clips, gainDB, isMuted, inserts, group, origin, ducked, pan, output, sends, vca, frozen, position }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -179,6 +182,8 @@ public struct Track: Codable, Hashable, Sendable, Identifiable {
         sends = try c.decodeIfPresent([Send].self, forKey: .sends) ?? []
         vca = try c.decodeIfPresent(UUID.self, forKey: .vca)
         frozen = try c.decodeIfPresent(Frozen.self, forKey: .frozen)
+        // A position out of range (a hand-edited file) is left out rather than played somewhere no control can show.
+        position = (try? c.decodeIfPresent(SurroundPosition.self, forKey: .position)).flatMap { $0 }.flatMap { $0.isValid ? $0 : nil }
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -188,6 +193,7 @@ public struct Track: Codable, Hashable, Sendable, Identifiable {
         try c.encode(clips, forKey: .clips)
         try c.encodeIfPresent(vca, forKey: .vca)
         try c.encodeIfPresent(frozen, forKey: .frozen)
+        try c.encodeIfPresent(position, forKey: .position)
         try c.encode(gainDB, forKey: .gainDB)
         try c.encode(isMuted, forKey: .isMuted)
         if !inserts.isEmpty { try c.encode(inserts, forKey: .inserts) }

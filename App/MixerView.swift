@@ -47,7 +47,8 @@ struct MixerSheet: View {
                                    destinations: project.buses.map { ($0.id, $0.name) },
                                    sends: t.sends, sendTargets: project.buses.map { ($0.id, $0.name) },
                                    change: { session.perform("set_track", ["track": .string(t.id.uuidString)].merging($0) { $1 }) },
-                                   send: { session.perform("set_send", ["from": .string(t.id.uuidString)].merging($0) { $1 }) }, remove: nil)
+                                   send: { session.perform("set_send", ["from": .string(t.id.uuidString)].merging($0) { $1 }) }, remove: nil,
+                                   place: t.position, placeable: project.channels > 2, heights: project.layout == .immersive714)
                     }
                     Text(L10n.text("mixer.buses")).font(.headline).padding(.top, 8)
                     if project.buses.isEmpty { Text(L10n.text("mixer.buses.none")).foregroundStyle(.secondary) }
@@ -316,9 +317,25 @@ private struct MixerStrip: View {
     let change: ([String: JSONValue]) -> Void
     let send: ([String: JSONValue]) -> Void
     let remove: (() -> Void)?
+    /// In a document wider than stereo: the track's place by the surround panner (nil: its sources on their own loudspeakers).
+    var place: SurroundPosition? = nil
+    /// Whether the strip is placed by azimuth (a track in a layout wider than stereo), and whether the layout has heights.
+    var placeable = false
+    var heights = false
+    @State private var azimuth = 0.0
     @State private var level = 0.0
     @State private var position = 0.0
     @State private var dragging = false
+
+    /// A place in words: "Own loudspeakers", "Center", "Left 30°", "Right 110°", "Behind", with the height when there is one.
+    static func placeText(_ p: SurroundPosition?) -> String {
+        guard let p else { return L10n.text("mixer.place.own") }
+        let a = p.azimuth
+        let direction = abs(a) < 0.5 ? L10n.text("mixer.place.center")
+            : abs(abs(a) - 180) < 0.5 ? L10n.text("mixer.place.behind")
+            : a > 0 ? L10n.text("mixer.place.left", L10n.number(a, 0)) : L10n.text("mixer.place.right", L10n.number(-a, 0))
+        return p.elevation > 0 ? L10n.text("mixer.place.withHeight", direction, L10n.number(p.elevation, 0)) : direction
+    }
 
     static func levelText(_ db: Double) -> String { (L10n.number(db, 1, sign: true) + " dB").replacingOccurrences(of: "-", with: "−") }
     /// What a strip's lanes are, in words: the slider beside it is then not the whole level.
@@ -377,7 +394,9 @@ private struct MixerStrip: View {
                     .accessibilityIdentifier("mixer.strip.heard")
             }
         }
-        .onAppear { level = gainDB; position = pan }
+        // The azimuth slider runs left to right, so its value is the azimuth turned round (positive is left).
+        .onAppear { level = gainDB; position = pan; azimuth = -(place?.azimuth ?? 0) }
+        .onChange(of: place) { azimuth = -(place?.azimuth ?? 0) }
         .onChange(of: gainDB) { if !dragging { level = gainDB } }
         .onChange(of: pan) { if !dragging { position = pan } }
         .accessibilityElement(children: .contain)
@@ -451,6 +470,30 @@ private struct MixerStrip: View {
                 Text(panAutomated ? L10n.text("mixer.pan.automated") : Self.panText(position)).font(.caption).lineLimit(1).frame(width: 72, alignment: .leading)
                     .foregroundStyle(panAutomated ? .secondary : .primary)
                     .help(panAutomated ? L10n.text("mixer.pan.automated.help") : "")
+            } else if placeable {
+                // The surround panner: where the sound comes from, positive to the left (BS.2051's convention).
+                Slider(value: $azimuth, in: -180...180, onEditingChanged: { editing in
+                    if !editing {
+                        azimuth = (azimuth / 5).rounded() * 5
+                        if -azimuth != (place?.azimuth ?? 0) || place == nil { change(["azimuth": .number(-azimuth == 0 ? 0 : -azimuth)]) }
+                    }
+                })
+                .frame(width: 90)
+                .help(L10n.text("mixer.place.help"))
+                .accessibilityLabel(L10n.text("mixer.place.ax", name))
+                .accessibilityValue(Text(Self.placeText(place)))
+                .accessibilityIdentifier("mixer.strip.azimuth")
+                Menu(Self.placeText(place)) {
+                    if heights {
+                        ForEach([0.0, 15, 30], id: \.self) { up in
+                            Button((place?.elevation == up ? "✓ " : "") + L10n.text("mixer.place.elevation", L10n.number(up, 0))) { change(["elevation": .number(up)]) }
+                        }
+                        Divider()
+                    }
+                    Button(L10n.text("mixer.place.off")) { change(["placed": .bool(false)]) }.disabled(place == nil)
+                }
+                .menuStyle(.borderlessButton).font(.caption).frame(width: 128, alignment: .leading)
+                .accessibilityIdentifier("mixer.strip.place")
             }
             Picker(L10n.text("mixer.output.ax", name), selection: Binding(get: { output }, set: { change(["output": .string($0?.uuidString ?? "master")]) })) {
                 Text(L10n.text("mixer.output")).tag(UUID?.none)

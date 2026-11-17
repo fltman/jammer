@@ -218,10 +218,24 @@ public enum PlanCompiler {
                 }
             }
             if let inserts, t.inserts.contains(where: { !$0.bypass }) { inserts.attachChain(for: t, to: plan, index: track) }
+            // A track placed by the surround panner has its own copies of its mono and stereo sources in the
+            // plan, each with the panner's matrix (the same source on another track is placed there).
+            let panned = project.channels > 2 ? t.position : nil
+            var ownIndices: [UUID: Int32] = [:]
             for c in t.clips {
                 guard let ref = project.source(c.sourceID) else { continue }
                 let index: Int32
-                if let i = indices[ref.id] {
+                if let position = panned, ref.info.channels <= 2 {
+                    if let i = ownIndices[ref.id] {
+                        index = i
+                    } else {
+                        guard let s = pool.source(for: ref) else { continue }
+                        index = jm_plan_add_source(plan, s)
+                        ownIndices[ref.id] = index
+                        let m = Panner.matrix(position, sourceChannels: ref.info.channels, in: project.layout)
+                        m.withUnsafeBufferPointer { jm_plan_set_source_matrix(plan, index, $0.baseAddress!, Int32(ref.info.channels)) }
+                    }
+                } else if let i = indices[ref.id] {
                     index = i
                 } else {
                     guard let s = pool.source(for: ref) else { continue }

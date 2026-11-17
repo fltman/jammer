@@ -418,7 +418,7 @@ Lowers tracks (music, atmosphere) while there is speech on other tracks and lets
 
 ### `set_track`
 
-Changes one track: its gain, mute, name, pan, or the bus it goes to.
+Changes one track: its gain, mute, name, pan, its place in a surround layout, or the bus it goes to.
 
 | Param | Type | Description |
 |---|---|---|
@@ -427,6 +427,10 @@ Changes one track: its gain, mute, name, pan, or the bus it goes to.
 | `muted` | boolean | True to mute. |
 | `name` | string | A new name. |
 | `pan` | number | −1 (left) to 1 (right), 0 the center. Stereo documents only. |
+| `azimuth` | number | Documents wider than stereo: where the track's mono or stereo sound comes from, in degrees, positive to the left (0 the center, 90 the left side, ±180 behind; ITU-R BS.2051's convention). Placing a track this way uses the surround panner (pairwise vector base amplitude panning at constant power). A source of more than two channels on the track stays on its own loudspeakers. |
+| `elevation` | number | Documents with height loudspeakers (7.1.4): degrees up, 0 to 90; the height layer is at 30, and above it the sound stays there. |
+| `width` | number | For a stereo source: the angle between its two sides, centered on azimuth. Default 60 (at azimuth 0, exactly L and R). |
+| `placed` | boolean | false takes the track out of the surround panner again: each source back on its own loudspeakers (a voice in C, a pair in L and R). |
 | `output` | string | The id of the bus the track goes to, or "master" for the output. |
 
 ### `add_bus`

@@ -5353,6 +5353,24 @@
         }
       }
     },
+    "error.mixer.narrow": {
+      "comment": "An error’s reason, shown in the status line after a step that failed (the agent API says the same in English). %@ is the document’s layout.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "a place by azimuth is for documents wider than stereo; this one is %@. Use pan."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "en placering med azimut är för dokument bredare än stereo; det här är %@. Använd panorering."
+          }
+        }
+      }
+    },
     "error.mixer.noBus": {
       "comment": "An error’s reason, shown in the status line after a step that failed (the agent API says the same in English). Placeholders are names, ids or numbers.",
       "extractionState": "manual",
@@ -5486,13 +5504,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "pan is for stereo documents; this one is %@, and its surround panner isn’t built yet."
+            "value": "pan is for stereo documents; this one is %@. Place a track with azimuth instead."
           }
         },
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "panorering är för stereodokument; det här är %@, och dess surroundpanorering är inte byggd än."
+            "value": "panorering är för stereodokument; det här är %@. Placera spåret med azimut i stället."
           }
         }
       }
@@ -8833,6 +8851,42 @@
         }
       }
     },
+    "menu.layout.mono": {
+      "comment": "Menu item in Audio › Layout.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mono"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mono"
+          }
+        }
+      }
+    },
+    "menu.layout.stereo": {
+      "comment": "Menu item in Audio › Layout.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stereo"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stereo"
+          }
+        }
+      }
+    },
     "menu.picture": {
       "comment": "Menu item: opens the window that shows a film beside the sound.",
       "extractionState": "manual",
@@ -9993,6 +10047,186 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ %% höger"
+          }
+        }
+      }
+    },
+    "mixer.place.ax": {
+      "comment": "Accessibility label of the azimuth slider. %@ is the track.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Place of %@"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Placering för %@"
+          }
+        }
+      }
+    },
+    "mixer.place.behind": {
+      "comment": "A place straight behind.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Behind"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bakom"
+          }
+        }
+      }
+    },
+    "mixer.place.center": {
+      "comment": "A place straight ahead.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Center"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mitten"
+          }
+        }
+      }
+    },
+    "mixer.place.elevation": {
+      "comment": "Menu item: the height of the place. %@ is degrees.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@° up"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@° upp"
+          }
+        }
+      }
+    },
+    "mixer.place.help": {
+      "comment": "Help of the azimuth slider in a surround document.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Where the track is heard from, around the listener: left to the left, right to the right, either end behind."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Var spåret hörs ifrån, runt lyssnaren: vänster åt vänster, höger åt höger, båda ändarna bakom."
+          }
+        }
+      }
+    },
+    "mixer.place.left": {
+      "comment": "A place to the left. %@ is the angle in degrees.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Left %@°"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vänster %@°"
+          }
+        }
+      }
+    },
+    "mixer.place.off": {
+      "comment": "Menu item: take the track out of the surround panner.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Back on Own Loudspeakers"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tillbaka till egna högtalare"
+          }
+        }
+      }
+    },
+    "mixer.place.own": {
+      "comment": "The track is not placed by the panner: each source on its own loudspeakers (a voice in C, a pair in L and R).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Own loudspeakers"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Egna högtalare"
+          }
+        }
+      }
+    },
+    "mixer.place.right": {
+      "comment": "A place to the right. %@ is the angle in degrees.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Right %@°"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Höger %@°"
+          }
+        }
+      }
+    },
+    "mixer.place.withHeight": {
+      "comment": "A place with height. %1$@ is the direction (Left 30°), %2$@ the elevation in degrees.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@, %2$@° up"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@, %2$@° upp"
           }
         }
       }

@@ -272,12 +272,16 @@ public enum Operations {
                        .init("lookahead", .number, "ms before the speech that it starts going down. Default: the attack, so it is down when the first word comes.", range: 0...2_000),
                        .init("stack", .boolean, "True to duck on top of an earlier ducking instead of replacing it."),
                        start, end]),
-        .init("set_track", "Change Track", "Changes one track: its gain, mute, name, pan, or the bus it goes to.",
+        .init("set_track", "Change Track", "Changes one track: its gain, mute, name, pan, its place in a surround layout, or the bus it goes to.",
               params: [.init("track", .string, "Track id.", required: true),
                        .init("gainDB", .number, "The track's gain in dB: the new value, not a change to the old one.", range: -96...24),
                        .init("muted", .boolean, "True to mute."),
                        .init("name", .string, "A new name."),
                        .init("pan", .number, "−1 (left) to 1 (right), 0 the center. Stereo documents only.", range: -1...1),
+                       .init("azimuth", .number, "Documents wider than stereo: where the track's mono or stereo sound comes from, in degrees, positive to the left (0 the center, 90 the left side, ±180 behind; ITU-R BS.2051's convention). Placing a track this way uses the surround panner (pairwise vector base amplitude panning at constant power). A source of more than two channels on the track stays on its own loudspeakers.", range: -180...180),
+                       .init("elevation", .number, "Documents with height loudspeakers (7.1.4): degrees up, 0 to 90; the height layer is at 30, and above it the sound stays there.", range: 0...90),
+                       .init("width", .number, "For a stereo source: the angle between its two sides, centered on azimuth. Default 60 (at azimuth 0, exactly L and R).", range: 0...180),
+                       .init("placed", .boolean, "false takes the track out of the surround panner again: each source back on its own loudspeakers (a voice in C, a pair in L and R)."),
                        .init("output", .string, "The id of the bus the track goes to, or \"master\" for the output.")]),
         .init("add_bus", "Add Bus", "Adds a bus to the mixer: tracks routed to it (set_track output) are summed, given the bus's gain and pan, and passed on to the output or to another bus. The answer's `bus` is its number in `GET …/mixer`, where its id is.",
               params: [.init("name", .string, "What the bus is called.", required: true),
@@ -1032,6 +1036,12 @@ public enum StepRunner {
             if let n = p["name"]?.string, !n.trimmingCharacters(in: .whitespaces).isEmpty { s.project.tracks[t].name = n }
             if p["pan"] != nil || p["output"] != nil {
                 do { try s.project.setTrackRoute(id, pan: p["pan"]?.double, output: try route(p["output"], "set_track")) }
+                catch let e as Mixer.Failure { throw StepFailure("set_track: " + (e.errorDescription ?? ""), reason: e.reason, keyed: e.keyed) }
+            }
+            var placed: Bool?
+            if let v = p["placed"], case .bool(let b) = v { placed = b }
+            if p["azimuth"] != nil || p["elevation"] != nil || p["width"] != nil || placed != nil {
+                do { try s.project.setTrackPosition(id, azimuth: p["azimuth"]?.double, elevation: p["elevation"]?.double, width: p["width"]?.double, placed: placed) }
                 catch let e as Mixer.Failure { throw StepFailure("set_track: " + (e.errorDescription ?? ""), reason: e.reason, keyed: e.keyed) }
             }
         case "add_bus":
