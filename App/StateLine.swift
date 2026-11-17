@@ -16,7 +16,7 @@ struct StateLine: View {
         }
         .font(font)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(kind.spoken.map { "\($0) \(text)" } ?? text)
+        .accessibilityLabel(kind.spokenSaid.map { "\(L10n.message($0.keyed)) \(text)" } ?? text)
     }
 }
 

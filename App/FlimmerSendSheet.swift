@@ -26,7 +26,7 @@ final class FlimmerSendModel {
     init(session: EditorSession) {
         self.session = session
         // What can be said without Flimmer: whether the document can go back at all.
-        if let no = FlimmerSend.refusal(session.project) { stage = .failed(no.message) }
+        if let no = FlimmerSend.refusal(session.project) { stage = .failed(L10n.error(no)) }
     }
 
     static let transport: FlimmerSend.Transport = { request in

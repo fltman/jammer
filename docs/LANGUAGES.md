@@ -27,6 +27,8 @@ Jämmer still starts in English whatever the Mac's language is; Swedish only wit
 
 Numbers inside these sentences are written as the API writes them (0.5, not 0,5), whatever the Mac's region.
 
+**Seen as pictures in Swedish (2026-11-17, block H):** Settings (Models, Agents, Paid Services), Storage, a linked file's window, Send to Flimmer, the ACX report, an import's notes and the spectral area, besides block C's pictures. Swedish stays off until Anders turns it on; the time readout keeps its point (0:07.480) until he has answered.
+
 ## The foundation, built 2026-11-17 (before the Swedish)
 
 - **The catalogue:** `App/Localizable.xcstrings`, English as the source, built into the app by Xcode (the project is generated again by the pre-commit check, so a new file can't be left out).

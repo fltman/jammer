@@ -51,13 +51,13 @@ final class ModelsModel {
     let rows: [ModelRow] = {
         let store = SpeechEngines.store
         var rows = ModelSpec.catalogue.map { spec in
-            ModelRow(id: spec.id, title: spec.title, use: L10n.text("settings.models.whisper.use"), bytes: spec.size, licence: spec.licence,
+            ModelRow(id: spec.id, title: spec.id.contains("medium") ? L10n.text("settings.models.whisperMedium.title") : L10n.text("settings.models.whisperSmall.title"), use: L10n.text("settings.models.whisper.use"), bytes: spec.size, licence: spec.licence,
                      installed: { store.isInstalled(spec) },
                      install: { p in try await store.install(spec, progress: p) },
                      remove: { try store.remove(spec) })
         }
         let parakeet = SpeechEngines.parakeet
-        rows.append(ModelRow(id: "parakeet", title: ParakeetEngine.title, use: L10n.text("settings.models.parakeet.use"),
+        rows.append(ModelRow(id: "parakeet", title: L10n.text("settings.models.parakeet.title"), use: L10n.text("settings.models.parakeet.use"),
                              bytes: ParakeetEngine.downloadBytes, licence: ParakeetEngine.licence,
                              installed: { parakeet.isInstalled },
                              install: { p in try await parakeet.install(progress: p) },
@@ -70,13 +70,13 @@ final class ModelsModel {
                                  remove: { try d.remove() }))
         }
         let stems = Stems.model
-        rows.append(ModelRow(id: "stems", title: StemModel.title, use: L10n.text("settings.models.stems.use"),
+        rows.append(ModelRow(id: "stems", title: L10n.text("settings.models.stems.title"), use: L10n.text("settings.models.stems.use"),
                              bytes: StemModel.downloadBytes, licence: StemModel.licence,
                              installed: { stems.isInstalled },
                              install: { p in try await stems.install(progress: p) },
                              remove: { Stems.forget(); try stems.remove() }))
         let soundtrack = Stems.soundtrack
-        rows.append(ModelRow(id: "soundtrack", title: StemModel.Soundtrack.title, use: L10n.text("settings.models.soundtrack.use"),
+        rows.append(ModelRow(id: "soundtrack", title: L10n.text("settings.models.soundtrack.title"), use: L10n.text("settings.models.soundtrack.use"),
                              bytes: StemModel.Soundtrack.downloadBytes, licence: StemModel.Soundtrack.licence,
                              installed: { soundtrack.isInstalled },
                              install: { p in try await soundtrack.install(progress: p) },

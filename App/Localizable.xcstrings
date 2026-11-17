@@ -21477,6 +21477,23 @@
         }
       }
     },
+    "settings.models.parakeet.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Parakeet TDT 0.6B v3 (25 languages)"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Parakeet TDT 0.6B v3 (25 språk)"
+          }
+        }
+      }
+    },
     "settings.models.parakeet.use": {
       "comment": "What a model is for.",
       "extractionState": "manual",
@@ -21513,6 +21530,23 @@
         }
       }
     },
+    "settings.models.soundtrack.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Soundtrack separation (MRX)"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uppdelning av filmljud (MRX)"
+          }
+        }
+      }
+    },
     "settings.models.soundtrack.use": {
       "comment": "What a model is for. Names the menu path.",
       "extractionState": "manual",
@@ -21545,6 +21579,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "modellkällan"
+          }
+        }
+      }
+    },
+    "settings.models.stems.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stem separation (Spleeter 4stems)"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uppdelning i stems (Spleeter 4stems)"
           }
         }
       }
@@ -21599,6 +21650,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "Transkribering på svenska; den bästa svenska motorn här."
+          }
+        }
+      }
+    },
+    "settings.models.whisperMedium.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "KB-Whisper medium (Swedish, 539 MB)"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "KB-Whisper medium (svenska, 539 MB)"
+          }
+        }
+      }
+    },
+    "settings.models.whisperSmall.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "KB-Whisper small (Swedish, 175 MB)"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "KB-Whisper small (svenska, 175 MB)"
           }
         }
       }
@@ -22232,6 +22317,74 @@
           "stringUnit": {
             "state": "translated",
             "value": "Välkommen till Jämmer"
+          }
+        }
+      }
+    },
+    "state.spoken.error": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Error:"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fel:"
+          }
+        }
+      }
+    },
+    "state.spoken.progress": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In progress:"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pågår:"
+          }
+        }
+      }
+    },
+    "state.spoken.success": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Done:"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Klart:"
+          }
+        }
+      }
+    },
+    "state.spoken.warning": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Warning:"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Varning:"
           }
         }
       }
@@ -25124,6 +25277,244 @@
           "stringUnit": {
             "state": "translated",
             "value": "Effekter, reparationer och frysta spår görs som nya ljudfiler i Jämmers mediamapp; dina egna filer ändras aldrig. Här syns vad som finns där. Inget tas bort om du inte väljer det här, och det du väljer hamnar i papperskorgen."
+          }
+        }
+      }
+    },
+    "storage.kind.debleed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "bleed removed"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "överhörning borttagen"
+          }
+        }
+      }
+    },
+    "storage.kind.declick": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "clicks removed"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "klick borttagna"
+          }
+        }
+      }
+    },
+    "storage.kind.declip": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "clipping repaired"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "överstyrning reparerad"
+          }
+        }
+      }
+    },
+    "storage.kind.dehum": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "hum removed"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "brum borttaget"
+          }
+        }
+      }
+    },
+    "storage.kind.denoise": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "noise reduced"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "brus reducerat"
+          }
+        }
+      }
+    },
+    "storage.kind.dereverb": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "reverb reduced"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "reverb reducerad"
+          }
+        }
+      }
+    },
+    "storage.kind.drift": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "drift corrected"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "drift rättad"
+          }
+        }
+      }
+    },
+    "storage.kind.duck": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ducked"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "duckad"
+          }
+        }
+      }
+    },
+    "storage.kind.echo": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "echo"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "eko"
+          }
+        }
+      }
+    },
+    "storage.kind.frozen": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "frozen"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "fryst"
+          }
+        }
+      }
+    },
+    "storage.kind.levelled": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "leveled"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "nivåjusterad"
+          }
+        }
+      }
+    },
+    "storage.kind.limit": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "limited"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "begränsad"
+          }
+        }
+      }
+    },
+    "storage.kind.spectral": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "spectral edit"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "spektral redigering"
+          }
+        }
+      }
+    },
+    "storage.kind.stem": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "stem"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "stem"
           }
         }
       }

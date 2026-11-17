@@ -21,12 +21,14 @@ public enum StateKind: String, Sendable, CaseIterable {
         }
     }
     /// Said first by VoiceOver, where the kind matters to what follows (an upplysning needs no word).
-    public var spoken: String? {
+    public var spoken: String? { spokenSaid?.text }
+    /// The same, by key, for a window in either language.
+    public var spokenSaid: Said? {
         switch self {
-        case .error: "Error:"
-        case .warning: "Warning:"
-        case .success: "Done:"
-        case .progress: "In progress:"
+        case .error: Said("state.spoken.error", "Error:")
+        case .warning: Said("state.spoken.warning", "Warning:")
+        case .success: Said("state.spoken.success", "Done:")
+        case .progress: Said("state.spoken.progress", "In progress:")
         case .info: nil
         }
     }

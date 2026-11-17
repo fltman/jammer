@@ -168,7 +168,7 @@ struct StorageView: View {
                             .accessibilityLabel(L10n.text("storage.choose.ax", f.name))
                     }
                     Text(f.name).lineLimit(1).truncationMode(.middle)
-                    if let kind = f.kind { Text(kind).font(.caption).foregroundStyle(.secondary) }
+                    if let kind = f.kind { Text(StorageKinds.name(kind)).font(.caption).foregroundStyle(.secondary) }
                     Spacer()
                     if !f.projects.isEmpty { Text(f.projects.map { ($0 as NSString).lastPathComponent }.joined(separator: ", ")).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
                     Text(Self.size(f.bytes)).monospacedDigit().font(.caption)
@@ -195,5 +195,18 @@ struct StorageView: View {
         }
         chosen = []
         reload()
+    }
+}
+
+/// What made a file in Jämmer's media folder, in the window's language. The register keeps the step's own
+/// word (`frozen`, `duck`, …), which stays as it is for an agent.
+enum StorageKinds {
+    static func name(_ kind: String) -> String {
+        let names = ["frozen": L10n.text("storage.kind.frozen"), "duck": L10n.text("storage.kind.duck"), "echo": L10n.text("storage.kind.echo"),
+                     "limit": L10n.text("storage.kind.limit"), "debleed": L10n.text("storage.kind.debleed"), "drift": L10n.text("storage.kind.drift"),
+                     "levelled": L10n.text("storage.kind.levelled"), "spectral": L10n.text("storage.kind.spectral"), "stem": L10n.text("storage.kind.stem"),
+                     "dehum": L10n.text("storage.kind.dehum"), "declip": L10n.text("storage.kind.declip"), "declick": L10n.text("storage.kind.declick"),
+                     "denoise": L10n.text("storage.kind.denoise"), "dereverb": L10n.text("storage.kind.dereverb")]
+        return names[kind] ?? kind
     }
 }
