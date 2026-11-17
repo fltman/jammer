@@ -138,7 +138,7 @@ struct Curve {
     std::vector<int64_t> frames;
     std::vector<float> db;   // the values, whatever the kind
     bool empty() const { return frames.empty(); }
-    double dbAt(int64_t t) const;
+    double dbAt(int64_t t) const JM_NONBLOCKING;
     /// `n` interleaved frames of `in`, of which the first is timeline frame `at`, times the curve, to `out`
     /// (which may be `in`).
     void apply(const float *in, float *out, int64_t at, int64_t n, int32_t channels) const;
@@ -162,6 +162,26 @@ struct PanLayout {
 struct Placement {
     Curve azimuth, elevation;
     double width = 60;
+};
+
+/// A sound field (AmbiX, order 1–3) turned round the listener as it plays: its yaw, pitch and roll over the
+/// timeline (degrees), and how the turned field goes into the document (`base`, [component][document channel]:
+/// the field's own components into an Ambisonics document, or a decoder into loudspeakers). The turn is worked
+/// out exactly on a 32-point quadrature of the sphere (the same as the app's `Ambisonics.rotation`), whose
+/// directions, weights and harmonics are made here when the plan is built.
+struct FieldTurn {
+    static constexpr int32_t kPoints = 32, kMaxComponents = 16, kMaxChannels = 32;
+    int32_t order = 1, components = 4, channels = 0;
+    std::vector<float> base;
+    Curve yaw, pitch, roll;
+    double dir[kPoints][3];
+    double weight[kPoints];
+    double harmonics[kPoints][kMaxComponents];
+    /// The matrix from the field's components to the document's channels at timeline frame `t` (the turn there,
+    /// then `base`), `out` components × channels. Nothing allocated.
+    void matrix(int64_t t, float *out) const JM_NONBLOCKING;
+    /// The first lane point strictly between `from` and `to` (where the turn changes its course), or −1.
+    int64_t bend(int64_t from, int64_t to) const JM_NONBLOCKING;
 };
 
 /// Automation of one parameter of one plugin on a strip: the value the parameter has at each place on
@@ -317,6 +337,8 @@ struct Plan {
     std::vector<std::vector<float>> sourceMatrix;
     /// Per source: placed by the surround panner, its gains worked out as it plays (overrides the matrix).
     std::vector<std::shared_ptr<const Placement>> sourcePlacement;
+    /// Per source: a sound field turned as it plays (overrides the matrix).
+    std::vector<std::shared_ptr<const FieldTurn>> sourceTurn;
     PanLayout panLayout;
     std::vector<Track> tracks;
     std::vector<Bus> buses;

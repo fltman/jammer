@@ -74,6 +74,52 @@ void Renderer::mixClip(const Plan &plan, const Clip &c, float trackGain, int64_t
         }
         return;
     }
+    if (const FieldTurn *ft = plan.sourceTurn[size_t(c.source)].get(); ft && sc == ft->components) {
+        // A sound field turned as it plays: the field's matrix worked out at the grid's points and, between
+        // them, a curve through three of them (this one and the next two), so that a turn at a steady speed
+        // is followed within the place lanes' tolerance (a straight ramp would be off by its chord, which
+        // grows with the order). Only grid points: where a render starts never changes a sample.
+        constexpr int32_t kC = FieldTurn::kMaxComponents, kD = FieldTurn::kMaxChannels;
+        float m0[kC * kD], m1[kC * kD], m2[kC * kD];
+        const int32_t dc = ft->channels;
+        int64_t i = 0;
+        while (i < got) {
+            const int64_t t = a + i;
+            const int64_t g = (t / Chain::kQuantum) * Chain::kQuantum;
+            const int64_t next = std::min(a + got, g + Chain::kQuantum);
+            const int64_t len = next - t;
+            ft->matrix(g, m0);
+            ft->matrix(g + Chain::kQuantum, m1);
+            // Where a lane turns within the next two quanta, a curve through them would overshoot the corner, and
+            // a straight line would cut it (by up to the order times the change of speed): there the matrix is
+            // also worked out at the lane's own point (m2), and goes straight to it and on to the next grid point.
+            const int64_t bendAt = ft->bend(g, g + 2 * Chain::kQuantum);
+            const bool curve = bendAt < 0;
+            const bool kink = !curve && bendAt < g + Chain::kQuantum;
+            if (curve) ft->matrix(g + 2 * Chain::kQuantum, m2);
+            else if (kink) ft->matrix(bendAt, m2);
+            const float uk = kink ? float(bendAt - g) / float(Chain::kQuantum) : 0;
+            for (int64_t j = 0; j < len; ++j, ++i) {
+                const float gn = fades ? base * fade_gain(c, a - c.start + i) : base;
+                const float u = float(t + j - g) / float(Chain::kQuantum);
+                float l0, l1, l2;
+                if (curve) { l0 = (u - 1) * (u - 2) * 0.5f; l1 = u * (2 - u); l2 = u * (u - 1) * 0.5f; }
+                else if (kink && u < uk) { const float v = u / uk; l0 = 1 - v; l1 = 0; l2 = v; }
+                else if (kink) { const float v = (u - uk) / (1 - uk); l0 = 0; l1 = v; l2 = 1 - v; }
+                else { l0 = 1 - u; l1 = u; l2 = 0; }
+                float *o = out + (a - start + i) * channels_;
+                const float *s = scratch_.data() + i * sc;
+                for (int32_t k = 0; k < sc; ++k) {
+                    const float sk = s[k] * gn;
+                    if (sk == 0.0f) continue;
+                    const int32_t row = k * dc;
+                    for (int32_t ch = 0; ch < dc && ch < channels_; ++ch)
+                        o[ch] += sk * (l0 * m0[row + ch] + l1 * m1[row + ch] + (l2 != 0.0f ? l2 * m2[row + ch] : 0.0f));
+                }
+            }
+        }
+        return;
+    }
     const std::vector<float> &m = plan.sourceMatrix[size_t(c.source)];
     if (!m.empty()) {
         // Through the source's matrix: each source channel into the document's channels by its gains.
@@ -138,6 +184,7 @@ int32_t jm_plan_add_source(jm_plan *plan, jm_source *source) {
     plan->ptr->sources.push_back(source->ptr);
     plan->ptr->sourceMatrix.emplace_back();
     plan->ptr->sourcePlacement.emplace_back();
+    plan->ptr->sourceTurn.emplace_back();
     return int32_t(plan->ptr->sources.size() - 1);
 }
 
@@ -179,6 +226,92 @@ void jm_plan_set_source_placement(jm_plan *plan, int32_t source, const int64_t *
     pl->elevation.db.assign(el_values, el_values + el_count);
     pl->width = width;
     p.sourcePlacement[size_t(source)] = pl;
+}
+
+namespace {
+/// The real spherical harmonics of AmbiX (ACN, SN3D) up to `order` for a direction, as the app's
+/// `Ambisonics.encode`. Nothing allocated.
+void field_harmonics(double az, double el, int32_t order, double *y) JM_NONBLOCKING {
+    const double cp = std::cos(az), sp = std::sin(az), ct = std::cos(el), st = std::sin(el);
+    y[0] = 1;
+    if (order >= 1) { y[1] = sp * ct; y[2] = st; y[3] = cp * ct; }
+    if (order >= 2) {
+        const double r3 = 1.7320508075688772;
+        y[4] = r3 / 2 * std::sin(2 * az) * ct * ct; y[5] = r3 / 2 * sp * std::sin(2 * el); y[6] = 0.5 * (3 * st * st - 1);
+        y[7] = r3 / 2 * cp * std::sin(2 * el); y[8] = r3 / 2 * std::cos(2 * az) * ct * ct;
+    }
+    if (order >= 3) {
+        const double a = 0.7905694150420949, b = 1.9364916731037085, c = 0.6123724356957945;
+        y[9] = a * std::sin(3 * az) * ct * ct * ct; y[10] = b * std::sin(2 * az) * st * ct * ct; y[11] = c * sp * ct * (5 * st * st - 1);
+        y[12] = 0.5 * st * (5 * st * st - 3); y[13] = c * cp * ct * (5 * st * st - 1); y[14] = b * std::cos(2 * az) * st * ct * ct;
+        y[15] = a * std::cos(3 * az) * ct * ct * ct;
+    }
+}
+} // namespace
+
+void FieldTurn::matrix(int64_t t, float *out) const JM_NONBLOCKING {
+    const double d2r = 3.14159265358979323846 / 180;
+    const double r = roll.dbAt(t) * d2r, p = pitch.dbAt(t) * d2r, yw = yaw.dbAt(t) * d2r;
+    const double cr = std::cos(r), sr = std::sin(r), cpi = std::cos(p), spi = std::sin(p), cy = std::cos(yw), sy = std::sin(yw);
+    double m[kMaxComponents][kMaxComponents] = {};
+    double y1[kMaxComponents];
+    for (int32_t k = 0; k < kPoints; ++k) {
+        // The point turned: roll about the front axis, pitch about the left one, yaw about the vertical.
+        const double *v = dir[k];
+        const double a1 = v[1] * cr - v[2] * sr, a2 = v[1] * sr + v[2] * cr;
+        const double b0 = v[0] * cpi - a2 * spi, b2 = v[0] * spi + a2 * cpi;
+        const double x = b0 * cy - a1 * sy, y = b0 * sy + a1 * cy, z = b2;
+        field_harmonics(std::atan2(y, x), std::asin(z > 1 ? 1 : z < -1 ? -1 : z), order, y1);
+        for (int32_t i = 0; i < components; ++i) {
+            const int32_t band = int32_t(std::sqrt(double(i)) + 1e-9);
+            const double f = double(2 * band + 1) * weight[k] * y1[i];
+            for (int32_t j = band * band; j < (band + 1) * (band + 1); ++j) m[j][i] += f * harmonics[k][j];
+        }
+    }
+    for (int32_t i = 0; i < components; ++i)
+        for (int32_t ch = 0; ch < channels; ++ch) {
+            double s = 0;
+            for (int32_t j = 0; j < components; ++j) s += m[i][j] * double(base[size_t(j * channels + ch)]);
+            out[i * channels + ch] = float(s);
+        }
+}
+
+int64_t FieldTurn::bend(int64_t from, int64_t to) const JM_NONBLOCKING {
+    int64_t first = -1;
+    for (const Curve *c : {&yaw, &pitch, &roll}) {
+        const auto it = std::upper_bound(c->frames.begin(), c->frames.end(), from);
+        if (it != c->frames.end() && *it < to && (first < 0 || *it < first)) first = *it;
+    }
+    return first;
+}
+
+void jm_plan_set_source_turn(jm_plan *plan, int32_t source, int32_t order, const float *base,
+                             const int64_t *yaw_frames, const float *yaw_values, int32_t yaw_count,
+                             const int64_t *pitch_frames, const float *pitch_values, int32_t pitch_count,
+                             const int64_t *roll_frames, const float *roll_values, int32_t roll_count) {
+    Plan &p = *plan->ptr;
+    if (source < 0 || size_t(source) >= p.sources.size() || order < 1 || order > 3 || yaw_count < 1 || pitch_count < 1 || roll_count < 1) return;
+    auto f = std::make_shared<FieldTurn>();
+    f->order = order;
+    f->components = (order + 1) * (order + 1);
+    f->channels = p.channels;
+    if (p.sources[size_t(source)]->channels != f->components || p.channels > FieldTurn::kMaxChannels) return;
+    f->base.assign(base, base + size_t(f->components * p.channels));
+    f->yaw.frames.assign(yaw_frames, yaw_frames + yaw_count); f->yaw.db.assign(yaw_values, yaw_values + yaw_count);
+    f->pitch.frames.assign(pitch_frames, pitch_frames + pitch_count); f->pitch.db.assign(pitch_values, pitch_values + pitch_count);
+    f->roll.frames.assign(roll_frames, roll_frames + roll_count); f->roll.db.assign(roll_values, roll_values + roll_count);
+    // Gauss–Legendre in sin(elevation) (4 nodes) times 8 azimuths: exact for the products of harmonics up to order 3.
+    const double node[4] = {-0.8611363115940526, -0.3399810435848563, 0.3399810435848563, 0.8611363115940526};
+    const double gw[4] = {0.3478548451374538, 0.6521451548625461, 0.6521451548625461, 0.3478548451374538};
+    int32_t k = 0;
+    for (int32_t i = 0; i < 4; ++i)
+        for (int32_t a = 0; a < 8; ++a, ++k) {
+            const double az = 2 * 3.14159265358979323846 * a / 8, el = std::asin(node[i]);
+            f->dir[k][0] = std::cos(az) * std::cos(el); f->dir[k][1] = std::sin(az) * std::cos(el); f->dir[k][2] = std::sin(el);
+            f->weight[k] = gw[i] / 2 / 8;
+            field_harmonics(az, el, 3, f->harmonics[k]);
+        }
+    p.sourceTurn[size_t(source)] = f;
 }
 
 namespace {

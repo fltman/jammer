@@ -46,7 +46,7 @@ struct AutomationTests {
         let newer = json.replacingOccurrences(of: "\"formatVersion\":3", with: "\"formatVersion\":\(Project.newestFormatVersion + 1)")
         #expect(throws: Project.NeedsNewer(version: Project.newestFormatVersion + 1)) { try JSONDecoder().decode(Project.self, from: Data(newer.utf8)) }
         // (A build from before automation knew formats up to 2 and refuses 3 by the same check; format 4 is a document wider than stereo.)
-        #expect(Project.automationFormatVersion == 3 && Project.immersiveFormatVersion == 4 && Project.newestFormatVersion == 4)
+        #expect(Project.automationFormatVersion == 3 && Project.immersiveFormatVersion == 4 && Project.fieldFormatVersion == 5 && Project.newestFormatVersion == 5)
         // Cleared, it is the project it was.
         let cleared = try p.clearAutomation(strip: p.tracks[0].id, param: .gain)
         #expect(cleared == 2)

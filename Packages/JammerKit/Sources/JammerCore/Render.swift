@@ -177,6 +177,25 @@ public enum PlanCompiler {
         var (af, av) = line(azimuth, position.azimuth), (ef, ev) = line(elevation, position.elevation)
         jm_plan_set_source_placement(plan, source, &af, &av, Int32(af.count), &ef, &ev, Int32(ef.count), position.width)
     }
+    /// A sound field's matrix into the document: decoded (or its components as they are into a field), turned
+    /// first by the track's fixed rotation. (A moving turn is the engine's; this is its place at no lane.)
+    public static func fieldMatrix(_ ref: SourceRef, track: Track, in project: Project) -> [Float]? {
+        guard let order = ref.fieldOrder else { return nil }
+        let n = ref.info.channels, out = project.channels
+        let base = fieldBase(ref, in: project)
+        guard let r = track.rotation, !r.isNone else { return base }
+        let rot = Ambisonics.rotation(yaw: r.yaw, pitch: r.pitch, roll: r.roll, order: order)
+        var m = [Float](repeating: 0, count: n * out)
+        for i in 0..<n { for j in 0..<n where rot[i * n + j] != 0 { for ch in 0..<out { m[i * out + ch] += rot[i * n + j] * base[j * out + ch] } } }
+        return m
+    }
+    /// A field's matrix with no turn, always given (its components one for one when the document is the field).
+    static func fieldBase(_ ref: SourceRef, in project: Project) -> [Float] {
+        let n = ref.info.channels, out = project.channels
+        if let m = project.layout.matrix(sourceChannels: n, sourceMask: ref.info.channelMask, fieldOrder: ref.fieldOrder) { return m }
+        return (0..<n).flatMap { k in (0..<out).map { Float(k == $0 ? 1 : 0) } }
+    }
+
     static func setPanLayout(_ plan: OpaquePointer, _ layout: ChannelLayout) {
         if let order = layout.ambisonicOrder { jm_plan_set_pan_layout(plan, Int32(order), nil, nil, nil, 0); return }
         var ch: [Int32] = [], az: [Double] = [], el: [Double] = []
@@ -254,10 +273,39 @@ public enum PlanCompiler {
             let elLane = project.lane(strip: t.id, param: .elevation).flatMap { $0.enabled && !$0.points.isEmpty ? $0 : nil }
             let panned: SurroundPosition? = project.channels > 2 && (t.position != nil || azLane != nil || elLane != nil) ? (t.position ?? SurroundPosition()) : nil
             var ownIndices: [UUID: Int32] = [:]
+            // A track's sound fields turned: by its fixed rotation (baked into the field's matrix), or by its yaw,
+            // pitch and roll lanes, worked out by the engine as it plays. Each turned field has its own copy.
+            func turnLane(_ p: AutomationLane.Param) -> AutomationLane? { project.lane(strip: t.id, param: p).flatMap { $0.enabled && !$0.points.isEmpty ? $0 : nil } }
+            let yawLane = turnLane(.yaw), pitchLane = turnLane(.pitch), rollLane = turnLane(.roll)
+            let turnMoves = yawLane != nil || pitchLane != nil || rollLane != nil
+            let turned = turnMoves || !(t.rotation?.isNone ?? true)
             for c in t.clips {
                 guard let ref = project.source(c.sourceID) else { continue }
                 let index: Int32
-                if let position = panned, ref.info.channels <= 2 {
+                if turned, let order = ref.fieldOrder {
+                    if let i = ownIndices[ref.id] {
+                        index = i
+                    } else {
+                        guard let s = pool.source(for: ref) else { continue }
+                        index = jm_plan_add_source(plan, s)
+                        ownIndices[ref.id] = index
+                        if !turnMoves {
+                            let m = Self.fieldMatrix(ref, track: t, in: project)!
+                            m.withUnsafeBufferPointer { jm_plan_set_source_matrix(plan, index, $0.baseAddress!, Int32(ref.info.channels)) }
+                        } else {
+                            let r = t.rotation ?? FieldRotation()
+                            func line(_ lane: AutomationLane?, _ fixed: Double) -> ([Int64], [Float]) {
+                                guard let lane else { return ([0], [Float(fixed)]) }
+                                return (lane.points.map { Int64($0.frame) }, lane.points.map { Float($0.value) })
+                            }
+                            var (yf, yv) = line(yawLane, r.yaw), (pf, pv) = line(pitchLane, r.pitch), (rf, rv) = line(rollLane, r.roll)
+                            let base = Self.fieldBase(ref, in: project)
+                            base.withUnsafeBufferPointer { b in
+                                jm_plan_set_source_turn(plan, index, Int32(order), b.baseAddress!, &yf, &yv, Int32(yf.count), &pf, &pv, Int32(pf.count), &rf, &rv, Int32(rf.count))
+                            }
+                        }
+                    }
+                } else if let position = panned, ref.info.channels <= 2 {
                     if let i = ownIndices[ref.id] {
                         index = i
                     } else {
@@ -278,7 +326,7 @@ public enum PlanCompiler {
                     index = jm_plan_add_source(plan, s)
                     indices[ref.id] = index
                     // Into a layout wider than stereo (or from one): each channel to its loudspeaker.
-                    if let m = project.layout.matrix(sourceChannels: ref.info.channels, sourceMask: ref.info.channelMask) {
+                    if let m = project.layout.matrix(sourceChannels: ref.info.channels, sourceMask: ref.info.channelMask, fieldOrder: ref.fieldOrder) {
                         m.withUnsafeBufferPointer { jm_plan_set_source_matrix(plan, index, $0.baseAddress!, Int32(ref.info.channels)) }
                     }
                 }

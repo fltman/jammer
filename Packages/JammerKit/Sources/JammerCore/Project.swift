@@ -18,6 +18,9 @@ public struct SourceRef: Codable, Hashable, Sendable, Identifiable {
     /// The repairs this audio has been through ("dehum", "denoise"…), when Jämmer made the file
     /// from another: some measurements can't be trusted on repaired sound, and say so.
     public var repairs: [String]?
+    /// The file is a sound field (AmbiX) of this order: set when its document was made Ambisonics of that order,
+    /// or by `set_track` `field`. Nothing in a WAV says so. Into loudspeakers a field is decoded (AllRAD).
+    public var fieldOrder: Int?
 
     public func withRepairs(_ r: [String]?) -> SourceRef {
         var s = self
@@ -154,6 +157,8 @@ public struct Track: Codable, Hashable, Sendable, Identifiable {
     /// Where the track's mono or stereo sound is placed in a layout wider than stereo (the surround panner).
     /// nil: each source on its own loudspeakers (a voice in C, a pair in L and R). Not used in mono or stereo.
     public var position: SurroundPosition?
+    /// The track's sound fields turned round the listener (yaw, pitch, roll), fixed; lanes move it.
+    public var rotation: FieldRotation?
 
     public init(id: UUID = UUID(), name: String, clips: [Clip] = [], gainDB: Double = 0, isMuted: Bool = false, inserts: [Insert] = []) {
         self.id = id
@@ -164,7 +169,7 @@ public struct Track: Codable, Hashable, Sendable, Identifiable {
         self.inserts = inserts
     }
 
-    private enum CodingKeys: String, CodingKey { case id, name, clips, gainDB, isMuted, inserts, group, origin, ducked, pan, output, sends, vca, frozen, position }
+    private enum CodingKeys: String, CodingKey { case id, name, clips, gainDB, isMuted, inserts, group, origin, ducked, pan, output, sends, vca, frozen, position, rotation }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -184,6 +189,8 @@ public struct Track: Codable, Hashable, Sendable, Identifiable {
         frozen = try c.decodeIfPresent(Frozen.self, forKey: .frozen)
         // A position out of range (a hand-edited file) is left out rather than played somewhere no control can show.
         position = (try? c.decodeIfPresent(SurroundPosition.self, forKey: .position)).flatMap { $0 }.flatMap { $0.isValid ? $0 : nil }
+        // The same for a field's turn out of range.
+        rotation = (try? c.decodeIfPresent(FieldRotation.self, forKey: .rotation)).flatMap { $0 }.flatMap { $0.isValid && !$0.isNone ? $0 : nil }
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -194,6 +201,7 @@ public struct Track: Codable, Hashable, Sendable, Identifiable {
         try c.encodeIfPresent(vca, forKey: .vca)
         try c.encodeIfPresent(frozen, forKey: .frozen)
         try c.encodeIfPresent(position, forKey: .position)
+        try c.encodeIfPresent(rotation, forKey: .rotation)
         try c.encode(gainDB, forKey: .gainDB)
         try c.encode(isMuted, forKey: .isMuted)
         if !inserts.isEmpty { try c.encode(inserts, forKey: .inserts) }
@@ -281,7 +289,24 @@ public struct Project: Codable, Equatable, Sendable {
     /// What a project wider than stereo (5.1, 7.1, 7.1.4) is saved as: an app that only knows mono and stereo
     /// would put a mono source in every channel, the LFE too, so it refuses the file instead.
     public static let immersiveFormatVersion = 4
-    public static let newestFormatVersion = 4
+    /// What a project with a sound field marked as such, or turned, is saved as: an app before it would play a
+    /// field's components straight into loudspeakers, so it refuses the file instead.
+    public static let fieldFormatVersion = 5
+    public static let newestFormatVersion = 5
+
+    /// A source marked as a sound field, a track turned, or a lane that turns one.
+    public var usesFields: Bool {
+        sources.contains { $0.fieldOrder != nil } || tracks.contains { $0.rotation != nil }
+            || automation.contains { [.yaw, .pitch, .roll].contains($0.param) }
+    }
+    /// Marks the files of a sound field's size as fields of `order` (a document made Ambisonics says what its
+    /// files are; a file with loudspeakers named in it is never taken for one).
+    public mutating func markFields(order: Int) {
+        let n = (order + 1) * (order + 1)
+        for i in sources.indices where sources[i].info.channels == n && (sources[i].info.channelMask ?? 0) == 0 { sources[i].fieldOrder = order }
+    }
+    /// Whether the track plays a sound field.
+    public func playsField(_ track: Track) -> Bool { track.clips.contains { source($0.sourceID)?.fieldOrder != nil } }
 
     /// The document's loudspeakers. Every layout has its own channel count, so the count says which.
     public var layout: ChannelLayout { ChannelLayout.standard(channels: channels) ?? .stereo }
@@ -358,7 +383,7 @@ public struct Project: Codable, Equatable, Sendable {
 
     public func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
-        try c.encode(channels > 2 ? Self.immersiveFormatVersion : usesAutomation ? Self.automationFormatVersion
+        try c.encode(usesFields ? Self.fieldFormatVersion : channels > 2 ? Self.immersiveFormatVersion : usesAutomation ? Self.automationFormatVersion
                      : usesMixer ? Self.mixerFormatVersion : Self.formatVersion, forKey: .formatVersion)
         try c.encode(sampleRate, forKey: .sampleRate)
         try c.encode(channels, forKey: .channels)

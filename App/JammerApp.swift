@@ -333,6 +333,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                           ("send", L10n.text("menu.view.automation.send")),
                                           // A track's place and height (documents wider than stereo).
                                           ("azimuth", L10n.text("menu.view.automation.azimuth")), ("elevation", L10n.text("menu.view.automation.elevation")),
+                                          // A track's sound field turned (a track that plays one).
+                                          ("yaw", L10n.text("menu.view.automation.yaw")), ("pitch", L10n.text("menu.view.automation.pitch")), ("roll", L10n.text("menu.view.automation.roll")),
                                           ("plugin", L10n.text("menu.view.automation.plugin"))]
         let automationMenu = submenu(L10n.text("menu.view.automation"), kinds.map { kind, title in
             let i = item(title, #selector(EditorWindowController.showAutomation(_:)))

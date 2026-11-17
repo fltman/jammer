@@ -145,6 +145,7 @@ How an English term is written in Swedish text: unchanged, with a capital only w
 | frame rate, fps | bildfrekvens, bilder/s | added 2026-11-17 (block F), for Anders to look at |
 | drop-frame | drop-frame | added 2026-11-17 (block F): the trade's English term, as the rule says |
 | edit decision list, EDL | redigeringslista, EDL | added 2026-11-17 (block F), for Anders to look at |
+| sound field, turn (a field), front, side | ljudfält, vrida (vridning), fronten, sidan | added 2026-11-17 (block I), for Anders to look at; the API's yaw, pitch and roll stay as they are |
 
 ## Rules added 2026-11-17 (the series', to be followed when the work gets there)
 

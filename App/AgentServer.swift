@@ -759,6 +759,9 @@ enum AgentRouter {
             ["id": t.id.uuidString, "name": t.name, "gainDB": t.gainDB, "pan": t.pan, "muted": t.isMuted, "output": to(t.output), "sends": sends(t.sends),
              // In a document wider than stereo: the track's place by the surround panner (null: its sources on their own loudspeakers).
              "position": t.position.map { ["azimuth": $0.azimuth, "elevation": $0.elevation, "width": $0.width] as [String: Any] } ?? NSNull(),
+             // A track that plays a sound field: its order, and its turn (yaw, pitch, roll).
+             "field": t.clips.compactMap { p.source($0.sourceID)?.fieldOrder }.first.map { $0 as Any } ?? NSNull(),
+             "rotation": t.rotation.map { ["yaw": $0.yaw, "pitch": $0.pitch, "roll": $0.roll] as [String: Any] } ?? NSNull(),
              "vca": t.vca?.uuidString ?? NSNull(), "heard": heard(t.gainDB, t.isMuted, t.vca), "frozen": frozen(t.frozen), "automation": lanes(t.id),
              "latencySamples": t.frozen == nil ? own(t.inserts) : 0, "compensationSamples": plan.compensation(bus: false, index: p.tracks.firstIndex { $0.id == t.id } ?? 0)]
         }

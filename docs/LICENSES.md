@@ -33,6 +33,8 @@ Jämmer is MIT. Every third-party component and model is listed here **before** 
 | What | Source | Licence | Note |
 |---|---|---|---|
 | K-weighting at any sample rate | ITU-R BS.1770 analog prototype; constants as published in libebur128 | Standard / MIT | Reimplemented in `Loudness.swift`, tested against EBU Tech 3341/3342 |
+| Ambisonics decoding to loudspeakers (AllRAD) | F. Zotter, M. Frank, "All-Round Ambisonic Panning and Decoding", JAES 60(10), 2012 (not readable: AES e-library), as described in E. M. Hoffbauer, *Evaluation of Surround Sound Setups based on Ambisonic Room Impulse Response Measurements*, master's thesis, KUG/TU Graz 2021, §1.2.3 (read at phaidra.kug.ac.at, 2026-11-17); max-rE weights by the approximation there (eq. 1.17); VBAP after V. Pulkki, JAES 45(6), 1997 | Published methods | Own code in `AmbisonicDecoder.swift`; nothing copied. Zotter & Frank's book *Ambisonics* (Springer 2019, CC BY 4.0 per its OAPEN record) couldn't be opened from here (login, connection reset). |
+| Rotation of a sound field | Exact quadrature of products of spherical harmonics (Gauss–Legendre nodes computed here) | Mathematics | Own code in `AmbisonicDecoder.swift` and the engine's `FieldTurn`; checked against its definition (a turned field is the field of the turned direction) |
 
 ## File formats implemented from their specifications (own code, nothing bundled; read 2026-11-17)
 

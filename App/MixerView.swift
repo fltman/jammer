@@ -53,7 +53,8 @@ struct MixerSheet: View {
                                    sends: t.sends, sendTargets: project.buses.map { ($0.id, $0.name) },
                                    change: { session.perform("set_track", ["track": .string(t.id.uuidString)].merging($0) { $1 }) },
                                    send: { session.perform("set_send", ["from": .string(t.id.uuidString)].merging($0) { $1 }) }, remove: nil,
-                                   place: t.position, placeable: project.channels > 2, heights: project.layout == .immersive714 || project.layout.isAmbisonic)
+                                   place: t.position, placeable: project.channels > 2, heights: project.layout == .immersive714 || project.layout.isAmbisonic,
+                                   field: project.playsField(t), rotation: t.rotation)
                     }
                     Text(L10n.text("mixer.buses")).font(.headline).padding(.top, 8)
                     if project.buses.isEmpty { Text(L10n.text("mixer.buses.none")).foregroundStyle(.secondary) }
@@ -329,6 +330,10 @@ struct MixerStrip: View {
     /// Whether the strip is placed by azimuth (a track in a layout wider than stereo), and whether the layout has heights.
     var placeable = false
     var heights = false
+    /// A track that plays a sound field: its turn round the listener, in place of a place.
+    var field = false
+    var rotation: FieldRotation? = nil
+    @State private var yaw = 0.0
     @State private var azimuth = 0.0
     @State private var level = 0.0
     @State private var position = 0.0
@@ -339,6 +344,15 @@ struct MixerStrip: View {
     static func turnText(_ p: SurroundPosition?) -> String {
         guard let a = p?.azimuth, abs(a) >= 0.5 else { return L10n.text("mixer.turn.none") }
         return a > 0 ? L10n.text("mixer.turn.left", L10n.number(a, 0)) : L10n.text("mixer.turn.right", L10n.number(-a, 0))
+    }
+    /// A field's turn in words: "Field not turned", "Field turned 30° left, front up 15°".
+    static func fieldText(_ r: FieldRotation?) -> String {
+        guard let r, !r.isNone else { return L10n.text("mixer.field.none") }
+        var parts: [String] = []
+        if abs(r.yaw) >= 0.5 { parts.append(r.yaw > 0 ? L10n.text("mixer.field.yaw.left", L10n.number(r.yaw, 0)) : L10n.text("mixer.field.yaw.right", L10n.number(-r.yaw, 0))) }
+        if abs(r.pitch) >= 0.5 { parts.append(r.pitch > 0 ? L10n.text("mixer.field.pitch.up", L10n.number(r.pitch, 0)) : L10n.text("mixer.field.pitch.down", L10n.number(-r.pitch, 0))) }
+        if abs(r.roll) >= 0.5 { parts.append(r.roll > 0 ? L10n.text("mixer.field.roll.left", L10n.number(r.roll, 0)) : L10n.text("mixer.field.roll.right", L10n.number(-r.roll, 0))) }
+        return parts.isEmpty ? L10n.text("mixer.field.none") : L10n.text("mixer.field.turned", parts.joined(separator: L10n.text("mixer.field.separator")))
     }
     static func placeText(_ p: SurroundPosition?) -> String {
         guard let p else { return L10n.text("mixer.place.own") }
@@ -370,6 +384,9 @@ struct MixerStrip: View {
             case .plugin: text = L10n.text("mixer.automation.plugin", points, names(lane) ?? lane.parameter ?? "")
             case .azimuth: text = L10n.text("mixer.automation.azimuth", points)
             case .elevation: text = L10n.text("mixer.automation.elevation", points)
+            case .yaw: text = L10n.text("mixer.automation.yaw", points)
+            case .pitch: text = L10n.text("mixer.automation.pitch", points)
+            case .roll: text = L10n.text("mixer.automation.roll", points)
             }
             return lane.enabled ? text : L10n.text("mixer.automation.off", text)
         }
@@ -410,8 +427,9 @@ struct MixerStrip: View {
             }
         }
         // The azimuth slider runs left to right, so its value is the azimuth turned round (positive is left).
-        .onAppear { level = gainDB; position = pan; azimuth = -(place?.azimuth ?? 0) }
+        .onAppear { level = gainDB; position = pan; azimuth = -(place?.azimuth ?? 0); yaw = -(rotation?.yaw ?? 0) }
         .onChange(of: place) { azimuth = -(place?.azimuth ?? 0) }
+        .onChange(of: rotation) { yaw = -(rotation?.yaw ?? 0) }
         .onChange(of: gainDB) { if !dragging { level = gainDB } }
         .onChange(of: pan) { if !dragging { position = pan } }
         .accessibilityElement(children: .contain)
@@ -485,6 +503,33 @@ struct MixerStrip: View {
                 Text(panAutomated ? L10n.text("mixer.pan.automated") : Self.panText(position)).font(.caption).lineLimit(1).frame(width: 72, alignment: .leading)
                     .foregroundStyle(panAutomated ? .secondary : .primary)
                     .help(panAutomated ? L10n.text("mixer.pan.automated.help") : "")
+            } else if field {
+                // A sound field turned round the listener: the slider turns it (to the left is to the left, as a place),
+                // the menu lifts its front or its side, or takes the turn away.
+                Slider(value: $yaw, in: -180...180, onEditingChanged: { editing in
+                    if !editing {
+                        yaw = (yaw / 5).rounded() * 5
+                        if -yaw != (rotation?.yaw ?? 0) { change(["yaw": .number(-yaw == 0 ? 0 : -yaw)]) }
+                    }
+                })
+                .frame(width: 90)
+                .help(L10n.text("mixer.field.help"))
+                .accessibilityLabel(L10n.text("mixer.field.ax", name))
+                .accessibilityValue(Text(Self.fieldText(rotation)))
+                .accessibilityIdentifier("mixer.strip.yaw")
+                Menu(Self.fieldText(rotation)) {
+                    ForEach([-30.0, -15, 0, 15, 30], id: \.self) { up in
+                        Button(((rotation?.pitch ?? 0) == up ? "✓ " : "") + L10n.text("mixer.field.pitch", L10n.number(up, 0))) { change(["pitch": .number(up)]) }
+                    }
+                    Divider()
+                    ForEach([-30.0, -15, 0, 15, 30], id: \.self) { side in
+                        Button(((rotation?.roll ?? 0) == side ? "✓ " : "") + L10n.text("mixer.field.roll", L10n.number(side, 0))) { change(["roll": .number(side)]) }
+                    }
+                    Divider()
+                    Button(L10n.text("mixer.field.off")) { change(["turned": .bool(false)]) }.disabled(rotation == nil)
+                }
+                .menuStyle(.borderlessButton).font(.caption).frame(width: 160, alignment: .leading)
+                .accessibilityIdentifier("mixer.strip.field")
             } else if placeable {
                 // The surround panner: where the sound comes from, positive to the left (BS.2051's convention).
                 Slider(value: $azimuth, in: -180...180, onEditingChanged: { editing in

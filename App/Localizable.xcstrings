@@ -3436,6 +3436,23 @@
         }
       }
     },
+    "automation.ax.lane.pitch": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Field front automation of %@"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Frontautomation för fältet i %@"
+          }
+        }
+      }
+    },
     "automation.ax.lane.plugin": {
       "comment": "Accessibility label of a plugin parameter lane. %1$@ is the parameter, %2$@ the strip.",
       "extractionState": "manual",
@@ -3472,6 +3489,23 @@
         }
       }
     },
+    "automation.ax.lane.roll": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Field side automation of %@"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sidautomation för fältet i %@"
+          }
+        }
+      }
+    },
     "automation.ax.lane.send": {
       "comment": "VoiceOver: a lane. %@ is the strip.",
       "extractionState": "manual",
@@ -3486,6 +3520,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Send-automation för %@"
+          }
+        }
+      }
+    },
+    "automation.ax.lane.yaw": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Field turn automation of %@"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vridningsautomation för fältet i %@"
           }
         }
       }
@@ -3784,6 +3835,23 @@
         }
       }
     },
+    "automation.caption.pitch": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Field front lane: up is the front lifted, down lowered."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bana för fältets front: upp är fronten lyft, ner sänkt."
+          }
+        }
+      }
+    },
     "automation.caption.plugin": {
       "comment": "Caption of a plugin parameter lane. %1$@ is the parameter’s name, %2$@ the plugin’s.",
       "extractionState": "manual",
@@ -3816,6 +3884,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ingen pluginparameterbana på den här kanalen. En görs med ett steg (set_automation med param plugin) och ritas och ändras sedan här."
+          }
+        }
+      }
+    },
+    "automation.caption.roll": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Field side lane: up is the left side lifted, down the right."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bana för fältets sida: upp är vänster sida lyft, ner höger."
           }
         }
       }
@@ -3888,6 +3973,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "%1$@ · send %2$@ av %3$@, ⌥Tab för nästa"
+          }
+        }
+      }
+    },
+    "automation.caption.yaw": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Field turn lane, in place of the turn slider. Left is up, behind at either edge."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vridningsbana för fältet, i vridningsreglagets ställe. Vänster är upp, bakom vid båda kanterna."
           }
         }
       }
@@ -4156,6 +4258,23 @@
         }
       }
     },
+    "automation.removed.pitch": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Field front lane removed from %@"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fältets frontbana borttagen från %@"
+          }
+        }
+      }
+    },
     "automation.removed.plugin": {
       "comment": "Status line. %@ is the strip.",
       "extractionState": "manual",
@@ -4174,6 +4293,23 @@
         }
       }
     },
+    "automation.removed.roll": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Field side lane removed from %@"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fältets sidbana borttagen från %@"
+          }
+        }
+      }
+    },
     "automation.removed.send": {
       "comment": "Status line when a send lane’s last point was deleted. %@ is the strip.",
       "extractionState": "manual",
@@ -4188,6 +4324,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Send-banan borttagen från %@"
+          }
+        }
+      }
+    },
+    "automation.removed.yaw": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Field turn lane removed from %@"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fältets vridningsbana borttagen från %@"
           }
         }
       }
@@ -4312,6 +4465,23 @@
         }
       }
     },
+    "automation.unit.pitch": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "a pitch is −90 to 90 degrees, positive lifting the front"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "en lutning framåt är −90 till 90 grader, positivt lyfter fronten"
+          }
+        }
+      }
+    },
     "automation.unit.plugin": {
       "extractionState": "manual",
       "localizations": {
@@ -4325,6 +4495,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "en plugins parameter har sitt eget omfång"
+          }
+        }
+      }
+    },
+    "automation.unit.roll": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "a roll is −180 to 180 degrees, positive lifting the left side"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "en lutning åt sidan är −180 till 180 grader, positivt lyfter vänster sida"
+          }
+        }
+      }
+    },
+    "automation.unit.yaw": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "a yaw is −360 to 360 degrees, positive to the left"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "en vridning är −360 till 360 grader, positivt åt vänster"
           }
         }
       }
@@ -5942,6 +6146,23 @@
         }
       }
     },
+    "error.automation.noField": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "that strip plays no sound field to turn: yaw, pitch and roll are a track's whose files are Ambisonics (set_track field)."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "den kanalen spelar inget ljudfält att vrida: yaw, pitch och roll hör till ett spår vars filer är Ambisonics (set_track field)."
+          }
+        }
+      }
+    },
     "error.automation.noInsert": {
       "comment": "An error’s reason, shown in the status line after a step that failed (the agent API says the same in English). Placeholders are names, ids or numbers.",
       "extractionState": "manual",
@@ -5978,20 +6199,70 @@
         }
       }
     },
-    "error.automation.noPlace": {
-      "comment": "An error’s reason, shown in the status line after a step that failed (the agent API says the same in English). %@ is what was named: “a stereo document”, “the master”, “that strip”.",
+    "error.automation.noPlace.bus": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ has no place to automate: azimuth and elevation are a track’s, in documents wider than stereo."
+            "value": "a bus (its turn is an azimuth, in a loudspeaker layout) has no place to automate: azimuth and elevation are a track's, in documents wider than stereo."
           }
         },
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ har ingen placering att automatisera: azimut och elevation hör till ett spår, i dokument bredare än stereo."
+            "value": "en buss (dess vridning är en azimut, i en högtalaruppsättning) har ingen placering att automatisera: azimut och elevation är ett spårs, i dokument bredare än stereo."
+          }
+        }
+      }
+    },
+    "error.automation.noPlace.layout": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "a %@ document has no place to automate: azimuth and elevation are a track's, in documents wider than stereo."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ett %@-dokument har ingen placering att automatisera: azimut och elevation är ett spårs, i dokument bredare än stereo."
+          }
+        }
+      }
+    },
+    "error.automation.noPlace.master": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "the master has no place to automate: azimuth and elevation are a track's, in documents wider than stereo."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "mastern har ingen placering att automatisera: azimut och elevation är ett spårs, i dokument bredare än stereo."
+          }
+        }
+      }
+    },
+    "error.automation.noPlace.strip": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "that strip has no place to automate: azimuth and elevation are a track's, in documents wider than stereo."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "den kanalen har ingen placering att automatisera: azimut och elevation är ett spårs, i dokument bredare än stereo."
           }
         }
       }
@@ -14368,6 +14639,23 @@
         }
       }
     },
+    "menu.view.automation.pitch": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Field Front"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fältets front"
+          }
+        }
+      }
+    },
     "menu.view.automation.plugin": {
       "comment": "Menu item in View › Automation: show each strip’s plugin parameter lane.",
       "extractionState": "manual",
@@ -14382,6 +14670,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pluginparametrar"
+          }
+        }
+      }
+    },
+    "menu.view.automation.roll": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Field Side"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fältets sida"
           }
         }
       }
@@ -14418,6 +14723,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Bussar, grupper och master"
+          }
+        }
+      }
+    },
+    "menu.view.automation.yaw": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Field Turn"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fältets vridning"
           }
         }
       }
@@ -14698,6 +15020,23 @@
         }
       }
     },
+    "mixer.automation.pitch": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ lifting the field’s front"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ som lyfter fältets front"
+          }
+        }
+      }
+    },
     "mixer.automation.plugin": {
       "comment": "Part of a strip’s automation line. %1$@ is “4 points”, %2$@ the parameter’s name in the plugin (its identifier when the plugin isn’t running).",
       "extractionState": "manual",
@@ -14758,6 +15097,23 @@
         }
       }
     },
+    "mixer.automation.roll": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ lifting the field’s side"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ som lyfter fältets sida"
+          }
+        }
+      }
+    },
     "mixer.automation.send": {
       "comment": "Under a strip in the mixer. %@ is the count of points.",
       "extractionState": "manual",
@@ -14812,6 +15168,23 @@
         }
       }
     },
+    "mixer.automation.yaw": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ turning the sound field"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ som vrider ljudfältet"
+          }
+        }
+      }
+    },
     "mixer.bus.remove.help": {
       "comment": "Tooltip.",
       "extractionState": "manual",
@@ -14862,6 +15235,244 @@
           "stringUnit": {
             "state": "translated",
             "value": "Inga bussar än."
+          }
+        }
+      }
+    },
+    "mixer.field.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn of %@’s sound field"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vridning av ljudfältet i %@"
+          }
+        }
+      }
+    },
+    "mixer.field.help": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turns the track’s sound field round the listener. The menu lifts its front or a side."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vrider spårets ljudfält runt lyssnaren. Menyn lyfter dess front eller en sida."
+          }
+        }
+      }
+    },
+    "mixer.field.none": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Field not turned"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fältet inte vridet"
+          }
+        }
+      }
+    },
+    "mixer.field.off": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not Turned"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inte vridet"
+          }
+        }
+      }
+    },
+    "mixer.field.pitch": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Front %@°"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fronten %@°"
+          }
+        }
+      }
+    },
+    "mixer.field.pitch.down": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "front down %@°"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "fronten ner %@°"
+          }
+        }
+      }
+    },
+    "mixer.field.pitch.up": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "front up %@°"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "fronten upp %@°"
+          }
+        }
+      }
+    },
+    "mixer.field.roll": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Side %@°"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sidan %@°"
+          }
+        }
+      }
+    },
+    "mixer.field.roll.left": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "left side up %@°"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "vänster sida upp %@°"
+          }
+        }
+      }
+    },
+    "mixer.field.roll.right": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "right side up %@°"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "höger sida upp %@°"
+          }
+        }
+      }
+    },
+    "mixer.field.separator": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": ", "
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": ", "
+          }
+        }
+      }
+    },
+    "mixer.field.turned": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Field turned %@"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fältet vridet %@"
+          }
+        }
+      }
+    },
+    "mixer.field.yaw.left": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@° left"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@° åt vänster"
+          }
+        }
+      }
+    },
+    "mixer.field.yaw.right": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@° right"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@° åt höger"
           }
         }
       }
@@ -24684,6 +25295,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "set_timecode: \"start\" betyder ingenting med rate none."
+          }
+        }
+      }
+    },
+    "step.set_track.fieldSize": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "set_track: a field of order %1$@ has %2$@ channels; %3$@ has %4$@."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "set_track: ett fält av ordning %1$@ har %2$@ kanaler; %3$@ har %4$@."
           }
         }
       }

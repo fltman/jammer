@@ -23,7 +23,7 @@ struct AmbisonicsTests {
         #expect(Ambisonics.encode(azimuth: 0, elevation: 0, order: 2).count == 9)
     }
 
-    @Test("Ambisonics documents: a 4-channel file opens as stereo (nothing says it is a field); set to 1st order it passes through unchanged; a voice is encoded from the front, a placed voice from its place; loudspeakers are encoded by direction without the LFE; a field into loudspeakers is left out")
+    @Test("Ambisonics documents: a 4-channel file opens as stereo (nothing says it is a field); set to 1st order it passes through unchanged; a voice is encoded from the front, a placed voice from its place; loudspeakers are encoded by direction without the LFE; a field into loudspeakers is decoded (AllRAD)")
     func documents() throws {
         let dir = TempDir()
         let n = 9_600
@@ -47,7 +47,7 @@ struct AmbisonicsTests {
         #expect(five[3 * 4..<4 * 4].allSatisfy { $0 == 0 }, "the LFE isn't encoded")
         #expect(abs(five[2 * 4 + 3] - 1) < k && abs(five[2 * 4 + 1]) < k, "C from the front")
         #expect(ChannelLayout.gains(from: .ambix3, to: .ambix1) == (0..<16).flatMap { r in (0..<4).map { Float(r == $0 ? 1 : 0) } })
-        #expect(ChannelLayout.gains(from: .ambix1, to: .surround51).allSatisfy { $0 == 0 }, "no decoder: left out")
+        #expect(ChannelLayout.gains(from: .ambix1, to: .surround51) == AmbisonicDecoder.cached(order: 1, to: .surround51), "decoded by AllRAD (block I)")
         // The meter takes only W, and a WAV export of the field is written without loudspeaker positions.
         #expect(LoudnessMeter.channelWeights(4) == [1, 0, 0, 0])
     }

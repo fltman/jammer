@@ -433,6 +433,11 @@ Changes one track: its gain, mute, name, pan, its place in a surround layout, or
 | `elevation` | number | Documents with height loudspeakers (7.1.4): degrees up, 0 to 90; the height layer is at 30, and above it the sound stays there. |
 | `width` | number | For a stereo source: the angle between its two sides, centered on azimuth. Default 60 (at azimuth 0, exactly L and R). |
 | `placed` | boolean | false takes the track out of the surround panner again: each source back on its own loudspeakers (a voice in C, a pair in L and R). |
+| `field` | number | The track's files are a sound field (AmbiX) of this order, 1–3 (a file of 4, 9 or 16 channels); 0: they are not. Into loudspeakers a field is decoded (AllRAD), into mono or stereo by way of 5.1. Making a document Ambisonics marks its files of that size already. |
+| `yaw` | number | A track that plays a sound field: the field turned round the listener, degrees, positive to the left. |
+| `pitch` | number | The field's front lifted (positive) or lowered, degrees. |
+| `roll` | number | The field's left side lifted (positive) or lowered, degrees. |
+| `turned` | boolean | false takes the field's turn away (yaw, pitch and roll back to 0). |
 | `output` | string | The id of the bus the track goes to, or "master" for the output. |
 
 ### `add_bus`

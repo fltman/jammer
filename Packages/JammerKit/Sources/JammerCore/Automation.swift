@@ -23,7 +23,8 @@ public struct AutomationLane: Codable, Hashable, Sendable {
     /// `plugin`: one parameter of one plugin on the strip (`insert` and `parameter` then say which), in the
     /// parameter's own unit, a straight line between points.
     /// azimuth and elevation: a track's place in a layout wider than stereo (the surround panner), in degrees.
-    public enum Param: String, Codable, Sendable, CaseIterable { case gain, pan, mute, send, plugin, azimuth, elevation }
+    /// yaw, pitch and roll: a track's sound field turned round the listener, in degrees (`FieldRotation`).
+    public enum Param: String, Codable, Sendable, CaseIterable { case gain, pan, mute, send, plugin, azimuth, elevation, yaw, pitch, roll }
     public enum Shape: String, Codable, Sendable { case linear, hold }
 
     /// The track, bus or VCA group, or `Master.id`.
@@ -83,6 +84,9 @@ public enum Automation {
         // Past ±180 so that a place can move on round behind (170° to 190° goes behind, not back across the front).
         case .azimuth: -360...360
         case .elevation: SurroundPosition.elevationRange
+        case .yaw: FieldRotation.yawRange
+        case .pitch: FieldRotation.pitchRange
+        case .roll: FieldRotation.rollRange
         }
     }
     static func unit(of param: AutomationLane.Param) -> Said {
@@ -93,6 +97,9 @@ public enum Automation {
         case .plugin: Said("automation.unit.plugin", "a plugin's parameter has its own range")
         case .azimuth: Said("automation.unit.azimuth", "an azimuth is −360 to 360 degrees, positive to the left (past ±180 it goes on round behind)")
         case .elevation: Said("automation.unit.elevation", "an elevation is 0 to 90 degrees up")
+        case .yaw: Said("automation.unit.yaw", "a yaw is −360 to 360 degrees, positive to the left")
+        case .pitch: Said("automation.unit.pitch", "a pitch is −90 to 90 degrees, positive lifting the front")
+        case .roll: Said("automation.unit.roll", "a roll is −180 to 180 degrees, positive lifting the left side")
         }
     }
     /// The longest timeline a point may be on: 24 hours at 192 kHz.
@@ -101,10 +108,13 @@ public enum Automation {
     public enum Failure: Error, LocalizedError, Equatable {
         case noStrip(String), notBuilt(String), badValue(Said), tooMany, mono, noPan, noSend(String), groupHasNoPan, noInsert
         /// A place (azimuth, elevation) automated on something that has none: in mono or stereo, or on anything but a track.
-        case noPlace(String)
+        case noPlace(Said)
+        /// A field's turn (yaw, pitch, roll) on something that plays no sound field.
+        case noField
         /// Pan automation in a document wider than stereo. The value is the layout.
         case wide(String)
 
+        static let noFieldSaid = Said("error.automation.noField", "that strip plays no sound field to turn: yaw, pitch and roll are a track's whose files are Ambisonics (set_track field).")
         public var reason: String {
             switch self {
             case .noStrip: "not_found"
@@ -113,6 +123,7 @@ public enum Automation {
             case .tooMany: "too_many"
             case .mono, .wide: "needs_stereo"
             case .noPlace: "needs_surround"
+            case .noField: "no_field"
             case .noPan, .groupHasNoPan: "bad_request"
             case .noSend, .noInsert: "not_found"
             }
@@ -123,7 +134,8 @@ public enum Automation {
             case .notBuilt(let what): "automation of \(what) isn't built yet; gain, pan and mute are."
             case .mono: "a mono document has no pan to automate."
             case .wide(let layout): "a \(layout) document has no stereo pan to automate; its surround panner isn't built yet."
-            case .noPlace(let what): "\(what) has no place to automate: azimuth and elevation are a track's, in documents wider than stereo."
+            case .noPlace(let s): s.text
+            case .noField: Self.noFieldSaid.text
             case .noPan: "the master has a level to automate, not a pan, a mute or a send."
             case .groupHasNoPan: "a VCA group has a level and a mute to automate, not a pan or a send."
             case .noSend(let to): "that strip has no send to \(to); make the send first (set_send)."
@@ -139,7 +151,8 @@ public enum Automation {
             case .notBuilt(let what): KeyedMessage("error.automation.notBuilt", ["\(what)"])
             case .mono: KeyedMessage("error.automation.mono")
             case .wide(let layout): KeyedMessage("error.automation.wide", ["\(layout)"])
-            case .noPlace(let what): KeyedMessage("error.automation.noPlace", ["\(what)"])
+            case .noPlace(let s): s.keyed
+            case .noField: Self.noFieldSaid.keyed
             case .noPan: KeyedMessage("error.automation.noPan")
             case .groupHasNoPan: KeyedMessage("error.automation.groupHasNoPan")
             case .noSend(let to): KeyedMessage("error.automation.noSend", ["\(to)"])
@@ -275,12 +288,21 @@ extension Project {
         }
         if param == .pan, channels != 2 { throw channels == 1 ? Automation.Failure.mono : Automation.Failure.wide(layout.rawValue) }
         if param == .azimuth || param == .elevation {
-            guard channels > 2 else { throw Automation.Failure.noPlace("a \(layout.rawValue) document") }
+            guard channels > 2 else {
+                throw Automation.Failure.noPlace(Said("error.automation.noPlace.layout", "a %@ document has no place to automate: azimuth and elevation are a track's, in documents wider than stereo.", layout.rawValue))
+            }
             // A track's place; a bus's turn (azimuth only, in a loudspeaker layout).
             let onBus = param == .azimuth && bus(strip) != nil && !layout.isAmbisonic
             guard tracks.contains(where: { $0.id == strip }) || onBus else {
-                throw Automation.Failure.noPlace(strip == Master.id ? "the master" : bus(strip) != nil ? "a bus (its turn is an azimuth, in a loudspeaker layout)" : "that strip")
+                throw Automation.Failure.noPlace(strip == Master.id
+                    ? Said("error.automation.noPlace.master", "the master has no place to automate: azimuth and elevation are a track's, in documents wider than stereo.")
+                    : bus(strip) != nil ? Said("error.automation.noPlace.bus", "a bus (its turn is an azimuth, in a loudspeaker layout) has no place to automate: azimuth and elevation are a track's, in documents wider than stereo.")
+                    : Said("error.automation.noPlace.strip", "that strip has no place to automate: azimuth and elevation are a track's, in documents wider than stereo."))
             }
+        }
+        if param == .yaw || param == .pitch || param == .roll {
+            // A track's sound field turned: only a track that plays one.
+            guard let track = tracks.first(where: { $0.id == strip }), playsField(track) else { throw Automation.Failure.noField }
         }
         // A mute holds its value until the next point; a level and a pan go in a straight line.
         if let shape, shape != (param == .mute ? .hold : .linear) {

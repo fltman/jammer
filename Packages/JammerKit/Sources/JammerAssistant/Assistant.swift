@@ -112,7 +112,7 @@ public enum AssistantCatalog {
 
     /// Parameters the assistant isn't given on the steps it has: a bus's turn in a surround document (surround
     /// isn't the assistant's yet; its tools stay as they were evaluated).
-    public static let paramsNotForAssistant: Set<String> = ["azimuth", "turned"]
+    public static let paramsNotForAssistant: Set<String> = ["azimuth", "turned", "field", "yaw", "pitch", "roll"]
 
     /// Own actions: every step (but the above), the useful endpoints, and the macros.
     public static var actions: [AssistantAction] {

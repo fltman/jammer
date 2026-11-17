@@ -62,6 +62,8 @@ public enum ChannelLayout: String, Sendable, CaseIterable, Codable {
         default: nil
         }
     }
+    /// The Ambisonics layout of an order (1–3).
+    public static func ambisonic(order: Int) -> ChannelLayout? { allCases.first { $0.ambisonicOrder == order } }
     public var isAmbisonic: Bool { ambisonicOrder != nil }
 
     /// The loudspeakers, in the order the channels come in a file and in the document.
@@ -127,7 +129,11 @@ extension ChannelLayout {
     ///
     /// Into a wider layout each source loudspeaker goes to the same loudspeaker; a mono source (a voice) goes
     /// to the centre. A source wider than the document is folded down a layout at a time (`foldStep`).
-    public func matrix(sourceChannels: Int, sourceMask: UInt32?) -> [Float]? {
+    public func matrix(sourceChannels: Int, sourceMask: UInt32?, fieldOrder: Int? = nil) -> [Float]? {
+        // A file known to be a sound field: its components as they are into a field of its order, otherwise decoded.
+        if let fieldOrder, let field = ChannelLayout.ambisonic(order: fieldOrder), field.channels == sourceChannels {
+            return field == self ? nil : ChannelLayout.gains(from: field, to: self)
+        }
         let source = ChannelLayout.of(channels: sourceChannels, mask: sourceMask)
         if source == self { return nil }
         if channels <= 2, sourceChannels <= 2 { return nil }
@@ -159,10 +165,14 @@ extension ChannelLayout {
             }
             return m
         }
-        if s.isAmbisonic {
-            // A sound field into loudspeakers needs a decoder, which isn't built: it is left out (silent there).
-            // Listening to an Ambisonics document goes through Apple's spatial mixer instead.
-            return [Float](repeating: 0, count: s.channels * d.channels)
+        if let order = s.ambisonicOrder {
+            // A sound field into loudspeakers: decoded by AllRAD (AmbisonicDecoder). Into mono or stereo, decoded
+            // into 5.1 and folded down from there by ITU-R BS.775, as any 5.1 source is.
+            if d.channels > 2 { return AmbisonicDecoder.cached(order: order, to: d) }
+            let decode = AmbisonicDecoder.cached(order: order, to: .surround51), fold = gains(from: .surround51, to: d)
+            var m = [Float](repeating: 0, count: s.channels * d.channels)
+            for c in 0..<s.channels { for k in 0..<6 { for o in 0..<d.channels { m[c * d.channels + o] += decode[c * 6 + k] * fold[k * d.channels + o] } } }
+            return m
         }
         let into = d.speakers
         if s == .mono {

@@ -62,6 +62,10 @@ extension Automation {
         // A place: left (positive) at the top as for pan, behind at either edge; up from level to overhead.
         case .azimuth: return (min(180, max(-180, value)) + 180) / 360
         case .elevation: return min(90, max(0, value)) / 90
+        // A field's turn: as an azimuth (left at the top); a pitch and a roll from their least to their most.
+        case .yaw: return (min(180, max(-180, value)) + 180) / 360
+        case .pitch: return (min(90, max(-90, value)) + 90) / 180
+        case .roll: return (min(180, max(-180, value)) + 180) / 360
         }
     }
     /// The value at a height: the other way round.
@@ -77,6 +81,8 @@ extension Automation {
         case .plugin: return 0
         case .azimuth: return h * 360 - 180
         case .elevation: return h * 90
+        case .yaw, .roll: return h * 360 - 180
+        case .pitch: return h * 180 - 90
         }
     }
 }
@@ -88,7 +94,7 @@ extension Project {
         let own = lane(strip: strip, param: param, to: param == .send ? to : nil,
                        insert: param == .plugin ? insert : nil, parameter: param == .plugin ? parameter : nil)
         // A plugin's parameter and a track's place are applied as written: switched on, they play.
-        let direct = param == .plugin || param == .azimuth || param == .elevation
+        let direct = param == .plugin || param == .azimuth || param == .elevation || param == .yaw || param == .pitch || param == .roll
         let isGroup = vca(strip) != nil
         let groupID = param == .gain || param == .mute ? group(of: strip) : nil
         let groups = groupID.flatMap { lane(strip: $0, param: param) }.flatMap { $0.enabled ? $0 : nil }
@@ -106,7 +112,7 @@ extension Project {
             case .gain: if let c = gainCurve(of: strip) { return made(c.frames, c.db, plays: true) }
             case .pan: if let c = panCurve(of: strip) { return made(c.frames, c.values, plays: true) }
             case .send: if let to, let c = sendCurve(from: strip, to: to) { return made(c.frames, c.db, plays: true) }
-            case .plugin, .azimuth, .elevation: break       // shown from their own points, below
+            case .plugin, .azimuth, .elevation, .yaw, .pitch, .roll: break       // shown from their own points, below
             case .mute:
                 if let c = muteCurve(of: strip) {
                     let lanes = [own, groups].compactMap { $0 }.filter(\.enabled)

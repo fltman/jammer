@@ -145,17 +145,17 @@ public enum Operations {
     static let automationSteps: [OperationSpec] = [
         .init("set_automation", "Write Automation", "Writes automation: points on the timeline that a strip's level, pan or mute follows (before the first point the value is the first point's, after the last the last's). `gain`: a straight line in dB from point to point, added to the fader, which stays where it is (0 dB is no change). `pan`: a straight line from point to point, −1 left to 1 right, in the place of the fixed pan while the lane is there (stereo documents). `mute`: 1 muted, 0 heard, each held until the next point; the sound closes and opens over 5 ms beginning at the point, so it never clicks, and sends before the fader are silenced too, as by the mute button. `send` with `to` (a bus id): the level of the strip's send to that bus, in dB, added to the send's own level. `strip` may also be a VCA group's id: its gain and mute lanes are added to those of every track and bus in the group, as its fader is. The master has a gain lane only. `points` replace the whole lane; with `start` and `end` they replace only the points inside that range and nothing outside it is touched. A point lands on its own sample, whatever plugins the strip has. Edits that close up or open the whole timeline (delete, paste, removed pauses) move the points with the sound; lining up or stretching one track doesn't, and the answer then carries a warning. Refused with the name of the field: a point after the document's end or outside `start`…`end`, a value outside what the lane takes (−96 to 24 dB, −1 to 1, 0 or 1), two points at one time. info has `points`, how many the lane now has.",
               params: [.init("strip", .string, "The id of the track, bus or VCA group, or \"master\".", required: true),
-                       .init("param", .string, "What the lane moves. Default gain. plugin: one parameter of a plugin on the strip (`insert` and `parameter` say which), in the parameter's own unit, a straight line between points, set once every 512 frames; for now only where the plugin is an Audio Unit (another kind answers not_available).", options: ["gain", "pan", "mute", "send", "plugin", "azimuth", "elevation"]),
+                       .init("param", .string, "What the lane moves. Default gain. plugin: one parameter of a plugin on the strip (`insert` and `parameter` say which), in the parameter's own unit, a straight line between points, set once every 512 frames; for now only where the plugin is an Audio Unit (another kind answers not_available).", options: ["gain", "pan", "mute", "send", "plugin", "azimuth", "elevation", "yaw", "pitch", "roll"]),
                        .init("to", .string, "For param send: the id of the bus the send goes to. The send must be there (set_send)."),
                        .init("insert", .string, "For param plugin: the plugin on the strip, by its id or its name."),
                        .init("parameter", .string, "For param plugin: the parameter, by its identifier or its name (GET …/tracks/{id}/inserts/{insert} lists them with their ranges)."),
-                       .init("points", .pairs, "The points: [[seconds, value], …]; the value is dB for gain (−96 to 24), −1 to 1 for pan, 1 or 0 for mute, and for a plugin's parameter a value in that parameter's own range; for azimuth degrees −360 to 360 (positive to the left, past ±180 on round behind) and for elevation 0 to 90: a track's place in a document wider than stereo, moving in a straight line between points, worked out every 512 frames and glided in between. An empty list with `start` and `end` takes the points in that range away.", required: true),
+                       .init("points", .pairs, "The points: [[seconds, value], …]; the value is dB for gain (−96 to 24), −1 to 1 for pan, 1 or 0 for mute, and for a plugin's parameter a value in that parameter's own range; for azimuth degrees −360 to 360 (positive to the left, past ±180 on round behind) and for elevation 0 to 90: a track's place in a document wider than stereo, moving in a straight line between points, worked out every 512 frames and glided in between; for yaw (−360 to 360), pitch (−90 to 90) and roll (−180 to 180) degrees: a track's sound field turned (set_track field), worked out every 512 frames and glided in between along a curve through the next two. An empty list with `start` and `end` takes the points in that range away.", required: true),
                        .init("start", .seconds, "Start of the range to replace, in seconds. With `end`."),
                        .init("end", .seconds, "End of the range to replace, in seconds. With `start`."),
                        .init("enabled", .boolean, "False keeps the lane but stops it being heard; true brings it back.")]),
         .init("clear_automation", "Clear Automation", "Takes the points of one lane away: all of them, or with `start` and `end` those inside that range. One strip and one lane at a time; nothing clears a whole project. info has `removed`.",
               params: [.init("strip", .string, "The id of the track, bus or VCA group, or \"master\".", required: true),
-                       .init("param", .string, "Which lane.", required: true, options: ["gain", "pan", "mute", "send", "plugin", "azimuth", "elevation"]),
+                       .init("param", .string, "Which lane.", required: true, options: ["gain", "pan", "mute", "send", "plugin", "azimuth", "elevation", "yaw", "pitch", "roll"]),
                        .init("to", .string, "For param send: the id of the bus the send goes to."),
                        .init("insert", .string, "For param plugin: the plugin on the strip, by its id or its name."),
                        .init("parameter", .string, "For param plugin: the parameter, by its identifier or its name."),
@@ -282,6 +282,11 @@ public enum Operations {
                        .init("elevation", .number, "Documents with height loudspeakers (7.1.4): degrees up, 0 to 90; the height layer is at 30, and above it the sound stays there.", range: 0...90),
                        .init("width", .number, "For a stereo source: the angle between its two sides, centered on azimuth. Default 60 (at azimuth 0, exactly L and R).", range: 0...180),
                        .init("placed", .boolean, "false takes the track out of the surround panner again: each source back on its own loudspeakers (a voice in C, a pair in L and R)."),
+                       .init("field", .number, "The track's files are a sound field (AmbiX) of this order, 1–3 (a file of 4, 9 or 16 channels); 0: they are not. Into loudspeakers a field is decoded (AllRAD), into mono or stereo by way of 5.1. Making a document Ambisonics marks its files of that size already.", range: 0...3),
+                       .init("yaw", .number, "A track that plays a sound field: the field turned round the listener, degrees, positive to the left.", range: -360...360),
+                       .init("pitch", .number, "The field's front lifted (positive) or lowered, degrees.", range: -90...90),
+                       .init("roll", .number, "The field's left side lifted (positive) or lowered, degrees.", range: -180...180),
+                       .init("turned", .boolean, "false takes the field's turn away (yaw, pitch and roll back to 0)."),
                        .init("output", .string, "The id of the bus the track goes to, or \"master\" for the output.")]),
         .init("add_bus", "Add Bus", "Adds a bus to the mixer: tracks routed to it (set_track output) are summed, given the bus's gain and pan, and passed on to the output or to another bus. The answer's `bus` is its number in `GET …/mixer`, where its id is.",
               params: [.init("name", .string, "What the bus is called.", required: true),
@@ -1085,6 +1090,30 @@ public enum StepRunner {
                 do { try s.project.setTrackPosition(id, azimuth: p["azimuth"]?.double, elevation: p["elevation"]?.double, width: p["width"]?.double, placed: placed) }
                 catch let e as Mixer.Failure { throw StepFailure("set_track: " + (e.errorDescription ?? ""), reason: e.reason, keyed: e.keyed) }
             }
+            if let f = p["field"]?.double {
+                let order = Int(f)
+                let used = Set(s.project.tracks[t].clips.map(\.sourceID))
+                for i in s.project.sources.indices where used.contains(s.project.sources[i].id) {
+                    if order == 0 { s.project.sources[i].fieldOrder = nil; continue }
+                    guard s.project.sources[i].info.channels == (order + 1) * (order + 1) else {
+                        throw StepFailure(Said("step.set_track.fieldSize", "set_track: a field of order %1$@ has %2$@ channels; %3$@ has %4$@.",
+                                               "\(order)", "\((order + 1) * (order + 1))", s.project.sources[i].name, "\(s.project.sources[i].info.channels)"), reason: "bad_request")
+                    }
+                    s.project.sources[i].fieldOrder = order
+                }
+                if order == 0 { s.project.tracks[t].rotation = nil }
+            }
+            var turned: Bool?
+            if let v = p["turned"], case .bool(let b) = v { turned = b }
+            if turned == false { s.project.tracks[t].rotation = nil }
+            if p["yaw"] != nil || p["pitch"] != nil || p["roll"] != nil {
+                guard s.project.playsField(s.project.tracks[t]) else { throw StepFailure("set_track", wrapping: Automation.Failure.noField, reason: "no_field") }
+                var r = s.project.tracks[t].rotation ?? FieldRotation()
+                if let v = p["yaw"]?.double { r.yaw = v }
+                if let v = p["pitch"]?.double { r.pitch = v }
+                if let v = p["roll"]?.double { r.roll = v }
+                s.project.tracks[t].rotation = r.isNone ? nil : r
+            }
         case "add_bus":
             do {
                 let out = try route(p["output"], "add_bus")
@@ -1303,7 +1332,9 @@ public enum StepRunner {
                 throw StepFailure(Said("step.set_layout.layout_one", "set_layout: \"layout\" is one of %@.", "\(ChannelLayout.allCases.map(\.rawValue).joined(separator: ", "))"))
             }
             s.project.channels = layout.channels
-            return ["channels": Double(layout.channels)]
+            // A document made Ambisonics says what its files of that size are: sound fields of its order.
+            if let order = layout.ambisonicOrder { s.project.markFields(order: order) }
+            return ["channels": Double(layout.channels), "fields": Double(s.project.sources.filter { $0.fieldOrder != nil }.count)]
         case "set_timecode":
             let named = p["rate"]?.string ?? ""
             if named == "none" {

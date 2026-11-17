@@ -24,3 +24,13 @@ public enum Ambisonics {
         return y.map(Float.init)
     }
 }
+
+/// A sound field turned round the listener, in degrees: yaw turns it (positive to the left, as an azimuth),
+/// pitch lifts its front, roll lifts its left side. Applied roll, then pitch, then yaw.
+public struct FieldRotation: Codable, Equatable, Hashable, Sendable {
+    public var yaw: Double, pitch: Double, roll: Double
+    public init(yaw: Double = 0, pitch: Double = 0, roll: Double = 0) { self.yaw = yaw; self.pitch = pitch; self.roll = roll }
+    public static let yawRange = -360.0...360.0, pitchRange = -90.0...90.0, rollRange = -180.0...180.0
+    public var isNone: Bool { yaw == 0 && pitch == 0 && roll == 0 }
+    public var isValid: Bool { Self.yawRange.contains(yaw) && Self.pitchRange.contains(pitch) && Self.rollRange.contains(roll) }
+}

@@ -8,7 +8,7 @@
 
 namespace jm {
 
-double Curve::dbAt(int64_t t) const {
+double Curve::dbAt(int64_t t) const JM_NONBLOCKING {
     const size_t i = size_t(std::upper_bound(frames.begin(), frames.end(), t) - frames.begin());
     if (i == 0) return db.front();
     if (i == frames.size()) return db.back();

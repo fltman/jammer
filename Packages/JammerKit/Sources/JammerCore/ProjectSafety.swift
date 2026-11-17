@@ -200,6 +200,10 @@ public enum ProjectSafety {
             if lost > 0 { notes.append(counted(lost, Said("project.repaired.routes.one", "1 route or send in the mixer led to a bus that isn't there, or round in a circle; a route now goes to the output and a send is gone."), Said("project.repaired.routes.other", "%@ routes or sends in the mixer led to a bus that isn't there, or round in a circle; a route now goes to the output and a send is gone.", "\(lost)"))) }
             if fixed > 0 { notes.append(counted(fixed, Said("project.repaired.levels.one", "1 level or pan in the mixer was outside what is possible and was put inside."), Said("project.repaired.levels.other", "%@ levels or pans in the mixer were outside what is possible and were put inside.", "\(fixed)"))) }
         }
+        // A field's order that its file's channels can't be (a hand-edited file): the mark is dropped, the file kept.
+        for i in p.sources.indices {
+            if let o = p.sources[i].fieldOrder, !(1...3).contains(o) || (o + 1) * (o + 1) != p.sources[i].info.channels { p.sources[i].fieldOrder = nil }
+        }
         // Sources whose description of their own audio makes no sense can't be played.
         let before = p.sources.count
         p.sources.removeAll { s in
