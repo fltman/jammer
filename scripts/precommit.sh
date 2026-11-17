@@ -17,7 +17,7 @@ out="${JAMMER_PRECOMMIT_OUT:-$root/build/precommit}"
 mkdir -p "$out"
 fail() { echo "precommit: NOT green: $1 (see $out)"; exit 1; }
 scripts/export-agents-guide.sh > "$out/guide.out" 2>&1 || fail "the agents guide didn't export"
-[[ ! -x "$tools/check-zsh-path.sh" ]] || "$tools/check-zsh-path.sh" scripts > "$out/path.out" 2>&1 || fail "a script uses zsh's path as a variable"
+[[ ! -x "$tools/check-zsh-path.sh" ]] || "$tools/check-zsh-path.sh" scripts > "$out/path.out" 2>&1 || fail "a script uses zsh's path or status as a variable"
 # The string catalogue and the code that uses it: placeholders, plural forms, keys, and no user text in moved files.
 scripts/test-guest-clean.sh > "$out/guestclean.out" 2>&1 || fail "guest-clean.sh: $(tail -1 "$out/guestclean.out")"
 scripts/check-fetch-guard.sh > "$out/fetch.out" 2>&1 || fail "a script can fetch third-party code without a yes ($(head -1 "$out/fetch.out"))"
