@@ -125,6 +125,21 @@ Film and television are set by how loud the talking is. Jämmer measures it itse
 
 Not made a profile: Apple's Atmos film range (−31 to −10 LKFS dialogue, on a 5.1 render: nothing Jämmer makes before phase 4); Amazon, Disney+, Max (no public numbers found).
 
+**Jämmer's own numbers on the eight files** (in the app, 2026-11-17; the speech found by the Mac's own transcription, then by Find Speakers). "Made as" is how loud the speech alone was made and the share of the file it was placed over; a pause between sentences is inside that share, and the detectors leave some of them out.
+
+| File | Speech made as | Whole file (ffmpeg) | By the transcript's words | By who speaks when |
+|---|---|---|---|---|
+| d1 speech alone | −27, 93 % | −27.1 | −26.74, 86 % | −26.87, 92 % |
+| d2 speech over quiet music | −27, 92 % | −26.9 | −26.70, 84 % | −26.75, 90 % |
+| d3 half speech, loud music between | −27, 47 % | −19.3 | −26.76, 44 % | −26.78, 44 % |
+| d4 little speech, loud effects | −27, 11 % | −20.4 | −26.58, 10 % | −26.85, 11 % |
+| d5 quiet speech, loud music between | −38, 47 % | −20.2 | −37.74, 44 % | −37.77, 44 % |
+| d6 speech under music | −30, 92 % | −21.5 | −21.48, 84 % | −21.36, 89 % |
+| d7 music only | none | −24.0 | no speech found | no speech found (Find Speakers ends as failed on a file without speech) |
+| d8 two voices over room tone | −27, 86 % | −27.1 | −26.98, 79 % | −27.02, 84 % |
+
+Where the speech is the loudest thing while it is spoken (all but d6) the number is within 0.5 LU of what the speech was made as, whatever is between the sentences. In d6 the music is 8 dB over the speech all the way, and the number is the music's: dialogue gating measures everything that sounds while someone speaks, not the voice alone. What a reference meter says of the same files is the part that is missing.
+
 **Calibration, waiting for Anders.** `scripts/make-dialogue-test-files.py` makes eight files (system voices reading an invented text, music and effects from tones and noise; nothing fetched) in `$JAMMER_TEST_MEDIA/dialogue`, with `manifest.json` saying where the speech was put: speech alone; over quiet music; half speech with loud music between; little speech with loud effects; quiet speech; speech under music; music only; two voices over room tone. He measures them in a reference meter (TBProAudio dpMeter5 in DIAL mode, or DeliveryQC.com, both of which say they use Dolby's code); the differences go in the manual with the share of speech beside them. Until then: debug builds only, and nothing is called met or failed.
 
 ## Not built yet

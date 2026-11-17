@@ -19,6 +19,7 @@ final class PictureFollower {
     @ObservationIgnored private var length = 0.0
     @ObservationIgnored private var shown = -1.0       // the film time last sought to while stopped
     @ObservationIgnored private var running = false
+    @ObservationIgnored private var itemReady: NSKeyValueObservation?
 
     init(session: EditorSession) {
         self.session = session
@@ -36,7 +37,7 @@ final class PictureFollower {
     }
     func stop() {
         timer?.invalidate(); timer = nil
-        player.pause(); running = false
+        player.pause(); running = false; shown = -1
     }
 
     private func load(_ video: VideoReference?) {
@@ -54,7 +55,13 @@ final class PictureFollower {
             guard let self, self.loaded == video else { return }
             guard !tracks.isEmpty, seconds.isFinite, seconds > 0 else { self.player.replaceCurrentItem(with: nil); self.state = .unreadable; return }
             self.length = seconds
-            self.player.replaceCurrentItem(with: AVPlayerItem(asset: asset))
+            let item = AVPlayerItem(asset: asset)
+            // A place asked for before the film could be shown is asked for again when it can.
+            self.itemReady = item.observe(\.status) { [weak self] item, _ in
+                guard item.status == .readyToPlay else { return }
+                Task { @MainActor in self?.shown = -1; self?.follow() }
+            }
+            self.player.replaceCurrentItem(with: item)
             self.state = .ready
             self.follow()
         }
@@ -158,8 +165,6 @@ struct PictureSheet: View {
             .controlSize(.small)
             .padding(.horizontal, 12).padding(.vertical, 8)
         }
-        .onAppear { follower.start() }
-        .onDisappear { follower.stop() }
     }
 
     @ViewBuilder private var line: some View {
@@ -190,6 +195,10 @@ struct PictureSheet: View {
 
 final class PictureWindow: NSWindow, NSWindowDelegate {
     weak var session: EditorSession? { didSet { delegate = self } }
+    /// Follows the playhead while the window is shown, and not while it is closed.
+    var follower: PictureFollower?
+    override func makeKeyAndOrderFront(_ sender: Any?) { super.makeKeyAndOrderFront(sender); follower?.start() }
+    override func close() { follower?.stop(); super.close() }
     func windowWillReturnUndoManager(_ window: NSWindow) -> UndoManager? { session?.document?.undoManager }
     override func keyDown(with event: NSEvent) {
         if event.keyCode == 49, event.modifierFlags.intersection([.command, .option, .control]).isEmpty { session?.togglePlay(); return }

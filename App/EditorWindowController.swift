@@ -435,7 +435,12 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         w.isReleasedWhenClosed = false
         w.identifier = NSUserInterfaceItemIdentifier("picture")
         w.title = L10n.text("picture.window.title", session.name)
-        w.contentViewController = NSHostingController(rootView: PictureSheet(session: session, follower: PictureFollower(session: session)))
+        let follower = PictureFollower(session: session)
+        w.follower = follower
+        let hosting = NSHostingController(rootView: PictureSheet(session: session, follower: follower))
+        // The window's size is the user's (and the first time 640 by 400): the view's own wishes don't resize it.
+        hosting.sizingOptions = []
+        w.contentViewController = hosting
         w.setContentSize(NSSize(width: 640, height: 400))
         w.nextResponder = self
         pictureWindow = w
@@ -715,13 +720,17 @@ struct TransportBar: View {
                 .font(.system(.title3, design: .monospaced).weight(.medium))
                 .foregroundStyle(Theme.neonColor)
                 .shadow(color: Theme.neonColor.opacity(0.5), radius: 6)
+                // The time is never the one that gives way when the row is tight (the timecode beside it took its room).
+                .lineLimit(1).fixedSize().layoutPriority(3)
                 .accessibilityLabel("Playhead")
             Text("/ \(formatTime(session.duration))").font(.system(.callout, design: .monospaced)).foregroundStyle(.secondary)
             // The picture's timecode at the playhead, when the document has one.
             if let tc = session.project.timecode {
                 Text(tc.timecode(at: session.playhead, sampleRate: session.project.sampleRate).text)
                     .font(.system(.callout, design: .monospaced)).foregroundStyle(.secondary)
+                    .lineLimit(1).fixedSize().layoutPriority(2)
                     .accessibilityLabel(L10n.text("transport.timecode.label"))
+                    .accessibilityValue(tc.timecode(at: session.playhead, sampleRate: session.project.sampleRate).text)
                     .accessibilityIdentifier("transport.timecode")
                     .help(L10n.text("transport.timecode.help", tc.rate.rawValue, tc.start.text))
             }
