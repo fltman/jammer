@@ -171,7 +171,7 @@ final class BatchModel {
                 var parts = [L10n.text("batch.result.done", String(result.outputs.count))]
                 let short = zip(result.outputs, zip(result.loudness, result.limitedByPeak)).filter { $0.1.1 }
                 if !short.isEmpty {
-                    parts.append(L10n.text("batch.result.short", String(short.count), short.map { String(format: "%@ %.1f LUFS", ($0.0 as NSString).lastPathComponent, $0.1.0 ?? 0) }.joined(separator: ", ")))
+                    parts.append(L10n.text("batch.result.short", String(short.count), short.map { ($0.0 as NSString).lastPathComponent + " " + L10n.number($0.1.0 ?? 0, 1) + " LUFS" }.joined(separator: ", ")))
                 }
                 if !result.skipped.isEmpty { parts.append(L10n.text("batch.result.skipped", String(result.skipped.count))) }
                 if !result.failed.isEmpty { parts.append(L10n.text("batch.result.failed", String(result.failed.count), result.failed.map { "\(($0.file as NSString).lastPathComponent) (\($0.message))" }.joined(separator: "; "))) }

@@ -1,15 +1,37 @@
-# Swedish in Jämmer: plan and word list (2026-11-17, nothing built)
+# Swedish in Jämmer: plan, word list and what is built (2026-11-17)
 
 The rule is the series' (the-apps/SIBLINGS.md, "Språk"): English and Swedish in the interface, the texts in a string catalogue, no text a user sees written straight in the code; the agent API's exact words and what a model itself writes are not translated; the catalogue check tells `%1$@` from `%@`; every state is looked at as a picture in both languages. Sites and manuals stay English first.
 
-## The foundation, built 2026-11-17 (no Swedish word used yet)
+## Built 2026-11-17 (block C): the Swedish is in, behind a start argument
+
+Jämmer still starts in English whatever the Mac's language is; Swedish only with `-language sv` (`JAMMER_LANG=sv scripts/with-app.sh …`), until Anders has seen it. `scripts/test-language-switch.sh` (in the pre-commit check) starts the debug build without a window on a Mac said to be Swedish, Swedish and English, German and English, and gets English each time, and Swedish only with the argument.
+
+- **The catalogue:** 888 texts, each with English and Swedish; the pre-commit check runs `check-strings.py --require sv`. Every file of the app whose texts are all in the catalogue is on `scripts/l10n-moved.txt` (the check fails on a text written in such a file).
+- **Counts** by the catalogue's plural forms (34): no sentence is made by adding a letter.
+- **Values are text:** `L10n.text` takes strings, so the compiler refuses a number handed to a `%@`; the check refuses a number placeholder anywhere but in a count.
+- **The operations' titles** (menus, ⌘K, the assistant's plan, the undo names) by name, `L10n.operation(name)` → `op.<name>.title`; the check holds each entry's English to the schema's title, so the window and the API name an operation the same way. The API's `title` stays English.
+- **The packages' typed errors** (21 types, 69 sentences) carry a key and their values (`KeyedMessage`); a failed step hands the key to the window, which says it in its language, while the API says the English words as before. The check holds each key's English to the error's own `errorDescription`.
+- **The assistant's conversation** (its notes, what it reports after running a plan, its measurements) is in the language of the question, as the held-back note already was: a Swedish question gets Swedish lines in an English window. Short questions whose language can't be told get the window's.
+- **The GUI scripts** find menus and texts by key (`scripts/l10n.sh`); the accessibility audit runs in either language. Run 2026-11-17 in both: 13 states each, all filled, no control without a name, nothing crashed.
+- **Numbers follow the Mac's region** (Anders, 2026-11-17), in either language, as macOS does: a Swedish region writes 0,3 and a US region 0.3, through `L10n.number`. The switch test checks both. Not changed: the time readouts (0:07.480) and the fields where a time is typed, which are read back with a point.
+- **Seen as pictures in both languages** (2026-11-17): the document window, the mixer, Plugins, Duck Under Speech, Repair, the command palette. Everything fits; the mixer is cut on the right in both languages when its window has been made narrow, because its description line doesn't wrap (a layout fault of the mixer, not of the language).
+
+**Still English in a Swedish window** (each is a message made where it is thrown, from parts, in the packages):
+- a failed step whose reason is written in the step itself rather than by a typed error (about 140 in `JammerAgent/Operations.swift`; most can only be reached through the API, since the menus send valid steps);
+- the cases of typed errors that carry a message made at the throw (`badValue(String)`, `PluginError.failed`, the limiter's three, export's `unsupported`, `AudioFileError`);
+- reports built in the packages: the ACX report's lines, Separate Stems' summary, the spectral area's status, a plugin host's own words when it dies;
+- the API's own answers and anything a model writes, as the rule says.
+
+These move as they are rewritten into typed errors; matching on English words (the earlier plan's second way) is not used.
+
+## The foundation, built 2026-11-17 (before the Swedish)
 
 - **The catalogue:** `App/Localizable.xcstrings`, English as the source, built into the app by Xcode (the project is generated again by the pre-commit check, so a new file can't be left out).
 - **The lookup:** `L10n.text(key, values…)` and `L10n.count(key, n)` (`App/L10n.swift`).
 - **The pattern, on the three hard kinds**, in the mixer sheet's automation lines: a count through the catalogue's plural forms ("1 point", "2 points": seen in the app from the compiled catalogue), a phrase with two values as `%1$@` and `%2$@`, and sentences that used to be glued from halves as whole entries with the other part as a value ("%@ (for every strip in the group)"). Eleven keys.
 - **The check** (`scripts/check-strings.py`, in the pre-commit check, after its own self-test): every key has English; one text never mixes `%1$@` and `%@`, and numbers its placeholders when it has more than one; a translation has the source's placeholders written the same way (`%1$@` is not `%@`); a count has the forms `one` and `other` with exactly one number and nothing else; every key the code asks for exists, counts are asked for as counts, and no key is unused; and a file listed in `scripts/l10n-moved.txt` has no text for the user written in its code. The self-test plants twelve kinds of fault and fails unless each is caught. `--require sv` adds "every key has Swedish" the day the words are chosen.
 - **The test copy's language** is set on its start line (`JAMMER_LANG=sv scripts/with-app.sh …`, English otherwise), never from the Mac's settings. `scripts/l10n.sh <key> [en|sv]` prints a key's text for GUI scripts.
-- **Not done:** the other 780 or so texts of the app (only `App/L10n.swift` is on the list of fully moved files), the operation titles, the packages' messages, any Swedish, and the scripts' own move from English titles to keys.
+- (What was not done here was done the same day: see the section above.)
 
 ## How much there is (counted roughly in the code, 2026-11-17)
 

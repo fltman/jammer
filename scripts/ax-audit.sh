@@ -30,7 +30,7 @@ front() { osa 'set frontmost to true' >/dev/null; sleep 0.3; }
 key() { front; osascript -e "tell application \"System Events\" to $1" >/dev/null 2>&1; sleep 0.3; }
 raise() { front; osa "perform action \"AXRaise\" of (first window whose name contains \"$1\")" >/dev/null; sleep 0.4; }
 # Menus by their keys in the string catalogue, never by their words: the script works in either language.
-t() { "$(dirname "$0")/l10n.sh" "$1"; }
+t() { "$root/scripts/l10n.sh" "$1"; }
 menu() { front; "$SM" --pid $P "$(t $1)" "$(t $2)" >/dev/null || echo "   (menu not pressed: $1 › $2)"; sleep 1; }
 can() { "$SM" --pid $P --check "$(t $1)" "$(t $2)" >/dev/null 2>&1; }
 post() { curl -s -m 60 -X POST -H "$H" "$@"; }
@@ -53,7 +53,7 @@ ask() {
     sleep 0.6
   fi
   local focus="$(focused)"
-  if [[ "$focus" != "Ask the assistant" ]]; then echo "NOT TYPED the assistant's field isn't focused (focus is on \"$focus\"): \"$2\""; return 1; fi
+  if [[ "$focus" != "$(t assistant.field.ax)" ]]; then echo "NOT TYPED the assistant's field isn't focused (focus is on \"$focus\"): \"$2\""; return 1; fi
   key "keystroke \"$2\""; key 'key code 36'; sleep ${3:-8}
 }
 
@@ -71,8 +71,8 @@ audit() {
   # $2 is a catalogue key (the text in the test copy's language, up to its first value), a count's key with
   # its number (import.tracks=2), or a name from the test material.
   local want
-  if [[ "$2" == *=* ]]; then want="$("$(dirname "$0")/l10n.sh" "${2%%=*}" "" "$([[ ${2#*=} == 1 ]] && echo one || echo other)")"; want="${want/\%lld/${2#*=}}"
-  else want="$("$(dirname "$0")/l10n.sh" "$2" 2>/dev/null || echo "$2")"; want="${want%%\%*}"; fi
+  if [[ "$2" == *=* ]]; then want="$("$root/scripts/l10n.sh" "${2%%=*}" "" "$([[ ${2#*=} == 1 ]] && echo one || echo other)")"; want="${want/\%lld/${2#*=}}"
+  else want="$("$root/scripts/l10n.sh" "$2" 2>/dev/null || echo "$2")"; want="${want%%\%*}"; fi
   want="${want:0:40}"
   if ! grep -q -F -- "$want" "${file%.txt}.read.txt"; then unfilled=$(( unfilled + 1 )); echo "NOT FILLED $1: \"$want\" was not read, so the state was not there"; fi
   local n=$(grep -c '^UNNAMED' "$file")
@@ -112,11 +112,11 @@ if [[ -f "$speech" && -f "$music" ]]; then
   audit "transcript with words and speakers" transcript.title
 
   ask Reading "what is the loudness?" 10
-  audit "assistant with a question and an answer" "You: what is the loudness"
+  audit "assistant with a question and an answer" "$(t assistant.ax.you): what is the loudness"
   ask Reading "delete from 2 to 4 seconds" 10
   audit "assistant with a plan waiting" assistant.plan
   ask Reading "write a poem about the sea" 6
-  audit "assistant with a refusal" "You: write a poem"
+  audit "assistant with a refusal" "$(t assistant.ax.you): write a poem"
   [[ -x "$root/build/winshot" ]] && "$root/build/winshot" --pid $P --only Reading "$out/assistant.png" >/dev/null 2>&1
   echo "         playing: $(curl -s "$B/documents/$DOC" | json "print(d['document']['playing'])")"
 

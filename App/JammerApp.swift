@@ -44,7 +44,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         #if DEBUG
         // `-printLanguage YES`: says which language the texts come in, and one text, and ends (for the test of the switch).
         if UserDefaults.standard.bool(forKey: "printLanguage") {
-            print("language \(Bundle.main.preferredLocalizations.first ?? "?"): \(L10n.text("menu.picture"))")
+            print("language \(Bundle.main.preferredLocalizations.first ?? "?"): \(L10n.text("menu.picture")) number \(L10n.number(0.25, 2))")
             exit(0)
         }
         #endif

@@ -160,7 +160,7 @@ final class AutomationLanesView: NSView {
 
     static func valueText(_ v: Double, _ param: AutomationLane.Param) -> String {
         switch param {
-        case .gain, .send: return L10n.text("automation.value.db", String(format: "%+.1f", v).replacingOccurrences(of: "-", with: "−"))
+        case .gain, .send: return L10n.text("automation.value.db", L10n.number(v, 1, sign: true).replacingOccurrences(of: "-", with: "−"))
         case .pan:
             if abs(v) < 0.005 { return L10n.text("automation.value.centre") }
             let percent = String(Int((abs(v) * 100).rounded()))

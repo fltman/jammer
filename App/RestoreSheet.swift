@@ -43,10 +43,10 @@ final class RestoreModel {
         let project = session.project, pool = session.pool, range = self.range
         let a = await Task.detached(priority: .userInitiated) { Restoration.analyze(project, range: range, pool: pool) }.value
         var parts: [String] = []
-        parts.append(a.hum.map { L10n.text("restore.found.hum", String(format: "%.2f", $0.frequency), String(format: "%.0f", $0.prominence)) } ?? L10n.text("restore.found.noHum"))
+        parts.append(a.hum.map { L10n.text("restore.found.hum", L10n.number($0.frequency, 2), L10n.number($0.prominence, 0)) } ?? L10n.text("restore.found.noHum"))
         parts.append(a.clippedRuns > 0 ? L10n.count("restore.found.clipped", a.clippedRuns) : L10n.text("restore.found.noClipping"))
         parts.append(a.clicks > 0 ? L10n.count("restore.found.clicks", a.clicks) : L10n.text("restore.found.noClicks"))
-        parts.append(a.rt60.map { a.reverberant ? L10n.text("restore.found.reverb", String(format: "%.1f", $0)) : L10n.text("restore.found.littleReverb", String(format: "%.1f", $0)) }
+        parts.append(a.rt60.map { a.reverberant ? L10n.text("restore.found.reverb", L10n.number($0, 1)) : L10n.text("restore.found.littleReverb", L10n.number($0, 1)) }
                      ?? (a.reverbUnknown != nil ? L10n.text("restore.found.reverbUnknown.after") : L10n.text("restore.found.reverbUnknown")))
         if let n = a.noiseFloor { parts.append(L10n.text("restore.found.noiseFloor", "\(n.level < 0 ? "−" : "")\(Int(abs(n.level).rounded()))")) }
         findings = a.sampled ? L10n.text("restore.found.sampled", parts.joined(separator: " · ")) : parts.joined(separator: " · ")
@@ -161,8 +161,8 @@ struct RestoreSheet: View {
                         Text(L10n.text("restore.sensitivity"))
                         Slider(value: $model.sensitivity, in: 0.25...4)
                             .accessibilityLabel(L10n.text("restore.sensitivity"))
-                            .accessibilityValue(L10n.text("restore.sensitivity.ax", String(format: "%.1f", model.sensitivity)))
-                        Text(String(format: "%.1f×", model.sensitivity)).monospacedDigit().frame(width: 44, alignment: .trailing)
+                            .accessibilityValue(L10n.text("restore.sensitivity.ax", L10n.number(model.sensitivity, 1)))
+                        Text(L10n.number(model.sensitivity, 1) + "×").monospacedDigit().frame(width: 44, alignment: .trailing)
                     }
                 }
             }

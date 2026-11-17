@@ -251,9 +251,9 @@ private struct MasterStrip: View {
                     })
                     .frame(width: 120)
                     .accessibilityLabel(L10n.text("mixer.master.ceiling.ax"))
-                    .accessibilityValue(Text(String(format: "%.1f dBTP", ceiling)))
+                    .accessibilityValue(Text(L10n.number(ceiling, 1) + " dBTP"))
                     .accessibilityIdentifier("mixer.master.ceiling")
-                    Text(String(format: "%.1f dBTP", ceiling).replacingOccurrences(of: "-", with: "−")).monospacedDigit().lineLimit(1).fixedSize()
+                    Text((L10n.number(ceiling, 1) + " dBTP").replacingOccurrences(of: "-", with: "−")).monospacedDigit().lineLimit(1).fixedSize()
                 }
                 Spacer(minLength: 0)
             }
@@ -310,7 +310,7 @@ private struct MixerStrip: View {
     @State private var position = 0.0
     @State private var dragging = false
 
-    static func levelText(_ db: Double) -> String { String(format: "%+.1f dB", db).replacingOccurrences(of: "-", with: "−") }
+    static func levelText(_ db: Double) -> String { (L10n.number(db, 1, sign: true) + " dB").replacingOccurrences(of: "-", with: "−") }
     /// What a strip's lanes are, in words: the slider beside it is then not the whole level.
     static func automationText(_ lanes: [AutomationLane]) -> String? {
         // From the catalogue: the count by its plural forms, each lane a whole phrase with its values as

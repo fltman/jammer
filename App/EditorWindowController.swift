@@ -164,13 +164,13 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
                     for id in others {
                         guard let t = q.tracks.first(where: { $0.id == id }), let r = results[id] else { continue }
                         if r.confidence < 0.3 {
-                            notes.append(L10n.text("importTracks.note.noMatch", t.name, String(format: "%.2f", r.confidence)))
+                            notes.append(L10n.text("importTracks.note.noMatch", t.name, L10n.number(r.confidence, 2)))
                         } else {
-                            var note = L10n.text("importTracks.note.moved", t.name, String(format: "%+.3f", q.seconds(r.offset)))
+                            var note = L10n.text("importTracks.note.moved", t.name, L10n.number(q.seconds(r.offset), 3, sign: true))
                             // Recorders' clocks can disagree; say so when they part noticeably.
                             if let d = q.drift(of: id, against: reference, pool: pool), d.start.confidence > 0.5, d.end.confidence > 0.5,
                                abs(d.partsPerMillion) > 10 {
-                                note += ", " + L10n.text("importTracks.note.drift", String(format: "%.0f", d.partsPerMillion * 3.6))
+                                note += ", " + L10n.text("importTracks.note.drift", L10n.number(d.partsPerMillion * 3.6, 0))
                             }
                             notes.append(note)
                         }
@@ -210,7 +210,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
                 switch result {
                 case .success(let q):
                     session.commit(q, action: L10n.text("attenuate.title"))
-                    session.status = L10n.text("attenuate.done", String(format: "%.0f", band.lowerBound), String(format: "%.0f", band.upperBound), String(format: "%.0f", -gain))
+                    session.status = L10n.text("attenuate.done", L10n.number(band.lowerBound, 0), L10n.number(band.upperBound, 0), L10n.number(-gain, 0))
                 case .failure(let e):
                     session.status = e.localizedDescription
                 }
@@ -599,7 +599,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         Task {
             session.status = L10n.text("measure.working")
             let r = await session.analyze(session.selection)
-            func f(_ v: Double?, _ unit: String) -> String { v.map { String(format: "%.1f %@", $0, unit) } ?? "—" }
+            func f(_ v: Double?, _ unit: String) -> String { v.map { L10n.number($0, 1) + " " + unit } ?? "—" }
             session.status = session.selection == nil ? L10n.text("measure.done.all", f(r.integrated, "LUFS"), f(r.range, "LU"), f(r.truePeak, "dBTP")) : L10n.text("measure.done.selection", f(r.integrated, "LUFS"), f(r.range, "LU"), f(r.truePeak, "dBTP"))
         }
     }
@@ -635,12 +635,12 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
                         Task { @MainActor in session.status = L10n.text("export.working.percent", String(Int(p * 100))) }
                     }
                     if let d = delivery, let l = d.loudness {
-                        let name = url.lastPathComponent, loud = String(format: "%.1f", l)
+                        let name = url.lastPathComponent, loud = L10n.number(l, 1)
                         session.status = d.limitedByPeak ? L10n.text("export.done.loudness.peaks", name, loud)
                             : d.compensatedDB == 0 ? L10n.text("export.done.loudness.asEncoded", name, loud)
-                            : L10n.text("export.done.loudness.compensated", name, loud, String(format: "%+.2f", d.compensatedDB))
+                            : L10n.text("export.done.loudness.compensated", name, loud, L10n.number(d.compensatedDB, 2, sign: true))
                     } else if let l = session.lastExportLimiter {
-                        session.status = L10n.text("export.done.limiter", url.lastPathComponent, String(format: "%.2f", l.truePeakDB).replacingOccurrences(of: "-", with: "−"), String(format: "%.1f", l.ceilingDB).replacingOccurrences(of: "-", with: "−"))
+                        session.status = L10n.text("export.done.limiter", url.lastPathComponent, L10n.number(l.truePeakDB, 2).replacingOccurrences(of: "-", with: "−"), L10n.number(l.ceilingDB, 1).replacingOccurrences(of: "-", with: "−"))
                     } else {
                         session.status = L10n.text("export.done", url.lastPathComponent)
                     }
@@ -863,7 +863,7 @@ struct ExportAccessory: View {
             }
             Picker(L10n.text("export.sampleRate"), selection: $model.sampleRate) {
                 Text(L10n.text("export.sampleRate.same")).tag(0.0)
-                ForEach([44_100.0, 48_000, 88_200, 96_000, 22_050, 16_000], id: \.self) { Text(String(format: "%g kHz", $0 / 1_000)).tag($0) }
+                ForEach([44_100.0, 48_000, 88_200, 96_000, 22_050, 16_000], id: \.self) { Text(($0 / 1_000).formatted(.number.grouping(.never).locale(Locale.current)) + " kHz").tag($0) }
             }
             .disabled(model.choice == .opus)
             .help(L10n.text("export.sampleRate.help"))

@@ -49,6 +49,12 @@ enum L10n {
         guard let code, let path = Bundle.main.path(forResource: code, ofType: "lproj"), let b = Bundle(path: path) else { return .main }
         return b
     }
+    /// A number written out for a text, with the decimal separator of the Mac's region (as macOS does:
+    /// a Swedish region gives "0,3" in either language). No grouping; `sign` writes a plus before a positive.
+    static func number(_ v: Double, _ decimals: Int, sign: Bool = false) -> String {
+        v.formatted(.number.precision(.fractionLength(decimals)).grouping(.never)
+            .sign(strategy: sign ? .always(includingZero: true) : .automatic).locale(Locale.current))
+    }
     /// A count, in the plural form the language wants.
     static func count(_ key: String, _ n: Int) -> String {
         String.localizedStringWithFormat(NSLocalizedString(key, comment: ""), n)

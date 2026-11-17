@@ -19,3 +19,9 @@ else
   [[ "$got" == "language en: "* ]] || { echo "test-language-switch: with -language sv and no Swedish in the bundle the app said \"$got\""; exit 1; }
   echo "test-language-switch: English on a Mac set to Swedish, German or English; the bundle has no Swedish yet, so -language sv is English too"
 fi
+# Numbers follow the Mac's region, in either language (as macOS does).
+for lang in en sv; do
+  comma=$(say -AppleLanguages "(en)" -AppleLocale sv_SE -language $lang); point=$(say -AppleLanguages "(en)" -AppleLocale en_US -language $lang)
+  [[ "$comma" == *"number 0,25" && "$point" == *"number 0.25" ]] || { echo "test-language-switch: numbers don't follow the region ($lang: Swedish region \"$comma\", US region \"$point\")"; exit 1; }
+done
+echo "test-language-switch: numbers follow the region in both languages (0,25 in Sweden, 0.25 in the US)"

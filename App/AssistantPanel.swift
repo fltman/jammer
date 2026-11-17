@@ -192,7 +192,7 @@ final class AssistantModel {
                 history.append((goal, plan.reply))
                 var text = plan.reply
                 if let cost = plan.cost {
-                    let amount = String(format: "%.4f", cost)
+                    let amount = L10n.number(cost, 4)
                     text += text.isEmpty ? L10n.reply("assistant.reply.cost", replyLanguage, amount) : " " + L10n.reply("assistant.reply.costAfter", replyLanguage, amount)
                 }
                 if !text.isEmpty { messages.append(Message(role: .assistant, text: text)) }
@@ -273,9 +273,9 @@ final class AssistantModel {
                 messages.append(Message(role: .note, text: L10n.replyCount("assistant.reply.done", replyLanguage, steps.count)))
                 for res in results where res.op == "loudness_preset" {
                     if res.info["limitedByPeak"] == 1, let after = res.info["integratedAfter"], let target = res.info["target"] {
-                        messages.append(Message(role: .assistant, text: L10n.reply("assistant.reply.peakHeld", replyLanguage, String(format: "%.1f", after), String(format: "%.0f", target))))
+                        messages.append(Message(role: .assistant, text: L10n.reply("assistant.reply.peakHeld", replyLanguage, L10n.number(after, 1), L10n.number(target, 0))))
                     } else if let after = res.info["integratedAfter"] {
-                        messages.append(Message(role: .assistant, text: L10n.reply("assistant.reply.nowAt", replyLanguage, String(format: "%.1f", after))))
+                        messages.append(Message(role: .assistant, text: L10n.reply("assistant.reply.nowAt", replyLanguage, L10n.number(after, 1))))
                     }
                 }
                 return true
@@ -335,13 +335,13 @@ final class AssistantModel {
             catch { messages.append(Message(role: .note, text: error.localizedDescription)); return false }
         case "measure_loudness":
             let r = await session.analyze(session.selection)
-            func f(_ v: Double?, _ u: String) -> String { v.map { String(format: "%.1f %@", $0, u) } ?? "—" }
+            func f(_ v: Double?, _ u: String) -> String { v.map { L10n.number($0, 1) + " " + u } ?? "—" }
             messages.append(Message(role: .assistant, text: L10n.reply("assistant.reply.loudness", replyLanguage, f(r.integrated, "LUFS"), f(r.range, "LU"), f(r.truePeak, "dBTP"))))
             return true
         case "analyze_restoration":
             let p = session.project, pool = session.pool, range = session.selection ?? 0..<p.length
             let a = await Task.detached { Restoration.analyze(p, range: range, pool: pool) }.value
-            let hum = a.hum.map { L10n.reply("assistant.reply.hum", replyLanguage, String(format: "%.1f", $0.frequency)) } ?? L10n.reply("assistant.reply.noHum", replyLanguage)
+            let hum = a.hum.map { L10n.reply("assistant.reply.hum", replyLanguage, L10n.number($0.frequency, 1)) } ?? L10n.reply("assistant.reply.noHum", replyLanguage)
             let found = L10n.reply("assistant.reply.found", replyLanguage, L10n.replyCount("assistant.reply.clipped", replyLanguage, a.clippedRuns), L10n.replyCount("assistant.reply.clicks", replyLanguage, a.clicks))
             messages.append(Message(role: .assistant, text: hum + " " + found))
             return true
@@ -401,7 +401,7 @@ final class AssistantModel {
 extension JSONValue {
     var display: String {
         switch self {
-        case .number(let d): d == d.rounded() ? String(Int(d)) : String(format: "%g", d)
+        case .number(let d): d == d.rounded() ? String(Int(d)) : d.formatted(.number.grouping(.never).locale(Locale.current))
         case .string(let s): s
         case .bool(let b): b ? "yes" : "no"
         case .array(let a): a.map(\.display).joined(separator: ", ")

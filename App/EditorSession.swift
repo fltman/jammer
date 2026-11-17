@@ -521,24 +521,24 @@ final class EditorSession {
                     : failed.keyed.map(L10n.message) ?? failed.error, .error)
                 NSSound.beep()
             } else if op == "limit", let info = r.first?.info, let after = info["truePeakAfter"], let cut = info["reductionMaxDB"], let secs = info["limitedSeconds"] {
-                status = L10n.text("limit.done", String(format: "%.2f", after), String(format: "%.1f", cut), String(format: "%.1f", secs))
+                status = L10n.text("limit.done", L10n.number(after, 2), L10n.number(cut, 1), L10n.number(secs, 1))
                     + (info["beforePlugins"] == 1 ? " " + L10n.text("limit.done.beforePlugins") : "")
             } else if let info = r.first?.info, let after = info["integratedAfter"], let target = info["target"] {
                 status = info["limited"] == 1
-                    ? L10n.text("loudness.done.limited", title, String(format: "%.1f", after), String(format: "%.1f", info["reductionMaxDB"] ?? 0), String(format: "%.1f", info["limitedSeconds"] ?? 0))
-                        + (info["limitedByPeak"] == 1 ? " " + L10n.text("loudness.done.target", String(format: "%.0f", target)) : "")
+                    ? L10n.text("loudness.done.limited", title, L10n.number(after, 1), L10n.number(info["reductionMaxDB"] ?? 0, 1), L10n.number(info["limitedSeconds"] ?? 0, 1))
+                        + (info["limitedByPeak"] == 1 ? " " + L10n.text("loudness.done.target", L10n.number(target, 0)) : "")
                     : info["limitedByPeak"] == 1
-                    ? L10n.text("loudness.done.short", String(format: "%.1f", after), String(format: "%.0f", target))
-                    : L10n.text("loudness.done", title, String(format: "%.1f", after), String(format: "%+.2f", info["gainDB"] ?? 0))
+                    ? L10n.text("loudness.done.short", L10n.number(after, 1), L10n.number(target, 0))
+                    : L10n.text("loudness.done", title, L10n.number(after, 1), L10n.number(info["gainDB"] ?? 0, 2, sign: true))
             } else if op == "detect_tempo", let info = r.first?.info, let bpm = info["bpm"] {
-                let shown = bpm == bpm.rounded() ? String(format: "%.0f", bpm) : String(format: "%.2f", bpm)
-                status = L10n.text("tempo.done", shown, String(format: "%.3f", info["firstBeat"] ?? 0))
+                let shown = bpm == bpm.rounded() ? L10n.number(bpm, 0) : L10n.number(bpm, 2)
+                status = L10n.text("tempo.done", shown, L10n.number(info["firstBeat"] ?? 0, 3))
             } else if op == "duck", let info = r.first?.info, let regions = info["regions"] {
                 let n = Int(regions), by = params["amount"]?.double ?? -12
                 let amount = "\(by < 0 ? "−" : "")\(abs(by).formatted(.number.precision(.fractionLength(0...1))))"
                 status = info["replaced"] ?? 0 > 0 ? L10n.text("duck.done.replaced", L10n.count("duck.passages", n), amount) : L10n.text("duck.done", L10n.count("duck.passages", n), amount)
             } else if let gain = r.first?.info["gainDB"] {
-                status = L10n.text("gain.done", title, String(format: "%+.2f", gain))
+                status = L10n.text("gain.done", title, L10n.number(gain, 2, sign: true))
             } else {
                 status = saying
             }
