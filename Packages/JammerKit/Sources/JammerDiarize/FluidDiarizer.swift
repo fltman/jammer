@@ -61,7 +61,7 @@ public final class FluidDiarizer: SpeakerDiarizer, @unchecked Sendable {
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
             try await manager.prepareModels(directory: folder)
         } catch {
-            throw DiarizationError.model("The diarisation model couldn't be loaded from \(source.host() ?? source.absoluteString): \(error.localizedDescription)")
+            throw DiarizationError.model(Said("error.diarization.diarisation_model_couldn_t", "The diarisation model couldn't be loaded from %1$@: %2$@", "\(source.host() ?? source.absoluteString)", "\(error.localizedDescription)"))
         }
         let result: DiarizationResult
         do {

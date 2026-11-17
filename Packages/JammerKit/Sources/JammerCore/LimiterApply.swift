@@ -55,8 +55,8 @@ extension Project {
         }
         report.truePeakBeforeDB = before.peakDB
         guard before.peakDB > settings.ceilingDB else {
-            throw LimiterError.nothingToDo(String(format: "The true peak there is %.1f dBTP, already at or under the ceiling of %.1f. Nothing was changed.",
-                                                  before.peakDB, settings.ceilingDB))
+            throw LimiterError.nothingToDo(Said("limiter.nothingToDo", "The true peak there is %1$@ dBTP, already at or under the ceiling of %2$@. Nothing was changed.",
+                                                Said.n(before.peakDB, 1), Said.n(settings.ceilingDB, 1)))
         }
 
         // Each track alone, at unity and without its plugins: its level and its plugins still apply afterwards.
@@ -105,7 +105,7 @@ extension Project {
             }
             try put(limiter.finishGains())
             for w in writers { try w.finish() }
-            guard written == total else { throw LimiterError.ceilingNotMet("The limiter lost count of the audio (\(written) of \(total) frames). Nothing was changed.") }
+            guard written == total else { throw LimiterError.ceilingNotMet(Said("limiter.limiter_lost_count_audio", "The limiter lost count of the audio (%1$@ of %2$@ frames). Nothing was changed.", "\(written)", "\(total)")) }
             report.truePeakAfterDB = after.peakDB
             report.reductionMaxDB = limiter.stats.reductionMaxDB
             report.limitedSeconds = Double(limiter.stats.limitedFrames) / sampleRate
@@ -114,8 +114,8 @@ extension Project {
         }
         guard met else {
             for u in urls { try? FileManager.default.removeItem(at: u) }
-            throw LimiterError.ceilingNotMet(String(format: "The limiter couldn't keep the true peak under %.1f dBTP (it came to %.2f). Try a longer lookahead. Nothing was changed.",
-                                                    settings.ceilingDB, report.truePeakAfterDB))
+            throw LimiterError.ceilingNotMet(Said("limiter.ceilingNotMet.unchanged", "The limiter couldn't keep the true peak under %1$@ dBTP (it came to %2$@). Try a longer lookahead. Nothing was changed.",
+                                                  Said.n(settings.ceilingDB, 1), Said.n(report.truePeakAfterDB, 2)))
         }
 
         var p = self

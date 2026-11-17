@@ -83,7 +83,7 @@ final class RestoreModel {
             }
         case .failure(let e):
             try? FileManager.default.removeItem(at: dir)
-            previewError = e.localizedDescription
+            previewError = L10n.error(e)
         }
     }
 

@@ -14,8 +14,8 @@ public final class MP3Writer: StreamingAudioWriter {
     private var audioStart: UInt64 = 0
 
     public init(url: URL, channels: Int, sampleRate: Double, bitRate: Int = 128_000, id3: Data? = nil) throws {
-        guard (1...2).contains(channels) else { throw ExportError.unsupported("MP3 takes mono or stereo.") }
-        guard let l = lame_init() else { throw ExportError.unsupported("LAME couldn't start.") }
+        guard (1...2).contains(channels) else { throw ExportError.unsupported(Said("error.export.mp3_takes_mono_stereo", "MP3 takes mono or stereo.")) }
+        guard let l = lame_init() else { throw ExportError.unsupported(Said("error.export.lame_couldn_t_start", "LAME couldn't start.")) }
         lame = l
         self.channels = channels
         lame_set_num_channels(l, Int32(channels))
@@ -24,9 +24,9 @@ public final class MP3Writer: StreamingAudioWriter {
         lame_set_brate(l, Int32(bitRate / 1_000))
         lame_set_quality(l, 2)
         lame_set_bWriteVbrTag(l, 1)
-        guard lame_init_params(l) >= 0 else { lame_close(l); throw ExportError.unsupported("LAME doesn't accept \(Int(sampleRate)) Hz at \(bitRate / 1_000) kbit/s.") }
+        guard lame_init_params(l) >= 0 else { lame_close(l); throw ExportError.unsupported(Said("error.export.lame_doesn_t_accept", "LAME doesn't accept %1$@ Hz at %2$@ kbit/s.", "\(Int(sampleRate))", "\(bitRate / 1_000)")) }
         FileManager.default.createFile(atPath: url.path, contents: nil)
-        guard let h = try? FileHandle(forUpdating: url) else { lame_close(l); throw ExportError.unsupported("Can't write \(url.lastPathComponent).") }
+        guard let h = try? FileHandle(forUpdating: url) else { lame_close(l); throw ExportError.unsupported(Said("error.export.can_t_write", "Can't write %@.", "\(url.lastPathComponent)")) }
         handle = h
         if let id3 {
             try h.write(contentsOf: id3)

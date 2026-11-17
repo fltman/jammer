@@ -30,12 +30,22 @@ public struct FolderPolicy: Sendable {
     }
 }
 
-public struct BatchError: Error, LocalizedError, Equatable {
+public struct BatchError: Error, LocalizedError, Equatable, KeyedFailure {
     public var reason: String
     public var message: String
+    /// The message by its key, for a window (`message` is its English, for the API).
+    public var keyed: KeyedMessage?
     public init(_ reason: String, _ message: String) {
         self.reason = reason
         self.message = message
+    }
+    public init(_ reason: String, _ said: Said) {
+        self.init(reason, said.text)
+        keyed = said.keyed
+    }
+    /// Another error, with its own key when it has one.
+    public init(_ reason: String, wrapping error: Error) {
+        self.init(reason, Said.of(error))
     }
     public var errorDescription: String? { message }
 }
@@ -90,7 +100,7 @@ public struct BatchRequest: Sendable {
     public func checkSources() throws {
         let sources = Set(inputs.map { FolderPolicy.canonical($0.path).path })
         if let clash = inputs.first(where: { sources.contains(FolderPolicy.canonical(destination(for: $0).path).path) }) {
-            throw BatchError("would_overwrite_source", "\(destination(for: clash).lastPathComponent) is one of the files being processed; batch never writes over its input. Use a suffix or another output folder.")
+            throw BatchError("would_overwrite_source", Said("error.batch.one_files_being_processed", "%@ is one of the files being processed; batch never writes over its input. Use a suffix or another output folder.", "\(destination(for: clash).lastPathComponent)"))
         }
     }
 
@@ -99,12 +109,12 @@ public struct BatchRequest: Sendable {
 
     public static func parse(_ body: [String: Any], policy: FolderPolicy?) throws -> BatchRequest {
         let known = fields
-        if let k = body.keys.first(where: { !known.contains($0) && $0 != AgentAPI.rationale }) { throw BatchError("bad_request", "Unknown field \"\(k)\". batch takes: \(known.sorted().joined(separator: ", ")).") }
+        if let k = body.keys.first(where: { !known.contains($0) && $0 != AgentAPI.rationale }) { throw BatchError("bad_request", Said("error.batch.unknown_field_1_batch", "Unknown field \"%1$@\". batch takes: %2$@.", "\(k)", "\(known.sorted().joined(separator: ", "))")) }
         func checked(_ path: String, _ what: String) throws -> URL {
-            guard path.hasPrefix("/") else { throw BatchError("bad_request", "\(what) must be an absolute path.") }
+            guard path.hasPrefix("/") else { throw BatchError("bad_request", Said("error.batch.absolute_path", "%@ must be an absolute path.", "\(what)")) }
             let url = FolderPolicy.canonical(path)
             if let policy, !policy.allows(url) {
-                throw BatchError("folder_not_allowed", "\(path) isn't in a folder agents may use. The user allows folders in Jämmer › Settings… › Agents.")
+                throw BatchError("folder_not_allowed", Said("error.batch.isn_t_folder_agents", "%@ isn't in a folder agents may use. The user allows folders in Jämmer › Settings… › Agents.", "\(path)"))
             }
             return url
         }
@@ -117,8 +127,8 @@ public struct BatchRequest: Sendable {
                 inputs.append(try checked(dir.appending(path: n).path, "folder"))
             }
         }
-        guard !inputs.isEmpty else { throw BatchError("bad_request", "Give files (absolute paths) or a folder with audio in it.") }
-        guard let out = body["output"] as? String else { throw BatchError("bad_request", "batch needs an output folder.") }
+        guard !inputs.isEmpty else { throw BatchError("bad_request", Said("error.batch.give_files_absolute_paths", "Give files (absolute paths) or a folder with audio in it.")) }
+        guard let out = body["output"] as? String else { throw BatchError("bad_request", Said("error.batch.batch_needs_output_folder", "batch needs an output folder.")) }
         var steps: [Step] = []
         if let raw = body["steps"] as? [Any], !raw.isEmpty {
             do {
@@ -128,57 +138,57 @@ public struct BatchRequest: Sendable {
         }
         var jobs: [JobStep] = []
         for item in (body["jobs"] as? [[String: Any]]) ?? [] {
-            guard let op = item["op"] as? String, jobOps.contains(op) else { throw BatchError("bad_request", "jobs take op \(jobOps.sorted().joined(separator: ", ")).") }
+            guard let op = item["op"] as? String, jobOps.contains(op) else { throw BatchError("bad_request", Said("error.batch.jobs_take_op", "jobs take op %@.", "\(jobOps.sorted().joined(separator: ", "))")) }
             // A job says what it is and with what, and nothing else; and only what that job takes.
-            if let k = item.keys.sorted().first(where: { !["op", "params", AgentAPI.rationale].contains($0) }) { throw BatchError("bad_request", "A job has no field \"\(k)\". It takes: op, params.") }
+            if let k = item.keys.sorted().first(where: { !["op", "params", AgentAPI.rationale].contains($0) }) { throw BatchError("bad_request", Said("error.batch.job_has_field_takes", "A job has no field \"%@\". It takes: op, params.", "\(k)")) }
             let takes = Operations.endpoints.first { $0.name == op }.map { Set($0.params.map(\.name)) }
             var params: [String: JSONValue] = [:]
             for (k, v) in (item["params"] as? [String: Any]) ?? [:] {
-                if let takes, !takes.contains(k), k != AgentAPI.rationale { throw BatchError("bad_request", "The job \(op) has no parameter \"\(k)\". It takes: \(takes.sorted().joined(separator: ", ")).") }
-                guard let j = JSONValue(v) else { throw BatchError("bad_request", "The job \(op): \"\(k)\" must be a number, string, boolean or list.") }
+                if let takes, !takes.contains(k), k != AgentAPI.rationale { throw BatchError("bad_request", Said("error.batch.job_1_has_parameter", "The job %1$@ has no parameter \"%2$@\". It takes: %3$@.", "\(op)", "\(k)", "\(takes.sorted().joined(separator: ", "))")) }
+                guard let j = JSONValue(v) else { throw BatchError("bad_request", Said("error.batch.job_1_2_number", "The job %1$@: \"%2$@\" must be a number, string, boolean or list.", "\(op)", "\(k)")) }
                 if k != AgentAPI.rationale { params[k] = j }
             }
             jobs.append(JobStep(op: op, params: params))
         }
-        if let given = body["export"], !(given is [String: Any]) { throw BatchError("bad_request", "export must be an object.") }
+        if let given = body["export"], !(given is [String: Any]) { throw BatchError("bad_request", Said("error.batch.export_object", "export must be an object.")) }
         let e = (body["export"] as? [String: Any]) ?? [:]
         if let k = e.keys.sorted().first(where: { !exportKeys.contains($0) && $0 != AgentAPI.rationale }) {
-            throw BatchError("bad_request", "export has no field \"\(k)\". It takes: \(exportKeys.sorted().joined(separator: ", ")).")
+            throw BatchError("bad_request", Said("error.batch.export_has_field_1", "export has no field \"%1$@\". It takes: %2$@.", "\(k)", "\(exportKeys.sorted().joined(separator: ", "))"))
         }
         guard let format = ExportFormat(rawValue: (e["format"] as? String) ?? "wav"), ExportFormat.available.contains(format) else {
-            throw BatchError("bad_request", "export.format must be one of \(ExportFormat.available.map(\.rawValue).joined(separator: ", ")).")
+            throw BatchError("bad_request", Said("error.batch.export_format_one", "export.format must be one of %@.", "\(ExportFormat.available.map(\.rawValue).joined(separator: ", "))"))
         }
         let defaults: [ExportFormat: Int] = [.aac: 192_000, .opus: 96_000, .mp3: 160_000]
         let depth = (e["bitDepth"] as? Int) ?? 24
-        if format.isLossless, !format.bitDepths.contains(depth) { throw BatchError("bad_request", "\(format.rawValue) takes \(format.bitDepths.map(String.init).joined(separator: " or ")) bits.") }
+        if format.isLossless, !format.bitDepths.contains(depth) { throw BatchError("bad_request", Said("error.batch.1_takes_2_bits", "%1$@ takes %2$@ bits.", "\(format.rawValue)", "\(format.bitDepths.map(String.init).joined(separator: " or "))")) }
         var request = BatchRequest(inputs: inputs, steps: steps, jobs: jobs,
                                    export: .init(format: format, bitDepth: depth, bitRate: (e["bitRate"] as? Int) ?? defaults[format] ?? 160_000),
                                    chapters: (e["chapters"] as? Bool) ?? true, output: try checked(out, "output"),
                                    suffix: (body["suffix"] as? String) ?? " (Jämmer)", overwrite: (body["overwrite"] as? Bool) ?? false)
         if let unknown = e.keys.first(where: { !exportKeys.contains($0) && $0 != AgentAPI.rationale }) {
-            throw BatchError("bad_request", "Unknown export field \"\(unknown)\". export takes: \(exportKeys.sorted().joined(separator: ", ")).")
+            throw BatchError("bad_request", Said("error.batch.unknown_export_field_1", "Unknown export field \"%1$@\". export takes: %2$@.", "\(unknown)", "\(exportKeys.sorted().joined(separator: ", "))"))
         }
         if let t = e["targetLUFS"] {
             guard let n = t as? NSNumber, CFGetTypeID(n) != CFBooleanGetTypeID(), (-40.0 ... -5.0).contains(n.doubleValue) else {
-                throw BatchError("bad_request", "export.targetLUFS must be a number between -40 and -5.")
+                throw BatchError("bad_request", Said("error.batch.export_targetlufs_number_between", "export.targetLUFS must be a number between -40 and -5."))
             }
             guard !format.isLossless else {
-                throw BatchError("bad_request", "export.targetLUFS is for mp3, aac and opus, where the encoder changes the loudness. Set the level of a \(format.rawValue) with a loudness_preset or normalize step.")
+                throw BatchError("bad_request", Said("error.batch.export_targetlufs_mp3_aac", "export.targetLUFS is for mp3, aac and opus, where the encoder changes the loudness. Set the level of a %@ with a loudness_preset or normalize step.", "\(format.rawValue)"))
             }
             request.loudnessTarget = .init(integrated: n.doubleValue)
         } else if let last = steps.last, last.op == "loudness_preset", let preset = LoudnessPreset(rawValue: last.params["preset"]?.string ?? "") {
             request.loudnessTarget = .init(integrated: preset.integrated, ceiling: preset.truePeakCeiling)
         }
         if let c = e["compensate"] {
-            guard let b = c as? Bool else { throw BatchError("bad_request", "export.compensate must be true or false.") }
+            guard let b = c as? Bool else { throw BatchError("bad_request", Said("error.batch.export_compensate_true_false", "export.compensate must be true or false.")) }
             request.compensate = b
         }
         if let v = e["sampleRate"] {
             guard let n = v as? NSNumber, CFGetTypeID(n) != CFBooleanGetTypeID(), SampleRateConversion.rates.contains(n.doubleValue) else {
-                throw BatchError("bad_request", "export.sampleRate must be one of \(SampleRateConversion.ratesList).")
+                throw BatchError("bad_request", Said("error.batch.export_samplerate_one", "export.sampleRate must be one of %@.", "\(SampleRateConversion.ratesList)"))
             }
-            if format == .opus, n.doubleValue != 48_000 { throw BatchError("bad_request", "opus is always written at 48000 Hz; leave export.sampleRate out or give 48000.") }
-            guard SampleRateConversion.factory != nil else { throw BatchError("bad_request", "Sample rate conversion isn't available in this build.") }
+            if format == .opus, n.doubleValue != 48_000 { throw BatchError("bad_request", Said("error.batch.opus_always_written_48000", "opus is always written at 48000 Hz; leave export.sampleRate out or give 48000.")) }
+            guard SampleRateConversion.factory != nil else { throw BatchError("bad_request", Said("error.batch.sample_rate_conversion_isn", "Sample rate conversion isn't available in this build.")) }
             request.sampleRate = n.doubleValue
         }
         try request.checkSources()
@@ -247,7 +257,7 @@ public enum BatchRunner {
                 if let f = results.first(where: { $0.status == .failed }) { throw BatchError(f.reason ?? "step_failed", f.error ?? "A step failed.") }
                 var project = state.project
                 for j in request.jobs {
-                    guard let job else { throw BatchError("not_available", "\(j.op) isn't available here.") }
+                    guard let job else { throw BatchError("not_available", Said("error.batch.isn_t_available_here", "%@ isn't available here.", "\(j.op)")) }
                     project = try await job(j, project, pool)
                 }
                 let delivery = try deliver(project, pool: pool, to: dest, request: request, media: media)
@@ -283,7 +293,7 @@ public enum BatchRunner {
     /// With a limiter on the master (a recipe can put one there) the file is measured as written and
     /// written again further under the ceiling until it holds, as an export from the app is.
     static func export(_ project: Project, pool: SourcePool, to url: URL, request: BatchRequest) throws {
-        guard project.length > 0 else { throw BatchError("empty", "Nothing is left to export.") }
+        guard project.length > 0 else { throw BatchError("empty", Said("error.batch.nothing_left_export", "Nothing is left to export.")) }
         guard let ceiling = project.master.limiter?.ceilingDB else {
             return try exportOnce(project, pool: pool, to: url, request: request, masterMargin: Mixer.masterMargins[0])
         }

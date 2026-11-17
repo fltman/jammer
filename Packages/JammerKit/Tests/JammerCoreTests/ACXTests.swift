@@ -9,7 +9,7 @@ struct ACXTests {
     }
     func measured(_ mix: LoudnessResult, encoded: LoudnessResult? = nil, rate: Double = 44_100, floor: Double? = -65, head: Double = 1.2, tail: Double = 3) -> ACX.Measured {
         ACX.Measured(mix: mix, noiseFloor: floor, noiseSeconds: 12, channels: 1, sampleRate: rate, seconds: 600, head: head, tail: tail,
-                     encoded: encoded, encodedBitRate: encoded == nil ? nil : 192_000, encodedSampleRate: encoded == nil ? nil : 44_100, encodedReason: encoded == nil ? "the MP3 couldn't be made (no encoder in this build)" : nil)
+                     encoded: encoded, encodedBitRate: encoded == nil ? nil : 192_000, encodedSampleRate: encoded == nil ? nil : 44_100, encodedReason: encoded == nil ? Said("acx.on.notMade", "the MP3 couldn't be made (%@)", inner: Said("error.said", "%@", "no encoder in this build")) : nil)
     }
     func row(_ rows: [DeliveryRequirement], _ name: String) -> DeliveryRequirement { rows.first { $0.name == name }! }
 

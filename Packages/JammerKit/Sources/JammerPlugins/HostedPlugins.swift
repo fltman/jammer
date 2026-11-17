@@ -42,7 +42,7 @@ public final class HostedInsertUnit: InsertUnit, @unchecked Sendable {
     public func apply(_ state: Data) throws {
         if state.starts(with: Self.ownStateMagic) {
             guard let values = try? JSONSerialization.jsonObject(with: state.dropFirst(Self.ownStateMagic.count)) as? [String: Double] else {
-                throw PluginError.failed("The saved settings for \(displayName) can't be read.")
+                throw PluginError.failed(Said("error.plugin.saved_settings_can_t", "The saved settings for %@ can't be read.", "\(displayName)"))
             }
             let known = Dictionary(host.parameters.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
             for (key, value) in values {
@@ -52,7 +52,7 @@ public final class HostedInsertUnit: InsertUnit, @unchecked Sendable {
             }
             return
         }
-        guard host.loadState(state) else { throw PluginError.failed("The saved settings for \(displayName) couldn't be applied.") }
+        guard host.loadState(state) else { throw PluginError.failed(Said("error.plugin.saved_settings_couldn_t", "The saved settings for %@ couldn't be applied.", "\(displayName)")) }
     }
 
     public var parameters: [PluginParameter] {
@@ -63,20 +63,20 @@ public final class HostedInsertUnit: InsertUnit, @unchecked Sendable {
     }
 
     public func set(_ identifier: String, to value: Double) throws {
-        guard host.died == nil else { throw PluginError.failed("\(displayName) \(host.died!.description) and is switched off.") }
+        guard host.died == nil else { throw PluginError.failed(Said("error.plugin.1_2_switched_off", "%1$@ %2$@ and is switched off.", "\(displayName)", "\(host.died!.description)")) }
         let all = host.parameters
         guard let p = all.first(where: { String($0.id) == identifier }) ?? all.first(where: { $0.name.caseInsensitiveCompare(identifier) == .orderedSame }) else {
-            throw PluginError.unknownParameter("\(displayName) has no parameter \"\(identifier)\".")
+            throw PluginError.unknownParameter(Said("error.plugin.1_has_parameter_2", "%1$@ has no parameter \"%2$@\".", "\(displayName)", "\(identifier)"))
         }
-        guard !p.readonly else { throw PluginError.outOfRange("\(p.name) can only be read.") }
+        guard !p.readonly else { throw PluginError.outOfRange(Said("error.plugin.can_only_read", "%@ can only be read.", "\(p.name)")) }
         guard value >= p.min, value <= p.max else {
-            throw PluginError.outOfRange("\(p.name) takes \(p.min.formatted()) to \(p.max.formatted()); \(value.formatted()) is outside.")
+            throw PluginError.outOfRange(Said("error.plugin.1_takes_2_3", "%1$@ takes %2$@ to %3$@; %4$@ is outside.", "\(p.name)", "\(p.min.formatted())", "\(p.max.formatted())", "\(value.formatted())"))
         }
-        guard host.set(p.id, to: value) else { throw PluginError.failed("\(displayName) didn't take the value.") }
+        guard host.set(p.id, to: value) else { throw PluginError.failed(Said("error.plugin.didn_t_take_value", "%@ didn't take the value.", "\(displayName)")) }
     }
 
     public var factoryPresets: [String] { [] }
-    public func loadPreset(_ name: String) throws { throw PluginError.unknownPreset("\(displayName) has no factory presets here.") }
+    public func loadPreset(_ name: String) throws { throw PluginError.unknownPreset(Said("error.plugin.has_factory_presets_here", "%@ has no factory presets here.", "\(displayName)")) }
 }
 
 /// The app's side of VST 3 and CLAP: the catalogue from the scan, and starting a plugin in a
@@ -127,10 +127,10 @@ public enum HostedPlugins {
         let (c, helper) = lock.withLock { (catalogue, self.helper) }
         let key = plugin.description
         if c.blocked.contains(key) {
-            throw PluginError.failed("\(key) is switched off because it failed while it was in use. Switch it on again in Audio › Plugins….")
+            throw PluginError.failed(Said("error.plugin.switched_off_because_failed", "%@ is switched off because it failed while it was in use. Switch it on again in Audio › Plugins….", "\(key)"))
         }
         guard let found = c.plugin(key), let helper else {
-            throw PluginError.notFound("No plugin \(key) is installed (or the last scan didn't find it).")
+            throw PluginError.notFound(Said("error.plugin.plugin_installed_last_scan", "No plugin %@ is installed (or the last scan didn't find it).", "\(key)"))
         }
         // Counted before starting, so two tracks can't both take the last place.
         let allowed = lock.withLock { () -> Bool in
@@ -139,7 +139,7 @@ public enum HostedPlugins {
             return true
         }
         guard allowed else {
-            throw PluginError.failed("\(limit) VST 3 and CLAP plugins are already running, which is the most Jämmer starts at once (each runs in a process of its own). Remove or bypass some to add \(found.name).")
+            throw PluginError.failed(Said("error.plugin.1_vst_3_clap", "%1$@ VST 3 and CLAP plugins are already running, which is the most Jämmer starts at once (each runs in a process of its own). Remove or bypass some to add %2$@.", "\(limit)", "\(found.name)"))
         }
         let host: PluginHostProcess
         do {
@@ -148,8 +148,8 @@ public enum HostedPlugins {
         } catch let e as PluginHostProcess.StartError {
             released()
             let message = e.message
-            if message.contains("mono audio") || message.contains("stereo audio") { throw PluginError.unsupportedFormat("\(found.name): \(message)") }
-            throw PluginError.failed("\(found.name) didn't start: \(message)")
+            if message.contains("mono audio") || message.contains("stereo audio") { throw PluginError.unsupportedFormat(Said("error.plugin.1_2", "%1$@: %2$@", "\(found.name)", "\(message)")) }
+            throw PluginError.failed(Said("error.plugin.1_didn_t_start", "%1$@ didn't start: %2$@", "\(found.name)", "\(message)"))
         }
         let name = found.name
         host.onDeath = { death in onDeath?(plugin, name, death) }

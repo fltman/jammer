@@ -191,7 +191,7 @@ struct StorageView: View {
             let moved = try MediaStorage.moveToTrash(dry.names, media: MediaStore.folder, known: known, dryRun: false)
             said = L10n.text("storage.moved", L10n.count("storage.moved.files", moved.names.count), Self.size(moved.bytes))
         } catch {
-            said = error.localizedDescription
+            said = L10n.error(error)
         }
         chosen = []
         reload()

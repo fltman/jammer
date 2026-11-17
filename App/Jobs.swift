@@ -103,7 +103,7 @@ final class JobRegistry {
                 case .nothingInRange: "nothing_in_range"
                 default: "restore_failed"
                 }
-                job.error = (code, error.localizedDescription)
+                job.fail(code, error)
             }
             self?.finish(job)
         }
@@ -142,7 +142,7 @@ final class JobRegistry {
             } catch {
                 guard self?.jobs[id]?.status != .cancelled else { return }
                 job.status = .failed
-                job.error = ((error as? DiarizationError)?.reason ?? "diarization_failed", error.localizedDescription)
+                job.fail((error as? DiarizationError)?.reason ?? "diarization_failed", error)
                 self?.finish(job)
                 return
             }
@@ -246,11 +246,15 @@ final class JobRegistry {
             case .success(let (separated, report)):
                 if session?.project == project { session?.commit(separated, action: L10n.text("audio.stems")) } else {
                     job.status = .failed
-                    job.error = ("document_changed", "The document changed while separating; nothing was applied. Run it again.")
+                    job.fail("document_changed", Said("job.changed.separating", "The document changed while separating; nothing was applied. Run it again."))
                     self?.finish(job)
                     return
                 }
-                session?.status = L10n.text("stems.done", report.stems.joined(separator: ", "))
+                // The engines' names for their stems, in the window's language.
+                let names = ["vocals": L10n.text("stems.name.vocals"), "drums": L10n.text("stems.name.drums"), "bass": L10n.text("stems.name.bass"),
+                             "other": L10n.text("stems.name.other"), "speech": L10n.text("stems.name.speech"), "music": L10n.text("stems.name.music"),
+                             "effects": L10n.text("stems.name.effects")]
+                session?.status = L10n.text("stems.done", report.stems.map { names[$0] ?? $0 }.joined(separator: ", "))
                 job.status = .done
                 job.progress = 1
                 job.result = ["stems": .array(report.stems.map { .string($0) }), "tracks": .array(report.tracks.map { .string($0.uuidString) }),
@@ -259,8 +263,8 @@ final class JobRegistry {
                                                                : "Sound above the model's 11 kHz, and whatever the model leaves, is in other; the stems add up to the original.")]
             case .failure(let e):
                 job.status = .failed
-                job.error = ((e as? StemError)?.reason ?? "separation_failed", e.localizedDescription)
-                session?.status = e.localizedDescription
+                job.fail((e as? StemError)?.reason ?? "separation_failed", e)
+                session?.status = L10n.error(e)
             }
             self?.finish(job)
         }
@@ -297,7 +301,7 @@ final class JobRegistry {
             case .success(let frozen):
                 guard session?.project == project else {
                     job.status = .failed
-                    job.error = ("document_changed", "The document changed while freezing; nothing was applied. Run it again.")
+                    job.fail("document_changed", Said("job.changed.freezing", "The document changed while freezing; nothing was applied. Run it again."))
                     self?.finish(job)
                     return
                 }
@@ -310,8 +314,8 @@ final class JobRegistry {
                 }
             case .failure(let e):
                 job.status = .failed
-                job.error = ((e as? FreezeError)?.reason ?? "freeze_failed", e.localizedDescription)
-                session?.status = e.localizedDescription
+                job.fail((e as? FreezeError)?.reason ?? "freeze_failed", e)
+                session?.status = L10n.error(e)
             }
             self?.finish(job)
         }
@@ -339,7 +343,7 @@ final class JobRegistry {
         let wanted = try? SpeechEngines.engine(choice, for: locale, model: model)
         if choice.paid, wanted == nil {
             job.status = .failed
-            job.error = ("engine_unavailable", "The \(choice.rawValue) engine can't be used now (its key or model is missing). Nothing was sent.")
+            job.fail("engine_unavailable", Said("job.engineUnavailable", "The %@ engine can't be used now (its key or model is missing). Nothing was sent.", choice.rawValue))
             jobs[job.id] = job
             return job
         }
@@ -351,7 +355,7 @@ final class JobRegistry {
             self?.update(job)
             guard await engine.supports(locale) else {
                 job.status = .failed
-                job.error = ("unsupported_language", TranscriptionError.unsupportedLanguage(locale.identifier(.bcp47)).localizedDescription)
+                job.fail("unsupported_language", TranscriptionError.unsupportedLanguage(locale.identifier(.bcp47)))
                 self?.finish(job)
                 return
             }
@@ -378,7 +382,7 @@ final class JobRegistry {
             } catch {
                 guard self?.jobs[id]?.status != .cancelled else { return }
                 job.status = .failed
-                job.error = ("transcription_failed", error.localizedDescription)
+                job.fail("transcription_failed", error)
                 self?.finish(job)
                 return
             }

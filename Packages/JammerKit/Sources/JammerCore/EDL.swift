@@ -69,9 +69,6 @@ public struct ExchangeTimeline: Sendable, Equatable {
     }
 }
 
-/// A note's sentence for one or for more ("1 clip has", "2 clips have").
-func counted(_ n: Int, _ one: String, _ many: String) -> String { n == 1 ? one : many }
-
 /// CMX 3600 EDL, audio only. There is no owner-published specification (docs/LICENSES.md): this writes what
 /// Autodesk's, Avid's and Premiere's documentation show and what the OTIO CMX reader reads, and reads the same.
 public enum EDL {
@@ -82,7 +79,7 @@ public enum EDL {
 
     public struct Written: Sendable, Equatable {
         public var text: String
-        public var warnings: [String]
+        public var warnings: [Said]
     }
 
     /// The list: each clip of tracks 1–4 an event (A, A2, A3, A4), reel AX, its name and file in comment lines,
@@ -91,20 +88,20 @@ public enum EDL {
     public static func write(_ t: ExchangeTimeline) throws -> Written {
         let settings = t.timecode ?? TimecodeSettings(rate: .fps25)
         let r = settings.rate.perSecond, fps = Double(r.num) / Double(r.den)
-        var warnings: [String] = []
-        if t.timecode == nil { warnings.append("The document has no timecode, so the list is at 25 frames a second from 00:00:00:00.") }
+        var warnings: [Said] = []
+        if t.timecode == nil { warnings.append(Said("note.edl.document_has_timecode_so", "The document has no timecode, so the list is at 25 frames a second from 00:00:00:00.")) }
         struct Event { let track: Int; let clip: ExchangeTimeline.Clip }
         var events: [Event] = []
         for (i, track) in t.tracks.enumerated() {
             guard i < maxTracks else {
-                if !track.clips.isEmpty { warnings.append("\(track.name) is track \(i + 1); a CMX 3600 list holds \(maxTracks) audio tracks, so it was left out.") }
+                if !track.clips.isEmpty { warnings.append(Said("note.edl.1_track_2_cmx", "%1$@ is track %2$@; a CMX 3600 list holds %3$@ audio tracks, so it was left out.", "\(track.name)", "\(i + 1)", "\(maxTracks)")) }
                 continue
             }
             events += track.clips.map { Event(track: i, clip: $0) }
         }
         events.sort { ($0.clip.start, $0.track) < ($1.clip.start, $1.track) }
         guard events.count <= maxEvents else {
-            throw ExportError.unsupported("The document has \(events.count) clips on its first four tracks; a CMX 3600 list holds \(maxEvents).")
+            throw ExportError.unsupported(Said("error.export.document_has_1_clips", "The document has %1$@ clips on its first four tracks; a CMX 3600 list holds %2$@.", "\(events.count)", "\(maxEvents)"))
         }
         var rounded = 0, levels = 0
         func tc(_ seconds: Double, from start: Int) -> String {
@@ -125,11 +122,11 @@ public enum EDL {
             lines.append("* SOURCE FILE: \(c.path)")
             lines.append("")
         }
-        if rounded > 0 { warnings.append(counted(rounded, "1 time fell between two frames and was rounded to the nearest.", "\(rounded) times fell between two frames and were rounded to the nearest.")) }
-        if levels > 0 { warnings.append(counted(levels, "1 clip has a gain or fades, which a CMX 3600 list can't hold.", "\(levels) clips have a gain or fades, which a CMX 3600 list can't hold.")) }
+        if rounded > 0 { warnings.append(counted(rounded, Said("note.edl.1_time_fell_between.one", "1 time fell between two frames and was rounded to the nearest."), Said("note.edl.1_time_fell_between.other", "%@ times fell between two frames and were rounded to the nearest.", "\(rounded)"))) }
+        if levels > 0 { warnings.append(counted(levels, Said("note.edl.1_clip_has_gain.one", "1 clip has a gain or fades, which a CMX 3600 list can't hold."), Said("note.edl.1_clip_has_gain.other", "%@ clips have a gain or fades, which a CMX 3600 list can't hold.", "\(levels)"))) }
         let mixed = t.tracks.prefix(maxTracks).filter { $0.gainDB != 0 || $0.pan != 0 || $0.muted }.count
-        if mixed > 0 { warnings.append(counted(mixed, "1 track has a level, pan or mute, which a CMX 3600 list can't hold.", "\(mixed) tracks have a level, pan or mute, which a CMX 3600 list can't hold.")) }
-        if !t.markers.isEmpty { warnings.append("Markers aren't written: a CMX 3600 list has none.") }
+        if mixed > 0 { warnings.append(counted(mixed, Said("note.edl.1_track_has_level.one", "1 track has a level, pan or mute, which a CMX 3600 list can't hold."), Said("note.edl.1_track_has_level.other", "%@ tracks have a level, pan or mute, which a CMX 3600 list can't hold.", "\(mixed)"))) }
+        if !t.markers.isEmpty { warnings.append(Said("note.edl.markers_aren_t_written", "Markers aren't written: a CMX 3600 list has none.")) }
         return Written(text: lines.joined(separator: "\r\n"), warnings: warnings)
     }
 
@@ -143,7 +140,7 @@ public enum EDL {
     /// reel beside the list. Black and video-only events are left out; a dissolve is read as a cut.
     public static func read(_ text: String, base: URL, name: String, rate given: Timecode.Rate? = nil) throws(FCPXMLImport.ImportError) -> FCPXMLImport.Timeline {
         let rows = text.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n").components(separatedBy: "\n")
-        guard rows.count < 200_000 else { throw .unreadable("it is far longer than an edit decision list.") }
+        guard rows.count < 200_000 else { throw .unreadable(Said("error.import.far_longer_than_edit", "it is far longer than an edit decision list.")) }
         var title = name, drop = false
         for row in rows.prefix(20) {
             if row.hasPrefix("TITLE:") { title = row.dropFirst(6).trimmingCharacters(in: .whitespaces) }
@@ -163,7 +160,7 @@ public enum EDL {
                 let g = { (i: Int) in ns.substring(with: m.range(at: i)) }
                 let reel = g(2), channel = g(3).uppercased(), edit = g(4).uppercased()
                 guard let si = frames(g(5)), let so = frames(g(6)), let ri = frames(g(7)), let ro = frames(g(8)) else {
-                    warnings.append(.init(code: "bad_timecode", message: "Event \(g(1)) has a time that isn't a timecode at \(rate.rawValue); it was left out.", clip: nil))
+                    warnings.append(.init(code: "bad_timecode", message: Said("import.note.event_1_has_time", "Event %1$@ has a time that isn't a timecode at %2$@; it was left out.", "\(g(1))", "\(rate.rawValue)"), clip: nil))
                     continue
                 }
                 if reel == "BL" || reel == "BLACK" { black += 1; continue }
@@ -190,7 +187,7 @@ public enum EDL {
             if body.uppercased().hasPrefix("FROM CLIP NAME:") { last.name = body.dropFirst("FROM CLIP NAME:".count).trimmingCharacters(in: .whitespaces) }
             events[events.count - 1] = last
         }
-        guard !events.isEmpty else { throw .noAudio("The list has no audio events\(video > 0 ? " (\(video) video events were left out)" : "").") }
+        guard !events.isEmpty else { throw .noAudio((video > 0 ? Said("error.import.edl.noAudio.video", "The list has no audio events (%@ video events were left out).", "\(video)") : Said("error.import.edl.noAudio", "The list has no audio events."))) }
         let zero = events.map(\.recIn).min()!
         var byTrack: [Int: [FCPXMLImport.ClipItem]] = [:]
         for e in events {
@@ -204,10 +201,10 @@ public enum EDL {
                                                        start: seconds(e.recIn - zero), sourceStart: seconds(e.srcIn), duration: seconds(max(0, e.recOut - e.recIn)),
                                                        gainDB: 0, fadeIn: .zero, fadeOut: .zero, enabled: true, origin: nil))
         }
-        if video > 0 { warnings.append(.init(code: "video", message: counted(video, "1 video event was left out: Jämmer reads the audio.", "\(video) video events were left out: Jämmer reads the audio."), clip: nil)) }
-        if black > 0 { warnings.append(.init(code: "black", message: counted(black, "1 black event was left out (it is silence).", "\(black) black events were left out (they are silence)."), clip: nil)) }
-        if dissolves > 0 { warnings.append(.init(code: "dissolve", message: counted(dissolves, "1 dissolve was read as a cut.", "\(dissolves) dissolves were read as cuts."), clip: nil)) }
-        if past > 0 { warnings.append(.init(code: "tracks", message: counted(past, "1 event on an audio channel past 64 was left out.", "\(past) events on audio channels past 64 were left out."), clip: nil)) }
+        if video > 0 { warnings.append(.init(code: "video", message: counted(video, Said("note.edl.1_video_event_was.one", "1 video event was left out: Jämmer reads the audio."), Said("note.edl.1_video_event_was.other", "%@ video events were left out: Jämmer reads the audio.", "\(video)")), clip: nil)) }
+        if black > 0 { warnings.append(.init(code: "black", message: counted(black, Said("note.edl.1_black_event_was.one", "1 black event was left out (it is silence)."), Said("note.edl.1_black_event_was.other", "%@ black events were left out (they are silence).", "\(black)")), clip: nil)) }
+        if dissolves > 0 { warnings.append(.init(code: "dissolve", message: counted(dissolves, Said("note.edl.1_dissolve_was_read.one", "1 dissolve was read as a cut."), Said("note.edl.1_dissolve_was_read.other", "%@ dissolves were read as cuts.", "\(dissolves)")), clip: nil)) }
+        if past > 0 { warnings.append(.init(code: "tracks", message: counted(past, Said("note.edl.1_event_audio_channel.one", "1 event on an audio channel past 64 was left out."), Said("note.edl.1_event_audio_channel.other", "%@ events on audio channels past 64 were left out.", "\(past)")), clip: nil)) }
         let tracks = byTrack.keys.sorted().map { k in
             FCPXMLImport.TrackItem(lane: k, name: "A\(k + 1)", gainDB: 0, muted: false, origin: nil, clips: byTrack[k]!.sorted { $0.start.seconds < $1.start.seconds })
         }

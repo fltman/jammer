@@ -19,12 +19,23 @@ enum L10n {
         let format = NSLocalizedString(key, comment: "")
         return args.isEmpty ? format : String(format: format, locale: Locale.current, arguments: args.map { $0 as CVarArg })
     }
+    /// An error in the window's language: by its key when it has one, else in its own words (a system's,
+    /// a plugin's, a model service's).
+    static func error(_ e: Error) -> String {
+        if let m = (e as? KeyedFailure)?.keyed { return message(m) }
+        return e.localizedDescription
+    }
     /// An error's reason by its key (`KeyedMessage`, from the packages), in the window's language, as a
     /// sentence of its own: the packages write it to follow a step's name and a colon, so it may start small.
     static func message(_ m: KeyedMessage) -> String {
-        let format = NSLocalizedString(m.key, comment: "")
-        let text = m.args.isEmpty ? format : String(format: format, locale: Locale.current, arguments: m.args.map { $0 as CVarArg })
+        let text = said(m)
         return text.prefix(1).uppercased() + text.dropFirst()
+    }
+    /// A keyed message as written, its inner sentences in its last places.
+    private static func said(_ m: KeyedMessage) -> String {
+        let format = NSLocalizedString(m.key, comment: "")
+        let values = m.args + m.inner.map(said)
+        return values.isEmpty ? format : String(format: format, locale: Locale.current, arguments: values.map { $0 as CVarArg })
     }
     /// An operation's title in the window's language (`op.<name>.title`), for the menus, the palette, the
     /// assistant's plan and the undo names. The schema keeps the English title for the agent API, and is
@@ -39,6 +50,19 @@ enum L10n {
     static func reply(_ key: String, _ language: NLLanguage?, _ args: String...) -> String {
         let format = replyBundle(language).localizedString(forKey: key, value: nil, table: nil)
         return args.isEmpty ? format : String(format: format, locale: Locale.current, arguments: args.map { $0 as CVarArg })
+    }
+    /// A keyed message standing in for an error (a finished job keeps only its key and its English).
+    struct KeyedOnly: Error, KeyedFailure { var keyed: KeyedMessage? }
+    /// An error in the assistant's conversation, in the question's language: by its key when it has one.
+    static func replyError(_ e: Error, _ language: NLLanguage?) -> String {
+        guard let m = (e as? KeyedFailure)?.keyed else { return e.localizedDescription }
+        let text = replySaid(m, language)
+        return text.prefix(1).uppercased() + text.dropFirst()
+    }
+    private static func replySaid(_ m: KeyedMessage, _ language: NLLanguage?) -> String {
+        let format = replyBundle(language).localizedString(forKey: m.key, value: nil, table: nil)
+        let values = m.args + m.inner.map { replySaid($0, language) }
+        return values.isEmpty ? format : String(format: format, locale: Locale.current, arguments: values.map { $0 as CVarArg })
     }
     /// A count in the assistant's conversation, in the question's language.
     static func replyCount(_ key: String, _ language: NLLanguage?, _ n: Int) -> String {

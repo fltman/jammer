@@ -78,10 +78,13 @@ enum SpeechEngines {
     /// The model for OpenAI, chosen from the provider's own list (`OpenAITranscription.models`); no id is written into the app.
     static var openAIModel: String { UserDefaults.standard.string(forKey: "transcribe.openai.model") ?? "" }
 
-    struct Unavailable: Error, LocalizedError {
+    struct Unavailable: Error, LocalizedError, KeyedFailure {
         var reason: String
-        var message: String
-        var errorDescription: String? { message }
+        var said: Said
+        init(reason: String, message: Said) { self.reason = reason; said = message }
+        var message: String { said.text }
+        var errorDescription: String? { said.text }
+        var keyed: KeyedMessage? { said.keyed }
     }
 
     static var installedWhisper: ModelSpec? { ModelSpec.catalogue.first { store.isInstalled($0) } }
@@ -90,23 +93,22 @@ enum SpeechEngines {
     /// installed, else Apple's recognisers.
     static func engine(_ choice: Choice, for locale: Locale, model: String? = nil) throws -> any TranscriptionEngine {
         let lang = locale.language.languageCode?.identifier ?? ""
-        let whereToInstall = "Install it under Jämmer › Settings › Models."
         switch choice {
         case .openai:
-            guard let key = openAIKey, !key.isEmpty else { throw Unavailable(reason: "missing_key", message: "There is no OpenAI key. Add it in the assistant's settings.") }
+            guard let key = openAIKey, !key.isEmpty else { throw Unavailable(reason: "missing_key", message: Said("engine.there_openai_key_add", "There is no OpenAI key. Add it in the assistant's settings.")) }
             let model = model ?? openAIModel
-            guard !model.isEmpty else { throw Unavailable(reason: "model_missing", message: "No OpenAI transcription model is chosen. Pass \"model\" with one of the provider's transcription models.") }
+            guard !model.isEmpty else { throw Unavailable(reason: "model_missing", message: Said("engine.openai_transcription_model_chosen", "No OpenAI transcription model is chosen. Pass \"model\" with one of the provider's transcription models.")) }
             return OpenAITranscription(endpoint: openAIEndpoint, model: model, key: { key })
         case .apple:
             return AppleSpeechEngine()
         case .whisper:
-            guard let kb = installedWhisper else { throw Unavailable(reason: "model_missing", message: "KB-Whisper isn't installed. \(whereToInstall)") }
-            guard lang == "sv" else { throw Unavailable(reason: "unsupported_language", message: "KB-Whisper is for Swedish.") }
+            guard let kb = installedWhisper else { throw Unavailable(reason: "model_missing", message: Said("engine.whisper.missing", "KB-Whisper isn't installed. Install it under Jämmer › Settings › Models.")) }
+            guard lang == "sv" else { throw Unavailable(reason: "unsupported_language", message: Said("engine.kb_whisper_swedish", "KB-Whisper is for Swedish.")) }
             return WhisperEngine(model: kb, path: store.path(for: kb))
         case .parakeet:
-            guard parakeet.isInstalled else { throw Unavailable(reason: "model_missing", message: "Parakeet isn't installed. \(whereToInstall)") }
+            guard parakeet.isInstalled else { throw Unavailable(reason: "model_missing", message: Said("engine.parakeet.missing", "Parakeet isn't installed. Install it under Jämmer › Settings › Models.")) }
             guard ParakeetEngine.languages.contains(lang) else {
-                throw Unavailable(reason: "unsupported_language", message: "Parakeet doesn't do \(locale.identifier(.bcp47)); it covers 25 European languages.")
+                throw Unavailable(reason: "unsupported_language", message: Said("engine.parakeet_doesn_t_do", "Parakeet doesn't do %@; it covers 25 European languages.", "\(locale.identifier(.bcp47))"))
             }
             return parakeet
         case .auto:

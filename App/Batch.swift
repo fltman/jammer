@@ -42,9 +42,9 @@ enum BatchJobs {
     static let hook: BatchRunner.JobHook = { step, project, pool in
         switch step.op {
         case "restore":
-            guard let kind = Restoration.Kind(rawValue: step.params["kind"]?.string ?? "") else { throw BatchError("bad_request", "restore needs kind.") }
-            if kind == .denoise, Restoration.denoiser == nil { throw BatchError("not_available", "Noise reduction isn't available in this build.") }
-            if kind == .dereverb, Restoration.dereverber == nil { throw BatchError("not_available", "Reverb reduction isn't available in this build.") }
+            guard let kind = Restoration.Kind(rawValue: step.params["kind"]?.string ?? "") else { throw BatchError("bad_request", Said("error.batch.restore_needs_kind", "restore needs kind.")) }
+            if kind == .denoise, Restoration.denoiser == nil { throw BatchError("not_available", Said("error.batch.noise_reduction_isn_t", "Noise reduction isn't available in this build.")) }
+            if kind == .dereverb, Restoration.dereverber == nil { throw BatchError("not_available", Said("error.batch.reverb_reduction_isn_t", "Reverb reduction isn't available in this build.")) }
             let settings = Restoration.Settings(kind: kind, amount: Float(step.params["amount"]?.double ?? Double(kind.defaultAmount)), humFrequency: step.params["humFrequency"]?.double,
                                                 sensitivity: step.params["sensitivity"]?.double ?? 1)
             do { return try Restoration.apply(settings, to: project, pool: pool, media: MediaStore.folder).0 } catch {
@@ -67,19 +67,19 @@ enum BatchJobs {
             if byTrack {
                 p.applyDiarization(Diarization.byTrack(p, pool: pool, tracks: tracks), engine: "by-track")
             } else {
-                guard Diarization.engine != nil else { throw BatchError("model_unavailable", "The speaker model isn't available.") }
+                guard Diarization.engine != nil else { throw BatchError("model_unavailable", Said("error.batch.speaker_model_isn_t", "The speaker model isn't available.")) }
                 let n = step.params["speakers"]?.double.map { Int($0) }
                 p.applyDiarization(try await Diarization.model(p, pool: pool, tracks: tracks, minSpeakers: n, maxSpeakers: n), engine: Diarization.engine?.engineName ?? "model")
             }
             return p
         case "separate":
             let model = step.params["model"]?.string ?? "music4"
-            guard Stems.isInstalled(model) else { throw BatchError("model_missing", StemError.modelMissing.localizedDescription) }
+            guard Stems.isInstalled(model) else { throw BatchError("model_missing", wrapping: StemError.modelMissing) }
             do { return try project.separatingStems(engine: try Stems.engine(model), pool: pool, media: MediaStore.folder).0 } catch let e as StemError {
-                throw BatchError(e.reason, e.localizedDescription)
+                throw BatchError(e.reason, wrapping: e)
             }
         default:
-            throw BatchError("bad_request", "Unknown job \(step.op).")
+            throw BatchError("bad_request", Said("error.batch.unknown_job", "Unknown job %@.", "\(step.op)"))
         }
     }
 }
@@ -179,7 +179,7 @@ final class BatchModel {
             }
             _ = job
         } catch {
-            status = error.localizedDescription
+            status = L10n.error(error)
         }
     }
 }

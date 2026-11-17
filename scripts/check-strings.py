@@ -63,6 +63,22 @@ def keyed_messages(root):
             for label, key in pending: out[key] = (name, texts.get(label))
     return out
 
+SAID = re.compile(r'\bSaid\(\s*"([A-Za-z0-9_.]+)",\s*"((?:[^"\\]|\\.)*)"')
+def said_messages(root):
+    """key -> (file, English, [other English given for the same key]) for every Said("key", "English" in the packages and the app."""
+    out = {}
+    for top in ('Packages', 'App'):
+        for folder, _, names in os.walk(os.path.join(root, top)):
+            if os.sep + 'Tests' in folder or os.sep + '.build' in folder: continue
+            for name in names:
+                if not name.endswith('.swift'): continue
+                for key, english in SAID.findall(open(os.path.join(folder, name), encoding='utf-8').read()):
+                    english = english.replace('\\"', '"').replace('\\\\', '\\')
+                    if key in out:
+                        if out[key][1] != english: out[key][2].append(f'{name}: "{english}"')
+                    else: out[key] = (name, english, [])
+    return out
+
 OPERATION = re.compile(r'\.init\("([a-z_0-9]+)", "([^"]*)"')
 def operation_titles(root):
     """name -> title, from the schema (every Operations.swift in the packages)."""
@@ -126,6 +142,15 @@ def check(root, require=None):
         if english is None: faults.append(f'{where}: "{key}" has no sentence of its own in errorDescription to hold the catalogue to')
         elif not have or have[0][1].replace('’', "'") != english.replace('’', "'"):
             faults.append(f'{key}: the catalogue says "{have[0][1] if have else ""}" where {where} says "{english}"')
+    # Sentences written where they are said (Said("key", "English", values…)): the key is in the catalogue, its
+    # English is the sentence in the code, and one key is never given two sentences.
+    said = said_messages(root)
+    for key, (where, english, others) in sorted(said.items()):
+        if others: faults.append(f'"{key}" is given two sentences: {where}: "{english}" and {others[0]}')
+        if key not in strings: faults.append(f'{where} says "{key}", which is not in the catalogue'); continue
+        have = units(strings[key].get('localizations', {}).get(source, {}))
+        if not have or have[0][1].replace('’', "'") != english.replace('’', "'"):
+            faults.append(f'{key}: the catalogue says "{have[0][1] if have else ""}" where {where} says "{english}"')
     # The operations' titles (L10n.operation looks them up by name): one entry per operation in the schema,
     # its English the schema's title, so the menus and the API name an operation the same way.
     ops = operation_titles(root)
@@ -135,7 +160,7 @@ def check(root, require=None):
         if key not in strings: faults.append(f'the operation {name} has no title in the catalogue ({key})')
         elif not have or have[0][1] != title: faults.append(f'{key}: the catalogue says "{have[0][1] if have else ""}" where the schema says "{title}"')
     op_keys = {f'op.{n}.title' for n in ops}
-    for key in sorted(set(strings) - set(used) - set(keyed) - op_keys): faults.append(f'{key} is in the catalogue and nothing uses it')
+    for key in sorted(set(strings) - set(used) - set(keyed) - set(said) - op_keys): faults.append(f'{key} is in the catalogue and nothing uses it')
     # Files whose texts have all been moved.
     moved = os.path.join(root, 'scripts', 'l10n-moved.txt')
     if os.path.exists(moved):
@@ -236,6 +261,7 @@ def self_test(root):
                 'a.count': {'localizations': {'en': {'variations': {'plural': {'one': {'stringUnit': {'value': '%lld point'}}, 'other': {'stringUnit': {'value': '%lld points'}}}}},
                                               'sv': {'variations': {'plural': {'one': {'stringUnit': {'value': '%lld punkt'}}, 'other': {'stringUnit': {'value': '%lld punkter'}}}}}}}}}
             cat['strings']['op.trim.title'] = {'localizations': {'en': {'stringUnit': {'value': 'Trim'}}, 'sv': {'stringUnit': {'value': 'Beskär'}}}}
+            cat['strings']['s.empty'] = {'localizations': {'en': {'stringUnit': {'value': 'The clipboard is empty: %@.'}}, 'sv': {'stringUnit': {'value': 'Urklippet är tomt: %@.'}}}}
             cat['strings']['e.gone'] = {'localizations': {'en': {'stringUnit': {'value': 'there is no bus with id %@.'}}, 'sv': {'stringUnit': {'value': 'det finns ingen buss med id %@.'}}}}
             code = 'let a = L10n.text("a.two", x, y); let b = L10n.text("a.one", x); let c = L10n.count("a.count", n)\n'
             return d, cat, code
@@ -246,7 +272,7 @@ def self_test(root):
             open(os.path.join(d, 'App', 'Code.swift'), 'w').write(code + extra)
             # A package error with a key: its sentence, and the key the catalogue has for it.
             os.makedirs(os.path.join(d, 'Packages', 'Kit', 'Sources'))
-            open(os.path.join(d, 'Packages', 'Kit', 'Sources', 'Operations.swift'), 'w').write('.init("trim", "Trim", "Cuts the ends.")\n' + op_extra)
+            open(os.path.join(d, 'Packages', 'Kit', 'Sources', 'Operations.swift'), 'w').write('.init("trim", "Trim", "Cuts the ends.")\nthrow StepFailure(Said("s.empty", "The clipboard is empty: %@.", "\\(op)"))\n' + op_extra)
             open(os.path.join(d, 'Packages', 'Kit', 'Sources', 'Fail.swift'), 'w').write(
                 'var reason: String {\n  case .gone(let n): "gone"\n}\nvar errorDescription: String? {\n  case .gone(let n): "there is no bus with id \\(n)."\n}\n'
                 'var keyed: KeyedMessage? {\n  case .gone(let n): KeyedMessage("' + package_key + '", ["\\(n)"])\n}\n')
@@ -289,6 +315,9 @@ def self_test(root):
         op_plants = {
             'an operation without a title in the catalogue': (None, '.init("pad", "Pad", "Adds silence.")\n'),
             'an operation title that is not the schema\'s': (lambda s: s['op.trim.title']['localizations']['en']['stringUnit'].update(value='Trim Ends'), ''),
+            'a sentence (Said) whose catalogue English is not the code\'s': (lambda s: s['s.empty']['localizations']['en']['stringUnit'].update(value='Nothing to paste: %@.'), ''),
+            'a sentence (Said) whose key is not in the catalogue': (lambda s: s.pop('s.empty'), ''),
+            'one key given two sentences': (None, 'throw StepFailure(Said("s.empty", "Nothing was copied: %@.", "\\(op)"))\n'),
         }
         for name, (mutate, extra) in op_plants.items():
             if not run(mutate, op_extra=extra): bad.append('not caught: ' + name)

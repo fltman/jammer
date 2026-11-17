@@ -144,7 +144,7 @@ public struct LinkedFile: Sendable, Equatable {
     /// gets the document's markers as cue points.
     public func write(_ plan: RenderPlan, range: Range<Frame>, markers: [FileMarker], scratch: URL) throws {
         guard plan.channels == channels, plan.sampleRate == sampleRate else {
-            throw ExportError.unsupported("The document no longer matches \(fileName) (\(channels) channel\(channels == 1 ? "" : "s") at \(Int(sampleRate)) Hz).")
+            throw ExportError.unsupported((channels == 1 ? Said("error.link.mismatch.one", "The document no longer matches %1$@ (1 channel at %2$@ Hz).", "\(fileName)", "\(Int(sampleRate))") : Said("error.link.mismatch.other", "The document no longer matches %1$@ (%2$@ channels at %3$@ Hz).", "\(fileName)", "\(channels)", "\(Int(sampleRate))")))
         }
         let tmp = scratch.appending(path: "\(UUID().uuidString).\(url.pathExtension)")
         try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)

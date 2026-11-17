@@ -7,7 +7,7 @@ public enum DAWproject {
 
     public struct Written: Sendable, Equatable {
         public var data: Data
-        public var warnings: [String]
+        public var warnings: [Said]
     }
 
     static func escape(_ s: String) -> String {
@@ -20,7 +20,7 @@ public enum DAWproject {
     /// the arrangement in seconds, each clip's Audio pointing at its file by its absolute path (external, so
     /// the project stays small and the audio isn't copied). A clip's own gain has no place in the format.
     public static func write(_ t: ExchangeTimeline, appVersion: String) -> Written {
-        var warnings: [String] = []
+        var warnings: [Said] = []
         var n = 0
         func id() -> String { n += 1; return "id\(n)" }
         var x: [String] = ["<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>",
@@ -73,8 +73,8 @@ public enum DAWproject {
         }
         x.append("  </Arrangement>")
         x.append("</Project>")
-        if gains > 0 { warnings.append(counted(gains, "1 clip has a gain of its own, which DAWproject has no place for.", "\(gains) clips have a gain of their own, which DAWproject has no place for.")) }
-        if t.markers.contains(where: { $0.duration > 0 }) { warnings.append("Regions are written as markers at their start: a DAWproject marker has no length.") }
+        if gains > 0 { warnings.append(counted(gains, Said("note.dawproject.1_clip_has_gain.one", "1 clip has a gain of its own, which DAWproject has no place for."), Said("note.dawproject.1_clip_has_gain.other", "%@ clips have a gain of their own, which DAWproject has no place for.", "\(gains)"))) }
+        if t.markers.contains(where: { $0.duration > 0 }) { warnings.append(Said("note.dawproject.regions_written_markers_their", "Regions are written as markers at their start: a DAWproject marker has no length.")) }
         let meta = ["<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>", "<MetaData>", "  <Title>\(escape(t.name))</Title>", "  <Comment>Made with Jämmer</Comment>", "</MetaData>"]
         let data = Zip.write([("project.xml", Data(x.joined(separator: "\n").utf8)), ("metadata.xml", Data(meta.joined(separator: "\n").utf8))])
         return Written(data: data, warnings: warnings)
@@ -85,14 +85,14 @@ public enum DAWproject {
     /// (external, by its path, relative to the project's folder when it isn't absolute) or inside it, then
     /// unpacked into `unpackTo`. Warped audio, nested clips, notes and video are left out, each said.
     public static func read(_ data: Data, base: URL, name: String, unpackTo: URL) throws(FCPXMLImport.ImportError) -> FCPXMLImport.Timeline {
-        guard data.count < 4 << 30 else { throw .unreadable("it is larger than Jämmer reads.") }
+        guard data.count < 4 << 30 else { throw .unreadable(Said("error.import.larger_than_j_mmer", "it is larger than Jämmer reads.")) }
         let entries: [Zip.Entry]
         let projectXML: Data
         do {
             entries = try Zip.entries(data)
-            guard let p = entries.first(where: { $0.name == "project.xml" }) else { throw Zip.Failure.notZip("it has no project.xml.") }
+            guard let p = entries.first(where: { $0.name == "project.xml" }) else { throw Zip.Failure.notZip(Said("error.zip.has_project_xml", "it has no project.xml.")) }
             projectXML = try Zip.read(p, in: data, limit: FCPXMLImport.maxBytes)
-        } catch let Zip.Failure.notZip(why) { throw .unreadable(why) } catch { throw .unreadable("it isn't a DAWproject file.") }
+        } catch let Zip.Failure.notZip(why) { throw .unreadable(why) } catch { throw .unreadable(Said("error.import.isn_t_dawproject_file", "it isn't a DAWproject file.")) }
         let root = try FCPXMLImport.parseXML(projectXML, rootName: "Project")
         var warnings: [FCPXMLImport.Warning] = []
         let bpm = Double(root.first("Transport")?.first("Tempo")?["value"] ?? "") ?? 120
@@ -129,14 +129,14 @@ public enum DAWproject {
                         url = path.hasPrefix("/") ? URL(fileURLWithPath: path) : base.appending(path: path)
                     } else {
                         // Inside the project: unpacked once, by a name that can't leave the folder.
-                        guard let e = entries.first(where: { $0.name == path }) else { warnings.append(.init(code: "missing_media", message: "\(path) isn't in the project.", clip: c["name"])); continue }
+                        guard let e = entries.first(where: { $0.name == path }) else { warnings.append(.init(code: "missing_media", message: Said("import.note.isn_t_project", "%@ isn't in the project.", "\(path)"), clip: c["name"])); continue }
                         let safe = path.split(separator: "/").last.map(String.init)?.replacingOccurrences(of: "..", with: "_") ?? "audio"
                         url = unpackTo.appending(path: "\(inside)-\(safe)")
                         if !FileManager.default.fileExists(atPath: url.path) {
                             do {
                                 try FileManager.default.createDirectory(at: unpackTo, withIntermediateDirectories: true)
                                 try Zip.read(e, in: data, limit: 4 << 30).write(to: url)
-                            } catch { warnings.append(.init(code: "missing_media", message: "\(path) couldn't be unpacked.", clip: c["name"])); continue }
+                            } catch { warnings.append(.init(code: "missing_media", message: Said("import.note.couldn_t_unpacked", "%@ couldn't be unpacked.", "\(path)"), clip: c["name"])); continue }
                         }
                         inside += 1
                     }
@@ -162,10 +162,10 @@ public enum DAWproject {
         }
         guard let arrangement = root.first("Arrangement") else { throw .noSequence }
         try walk(arrangement, unit: arrangement["timeUnit"] ?? "beats", track: nil)
-        guard !order.isEmpty else { throw .noAudio("The project has no audio clips in its arrangement.") }
-        if warped > 0 { warnings.append(.init(code: "warped", message: counted(warped, "1 warped (time-stretched) clip was left out: Jämmer doesn't stretch audio to a tempo.", "\(warped) warped (time-stretched) clips were left out: Jämmer doesn't stretch audio to a tempo."), clip: nil)) }
-        if nested > 0 { warnings.append(.init(code: "nested", message: counted(nested, "1 clip holding other clips was left out.", "\(nested) clips holding other clips were left out."), clip: nil)) }
-        if notes > 0 { warnings.append(.init(code: "notes", message: counted(notes, "1 note clip was left out: Jämmer has no instruments.", "\(notes) note clips were left out: Jämmer has no instruments."), clip: nil)) }
+        guard !order.isEmpty else { throw .noAudio(Said("error.import.project_has_audio_clips", "The project has no audio clips in its arrangement.")) }
+        if warped > 0 { warnings.append(.init(code: "warped", message: counted(warped, Said("note.dawproject.1_warped_time_stretched.one", "1 warped (time-stretched) clip was left out: Jämmer doesn't stretch audio to a tempo."), Said("note.dawproject.1_warped_time_stretched.other", "%@ warped (time-stretched) clips were left out: Jämmer doesn't stretch audio to a tempo.", "\(warped)")), clip: nil)) }
+        if nested > 0 { warnings.append(.init(code: "nested", message: counted(nested, Said("note.dawproject.1_clip_holding_other.one", "1 clip holding other clips was left out."), Said("note.dawproject.1_clip_holding_other.other", "%@ clips holding other clips were left out.", "\(nested)")), clip: nil)) }
+        if notes > 0 { warnings.append(.init(code: "notes", message: counted(notes, Said("note.dawproject.1_note_clip_was.one", "1 note clip was left out: Jämmer has no instruments."), Said("note.dawproject.1_note_clip_was.other", "%@ note clips were left out: Jämmer has no instruments.", "\(notes)")), clip: nil)) }
         let markers = root.first("Arrangement")?.first("Markers")
         let shots: [FCPXMLImport.Shot] = (markers?.all("Marker") ?? []).compactMap { m in
             seconds(m["time"], markers?["timeUnit"] ?? arrangement["timeUnit"] ?? "beats").map { .init(name: m["name"] ?? "", start: .init(seconds: $0), duration: .zero) }

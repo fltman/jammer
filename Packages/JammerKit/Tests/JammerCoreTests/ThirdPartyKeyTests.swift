@@ -32,7 +32,7 @@ struct ThirdPartyKeyTests {
     func describe() async throws {
         let plugin = try #require(Self.plugin, "the Audio Unit at JAMMER_KEYED_AU couldn't be loaded")
         let unit = try await PluginInstance.make(plugin, channels: 2, sampleRate: 48_000)
-        print("KEYED AU \(unit.displayName): hasKeyInput \(unit.hasKeyInput), refusal \(unit.keyRefusal ?? "none"), latency \(unit.latency) frames, in process \(unit.au.isLoadedInProcess)")
+        print("KEYED AU \(unit.displayName): hasKeyInput \(unit.hasKeyInput), refusal \(unit.keyRefusal?.text ?? "none"), latency \(unit.latency) frames, in process \(unit.au.isLoadedInProcess)")
         for p in unit.parameters { print("KEYED AU   \(p.identifier) | \(p.name) | \(p.min)…\(p.max) | now \(p.value) | \(p.unit)") }
         #expect(unit.hasKeyInput)
     }

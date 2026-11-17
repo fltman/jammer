@@ -59,7 +59,7 @@ final class FlimmerSendModel {
                 flimmerWarnings = p.flimmerWarnings
                 stage = .ready
             } catch {
-                stage = .failed(error.localizedDescription)
+                stage = .failed(L10n.error(error))
             }
         }
     }
@@ -74,7 +74,7 @@ final class FlimmerSendModel {
                 stage = .done
                 session.status = L10n.text("flimmer.sent")
             } catch {
-                stage = .failed(error.localizedDescription)
+                stage = .failed(L10n.error(error))
             }
         }
     }

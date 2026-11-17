@@ -45,14 +45,14 @@ public struct Limiter: Sendable, Equatable {
 
     /// NaN and infinity are in no range, so they are refused here too.
     public func validate() throws {
-        guard Self.ceilingRange.contains(ceilingDB) else { throw LimiterError.badValue("ceiling must be −20 to 0 dBTP.") }
-        guard Self.releaseRange.contains(releaseMs) else { throw LimiterError.badValue("release must be 1 to 2000 ms.") }
-        guard Self.lookaheadRange.contains(lookaheadMs) else { throw LimiterError.badValue("lookahead must be 0.5 to 20 ms.") }
+        guard Self.ceilingRange.contains(ceilingDB) else { throw LimiterError.badValue(Said("limiter.ceiling_20_0_dbtp", "ceiling must be −20 to 0 dBTP.")) }
+        guard Self.releaseRange.contains(releaseMs) else { throw LimiterError.badValue(Said("limiter.release_1_2000_ms", "release must be 1 to 2000 ms.")) }
+        guard Self.lookaheadRange.contains(lookaheadMs) else { throw LimiterError.badValue(Said("limiter.lookahead_0_5_20", "lookahead must be 0.5 to 20 ms.")) }
     }
 
     static func validate(channels: Int, sampleRate: Double) throws {
-        guard (1...64).contains(channels) else { throw LimiterError.badValue("channels must be 1 to 64.") }
-        guard (1_000.0...1_000_000.0).contains(sampleRate) else { throw LimiterError.badValue("sample rate must be 1 to 1000 kHz.") }
+        guard (1...64).contains(channels) else { throw LimiterError.badValue(Said("limiter.channels_1_64", "channels must be 1 to 64.")) }
+        guard (1_000.0...1_000_000.0).contains(sampleRate) else { throw LimiterError.badValue(Said("limiter.sample_rate_1_1000", "sample rate must be 1 to 1000 kHz.")) }
     }
 
     public struct Report: Sendable, Equatable {
@@ -73,7 +73,7 @@ public struct Limiter: Sendable, Equatable {
                              settings: Limiter) throws -> (output: [Float], report: Report) {
         try settings.validate()
         try validate(channels: channels, sampleRate: sampleRate)
-        guard interleaved.count % channels == 0 else { throw LimiterError.badValue("the audio must be whole frames of \(channels) channels.") }
+        guard interleaved.count % channels == 0 else { throw LimiterError.badValue(Said("limiter.audio_whole_frames_channels", "the audio must be whole frames of %@ channels.", "\(channels)")) }
         func peak(_ x: [Float]) -> Double {
             var m = PeakMeter(channels: channels, sampleRate: sampleRate)
             m.process(x)
@@ -96,22 +96,22 @@ public struct Limiter: Sendable, Equatable {
                                     ceilingDB: settings.ceilingDB, marginDB: margin))
             }
         }
-        throw LimiterError.ceilingNotMet(String(format: "The limiter couldn't keep the true peak under %.1f dBTP (it came to %.2f). Try a longer lookahead.",
-                                                settings.ceilingDB, last))
+        throw LimiterError.ceilingNotMet(Said("limiter.ceilingNotMet", "The limiter couldn't keep the true peak under %1$@ dBTP (it came to %2$@). Try a longer lookahead.",
+                                              Said.n(settings.ceilingDB, 1), Said.n(last, 2)))
     }
 }
 
-public enum LimiterError: Error, LocalizedError, Equatable {
-    case badValue(String)
-    case ceilingNotMet(String)
+public enum LimiterError: Error, LocalizedError, Equatable, KeyedFailure {
+    case badValue(Said)
+    case ceilingNotMet(Said)
     /// The audio is already at or under the ceiling.
-    case nothingToDo(String)
+    case nothingToDo(Said)
 
-    public var errorDescription: String? {
+    public var errorDescription: String? { said.text }
+    public var keyed: KeyedMessage? { said.keyed }
+    var said: Said {
         switch self {
-        case .badValue(let m): m
-        case .ceilingNotMet(let m): m
-        case .nothingToDo(let m): m
+        case .badValue(let m), .ceilingNotMet(let m), .nothingToDo(let m): m
         }
     }
 }
@@ -207,7 +207,7 @@ extension Limiter {
         public init(_ settings: Limiter, channels: Int, sampleRate: Double, marginDB: Double = 0) throws {
             try settings.validate()
             try Limiter.validate(channels: channels, sampleRate: sampleRate)
-            guard (0.0...6.0).contains(marginDB) else { throw LimiterError.badValue("margin must be 0 to 6 dB.") }
+            guard (0.0...6.0).contains(marginDB) else { throw LimiterError.badValue(Said("limiter.margin_0_6_db", "margin must be 0 to 6 dB.")) }
             self.channels = channels
             self.sampleRate = sampleRate
             lookahead = max(1, Int((settings.lookaheadMs / 1_000 * sampleRate).rounded()))

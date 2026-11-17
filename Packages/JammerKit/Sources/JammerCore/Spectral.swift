@@ -139,9 +139,9 @@ extension Project {
     public func applyingSpectralAttenuation(range: Range<Frame>, freq: ClosedRange<Double>, gainDB: Double, tracks: Set<UUID>? = nil,
                                             pool: SourcePool, media: URL) throws -> Project {
         guard freq.lowerBound >= 0, freq.upperBound <= sampleRate / 2, freq.upperBound > freq.lowerBound else {
-            throw EffectError.badValue("The band must lie between 0 Hz and \(Int(sampleRate / 2)) Hz.")
+            throw EffectError.badValue(Said("error.value.band_lie_between_0", "The band must lie between 0 Hz and %@ Hz.", "\(Int(sampleRate / 2))"))
         }
-        guard (-80...0).contains(gainDB) else { throw EffectError.badValue("gain must be between -80 and 0 dB.") }
+        guard (-80...0).contains(gainDB) else { throw EffectError.badValue(Said("error.value.gain_between_80_0", "gain must be between -80 and 0 dB.")) }
         let r = range.clamped(to: 0..<length)
         let targets = self.tracks.indices.filter { t in
             (tracks?.contains(self.tracks[t].id) ?? true) && self.tracks[t].clips.contains { $0.start < r.upperBound && $0.end > r.lowerBound }

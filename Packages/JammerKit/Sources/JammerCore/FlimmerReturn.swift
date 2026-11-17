@@ -53,9 +53,11 @@ public enum FlimmerReturn {
         public init() {}
     }
 
-    public enum PlanError: Error, LocalizedError, Equatable {
+    public enum PlanError: Error, LocalizedError, Equatable, KeyedFailure {
         case notFromFlimmer
-        public var errorDescription: String? { "This document didn't come from Flimmer, so there is nothing to send back to." }
+        static let said = Said("error.flimmer.notFromFlimmer", "This document didn't come from Flimmer, so there is nothing to send back to.")
+        public var errorDescription: String? { Self.said.text }
+        public var keyed: KeyedMessage? { Self.said.keyed }
     }
 
     public static func plan(_ project: Project) throws(PlanError) -> Plan {

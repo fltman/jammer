@@ -92,7 +92,7 @@ enum LinkedEditing {
             // In the words of the file the sibling sent, not of the copy made of it.
             let alert = NSAlert()
             alert.messageText = L10n.text("open.failed.title", url.lastPathComponent)
-            alert.informativeText = error.localizedDescription.replacingOccurrences(of: copyName ?? "", with: url.lastPathComponent)
+            alert.informativeText = L10n.error(error).replacingOccurrences(of: copyName ?? "", with: url.lastPathComponent)
             alert.runModal()
             return true
         }
@@ -122,7 +122,7 @@ extension EditorSession {
                 status = L10n.text("link.saved", link.fileName, link.requester)
                 done?(true)
             } catch {
-                status = L10n.text("link.saveFailed", link.fileName, error.localizedDescription)
+                status = L10n.text("link.saveFailed", link.fileName, L10n.error(error))
                 NSSound.beep()
                 done?(false)
             }

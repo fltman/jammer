@@ -127,12 +127,12 @@ public struct PluginInfo: Sendable, Codable, Hashable {
 }
 
 public enum PluginError: Error, LocalizedError, Equatable {
-    case notFound(String)
-    case unsupportedFormat(String)
-    case failed(String)
-    case unknownParameter(String)
-    case outOfRange(String)
-    case unknownPreset(String)
+    case notFound(Said)
+    case unsupportedFormat(Said)
+    case failed(Said)
+    case unknownParameter(Said)
+    case outOfRange(Said)
+    case unknownPreset(Said)
     /// The plugin's saved settings came with a project and the user hasn't allowed them (the plugin's name).
     case withheld(String)
 
@@ -149,14 +149,14 @@ public enum PluginError: Error, LocalizedError, Equatable {
 
     public var errorDescription: String? {
         switch self {
-        case .notFound(let m), .unsupportedFormat(let m), .failed(let m), .unknownParameter(let m), .outOfRange(let m), .unknownPreset(let m): m
+        case .notFound(let m), .unsupportedFormat(let m), .failed(let m), .unknownParameter(let m), .outOfRange(let m), .unknownPreset(let m): m.text
         case .withheld(let name): "\(name) wasn't started: its settings came with this project, and the user hasn't allowed them to be loaded into the plugin. The track plays without it."
         }
     }
     /// The same message by its key in the app's string catalogue (see `KeyedMessage`).
     public var keyed: KeyedMessage? {
         switch self {
-        case .notFound, .unsupportedFormat, .failed, .unknownParameter, .outOfRange, .unknownPreset: nil
+        case .notFound(let m), .unsupportedFormat(let m), .failed(let m), .unknownParameter(let m), .outOfRange(let m), .unknownPreset(let m): m.keyed
         case .withheld(let name): KeyedMessage("error.plugin.withheld", ["\(name)"])
         }
     }
@@ -243,13 +243,13 @@ public protocol InsertUnit: AnyObject, Sendable {
     /// Whether the plugin has a sidechain input that Jämmer can feed a key.
     var hasKeyInput: Bool { get }
     /// Why it can't be given a key although it has the input, in words; nil when it can or has none.
-    var keyRefusal: String? { get }
+    var keyRefusal: Said? { get }
 }
 
 public extension InsertUnit {
     func address(of identifier: String) -> UInt32? { nil }
     var hasKeyInput: Bool { false }
-    var keyRefusal: String? { nil }
+    var keyRefusal: Said? { nil }
 }
 
 public enum InsertUnits {
@@ -267,9 +267,9 @@ public enum InsertUnits {
     }
 
     static func makeExternal(_ plugin: PluginID, channels: Int, sampleRate: Double, state: Data?) throws -> any InsertUnit {
-        guard let external else { throw PluginError.notFound("This build can't run \(plugin.format.rawValue.uppercased()) plugins.") }
+        guard let external else { throw PluginError.notFound(Said("error.plugin.build_can_t_run", "This build can't run %@ plugins.", "\(plugin.format.rawValue.uppercased())")) }
         do { return try external(plugin, channels, sampleRate, state) } catch let e as PluginError { throw e } catch {
-            throw PluginError.failed(error.localizedDescription)
+            throw PluginError.failed(Said.of(error))
         }
     }
 
@@ -303,7 +303,7 @@ public final class PluginInstance: InsertUnit, @unchecked Sendable {
     public var audioUnit: AudioUnit { avUnit.audioUnit }
     public var au: AUAudioUnit { avUnit.auAudioUnit }
     public private(set) var hasKeyInput = false
-    public private(set) var keyRefusal: String?
+    public private(set) var keyRefusal: Said?
 
     init(plugin: PluginID, avUnit: AVAudioUnit, channels: Int, sampleRate: Double) {
         self.plugin = plugin
@@ -329,7 +329,7 @@ public final class PluginInstance: InsertUnit, @unchecked Sendable {
     public static func make(_ plugin: PluginID, channels: Int, sampleRate: Double, state: Data? = nil,
                             outOfProcess: Bool = false) async throws -> PluginInstance {
         guard isInstalled(plugin) else {
-            throw PluginError.notFound("No Audio Unit \(plugin) is installed.")
+            throw PluginError.notFound(Said("error.plugin.audio_unit_installed", "No Audio Unit %@ is installed.", "\(plugin)"))
         }
         let av: AVAudioUnit
         do {
@@ -340,10 +340,10 @@ public final class PluginInstance: InsertUnit, @unchecked Sendable {
             do {
                 av = try await AVAudioUnit.instantiate(with: plugin.componentDescription, options: .loadOutOfProcess)
             } catch {
-                throw PluginError.failed("\(plugin) didn't start: \(error.localizedDescription)")
+                throw PluginError.failed(Said("error.plugin.1_didn_t_start", "%1$@ didn't start: %2$@", "\(plugin)", "\(error.localizedDescription)"))
             }
         } catch {
-            throw PluginError.failed("\(plugin) didn't start: \(error.localizedDescription)")
+            throw PluginError.failed(Said("error.plugin.1_didn_t_start", "%1$@ didn't start: %2$@", "\(plugin)", "\(error.localizedDescription)"))
         }
         return try setUp(av, plugin: plugin, channels: channels, sampleRate: sampleRate, state: state)
     }
@@ -354,7 +354,7 @@ public final class PluginInstance: InsertUnit, @unchecked Sendable {
                                     outOfProcess: Bool = false) throws -> PluginInstance {
         dispatchPrecondition(condition: .notOnQueue(.main))
         guard isInstalled(plugin) else {
-            throw PluginError.notFound("No Audio Unit \(plugin) is installed.")
+            throw PluginError.notFound(Said("error.plugin.audio_unit_installed", "No Audio Unit %@ is installed.", "\(plugin)"))
         }
         final class Box: @unchecked Sendable { var unit: AVAudioUnit?; var error: Error? }
         func attempt(_ options: AudioComponentInstantiationOptions) throws -> AVAudioUnit {
@@ -364,8 +364,8 @@ public final class PluginInstance: InsertUnit, @unchecked Sendable {
                 box.error = e
                 done.signal()
             }
-            guard done.wait(timeout: .now() + 30) == .success else { throw PluginError.failed("\(plugin) took too long to start.") }
-            guard let av = box.unit else { throw PluginError.failed("\(plugin) didn't start: \(box.error?.localizedDescription ?? "no unit")") }
+            guard done.wait(timeout: .now() + 30) == .success else { throw PluginError.failed(Said("error.plugin.took_too_long_start", "%@ took too long to start.", "\(plugin)")) }
+            guard let av = box.unit else { throw PluginError.failed(Said("error.plugin.1_didn_t_start", "%1$@ didn't start: %2$@", "\(plugin)", "\(box.error?.localizedDescription ?? "no unit")")) }
             return av
         }
         let av: AVAudioUnit
@@ -387,31 +387,32 @@ public final class PluginInstance: InsertUnit, @unchecked Sendable {
         let size = UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
         for scope in [kAudioUnitScope_Input, kAudioUnitScope_Output] {
             guard AudioUnitSetProperty(u, kAudioUnitProperty_StreamFormat, scope, 0, &asbd, size) == noErr else {
-                throw PluginError.unsupportedFormat("\(av.name) can't process \(channels == 1 ? "mono" : "\(channels)-channel") float audio at \(Int(sampleRate)) Hz.")
+                throw PluginError.unsupportedFormat((channels == 1 ? Said("error.plugin.noMono", "%1$@ can't process mono float audio at %2$@ Hz.", av.name, "\(Int(sampleRate))") : Said("error.plugin.noChannels", "%1$@ can't process %2$@-channel float audio at %3$@ Hz.", av.name, "\(channels)", "\(Int(sampleRate))")))
             }
         }
         // A second input is the sidechain: given the same format as the first, before the unit is initialised.
         var inputs: UInt32 = 0, inputsSize = UInt32(MemoryLayout<UInt32>.size)
         AudioUnitGetProperty(u, kAudioUnitProperty_ElementCount, kAudioUnitScope_Input, 0, &inputs, &inputsSize)
         var keyed = false
-        var refusal: String?
+        var refusal: Said?
         if inputs >= 2 {
             if !av.auAudioUnit.isLoadedInProcess {
-                refusal = "\(av.name) has a sidechain input, but it runs in a process of its own here (Safe Mode, or because macOS wouldn't load it into Jämmer), and a key isn't carried there yet."
+                refusal = Said("plugin.key.outOfProcess", "%@ has a sidechain input, but it runs in a process of its own here (Safe Mode, or because macOS wouldn't load it into Jämmer), and a key isn't carried there yet.", av.name)
             } else if AudioUnitSetProperty(u, kAudioUnitProperty_StreamFormat, kAudioUnitScope_Input, 1, &asbd, size) == noErr {
                 keyed = true
             } else {
-                refusal = "\(av.name) has a sidechain input, but it wouldn't take \(channels == 1 ? "mono" : "stereo") float audio on it."
+                refusal = channels == 1 ? Said("plugin.key.noMono", "%@ has a sidechain input, but it wouldn't take mono float audio on it.", av.name)
+                                        : Said("plugin.key.noStereo", "%@ has a sidechain input, but it wouldn't take stereo float audio on it.", av.name)
             }
         }
         var maxFrames: UInt32 = 4_096
         AudioUnitSetProperty(u, kAudioUnitProperty_MaximumFramesPerSlice, kAudioUnitScope_Global, 0, &maxFrames, UInt32(MemoryLayout<UInt32>.size))
         let status = AudioUnitInitialize(u)
-        guard status == noErr else { throw PluginError.failed("\(av.name) couldn't initialize (error \(status)).") }
+        guard status == noErr else { throw PluginError.failed(Said("error.plugin.1_couldn_t_initialize", "%1$@ couldn't initialize (error %2$@).", "\(av.name)", "\(status)")) }
         let instance = PluginInstance(plugin: plugin, avUnit: av, channels: channels, sampleRate: sampleRate)
         if keyed {
             if jm_unit_enable_key_input(instance.unit) { instance.hasKeyInput = true }
-            else { refusal = "\(av.name) has a sidechain input, but wouldn't let Jämmer feed it." }
+            else { refusal = Said("plugin.key.refused", "%@ has a sidechain input, but wouldn't let Jämmer feed it.", av.name) }
         }
         instance.keyRefusal = refusal
         if let state { try instance.apply(state) }
@@ -433,7 +434,7 @@ public final class PluginInstance: InsertUnit, @unchecked Sendable {
 
     public func apply(_ state: Data) throws {
         guard let s = try PropertyListSerialization.propertyList(from: state, format: nil) as? [String: Any] else {
-            throw PluginError.failed("The saved settings for \(avUnit.name) can't be read.")
+            throw PluginError.failed(Said("error.plugin.saved_settings_can_t", "The saved settings for %@ can't be read.", "\(avUnit.name)"))
         }
         au.fullState = s
     }
@@ -458,10 +459,10 @@ public final class PluginInstance: InsertUnit, @unchecked Sendable {
         let all = au.parameterTree?.allParameters ?? []
         guard let p = all.first(where: { $0.keyPath == identifier }) ?? all.first(where: { $0.identifier == identifier })
             ?? all.first(where: { $0.displayName.caseInsensitiveCompare(identifier) == .orderedSame }) else {
-            throw PluginError.unknownParameter("\(avUnit.name) has no parameter \"\(identifier)\".")
+            throw PluginError.unknownParameter(Said("error.plugin.1_has_parameter_2", "%1$@ has no parameter \"%2$@\".", "\(avUnit.name)", "\(identifier)"))
         }
         guard value >= Self.decimal(p.minValue), value <= Self.decimal(p.maxValue) else {
-            throw PluginError.outOfRange("\(p.displayName) takes \(Self.decimal(p.minValue).formatted()) to \(Self.decimal(p.maxValue).formatted()); \(value.formatted()) is outside.")
+            throw PluginError.outOfRange(Said("error.plugin.1_takes_2_3", "%1$@ takes %2$@ to %3$@; %4$@ is outside.", "\(p.displayName)", "\(Self.decimal(p.minValue).formatted())", "\(Self.decimal(p.maxValue).formatted())", "\(value.formatted())"))
         }
         p.value = AUValue(value)
     }
@@ -470,7 +471,7 @@ public final class PluginInstance: InsertUnit, @unchecked Sendable {
 
     public func loadPreset(_ name: String) throws {
         guard let preset = (au.factoryPresets ?? []).first(where: { $0.name.caseInsensitiveCompare(name) == .orderedSame }) else {
-            throw PluginError.unknownPreset("\(avUnit.name) has no factory preset \"\(name)\".")
+            throw PluginError.unknownPreset(Said("error.plugin.1_has_factory_preset", "%1$@ has no factory preset \"%2$@\".", "\(avUnit.name)", "\(name)"))
         }
         au.currentPreset = preset
     }
@@ -562,7 +563,7 @@ public final class InsertHost: ChainProvider, @unchecked Sendable {
                                                      state: insert.state, outOfProcess: outOfProcess)
                 host.entries[insert.id] = Entry(instance: i, applied: insert.state)
             } catch {
-                host.failed[insert.id] = error as? PluginError ?? .failed(error.localizedDescription)
+                host.failed[insert.id] = error as? PluginError ?? .failed(Said.of(error))
             }
         }
         return host
@@ -618,7 +619,7 @@ public final class InsertHost: ChainProvider, @unchecked Sendable {
             } catch let e as PluginError {
                 lock.withLock { failed[insert.id] = e }
             } catch {
-                lock.withLock { failed[insert.id] = .failed(error.localizedDescription) }
+                lock.withLock { failed[insert.id] = .failed(Said.of(error)) }
             }
             changed = true
         }

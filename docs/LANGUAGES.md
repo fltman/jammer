@@ -16,13 +16,16 @@ Jämmer still starts in English whatever the Mac's language is; Swedish only wit
 - **Numbers follow the Mac's region** (Anders, 2026-11-17), in either language, as macOS does: a Swedish region writes 0,3 and a US region 0.3, through `L10n.number`. The switch test checks both. Not changed: the time readouts (0:07.480) and the fields where a time is typed, which are read back with a point.
 - **Seen as pictures in both languages** (2026-11-17): the document window, the mixer, Plugins, Duck Under Speech, Repair, the command palette. Everything fits; the mixer is cut on the right in both languages when its window has been made narrow, because its description line doesn't wrap (a layout fault of the mixer, not of the language).
 
-**Still English in a Swedish window** (each is a message made where it is thrown, from parts, in the packages):
-- a failed step whose reason is written in the step itself rather than by a typed error (about 140 in `JammerAgent/Operations.swift`; most can only be reached through the API, since the menus send valid steps);
-- the cases of typed errors that carry a message made at the throw (`badValue(String)`, `PluginError.failed`, the limiter's three, export's `unsupported`, `AudioFileError`);
-- reports built in the packages: what a timeline format couldn't hold or read (EDL, OTIO, DAWproject, FCPXML notes), the ACX report's lines, Separate Stems' summary, the spectral area's status, a plugin host's own words when it dies;
-- the API's own answers and anything a model writes, as the rule says.
+**Said in the window's language since block H (2026-11-17):** every sentence the packages make for a window: a step's own failures (about 130), the typed errors that carried a ready sentence (the limiter's, a file's, a plugin's, export's, the import's, Storage's, the audio device's, the assistant's, batch's, Send to Flimmer's), the project check's repair notes, what a timeline format couldn't hold or read, the ACX report's measurements and notes, the spectral area's description and the stems' names in the status line. Each is written once in English with its key (`Said("key", "English with %@", values…)` in the packages); the API says the English as before, the window says the key in its language, and `scripts/check-strings.py` holds the two to one sentence (505 of them, each with Swedish). A sentence with another inside it ("The file can't be read as a timeline: it isn't JSON.") carries the inner one by its key too.
 
-These move as they are rewritten into typed errors; matching on English words (the earlier plan's second way) is not used.
+**Still English in a Swedish window, on purpose:**
+- ACX's requirements, quoted as ACX publishes them (what Jämmer measured and why is Swedish);
+- the API's own answers and refusals that only an agent can meet (a field it doesn't know, a path that isn't absolute), and anything a model writes;
+- words from outside Jämmer: a plugin host's or a plugin's own words, a model service's answer, an error the system gives (a disk full, a file that can't be read by Core Audio), the on-device model's reason it can't run;
+- names Jämmer writes into a document (a separated track is "Demo song – Vocals"; the status line names the stems in Swedish);
+- the plugin helper's own errors (only in builds with CLAP, which a release doesn't have) and the model readers' (a damaged model file).
+
+Numbers inside these sentences are written as the API writes them (0.5, not 0,5), whatever the Mac's region.
 
 ## The foundation, built 2026-11-17 (before the Swedish)
 

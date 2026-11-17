@@ -230,8 +230,10 @@ final class JammerDocument: NSDocument {
         guard typeName == UTType.jammerProject.identifier || UTType(typeName)?.conforms(to: .jammerProject) == true else {
             throw CocoaError(.fileReadUnsupportedScheme)
         }
-        let (project, notes): (Project, [String])
-        do { (project, notes) = try ProjectPackage.readChecked(fileWrapper, packageURL: fileURL) } catch { throw OpenFailure.saying(error) }
+        let (project, said): (Project, [Said])
+        do { (project, said) = try ProjectPackage.readChecked(fileWrapper, packageURL: fileURL) } catch { throw OpenFailure.saying(error) }
+        // What was repaired, in the window's language.
+        let notes = said.map { L10n.message($0.keyed) }
         // A Media folder that is a link to somewhere else is not this project's media.
         let media = fileWrapper.fileWrappers?[ProjectPackage.mediaFolderName]
         mediaWrapper = media?.isDirectory == true ? media : nil
@@ -413,7 +415,7 @@ final class JammerDocument: NSDocument {
                     let n = self.pendingCopies.count
                     self.session?.status = n == 0 ? L10n.text("collect.nothing") : L10n.count("collect.done", n)
                 } else if let error, collecting {
-                    self.session?.status = L10n.text("collect.failed", error.localizedDescription)
+                    self.session?.status = L10n.text("collect.failed", L10n.error(error))
                 }
                 self.pendingCopies = []
                 self.pendingCollected = nil
@@ -434,7 +436,7 @@ enum OpenFailure {
     static func saying(_ error: Error, replacing copy: String? = nil, with name: String? = nil) -> NSError {
         let e = error as NSError
         guard e.localizedFailureReason == nil else { return e }
-        var why = error.localizedDescription
+        var why = L10n.error(error)
         if let copy, let name { why = why.replacingOccurrences(of: copy, with: name) }
         return NSError(domain: NSCocoaErrorDomain, code: NSFileReadCorruptFileError,
                        userInfo: [NSLocalizedDescriptionKey: why, NSLocalizedFailureReasonErrorKey: why, NSUnderlyingErrorKey: e])

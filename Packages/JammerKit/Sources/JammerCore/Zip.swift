@@ -40,25 +40,25 @@ enum Zip {
         return out
     }
 
-    enum Failure: Error { case notZip(String) }
+    enum Failure: Error { case notZip(Said) }
 
     /// The entries of a ZIP's central directory.
     static func entries(_ d: Data) throws -> [Entry] {
         let b = [UInt8](d)
         func u16(_ i: Int) -> Int { i + 1 < b.count ? Int(b[i]) | Int(b[i + 1]) << 8 : 0 }
         func u32(_ i: Int) -> Int { u16(i) | u16(i + 2) << 16 }
-        guard b.count >= 22 else { throw Failure.notZip("it is too short to be a ZIP file.") }
+        guard b.count >= 22 else { throw Failure.notZip(Said("error.zip.too_short_zip_file", "it is too short to be a ZIP file.")) }
         var eocd = -1
         for i in stride(from: b.count - 22, through: max(0, b.count - 22 - 65_535), by: -1) where u32(i) == 0x0605_4b50 { eocd = i; break }
-        guard eocd >= 0 else { throw Failure.notZip("it isn't a ZIP file (no central directory).") }
+        guard eocd >= 0 else { throw Failure.notZip(Said("error.zip.isn_t_zip_file", "it isn't a ZIP file (no central directory).")) }
         let count = u16(eocd + 10), dir = u32(eocd + 16)
-        guard count <= 100_000, dir < b.count else { throw Failure.notZip("its directory is damaged.") }
+        guard count <= 100_000, dir < b.count else { throw Failure.notZip(Said("error.zip.directory_damaged", "its directory is damaged.")) }
         var out: [Entry] = [], p = dir
         for _ in 0..<count {
-            guard p + 46 <= b.count, u32(p) == 0x0201_4b50 else { throw Failure.notZip("its directory is damaged.") }
+            guard p + 46 <= b.count, u32(p) == 0x0201_4b50 else { throw Failure.notZip(Said("error.zip.directory_damaged", "its directory is damaged.")) }
             let method = UInt16(u16(p + 10)), crc = UInt32(u32(p + 16)), csize = u32(p + 20), size = u32(p + 24)
             let nlen = u16(p + 28), xlen = u16(p + 30), clen = u16(p + 32), offset = u32(p + 42)
-            guard p + 46 + nlen <= b.count else { throw Failure.notZip("its directory is damaged.") }
+            guard p + 46 + nlen <= b.count else { throw Failure.notZip(Said("error.zip.directory_damaged", "its directory is damaged.")) }
             let name = String(decoding: b[(p + 46)..<(p + 46 + nlen)], as: UTF8.self)
             out.append(Entry(name: name, method: method, crc: crc, compressed: csize, size: size, offset: offset))
             p += 46 + nlen + xlen + clen
@@ -68,13 +68,13 @@ enum Zip {
 
     /// One entry's contents, at most `limit` bytes; its checksum checked.
     static func read(_ e: Entry, in d: Data, limit: Int) throws -> Data {
-        guard e.size <= limit, e.compressed <= d.count else { throw Failure.notZip("\(e.name) is larger than Jämmer reads from a project file.") }
+        guard e.size <= limit, e.compressed <= d.count else { throw Failure.notZip(Said("error.zip.larger_than_j_mmer", "%@ is larger than Jämmer reads from a project file.", "\(e.name)")) }
         let b = d.startIndex
-        guard e.offset + 30 <= d.count else { throw Failure.notZip("\(e.name) is outside the file.") }
+        guard e.offset + 30 <= d.count else { throw Failure.notZip(Said("error.zip.outside_file", "%@ is outside the file.", "\(e.name)")) }
         let h = d.subdata(in: (b + e.offset)..<(b + e.offset + 30))
         let nlen = Int(h[26]) | Int(h[27]) << 8, xlen = Int(h[28]) | Int(h[29]) << 8
         let start = e.offset + 30 + nlen + xlen
-        guard start + e.compressed <= d.count else { throw Failure.notZip("\(e.name) is outside the file.") }
+        guard start + e.compressed <= d.count else { throw Failure.notZip(Said("error.zip.outside_file", "%@ is outside the file.", "\(e.name)")) }
         let raw = d.subdata(in: (b + start)..<(b + start + e.compressed))
         let out: Data
         switch e.method {
@@ -84,11 +84,11 @@ enum Zip {
             let n = raw.withUnsafeBytes { src in
                 compression_decode_buffer(&buffer, buffer.count, src.bindMemory(to: UInt8.self).baseAddress!, raw.count, nil, COMPRESSION_ZLIB)
             }
-            guard n == e.size else { throw Failure.notZip("\(e.name) couldn't be unpacked.") }
+            guard n == e.size else { throw Failure.notZip(Said("error.zip.couldn_t_unpacked", "%@ couldn't be unpacked.", "\(e.name)")) }
             out = Data(buffer.prefix(n))
-        default: throw Failure.notZip("\(e.name) is packed in a way Jämmer doesn't read (method \(e.method)).")
+        default: throw Failure.notZip(Said("error.zip.1_packed_way_j", "%1$@ is packed in a way Jämmer doesn't read (method %2$@).", "\(e.name)", "\(e.method)"))
         }
-        guard crc32(out) == e.crc else { throw Failure.notZip("\(e.name) is damaged (its checksum doesn't match).") }
+        guard crc32(out) == e.crc else { throw Failure.notZip(Said("error.zip.damaged_checksum_doesn_t", "%@ is damaged (its checksum doesn't match).", "\(e.name)")) }
         return out
     }
 }

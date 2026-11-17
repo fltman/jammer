@@ -132,7 +132,7 @@ final class EditorSession {
     struct SpectralArea { var shape: SpectralShape; var track: Int }
     var spectralTool: SpectralTool = .box
     var spectralArea: SpectralArea? {
-        didSet { if let a = spectralArea { status = L10n.text("spectral.area.status", a.shape.summary, project.tracks[safe: a.track]?.name ?? L10n.text("spectral.area.aTrack")) } }
+        didSet { if let a = spectralArea { status = L10n.text("spectral.area.status", L10n.message(a.shape.summarySaid.keyed), project.tracks[safe: a.track]?.name ?? L10n.text("spectral.area.aTrack")) } }
     }
 
     /// Runs spectral_edit on the drawn area.
@@ -812,7 +812,7 @@ final class EditorSession {
             playhead = start
             startTimer()
         } catch {
-            status = error.localizedDescription
+            status = L10n.error(error)
         }
     }
 
@@ -940,10 +940,10 @@ final class EditorSession {
                 m.encodedBitRate = ACX.minBitRate
                 m.encodedSampleRate = ACX.sampleRate
             } else {
-                m.encodedReason = "the MP3 couldn't be read back on this Mac"
+                m.encodedReason = Said("acx.on.unread", "the MP3 couldn't be read back on this Mac")
             }
         } catch {
-            m.encodedReason = "the MP3 couldn't be made (\(error.localizedDescription))"
+            m.encodedReason = Said("acx.on.notMade", "the MP3 couldn't be made (%@)", inner: Said.of(error))
         }
         return m
     }

@@ -59,19 +59,19 @@ public struct EncodedExportOptions: Sendable {
 }
 
 public enum ExportError: Error, LocalizedError, Equatable {
-    case unsupported(String)
+    case unsupported(Said)
     case encoder(String, OSStatus)
 
     public var errorDescription: String? {
         switch self {
-        case .unsupported(let m): m
+        case .unsupported(let m): m.text
         case .encoder(let what, let status): "The encoder couldn't \(what) (error \(status))."
         }
     }
     /// The same message by its key in the app's string catalogue (see `KeyedMessage`).
     public var keyed: KeyedMessage? {
         switch self {
-        case .unsupported: nil
+        case .unsupported(let m): m.keyed
         case .encoder(let what, let status): KeyedMessage("error.export.encoder", ["\(what)", "\(status)"])
         }
     }
@@ -94,10 +94,10 @@ public final class EncodedWriter {
     public init(url: URL, options: EncodedExportOptions, channels: Int, sampleRate: Double) throws {
         self.channels = channels
         guard options.format != .wav, options.format != .opus, options.format != .mp3, options.format != .apac else {
-            throw ExportError.unsupported("Use WAVWriter for WAV, OggOpusWriter for Opus, mp3Factory for MP3 and APACWriter for APAC.")
+            throw ExportError.unsupported(Said("error.export.use_wavwriter_wav_oggopuswriter", "Use WAVWriter for WAV, OggOpusWriter for Opus, mp3Factory for MP3 and APACWriter for APAC."))
         }
         if options.format.isLossless, !options.format.bitDepths.contains(options.bitDepth) {
-            throw ExportError.unsupported("\(options.format.rawValue.uppercased()) takes \(options.format.bitDepths.map(String.init).joined(separator: " or ")) bits.")
+            throw ExportError.unsupported(Said("error.export.1_takes_2_bits", "%1$@ takes %2$@ bits.", "\(options.format.rawValue.uppercased())", "\(options.format.bitDepths.map(String.init).joined(separator: " or "))"))
         }
         var dst = AudioStreamBasicDescription()
         dst.mSampleRate = sampleRate
@@ -188,7 +188,7 @@ public final class EncodedWriter {
             return
         }
         if options.format == .mp3 {
-            guard let make = mp3Factory else { throw ExportError.unsupported("MP3 isn't available in this build.") }
+            guard let make = mp3Factory else { throw ExportError.unsupported(Said("error.export.mp3_isn_t_available", "MP3 isn't available in this build.")) }
             let w = try make(url, plan.channels, plan.sampleRate, options.bitRate, options.id3)
             try plan.render(range) { try w.write($0) }
             try w.finish()

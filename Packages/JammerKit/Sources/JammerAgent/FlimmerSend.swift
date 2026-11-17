@@ -25,14 +25,19 @@ public enum FlimmerSend {
     /// One HTTP exchange. The app uses URLSession; the tests a pretend Flimmer.
     public typealias Transport = @Sendable (URLRequest) async throws -> (Data, HTTPURLResponse)
 
-    public struct Failure: Error, LocalizedError, Equatable {
+    public struct Failure: Error, LocalizedError, Equatable, KeyedFailure {
         public var code: String
         public var reason: String?
         public var message: String
+        public var keyed: KeyedMessage?
         public init(_ code: String, _ message: String, reason: String? = nil) {
             self.code = code
             self.reason = reason
             self.message = message
+        }
+        public init(_ code: String, _ said: Said, reason: String? = nil) {
+            self.init(code, said.text, reason: reason)
+            keyed = said.keyed
         }
         public var errorDescription: String? { message }
     }
@@ -151,10 +156,10 @@ public enum FlimmerSend {
     /// Why the document can't be sent at all, before anything is rendered. Nil: it can.
     public static func refusal(_ project: Project) -> Failure? {
         guard let record = project.imported, record.app == "flimmer" else {
-            return Failure("not_from_flimmer", "This document didn't come from Flimmer, so there is nothing to send back to.")
+            return Failure("not_from_flimmer", Said("error.flimmer.document_didn_t_come", "This document didn't come from Flimmer, so there is nothing to send back to."))
         }
         guard let p = record.projectId, !p.isEmpty, let s = record.storyId, !s.isEmpty else {
-            return Failure("needs_new_export", "This film was exported from an older Flimmer, and the file doesn't say which project it belongs to. Export it again from Flimmer and import that file; then it can be sent back.")
+            return Failure("needs_new_export", Said("error.flimmer.film_was_exported_from", "This film was exported from an older Flimmer, and the file doesn't say which project it belongs to. Export it again from Flimmer and import that file; then it can be sent back."))
         }
         return nil
     }
@@ -259,7 +264,7 @@ public enum FlimmerSend {
             }
             if let contentType { r.setValue(contentType, forHTTPHeaderField: "Content-Type") }
             let (data, response): (Data, HTTPURLResponse)
-            do { (data, response) = try await transport(r) } catch { throw Failure("unreachable", "Flimmer stopped answering.") }
+            do { (data, response) = try await transport(r) } catch { throw Failure("unreachable", Said("error.flimmer.flimmer_stopped_answering", "Flimmer stopped answering.")) }
             let object = ((try? JSONSerialization.jsonObject(with: data)) as? [String: Any]) ?? [:]
             guard (200..<300).contains(response.statusCode) else {
                 throw FlimmerSend.explain(status: response.statusCode, error: object["error"] as? [String: Any] ?? [:], items: items)
@@ -290,7 +295,7 @@ public enum FlimmerSend {
             let q = name.addingPercentEncoding(withAllowedCharacters: .alphanumerics.union(.init(charactersIn: "-._"))) ?? "clip.wav"
             let size = ((try? FileManager.default.attributesOfItem(atPath: file.path))?[.size] as? NSNumber)?.int64Value ?? 0
             func id(_ answer: [String: Any]) throws -> String {
-                guard let id = (answer["upload"] as? [String: Any])?["id"] as? String else { throw Failure("bad_answer", "Flimmer's answer to an upload couldn't be read.") }
+                guard let id = (answer["upload"] as? [String: Any])?["id"] as? String else { throw Failure("bad_answer", Said("error.flimmer.flimmer_s_answer_upload", "Flimmer's answer to an upload couldn't be read.")) }
                 return id
             }
             if size <= Int64(limits.maxChunkBytes) {
@@ -321,7 +326,7 @@ public enum FlimmerSend {
         public func plan(_ body: [String: J], items: [Item]) async throws -> [String: Any] {
             // Nothing is sent that Flimmer hasn't agreed to take: it would refuse the whole plan.
             let strange = FlimmerSend.strangers(in: body)
-            guard strange.isEmpty else { throw Failure("bad_request", "Jämmer's plan has names Flimmer doesn't take (\(strange.joined(separator: ", "))); nothing was sent.") }
+            guard strange.isEmpty else { throw Failure("bad_request", Said("error.flimmer.j_mmer_s_plan", "Jämmer's plan has names Flimmer doesn't take (%@); nothing was sent.", "\(strange.joined(separator: ", "))")) }
             let data = try JSONSerialization.data(withJSONObject: J.object(body).any, options: [.sortedKeys])
             let (status, answer) = try await call("POST", "/api/v1/audio/sibling-plan", body: data, contentType: "application/json", items: items)
             guard status == 202, let id = (answer["job"] as? [String: Any])?["id"] as? String else { return answer }
@@ -331,9 +336,9 @@ public enum FlimmerSend {
                 switch FlimmerSend.jobState(job["status"] as? String) {
                 case .done: return job["result"] as? [String: Any] ?? [:]
                 case .failed: throw FlimmerSend.explain(status: 422, error: job["error"] as? [String: Any] ?? [:], items: items)
-                case .canceled: throw Failure("canceled", "The job was canceled in Flimmer; nothing was changed there.")
+                case .canceled: throw Failure("canceled", Said("error.flimmer.job_was_canceled_flimmer", "The job was canceled in Flimmer; nothing was changed there."))
                 case .unknown(let word):
-                    throw Failure("unknown_status", "Flimmer's job has the status \"\(word)\", which Jämmer doesn't know, so it has stopped waiting for it. Look in Flimmer for whether the change was made.")
+                    throw Failure("unknown_status", Said("error.flimmer.flimmer_s_job_has", "Flimmer's job has the status \"%@\", which Jämmer doesn't know, so it has stopped waiting for it. Look in Flimmer for whether the change was made.", "\(word)"))
                 case .waiting: try await Task.sleep(for: .seconds(pollInterval))
                 }
             }
@@ -407,7 +412,7 @@ public enum FlimmerSend {
         let plan = (try? FlimmerReturn.plan(project)) ?? .init()
         let items = self.items(project, plan: plan, mode: mode)
         guard !items.isEmpty || !plan.tracks.isEmpty else {
-            throw Failure("nothing_to_change", "There is nothing to send: no clip or track has changed since the film came in.")
+            throw Failure("nothing_to_change", Said("error.flimmer.there_nothing_send_clip", "There is nothing to send: no clip or track has changed since the film came in."))
         }
         let limits = try await client.limits()
         let rate = sendRate(project)

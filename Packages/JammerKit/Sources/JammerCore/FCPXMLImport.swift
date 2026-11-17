@@ -70,10 +70,17 @@ public enum FCPXMLImport {
         /// The clip it is about (its name), when there is one.
         public var clip: String?
 
+        /// The message by its key, for the window (`message` is its English, for the API).
+        public var keyed: KeyedMessage?
+
         public init(code: String, message: String, clip: String?) {
             self.code = code
             self.message = message
             self.clip = clip
+        }
+        public init(code: String, message: Said, clip: String?) {
+            self.init(code: code, message: message.text, clip: clip)
+            keyed = message.keyed
         }
     }
 
@@ -127,24 +134,30 @@ public enum FCPXMLImport {
     }
 
     public enum ImportError: Error, LocalizedError, Equatable {
-        case unreadable(String)
+        /// Why, as a sentence that follows "The file can't be read as a timeline:".
+        case unreadable(Said)
         case noSequence
         /// With the first reason a clip was left out, when there was one.
-        case noAudio(String?)
+        case noAudio(Said?)
 
         public var errorDescription: String? {
             switch self {
-            case .unreadable(let why): "The file isn't FCPXML that can be read: \(why)"
             case .noSequence: "The file has no sequence (a project timeline) to import."
-            case .noAudio(let why): "The timeline has no audio clips that could be opened." + (why.map { " \($0)" } ?? "")
+            case .unreadable, .noAudio: said.text
             }
         }
         /// The same message by its key in the app's string catalogue (see `KeyedMessage`).
         public var keyed: KeyedMessage? {
             switch self {
-            case .unreadable(let why): KeyedMessage("error.import.unreadable", ["\(why)"])
             case .noSequence: KeyedMessage("error.import.noSequence")
-            case .noAudio: nil
+            case .unreadable, .noAudio: said.keyed
+            }
+        }
+        var said: Said {
+            switch self {
+            case .unreadable(let why): Said("error.import.unreadable", "The file can't be read as a timeline: %@", inner: why)
+            case .noAudio(let why?): Said("error.import.noAudio.why", "The timeline has no audio clips that could be opened. %@", inner: why)
+            default: Said("error.import.noAudio", "The timeline has no audio clips that could be opened.")
             }
         }
         public var reason: String {
@@ -193,23 +206,23 @@ public enum FCPXMLImport {
         var stack: [Node] = []
         var count = 0
         /// Why parsing was stopped, when it was.
-        var refused: String?
+        var refused: Said?
 
-        func stop(_ parser: XMLParser, _ why: String) {
+        func stop(_ parser: XMLParser, _ why: Said) {
             refused = refused ?? why
             parser.abortParsing()
         }
         // A timeline has no business declaring entities: an internal one can expand to gigabytes,
         // an external one names a file or an address to read. Either ends the import.
-        func parser(_ parser: XMLParser, foundInternalEntityDeclarationWithName name: String, value: String?) { stop(parser, "it declares entities, which a timeline doesn't need and Jämmer doesn't follow.") }
-        func parser(_ parser: XMLParser, foundExternalEntityDeclarationWithName name: String, publicID: String?, systemID: String?) { stop(parser, "it points at other files or addresses (external entities), which Jämmer doesn't follow.") }
-        func parser(_ parser: XMLParser, foundUnparsedEntityDeclarationWithName name: String, publicID: String?, systemID: String?, notationName: String?) { stop(parser, "it points at other files or addresses (external entities), which Jämmer doesn't follow.") }
-        func parser(_ parser: XMLParser, resolveExternalEntityName name: String, systemID: String?) -> Data? { stop(parser, "it points at other files or addresses (external entities), which Jämmer doesn't follow."); return nil }
+        func parser(_ parser: XMLParser, foundInternalEntityDeclarationWithName name: String, value: String?) { stop(parser, Said("error.import.declares_entities_which_timeline", "it declares entities, which a timeline doesn't need and Jämmer doesn't follow.")) }
+        func parser(_ parser: XMLParser, foundExternalEntityDeclarationWithName name: String, publicID: String?, systemID: String?) { stop(parser, Said("error.import.points_other_files_addresses", "it points at other files or addresses (external entities), which Jämmer doesn't follow.")) }
+        func parser(_ parser: XMLParser, foundUnparsedEntityDeclarationWithName name: String, publicID: String?, systemID: String?, notationName: String?) { stop(parser, Said("error.import.points_other_files_addresses", "it points at other files or addresses (external entities), which Jämmer doesn't follow.")) }
+        func parser(_ parser: XMLParser, resolveExternalEntityName name: String, systemID: String?) -> Data? { stop(parser, Said("error.import.points_other_files_addresses", "it points at other files or addresses (external entities), which Jämmer doesn't follow.")); return nil }
 
         func parser(_ parser: XMLParser, didStartElement name: String, namespaceURI: String?, qualifiedName: String?, attributes: [String: String] = [:]) {
             count += 1
-            guard stack.count < FCPXMLImport.maxDepth else { return stop(parser, "its elements are nested deeper than any timeline's.") }
-            guard count <= FCPXMLImport.maxElements else { return stop(parser, "it has more elements than any timeline.") }
+            guard stack.count < FCPXMLImport.maxDepth else { return stop(parser, Said("error.import.elements_nested_deeper_than", "its elements are nested deeper than any timeline's.")) }
+            guard count <= FCPXMLImport.maxElements else { return stop(parser, Said("error.import.has_more_elements_than", "it has more elements than any timeline.")) }
             let n = Node(name, attributes)
             if let top = stack.last { top.children.append(n) } else { root = n }
             stack.append(n)
@@ -224,17 +237,17 @@ public enum FCPXMLImport {
     /// Reads the first sequence of the file at `url`. Media paths are resolved against the file's folder.
     public static func read(_ url: URL) throws(ImportError) -> Timeline {
         let size = ((try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? NSNumber)?.intValue ?? 0
-        guard size <= maxBytes else { throw .unreadable("it is \(size >> 20) MB, far larger than a timeline file.") }
-        guard let data = try? Data(contentsOf: url) else { throw .unreadable("it can't be opened.") }
+        guard size <= maxBytes else { throw .unreadable(Said("error.import.mb_far_larger_than", "it is %@ MB, far larger than a timeline file.", "\(size >> 20)")) }
+        guard let data = try? Data(contentsOf: url) else { throw .unreadable(Said("error.import.can_t_opened", "it can't be opened.")) }
         return try read(data, base: url.deletingLastPathComponent(), name: url.deletingPathExtension().lastPathComponent)
     }
 
     /// Parses an XML file under the same rules as a timeline: no entities, no fetching, a bounded depth and
     /// size. `rootName`: the element it must start with.
     static func parseXML(_ data: Data, rootName: String) throws(ImportError) -> Node {
-        guard data.count <= maxBytes else { throw .unreadable("it is \(data.count >> 20) MB, far larger than a timeline file.") }
+        guard data.count <= maxBytes else { throw .unreadable(Said("error.import.mb_far_larger_than", "it is %@ MB, far larger than a timeline file.", "\(data.count >> 20)")) }
         if data.prefix(1 << 20).range(of: Data("<!ENTITY".utf8)) != nil {
-            throw .unreadable("it declares entities, which a timeline doesn't need and Jämmer doesn't follow.")
+            throw .unreadable(Said("error.import.declares_entities_which_timeline", "it declares entities, which a timeline doesn't need and Jämmer doesn't follow."))
         }
         let parser = XMLParser(data: data)
         parser.shouldResolveExternalEntities = false
@@ -243,19 +256,20 @@ public enum FCPXMLImport {
         let parsed = parser.parse()
         if let refused = builder.refused { throw .unreadable(refused) }
         guard parsed, let root = builder.root, root.name == rootName else {
-            throw .unreadable(parser.parserError == nil ? "it has no \(rootName) element." : "it isn't well-formed XML (line \(parser.lineNumber)).")
+            throw .unreadable(parser.parserError == nil ? Said("error.import.noRoot", "it has no %@ element.", rootName)
+                                                        : Said("error.import.notXML", "it isn't well-formed XML (line %@).", "\(parser.lineNumber)"))
         }
         return root
     }
 
     public static func read(_ data: Data, base: URL, name fallbackName: String) throws(ImportError) -> Timeline {
-        guard data.count <= maxBytes else { throw .unreadable("it is \(data.count >> 20) MB, far larger than a timeline file.") }
+        guard data.count <= maxBytes else { throw .unreadable(Said("error.import.mb_far_larger_than", "it is %@ MB, far larger than a timeline file.", "\(data.count >> 20)")) }
         // A timeline has no business declaring entities: an internal one can expand to gigabytes, an
         // external one names a file or an address to read. Looked for before the parser sees the file
         // (declarations sit in the prolog, ahead of the first element), and again by the parser's own hooks.
         let prolog = data.prefix(1 << 20)
         if prolog.range(of: Data("<!ENTITY".utf8)) != nil {
-            throw .unreadable("it declares entities, which a timeline doesn't need and Jämmer doesn't follow.")
+            throw .unreadable(Said("error.import.declares_entities_which_timeline", "it declares entities, which a timeline doesn't need and Jämmer doesn't follow."))
         }
         let parser = XMLParser(data: data)
         // Never fetch anything a file names (DTDs, entities).
@@ -266,7 +280,8 @@ public enum FCPXMLImport {
         if let refused = builder.refused { throw .unreadable(refused) }
         guard parsed, let root = builder.root, root.name == "fcpxml" else {
             // The parser's own text is an error number; say what it means.
-            throw .unreadable(parser.parserError == nil ? "it has no fcpxml element." : "it isn't well-formed XML (line \(parser.lineNumber)).")
+            throw .unreadable(parser.parserError == nil ? Said("error.import.noRoot", "it has no %@ element.", "fcpxml")
+                                                        : Said("error.import.notXML", "it isn't well-formed XML (line %@).", "\(parser.lineNumber)"))
         }
         guard let sequence = root.find("sequence"), let spine = sequence.first("spine") else { throw .noSequence }
         let project = root.find("project")
@@ -342,7 +357,7 @@ public enum FCPXMLImport {
                 if asset.hasAudio || !asset.hasVideo, let url = asset.url {
                     audioClip(c, asset: asset, url: url, timelineStart: at, lane: lane)
                 } else if asset.url == nil {
-                    warnings.append(Warning(code: "missing_media", message: "\(asset.name) has no file path in the FCPXML.", clip: c["name"]))
+                    warnings.append(Warning(code: "missing_media", message: Said("import.note.has_file_path_fcpxml", "%@ has no file path in the FCPXML.", "\(asset.name)"), clip: c["name"]))
                 }
                 connected(c, parentOffset: at, parentStart: Time(c["start"]) ?? .zero)
             }
@@ -386,7 +401,7 @@ public enum FCPXMLImport {
                 let volumes = Set(clips.compactMap { $0.md[flimmer + "trackVolume"].flatMap(Double.init) })
                 track.gainDB = db(volumes.first ?? 1)
                 if volumes.count > 1 {
-                    warnings.append(Warning(code: "track_volume", message: "The clips on \(track.name) give different track volumes; the first is used.", clip: nil))
+                    warnings.append(Warning(code: "track_volume", message: Said("import.note.clips_give_different_track", "The clips on %@ give different track volumes; the first is used.", "\(track.name)"), clip: nil))
                 }
                 track.muted = md[flimmer + "trackMuted"] == "1"
                 track.clips = clips.map(\.item)
@@ -397,7 +412,7 @@ public enum FCPXMLImport {
             } else {
                 for c in clips {
                     if c.item.enabled { track.clips.append(c.item) }
-                    else { warnings.append(Warning(code: "disabled_clip", message: "\(c.item.name) is switched off in the file and was left out (Jämmer mutes tracks, not clips).", clip: c.item.name)) }
+                    else { warnings.append(Warning(code: "disabled_clip", message: Said("import.note.switched_off_file_was", "%@ is switched off in the file and was left out (Jämmer mutes tracks, not clips).", "\(c.item.name)"), clip: c.item.name)) }
                 }
             }
             track.clips.sort { $0.start.seconds < $1.start.seconds }
@@ -412,7 +427,7 @@ public enum FCPXMLImport {
         }
         let channels = sequence["audioLayout"] == "mono" ? 1 : 2
         if let layout = sequence["audioLayout"], layout != "mono", layout != "stereo" {
-            warnings.append(Warning(code: "layout", message: "The timeline is \(layout); it was imported as stereo.", clip: nil))
+            warnings.append(Warning(code: "layout", message: Said("import.note.timeline_was_imported_stereo", "The timeline is %@; it was imported as stereo.", "\(layout)"), clip: nil))
         }
         // The picture's rate: the sequence's format says how long a frame is.
         var timecode: TimecodeSettings?
@@ -449,7 +464,7 @@ public enum FCPXMLImport {
         var sources: [URL: SourceRef] = [:]
         for url in timeline.media {
             guard FileManager.default.fileExists(atPath: url.path) else {
-                warnings.append(Warning(code: "missing_media", message: "\(url.lastPathComponent) wasn't found at \(url.path); its clips were left out.", clip: nil))
+                warnings.append(Warning(code: "missing_media", message: Said("import.note.1_wasn_t_found", "%1$@ wasn't found at %2$@; its clips were left out.", "\(url.lastPathComponent)", "\(url.path)"), clip: nil))
                 continue
             }
             do {
@@ -460,11 +475,11 @@ public enum FCPXMLImport {
                 }
                 sources[url] = s
                 if r.decoded, let original = try? AudioFileReader.info(at: url), original.sampleRate != timeline.sampleRate {
-                    warnings.append(Warning(code: "resampled", message: String(format: "%@ is %.0f Hz and the timeline %.0f Hz; it plays from a converted copy.",
-                                                                               s.name, original.sampleRate, timeline.sampleRate), clip: nil))
+                    warnings.append(Warning(code: "resampled", message: Said("import.note.resampled", "%1$@ is %2$@ Hz and the timeline %3$@ Hz; it plays from a converted copy.",
+                                                                             s.name, Said.n(original.sampleRate, 0), Said.n(timeline.sampleRate, 0)), clip: nil))
                 }
             } catch {
-                warnings.append(Warning(code: "unreadable_media", message: "\(url.lastPathComponent) couldn't be read as audio; its clips were left out.", clip: nil))
+                warnings.append(Warning(code: "unreadable_media", message: Said("import.note.couldn_t_read_audio", "%@ couldn't be read as audio; its clips were left out.", "\(url.lastPathComponent)"), clip: nil))
             }
         }
         let rate = timeline.sampleRate
@@ -477,13 +492,13 @@ public enum FCPXMLImport {
                 let start = max(0, c.start.frames(at: rate))
                 // A day is longer than any film; a clip placed beyond it is a broken or hostile file.
                 guard start <= Frame(86_400 * rate) else {
-                    warnings.append(Warning(code: "out_of_range", message: "\(c.name) is placed \(Int(Double(start) / rate / 3_600)) hours into the timeline and was left out.", clip: c.name))
+                    warnings.append(Warning(code: "out_of_range", message: Said("import.note.1_placed_2_hours", "%1$@ is placed %2$@ hours into the timeline and was left out.", "\(c.name)", "\(Int(Double(start) / rate / 3_600))"), clip: c.name))
                     continue
                 }
                 // Never past the end of the file (a clip can be a picture frame short of its stored times).
                 let length = sourceStart >= source.info.frames ? 0 : min(c.duration.frames(at: rate), source.info.frames - sourceStart)
                 guard length > 0 else {
-                    warnings.append(Warning(code: "empty_clip", message: "\(c.name) starts at or after the end of its file and was left out.", clip: c.name))
+                    warnings.append(Warning(code: "empty_clip", message: Said("import.note.starts_after_end_file", "%@ starts at or after the end of its file and was left out.", "\(c.name)"), clip: c.name))
                     continue
                 }
                 var clip = Clip(sourceID: source.id, sourceStart: sourceStart, start: start, length: length, gainDB: c.gainDB.isFinite ? c.gainDB : 0,
@@ -499,7 +514,7 @@ public enum FCPXMLImport {
                 // Clips on one track can't overlap here: one that does goes on a track of its own beside it.
                 let row = lanes.firstIndex { ($0.last?.end ?? 0) <= clip.start } ?? { lanes.append([]); return lanes.count - 1 }()
                 if row > 0, lanes[row].isEmpty {
-                    warnings.append(Warning(code: "overlap", message: "Clips on \(t.name) overlap; \(c.name) is on an extra track.", clip: c.name))
+                    warnings.append(Warning(code: "overlap", message: Said("import.note.clips_1_overlap_2", "Clips on %1$@ overlap; %2$@ is on an extra track.", "\(t.name)", "\(c.name)"), clip: c.name))
                 }
                 lanes[row].append(clip)
             }
@@ -514,7 +529,7 @@ public enum FCPXMLImport {
                 project.tracks.append(track)
             }
         }
-        guard project.tracks.contains(where: { !$0.clips.isEmpty }) else { throw .noAudio(warnings.first?.message) }
+        guard project.tracks.contains(where: { !$0.clips.isEmpty }) else { throw .noAudio(warnings.first.map { Said(text: $0.message, keyed: $0.keyed ?? Said("error.said", "%@", $0.message).keyed) }) }
         project.markers = timeline.shots.filter { !$0.name.isEmpty }.compactMap {
             let at = $0.start.frames(at: rate), length = $0.duration.frames(at: rate)
             guard at >= 0, at <= Frame(86_400 * rate) else { return nil }

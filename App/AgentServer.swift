@@ -589,7 +589,7 @@ enum AgentRouter {
                     let file = try TimelineExport.make(session.project, name: session.name, body: body, appVersion: appVersion)
                     var headers = ["Content-Disposition": "attachment; filename=\"\(asciiName(session.name)).\(file.fileExtension)\""]
                     // One header per note would need repeated headers; they are joined, each ASCII-safe.
-                    if !file.warnings.isEmpty { headers["X-Jammer-Warning"] = file.warnings.map(asciiHeader).joined(separator: " | ") }
+                    if !file.warnings.isEmpty { headers["X-Jammer-Warning"] = file.warnings.map { asciiHeader($0.text) }.joined(separator: " | ") }
                     return Response(status: 200, contentType: file.contentType, body: file.data, extraHeaders: headers)
                 } catch let e as BatchError {
                     if e.reason == "bad_request" { throw APIError.badRequest(e.message) }
@@ -705,7 +705,7 @@ enum AgentRouter {
         d["key"] = i.key?.uuidString ?? NSNull()
         if let live = s.inserts.instance(i.id) {
             d["hasKeyInput"] = live.hasKeyInput
-            if let why = live.keyRefusal { d["keyRefusal"] = why }
+            if let why = live.keyRefusal { d["keyRefusal"] = why.text }
         }
     }
 

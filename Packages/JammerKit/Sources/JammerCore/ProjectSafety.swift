@@ -23,22 +23,30 @@ public enum ProjectSafety {
     /// Refuses a project that can't be one, repairs what can be repaired in place, and returns
     /// what was changed, in words (empty when nothing was).
     @discardableResult
-    public static func check(_ p: inout Project, limits: Limits = Limits()) throws -> [String] {
+    public static func check(_ p: inout Project, limits: Limits = Limits()) throws -> [Said] {
         if let no = AudioFileInfo.refusal(channels: p.channels, sampleRate: p.sampleRate) {
-            throw AudioFileError.unreadable("The project can't be opened. \(no.replacingOccurrences(of: "The file says", with: "It says"))")
+            throw AudioFileError.unreadable(Said("error.project.refused", "The project can't be opened. %@", inner: no))
         }
-        func tooMany(_ n: Int, _ what: String, _ most: Int) -> AudioFileError {
-            .unreadable("The project can't be opened: it has \(n) \(what), and Jämmer takes at most \(most).")
+        func tooMany(_ said: Said) -> AudioFileError { .unreadable(said) }
+        guard p.tracks.count <= limits.tracks else {
+            throw tooMany(Said("error.project.tooManyTracks", "The project can't be opened: it has %1$@ tracks, and Jämmer takes at most %2$@.", "\(p.tracks.count)", "\(limits.tracks)"))
         }
-        guard p.tracks.count <= limits.tracks else { throw tooMany(p.tracks.count, "tracks", limits.tracks) }
         let clips = p.tracks.reduce(0) { $0 + $1.clips.count }
-        guard clips <= limits.clips else { throw tooMany(clips, "clips", limits.clips) }
-        guard p.sources.count <= limits.sources else { throw tooMany(p.sources.count, "audio files", limits.sources) }
-        guard p.markers.count <= limits.markers else { throw tooMany(p.markers.count, "markers", limits.markers) }
+        guard clips <= limits.clips else {
+            throw tooMany(Said("error.project.tooManyClips", "The project can't be opened: it has %1$@ clips, and Jämmer takes at most %2$@.", "\(clips)", "\(limits.clips)"))
+        }
+        guard p.sources.count <= limits.sources else {
+            throw tooMany(Said("error.project.tooManyFiles", "The project can't be opened: it has %1$@ audio files, and Jämmer takes at most %2$@.", "\(p.sources.count)", "\(limits.sources)"))
+        }
+        guard p.markers.count <= limits.markers else {
+            throw tooMany(Said("error.project.tooManyMarkers", "The project can't be opened: it has %1$@ markers, and Jämmer takes at most %2$@.", "\(p.markers.count)", "\(limits.markers)"))
+        }
         // More buses than Jämmer makes is a file that Jämmer didn't make: refused, not cut down in silence.
-        guard p.buses.count <= Mixer.maxBuses else { throw tooMany(p.buses.count, "buses", Mixer.maxBuses) }
+        guard p.buses.count <= Mixer.maxBuses else {
+            throw tooMany(Said("error.project.tooManyBuses", "The project can't be opened: it has %1$@ buses, and Jämmer takes at most %2$@.", "\(p.buses.count)", "\(Mixer.maxBuses)"))
+        }
 
-        var notes: [String] = []
+        var notes: [Said] = []
         // Automation: before the mixer is looked at, because what a frozen strip was made from includes the
         // lanes of what feeds it. A lane on a strip that isn't there, of a sort this build doesn't play, a
         // twin of another lane, or with nothing usable in it, is left out; values that aren't levels are
@@ -74,15 +82,15 @@ public enum ProjectSafety {
             }
             left += max(0, p.automation.count - 4_096)
             p.automation = kept
-            if left > 0 { notes.append("\(left) automation lane\(left == 1 ? "" : "s") in the project \(left == 1 ? "was" : "were") for a track or bus that isn't there, of a kind this Jämmer doesn't play, or had no usable points, and \(left == 1 ? "was" : "were") left out: \(left == 1 ? "that level is" : "those levels are") the fader's.") }
-            if mended > 0 { notes.append("\(mended) automation lane\(mended == 1 ? "" : "s") had points that were out of order, doubled, outside the timeline or not levels; \(mended == 1 ? "it was" : "they were") put right. Listen before you export.") }
+            if left > 0 { notes.append(counted(left, Said("project.repaired.lanesLeftOut.one", "1 automation lane in the project was for a track or bus that isn't there, of a kind this Jämmer doesn't play, or had no usable points, and was left out: that level is the fader's."), Said("project.repaired.lanesLeftOut.other", "%@ automation lanes in the project were for a track or bus that isn't there, of a kind this Jämmer doesn't play, or had no usable points, and were left out: those levels are the fader's.", "\(left)"))) }
+            if mended > 0 { notes.append(counted(mended, Said("project.repaired.lanesMended.one", "1 automation lane had points that were out of order, doubled, outside the timeline or not levels; it was put right. Listen before you export."), Said("project.repaired.lanesMended.other", "%@ automation lanes had points that were out of order, doubled, outside the timeline or not levels; they were put right. Listen before you export.", "\(mended)"))) }
         }
         // The mixer: buses with two of the same id, routes to buses that aren't there, loops, and values
         // that are not levels or pans. What can be put right is put right and said; a loop is cut where it closes.
         do {
             var seen = Set<UUID>(), unique: [Bus] = []
             for b in p.buses where seen.insert(b.id).inserted { unique.append(b) }
-            if unique.count < p.buses.count { notes.append("\(p.buses.count - unique.count) bus\(p.buses.count - unique.count == 1 ? "" : "es") had the same id as another and \(p.buses.count - unique.count == 1 ? "was" : "were") left out.") }
+            if unique.count < p.buses.count { notes.append(counted((p.buses.count - unique.count), Said("project.repaired.buses.one", "1 bus had the same id as another and was left out."), Said("project.repaired.buses.other", "%@ buses had the same id as another and were left out.", "\((p.buses.count - unique.count))"))) }
             p.buses = unique
             var fixed = 0, lost = 0
             func level(_ v: Double) -> Double { v.isFinite ? min(Mixer.gainRange.upperBound, max(Mixer.gainRange.lowerBound, v)) : 0 }
@@ -136,7 +144,7 @@ public enum ProjectSafety {
             // VCAs: twins dropped, levels brought into range, members of a VCA that isn't there released.
             var known = Set<UUID>(), groups: [VCA] = []
             for v in p.vcas.prefix(Mixer.maxVCAs) where known.insert(v.id).inserted { groups.append(v) }
-            if groups.count < p.vcas.count { notes.append("\(p.vcas.count - groups.count) VCA\(p.vcas.count - groups.count == 1 ? "" : "s") in the project had the same id as another, or came after the \(Mixer.maxVCAs) a document can have, and \(p.vcas.count - groups.count == 1 ? "was" : "were") left out.") }
+            if groups.count < p.vcas.count { notes.append(counted(p.vcas.count - groups.count, Said("project.repaired.vcas.one", "1 VCA in the project had the same id as another, or came after the %@ a document can have, and was left out.", "\(Mixer.maxVCAs)"), Said("project.repaired.vcas.other", "%1$@ VCAs in the project had the same id as another, or came after the %2$@ a document can have, and were left out.", "\(p.vcas.count - groups.count)", "\(Mixer.maxVCAs)"))) }
             p.vcas = groups
             for i in p.vcas.indices {
                 let v = p.vcas[i]
@@ -148,7 +156,7 @@ public enum ProjectSafety {
             var strays = 0
             for t in p.tracks.indices { if let v = p.tracks[t].vca, !known.contains(v) { p.tracks[t].vca = nil; strays += 1 } }
             for b in p.buses.indices { if let v = p.buses[b].vca, !known.contains(v) { p.buses[b].vca = nil; strays += 1 } }
-            if strays > 0 { notes.append("\(strays) strip\(strays == 1 ? "" : "s") belonged to a VCA that isn't in the project and \(strays == 1 ? "plays" : "play") at \(strays == 1 ? "its" : "their") own level.") }
+            if strays > 0 { notes.append(counted(strays, Said("project.repaired.strays.one", "1 strip belonged to a VCA that isn't in the project and plays at its own level."), Said("project.repaired.strays.other", "%@ strips belonged to a VCA that isn't in the project and play at their own level.", "\(strays)"))) }
             // Keys: one that names a strip that isn't there, or the strip it sits on, or a plugin on the master,
             // is taken away; then any that close a loop, one at a time, until none does.
             let strips = Set(p.tracks.map(\.id)).union(seen)
@@ -167,14 +175,14 @@ public enum ProjectSafety {
                 } }
                 break
             }
-            if keysGone > 0 { notes.append("\(keysGone) plugin\(keysGone == 1 ? "" : "s") listened to a track or bus that isn't there, or to one that it feeds; \(keysGone == 1 ? "it plays" : "they play") without that key.") }
+            if keysGone > 0 { notes.append(counted(keysGone, Said("project.repaired.keys.one", "1 plugin listened to a track or bus that isn't there, or to one that it feeds; it plays without that key."), Said("project.repaired.keys.other", "%@ plugins listened to a track or bus that isn't there, or to one that it feeds; they play without that key.", "\(keysGone)"))) }
             // Frozen strips: a freeze whose file isn't among the sources, or that isn't of what the strip is
             // now (a file edited by hand), is taken away, so the strip plays live rather than something stale.
             var thawed = 0
             let sourceIDs = Set(p.sources.map(\.id))
             for t in p.tracks.indices { if let f = p.tracks[t].frozen, !sourceIDs.contains(f.sourceID) || f.length <= 0 || p.content(of: p.tracks[t].id) != f.madeFrom { p.tracks[t].frozen = nil; thawed += 1 } }
             for b in p.buses.indices { if let f = p.buses[b].frozen, !sourceIDs.contains(f.sourceID) || f.length <= 0 || p.content(of: p.buses[b].id) != f.madeFrom { p.buses[b].frozen = nil; thawed += 1 } }
-            if thawed > 0 { notes.append("\(thawed) frozen track\(thawed == 1 ? "" : "s") or bus\(thawed == 1 ? "" : "es") didn't match \(thawed == 1 ? "its" : "their") frozen file and \(thawed == 1 ? "plays" : "play") live instead.") }
+            if thawed > 0 { notes.append(counted(thawed, Said("project.repaired.thawed.one", "1 frozen track or bus didn't match its frozen file and plays live instead."), Said("project.repaired.thawed.other", "%@ frozen tracks or buses didn't match their frozen files and play live instead.", "\(thawed)"))) }
             var cut = 0
             for t in p.tracks.indices where p.tracks[t].inserts.count > 64 { cut += p.tracks[t].inserts.count - 64; p.tracks[t].inserts = Array(p.tracks[t].inserts.prefix(64)) }
             for b in p.buses.indices where p.buses[b].inserts.count > 64 { cut += p.buses[b].inserts.count - 64; p.buses[b].inserts = Array(p.buses[b].inserts.prefix(64)) }
@@ -186,18 +194,18 @@ public enum ProjectSafety {
             }
             if let l = p.master.limiter, (try? l.settings.validate()) == nil {
                 p.master.limiter = nil
-                notes.append("The limiter on the master had values no limiter can have and was left off. Put it back in the mixer before exporting.")
+                notes.append(Said("project.repaired.limiter_master_had_values", "The limiter on the master had values no limiter can have and was left off. Put it back in the mixer before exporting."))
             }
-            if cut > 0 { notes.append("\(cut) plugin\(cut == 1 ? "" : "s") beyond the 64 a track or bus can have \(cut == 1 ? "was" : "were") left out.") }
-            if lost > 0 { notes.append("\(lost) route\(lost == 1 ? "" : "s") or send\(lost == 1 ? "" : "s") in the mixer led to a bus that isn't there, or round in a circle; a route now goes to the output and a send is gone.") }
-            if fixed > 0 { notes.append("\(fixed) level\(fixed == 1 ? "" : "s") or pan\(fixed == 1 ? "" : "s") in the mixer \(fixed == 1 ? "was" : "were") outside what is possible and \(fixed == 1 ? "was" : "were") put inside.") }
+            if cut > 0 { notes.append(counted(cut, Said("project.repaired.pluginsCut.one", "1 plugin beyond the 64 a track or bus can have was left out."), Said("project.repaired.pluginsCut.other", "%@ plugins beyond the 64 a track or bus can have were left out.", "\(cut)"))) }
+            if lost > 0 { notes.append(counted(lost, Said("project.repaired.routes.one", "1 route or send in the mixer led to a bus that isn't there, or round in a circle; a route now goes to the output and a send is gone."), Said("project.repaired.routes.other", "%@ routes or sends in the mixer led to a bus that isn't there, or round in a circle; a route now goes to the output and a send is gone.", "\(lost)"))) }
+            if fixed > 0 { notes.append(counted(fixed, Said("project.repaired.levels.one", "1 level or pan in the mixer was outside what is possible and was put inside."), Said("project.repaired.levels.other", "%@ levels or pans in the mixer were outside what is possible and were put inside.", "\(fixed)"))) }
         }
         // Sources whose description of their own audio makes no sense can't be played.
         let before = p.sources.count
         p.sources.removeAll { s in
             AudioFileInfo.refusal(channels: s.info.channels, sampleRate: s.info.sampleRate) != nil || s.info.frames < 0 || s.info.dataOffset < 0
         }
-        if p.sources.count < before { notes.append("\(before - p.sources.count) audio file\(before - p.sources.count == 1 ? "" : "s") in the project had an impossible description and \(before - p.sources.count == 1 ? "was" : "were") left out.") }
+        if p.sources.count < before { notes.append(counted((before - p.sources.count), Said("project.repaired.files.one", "1 audio file in the project had an impossible description and was left out."), Said("project.repaired.files.other", "%@ audio files in the project had an impossible description and were left out.", "\((before - p.sources.count))"))) }
         let frames = Dictionary(p.sources.map { ($0.id, $0.info.frames) }, uniquingKeysWith: { a, _ in a })
         let horizon = horizon(p.sampleRate)
         var dropped = 0
@@ -228,14 +236,14 @@ public enum ProjectSafety {
                 if !sound || kept != [o.bounce] { p.tracks[t].ducked = nil }
             }
         }
-        if dropped > 0 { notes.append("\(dropped) clip\(dropped == 1 ? "" : "s") pointed outside \(dropped == 1 ? "its" : "their") audio or the timeline and \(dropped == 1 ? "was" : "were") left out.") }
+        if dropped > 0 { notes.append(counted(dropped, Said("project.repaired.clips.one", "1 clip pointed outside its audio or the timeline and was left out."), Said("project.repaired.clips.other", "%@ clips pointed outside their audio or the timeline and were left out.", "\(dropped)"))) }
         let markers = p.markers.count
         p.markers.removeAll { $0.position < 0 || $0.position > horizon || $0.length < 0 }
         for m in p.markers.indices {
             p.markers[m].length = min(p.markers[m].length, horizon)
             p.markers[m].name = String(p.markers[m].name.prefix(500))
         }
-        if p.markers.count < markers { notes.append("\(markers - p.markers.count) marker\(markers - p.markers.count == 1 ? "" : "s") outside the timeline \(markers - p.markers.count == 1 ? "was" : "were") left out.") }
+        if p.markers.count < markers { notes.append(counted((markers - p.markers.count), Said("project.repaired.markers.one", "1 marker outside the timeline was left out."), Said("project.repaired.markers.other", "%@ markers outside the timeline were left out.", "\((markers - p.markers.count))"))) }
         return notes
     }
 
@@ -246,7 +254,7 @@ public enum ProjectSafety {
         let stream = UnsafeMutablePointer<compression_stream>.allocate(capacity: 1)
         defer { stream.deallocate() }
         guard compression_stream_init(stream, COMPRESSION_STREAM_DECODE, COMPRESSION_LZFSE) == COMPRESSION_STATUS_OK else {
-            throw AudioFileError.unreadable("The project's history can't be read.")
+            throw AudioFileError.unreadable(Said("error.file.project_s_history_can", "The project's history can't be read."))
         }
         defer { compression_stream_destroy(stream) }
         let chunk = 1 << 16
@@ -261,9 +269,9 @@ public enum ProjectSafety {
                 stream.pointee.dst_size = chunk
                 let status = compression_stream_process(stream, Int32(COMPRESSION_STREAM_FINALIZE.rawValue))
                 out.append(buffer, count: chunk - stream.pointee.dst_size)
-                guard out.count <= limit else { throw AudioFileError.unreadable("The project's history is larger than any real history and wasn't read.") }
+                guard out.count <= limit else { throw AudioFileError.unreadable(Said("error.file.project_s_history_larger", "The project's history is larger than any real history and wasn't read.")) }
                 if status == COMPRESSION_STATUS_END { break }
-                guard status == COMPRESSION_STATUS_OK else { throw AudioFileError.unreadable("The project's history is damaged.") }
+                guard status == COMPRESSION_STATUS_OK else { throw AudioFileError.unreadable(Said("error.file.project_s_history_damaged", "The project's history is damaged.")) }
             }
         }
         return out

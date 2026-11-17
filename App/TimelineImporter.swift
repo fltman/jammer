@@ -12,16 +12,16 @@ enum TimelineImporter {
         do {
             result = try await Task.detached(priority: .userInitiated) { try FCPXMLImport.build(timeline, mediaFolder: MediaStore.folder) }.value
         } catch let e as FCPXMLImport.ImportError {
-            throw BatchError(e.reason, e.localizedDescription)
+            throw BatchError(e.reason, wrapping: e)
         }
         guard let controller = NSDocumentController.shared as? JammerDocumentController else {
-            throw BatchError("internal", "The document controller isn't Jämmer's.")
+            throw BatchError("internal", Said("error.batch.document_controller_isn_t", "The document controller isn't Jämmer's."))
         }
         let doc = controller.open(result.project, name: result.name)
         if let s = doc.session {
             let w = result.warnings.count
             let done = L10n.text("import.done", L10n.count("import.tracks", result.project.tracks.count), L10n.count("import.clips", result.clips))
-            s.status = w > 0 ? L10n.text("import.done.notes", done, L10n.count("import.notes", w), result.warnings[0].message + (w > 1 ? " …" : "")) : done
+            s.status = w > 0 ? L10n.text("import.done.notes", done, L10n.count("import.notes", w), (result.warnings[0].keyed.map(L10n.message) ?? result.warnings[0].message) + (w > 1 ? " …" : "")) : done
         }
         return (doc.session, result)
     }
@@ -81,14 +81,14 @@ enum TimelineImporter {
                     if alert.runModal() == .alertFirstButtonReturn {
                         let drop = Set(outside)
                         for i in timeline.tracks.indices { timeline.tracks[i].clips.removeAll { drop.contains($0.media) } }
-                        timeline.warnings.append(.init(code: "outside", message: "\(outside.count) file\(outside.count == 1 ? "" : "s") outside the timeline's folder \(outside.count == 1 ? "wasn't" : "weren't") read.", clip: nil))
+                        timeline.warnings.append(.init(code: "outside", message: counted(outside.count, Said("import.note.outside.one", "1 file outside the timeline's folder wasn't read."), Said("import.note.outside.other", "%@ files outside the timeline's folder weren't read.", "\(outside.count)")), clip: nil))
                     }
                 }
                 _ = try await open(timeline)
             } catch {
                 let alert = NSAlert()
                 alert.messageText = L10n.text("import.failed.title")
-                alert.informativeText = error.localizedDescription
+                alert.informativeText = L10n.error(error)
                 alert.runModal()
             }
         }

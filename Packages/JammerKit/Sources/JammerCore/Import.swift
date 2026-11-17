@@ -39,10 +39,10 @@ public enum AudioImporter {
         do { own = try AudioFileReader.info(at: url) } catch AudioFileError.unreadable(let why) where isPCMContainer(url) {
             // It is a WAV or AIFF and Jämmer's own reader found it broken or absurd. Handing it to
             // the system's decoder for a second opinion would let through what was just refused.
-            throw AudioFileError.unreadable("Jämmer can't open \(url.lastPathComponent). \(why)")
+            throw AudioFileError.unreadable(Said("error.file.cantOpen", "Jämmer can't open %1$@. %2$@", url.lastPathComponent, inner: why))
         } catch { own = nil }
         if let info = own, info.frames == 0 {
-            throw AudioFileError.unreadable("\(url.lastPathComponent) has no sound in it (the file may have been cut off).")
+            throw AudioFileError.unreadable(Said("error.file.has_sound_file_may", "%@ has no sound in it (the file may have been cut off).", "\(url.lastPathComponent)"))
         }
         let ownWarning = own.flatMap { info in
             info.claimedFrames.map { shortWarning(url.lastPathComponent, got: Double(info.frames) / info.sampleRate, claimed: Double($0) / info.sampleRate) }
@@ -55,7 +55,7 @@ public enum AudioImporter {
         var info: AudioFileInfo
         do {
             info = try AudioFileReader.info(at: decodedURL)
-            guard info.frames > 0 else { throw AudioFileError.unreadable("\(url.lastPathComponent) has no sound in it (the file may be cut off or damaged).") }
+            guard info.frames > 0 else { throw AudioFileError.unreadable(Said("error.file.has_sound_file_may2", "%@ has no sound in it (the file may be cut off or damaged).", "\(url.lastPathComponent)")) }
         } catch {
             try? FileManager.default.removeItem(at: decodedURL)
             throw error
@@ -87,16 +87,16 @@ public enum AudioImporter {
         let file: AVAudioFile
         do { file = try AVAudioFile(forReading: url) } catch {
             // AVFoundation's own text is a bare error code; say what it means.
-            throw AudioFileError.unsupported("Jämmer can't read \(url.lastPathComponent): it isn't audio in a format this Mac can decode.")
+            throw AudioFileError.unsupported(Said("error.export.j_mmer_can_t", "Jämmer can't read %@: it isn't audio in a format this Mac can decode.", "\(url.lastPathComponent)"))
         }
         let input = file.processingFormat
         let channels = Int(input.channelCount)
         let rate = sampleRate ?? input.sampleRate
         // What the decoder says about the file is as untrusted as the file.
-        if let no = AudioFileInfo.refusal(channels: channels, sampleRate: input.sampleRate) { throw AudioFileError.unsupported("Jämmer can't read \(url.lastPathComponent). \(no)") }
+        if let no = AudioFileInfo.refusal(channels: channels, sampleRate: input.sampleRate) { throw AudioFileError.unsupported(Said("error.file.cantRead", "Jämmer can't read %1$@. %2$@", url.lastPathComponent, inner: no)) }
         func tooLarge(_ bytes: Double) -> AudioFileError {
-            .unsupported(String(format: "%@ is too large to open here: decoded it would take %.1f GB, and %.1f GB is what Jämmer may use on this disk.",
-                                url.lastPathComponent, bytes / 1_073_741_824, Double(limit) / 1_073_741_824))
+            .unsupported(Said("error.file.tooLarge", "%1$@ is too large to open here: decoded it would take %2$@ GB, and %3$@ GB is what Jämmer may use on this disk.",
+                              url.lastPathComponent, Said.n(bytes / 1_073_741_824, 1), Said.n(Double(limit) / 1_073_741_824, 1)))
         }
         // By what it says of itself first, so a long file is refused before any of it is written…
         let claimed = Double(max(0, file.length)) * rate / input.sampleRate * Double(channels) * 4
@@ -108,7 +108,7 @@ public enum AudioImporter {
         let decodeRate = stream == nil ? rate : input.sampleRate
         guard let output = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: decodeRate,
                                          channels: AVAudioChannelCount(channels), interleaved: true) else {
-            throw AudioFileError.unsupported("Unsupported channel layout in \(url.lastPathComponent).")
+            throw AudioFileError.unsupported(Said("error.export.unsupported_channel_layout", "Unsupported channel layout in %@.", "\(url.lastPathComponent)"))
         }
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let dest = folder.appending(path: "\(url.deletingPathExtension().lastPathComponent)-\(UUID().uuidString.prefix(8)).wav")
@@ -118,14 +118,14 @@ public enum AudioImporter {
         defer { if !finished { try? FileManager.default.removeItem(at: dest) } }
         var written: Int64 = 0
         guard let converter = AVAudioConverter(from: input, to: output) else {
-            throw AudioFileError.unsupported("Can't convert \(url.lastPathComponent) to \(Int(rate)) Hz.")
+            throw AudioFileError.unsupported(Said("error.export.can_t_convert_1", "Can't convert %1$@ to %2$@ Hz.", "\(url.lastPathComponent)", "\(Int(rate))"))
         }
         converter.sampleRateConverterQuality = AVAudioQuality.max.rawValue
         converter.sampleRateConverterAlgorithm = AVSampleRateConverterAlgorithm_Mastering
         let chunk: AVAudioFrameCount = 32_768
-        guard let inBuf = AVAudioPCMBuffer(pcmFormat: input, frameCapacity: chunk) else { throw AudioFileError.unsupported("Out of memory.") }
+        guard let inBuf = AVAudioPCMBuffer(pcmFormat: input, frameCapacity: chunk) else { throw AudioFileError.unsupported(Said("error.export.out_memory", "Out of memory.")) }
         let outCapacity = AVAudioFrameCount(Double(chunk) * decodeRate / input.sampleRate) + 1_024
-        guard let outBuf = AVAudioPCMBuffer(pcmFormat: output, frameCapacity: outCapacity) else { throw AudioFileError.unsupported("Out of memory.") }
+        guard let outBuf = AVAudioPCMBuffer(pcmFormat: output, frameCapacity: outCapacity) else { throw AudioFileError.unsupported(Said("error.export.out_memory", "Out of memory.")) }
         let total = max(1, Double(file.length))
         final class State: @unchecked Sendable { var done = false; var error: Error? }
         let state = State()
@@ -157,9 +157,9 @@ public enum AudioImporter {
             if let e = convError ?? state.error {
                 // -39 is "end of file": the audio stops before the file says it should.
                 if (e as NSError).code == -39 {
-                    throw AudioFileError.unsupported("\(url.lastPathComponent) is cut short: it ends before the sound it says it has, so it can't be opened.")
+                    throw AudioFileError.unsupported(Said("error.export.cut_short_ends_before", "%@ is cut short: it ends before the sound it says it has, so it can't be opened.", "\(url.lastPathComponent)"))
                 }
-                throw AudioFileError.unsupported("\(url.lastPathComponent) couldn't be decoded; it is damaged or not what its name says (error \((e as NSError).code)).")
+                throw AudioFileError.unsupported(Said("error.export.1_couldn_t_decoded", "%1$@ couldn't be decoded; it is damaged or not what its name says (error %2$@).", "\(url.lastPathComponent)", "\((e as NSError).code)"))
             }
             if outBuf.frameLength > 0, let data = outBuf.floatChannelData {
                 // …and by what actually comes out, since the header can say less than there is.

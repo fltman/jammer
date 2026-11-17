@@ -32,11 +32,11 @@ public enum M4AChapterWriter {
                 input.extendedLanguageTag = tag
             }
         }
-        guard writer.canAdd(audio), writer.canAdd(text) else { throw ExportError.unsupported("Can't write chapters into M4A here.") }
+        guard writer.canAdd(audio), writer.canAdd(text) else { throw ExportError.unsupported(Said("error.export.can_t_write_chapters", "Can't write chapters into M4A here.")) }
         writer.add(audio)
         writer.add(text)
         audio.addTrackAssociation(withTrackOf: text, type: AVAssetTrack.AssociationType.chapterList.rawValue)
-        guard writer.startWriting() else { throw writer.error ?? ExportError.unsupported("The M4A writer didn't start.") }
+        guard writer.startWriting() else { throw writer.error ?? ExportError.unsupported(Said("error.export.m4a_writer_didn_t", "The M4A writer didn't start.")) }
         writer.startSession(atSourceTime: .zero)
 
         let total = Double(range.count) / sr
@@ -49,7 +49,7 @@ public enum M4AChapterWriter {
         var pcmFormat: CMAudioFormatDescription?
         CMAudioFormatDescriptionCreate(allocator: nil, asbd: &asbd, layoutSize: 0, layout: nil, magicCookieSize: 0, magicCookie: nil,
                                        extensions: nil, formatDescriptionOut: &pcmFormat)
-        guard let pcmFormat else { throw ExportError.unsupported("Can't describe the audio for the M4A writer.") }
+        guard let pcmFormat else { throw ExportError.unsupported(Said("error.export.can_t_describe_audio", "Can't describe the audio for the M4A writer.")) }
 
         func wait(_ input: AVAssetWriterInput) throws {
             while !input.isReadyForMoreMediaData {

@@ -24,19 +24,19 @@ public enum ProjectPackage {
     /// repaired where it can be.
     public static func decode(_ data: Data) throws -> Project { try decodeChecked(data).project }
 
-    public static func decodeChecked(_ data: Data, limits: ProjectSafety.Limits = .init()) throws -> (project: Project, notes: [String]) {
-        guard data.count <= limits.bytes else { throw AudioFileError.unreadable("The project file is \(data.count >> 20) MB, larger than any real project.") }
+    public static func decodeChecked(_ data: Data, limits: ProjectSafety.Limits = .init()) throws -> (project: Project, notes: [Said]) {
+        guard data.count <= limits.bytes else { throw AudioFileError.unreadable(Said("error.file.project_file_mb_larger", "The project file is %@ MB, larger than any real project.", "\(data.count >> 20)")) }
         struct Version: Decodable { var formatVersion: Int }
         var project: Project
         do {
             let v = try JSONDecoder().decode(Version.self, from: data)
             guard v.formatVersion <= Project.newestFormatVersion else {
-                throw AudioFileError.unsupported("This project was saved by a newer Jämmer (format \(v.formatVersion)) and uses things this version doesn't have. Open it in a newer Jämmer.")
+                throw AudioFileError.unsupported(Said("error.export.project_was_saved_newer", "This project was saved by a newer Jämmer (format %@) and uses things this version doesn't have. Open it in a newer Jämmer.", "\(v.formatVersion)"))
             }
             project = try JSONDecoder().decode(Project.self, from: data)
         } catch let e as AudioFileError { throw e } catch {
             // The decoder's own words are about keys and types; say what it means for the user.
-            throw AudioFileError.unreadable("The project file is damaged or cut off and can't be opened.")
+            throw AudioFileError.unreadable(Said("error.file.project_file_damaged_cut", "The project file is damaged or cut off and can't be opened."))
         }
         let notes = try ProjectSafety.check(&project, limits: limits)
         return (project, notes)
@@ -61,10 +61,10 @@ public enum ProjectPackage {
 
     /// Reads the package and says what had to be left out. A source "in the package" is one that
     /// really is: a plain file directly in Media/, not a link, and not a path that climbs out.
-    public static func readChecked(_ wrapper: FileWrapper, packageURL: URL?) throws -> (project: Project, notes: [String]) {
+    public static func readChecked(_ wrapper: FileWrapper, packageURL: URL?) throws -> (project: Project, notes: [Said]) {
         guard wrapper.isDirectory, let manifestWrapper = wrapper.fileWrappers?[manifestName], manifestWrapper.isRegularFile,
               let manifest = manifestWrapper.regularFileContents else {
-            throw AudioFileError.unreadable("The project has no \(manifestName).")
+            throw AudioFileError.unreadable(Said("error.file.project_has", "The project has no %@.", "\(manifestName)"))
         }
         var (project, notes) = try decodeChecked(manifest)
         let media = wrapper.fileWrappers?[mediaFolderName]
@@ -82,7 +82,8 @@ public enum ProjectPackage {
                 outside += 1
             }
         }
-        if outside > 0 { notes.append("\(outside) audio file\(outside == 1 ? "" : "s") said to be inside the project \(outside == 1 ? "isn't" : "aren't") there (or the path points out of it) and \(outside == 1 ? "was" : "were") left out.") }
+        if outside > 0 { notes.append(counted(outside, Said("project.repaired.outside.one", "1 audio file said to be inside the project isn't there (or the path points out of it) and was left out."),
+                                              Said("project.repaired.outside.other", "%@ audio files said to be inside the project aren't there (or the path points out of it) and were left out.", "\(outside)"))) }
         return (project, notes)
     }
 }
@@ -126,7 +127,7 @@ extension ProjectPackage {
             let dest = media.appending(path: c.name)
             if FileManager.default.fileExists(atPath: dest.path) { try FileManager.default.removeItem(at: dest) }
             do { try FileManager.default.copyItem(at: c.from, to: dest) } catch {
-                throw AudioFileError.unreadable("Couldn't copy \(c.from.lastPathComponent) into the project: \(error.localizedDescription)")
+                throw AudioFileError.unreadable(Said("error.file.copy", "Couldn't copy %1$@ into the project: %2$@", c.from.lastPathComponent, inner: Said.of(error)))
             }
         }
     }

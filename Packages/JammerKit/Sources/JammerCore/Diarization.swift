@@ -24,7 +24,7 @@ public protocol SpeakerDiarizer: Sendable {
 public enum DiarizationError: Error, LocalizedError, Equatable {
     case noEngine
     case nothingToDo
-    case model(String)
+    case model(Said)
 
     public var reason: String {
         switch self {
@@ -37,7 +37,7 @@ public enum DiarizationError: Error, LocalizedError, Equatable {
         switch self {
         case .noEngine: "This copy of Jämmer has no diarisation model."
         case .nothingToDo: "There's no audio on those tracks."
-        case .model(let m): m
+        case .model(let m): m.text
         }
     }
     /// The same message by its key in the app's string catalogue (see `KeyedMessage`).
@@ -45,7 +45,7 @@ public enum DiarizationError: Error, LocalizedError, Equatable {
         switch self {
         case .noEngine: KeyedMessage("error.diarization.noEngine")
         case .nothingToDo: KeyedMessage("error.diarization.nothingToDo")
-        case .model: nil
+        case .model(let m): m.keyed
         }
     }
 }

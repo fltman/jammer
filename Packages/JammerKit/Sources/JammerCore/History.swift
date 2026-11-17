@@ -136,7 +136,9 @@ public struct History: Codable, Sendable, Equatable {
     }
 }
 
-public enum HistoryError: Error, LocalizedError, Equatable {
+public enum HistoryError: Error, LocalizedError, Equatable, KeyedFailure {
     case unknownNode
-    public var errorDescription: String? { "That step isn't in the history." }
+    static let said = Said("error.history.unknown", "That step isn't in the history.")
+    public var errorDescription: String? { Self.said.text }
+    public var keyed: KeyedMessage? { Self.said.keyed }
 }

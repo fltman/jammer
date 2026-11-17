@@ -1,4 +1,5 @@
 import Foundation
+import JammerCore
 
 /// Long work an agent starts and then follows: the series' shared job shape.
 ///
@@ -18,6 +19,11 @@ public struct Job: Sendable, Equatable {
     /// 0…1.
     public var progress: Double
     public var error: (code: String, message: String)?
+    /// The failure by its key, for a window (`error.message` is its English, for the API).
+    public var errorKeyed: KeyedMessage?
+    /// Sets the failure from a sentence of ours or from an error (by its key when it has one).
+    public mutating func fail(_ code: String, _ said: Said) { error = (code, said.text); errorKeyed = said.keyed }
+    public mutating func fail(_ code: String, _ e: Error) { fail(code, Said.of(e)) }
     /// Small facts about the outcome (counts, seconds, names).
     public var result: [String: JSONValue]?
     /// The document it works on, if any.

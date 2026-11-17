@@ -276,7 +276,7 @@ struct HostileFileTests {
         let flac = try Hostile.converted("flac", format: "flac", data: "flac", in: dir, seconds: 4)
         #expect(try warning(flac, "whole.flac") == nil)
         // A compressed file that ends in the middle isn't opened as half of itself: it is refused, and says why.
-        #expect(throws: AudioFileError.unsupported("half.flac is cut short: it ends before the sound it says it has, so it can't be opened.")) {
+        #expect(throws: AudioFileError.unsupported(Said("error.export.cut_short_ends_before", "%@ is cut short: it ends before the sound it says it has, so it can't be opened.", "half.flac"))) {
             _ = try warning(flac.prefix(flac.count / 2), "half.flac")
         }
     }

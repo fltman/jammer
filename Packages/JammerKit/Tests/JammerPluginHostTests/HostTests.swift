@@ -690,13 +690,13 @@ struct HostedPluginTests {
         do {
             let a = try InsertUnits.makeBlocking(plugin, channels: 2, sampleRate: 48_000), b = try InsertUnits.makeBlocking(plugin, channels: 2, sampleRate: 48_000)
             #expect(HostedPlugins.runningCount == 2)
-            #expect(throws: PluginError.failed("2 VST 3 and CLAP plugins are already running, which is the most Jämmer starts at once (each runs in a process of its own). Remove or bypass some to add Delay Gain.")) {
+            expectPluginError("2 VST 3 and CLAP plugins are already running, which is the most Jämmer starts at once (each runs in a process of its own). Remove or bypass some to add Delay Gain.") {
                 _ = try InsertUnits.makeBlocking(plugin, channels: 2, sampleRate: 48_000)
             }
             _ = (a, b)
         }
         #expect(HostedPlugins.runningCount == 0)
-        #expect(throws: PluginError.unsupportedFormat("Delay Gain: The plugin doesn't take mono audio.")) { _ = try InsertUnits.makeBlocking(plugin, channels: 1, sampleRate: 48_000) }
+        expectPluginError("Delay Gain: The plugin doesn't take mono audio.") { _ = try InsertUnits.makeBlocking(plugin, channels: 1, sampleRate: 48_000) }
         #expect(HostedPlugins.runningCount == 0, "a plugin that didn't start doesn't count")
         // It crashes in its 30th block of an export: the callback names it, the export finishes with the rest unprocessed.
         final class Told: @unchecked Sendable { var said: [String] = [] }
@@ -711,7 +711,7 @@ struct HostedPluginTests {
         c.blocked.insert(id)
         HostedPlugins.update(c)
         #expect(PluginCatalog.find(id) == nil)
-        #expect(throws: PluginError.failed("clap:com.brattoo.test.fx is switched off because it failed while it was in use. Switch it on again in Audio › Plugins….")) {
+        expectPluginError("clap:com.brattoo.test.fx is switched off because it failed while it was in use. Switch it on again in Audio › Plugins….") {
             _ = try InsertUnits.makeBlocking(plugin, channels: 2, sampleRate: 48_000)
         }
         c.blocked.removeAll()
@@ -793,4 +793,11 @@ struct HostTiming {
             print("BENCH   playback + an export:", stats(busy), String(format: "(%.1f %% of the block at p99; %d of %d blocks over a whole block)", busy.sorted()[Int(Double(busy.count) * 0.99)] / block * 100, busy.filter { $0 > block }.count, busy.count))
         }
     }
+}
+
+
+/// The plugin error thrown and its words (its key is checked by the strings check, not here).
+func expectPluginError(_ english: String, sourceLocation: SourceLocation = #_sourceLocation, _ body: () throws -> Void) {
+    let error = #expect(throws: PluginError.self, sourceLocation: sourceLocation) { try body() }
+    #expect(error?.errorDescription == english, sourceLocation: sourceLocation)
 }

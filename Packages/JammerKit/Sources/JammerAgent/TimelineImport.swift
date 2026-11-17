@@ -13,7 +13,7 @@ public enum TimelineImport {
         let route = formats == nil ? "import/timeline" : "import/fcpxml"
         let fields = formats == nil ? ["path", "rate"] : ["path"]
         if let unknown = body.keys.first(where: { !fields.contains($0) && $0 != AgentAPI.rationale }) {
-            throw BatchError("bad_request", "Unknown field \"\(unknown)\". \(route) takes: \(fields.joined(separator: ", ")).")
+            throw BatchError("bad_request", Said("error.batch.unknown_field_1_2", "Unknown field \"%1$@\". %2$@ takes: %3$@.", "\(unknown)", "\(route)", "\(fields.joined(separator: ", "))"))
         }
         let readable = formats ?? extensions
         guard let path = body["path"] as? String, path.hasPrefix("/") else {
@@ -25,42 +25,42 @@ public enum TimelineImport {
         }
         var rate: Timecode.Rate?
         if let r = body["rate"] {
-            guard ext == "edl" else { throw BatchError("bad_request", "rate is for an EDL only: the other formats say their own times.") }
+            guard ext == "edl" else { throw BatchError("bad_request", Said("error.batch.rate_edl_only_other", "rate is for an EDL only: the other formats say their own times.")) }
             guard let s = r as? String, let v = Timecode.Rate(rawValue: s) else {
-                throw BatchError("bad_request", "rate must be one of \(Timecode.Rate.allCases.map(\.rawValue).joined(separator: ", ")).")
+                throw BatchError("bad_request", Said("error.batch.rate_one", "rate must be one of %@.", "\(Timecode.Rate.allCases.map(\.rawValue).joined(separator: ", "))"))
             }
             rate = v
         }
         let url = FolderPolicy.canonical(path)
         func allowed(_ u: URL) -> Bool { policy?.allows(u) ?? true }
         guard allowed(url) else {
-            throw BatchError("folder_not_allowed", "\(path) isn't in a folder agents may use. The user allows folders in Jämmer › Settings… › Agents.")
+            throw BatchError("folder_not_allowed", Said("error.batch.isn_t_folder_agents", "%@ isn't in a folder agents may use. The user allows folders in Jämmer › Settings… › Agents.", "\(path)"))
         }
         var isDirectory: ObjCBool = false
-        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) else { throw BatchError("not_found", "There is no file at \(path).") }
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) else { throw BatchError("not_found", Said("error.batch.there_file", "There is no file at %@.", "\(path)")) }
         let base = url.deletingLastPathComponent(), name = url.deletingPathExtension().lastPathComponent
         let timeline: FCPXMLImport.Timeline
         do {
             switch ext {
             case "edl":
-                guard let data = FileManager.default.contents(atPath: url.path), data.count < 32 << 20 else { throw FCPXMLImport.ImportError.unreadable("it is far larger than an edit decision list.") }
+                guard let data = FileManager.default.contents(atPath: url.path), data.count < 32 << 20 else { throw FCPXMLImport.ImportError.unreadable(Said("error.import.far_larger_than_edit", "it is far larger than an edit decision list.")) }
                 // Lists are ASCII in practice; older ones Latin-1.
                 let text = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1) ?? ""
                 timeline = try EDL.read(text, base: base, name: name, rate: rate)
             case "otio":
-                guard let data = FileManager.default.contents(atPath: url.path) else { throw FCPXMLImport.ImportError.unreadable("it couldn't be read.") }
+                guard let data = FileManager.default.contents(atPath: url.path) else { throw FCPXMLImport.ImportError.unreadable(Said("error.import.couldn_t_read", "it couldn't be read.")) }
                 timeline = try OTIO.read(data, base: base, name: name)
             case "dawproject":
-                guard let data = try? Data(contentsOf: url, options: .mappedIfSafe) else { throw FCPXMLImport.ImportError.unreadable("it couldn't be read.") }
+                guard let data = try? Data(contentsOf: url, options: .mappedIfSafe) else { throw FCPXMLImport.ImportError.unreadable(Said("error.import.couldn_t_read", "it couldn't be read.")) }
                 timeline = try DAWproject.read(data, base: base, name: name, unpackTo: unpackTo.appending(path: UUID().uuidString))
             default:
                 // Final Cut's own bundles (.fcpxmld) keep the XML inside.
                 timeline = try FCPXMLImport.read(isDirectory.boolValue ? url.appending(path: "Info.fcpxml") : url)
             }
-        } catch let error as FCPXMLImport.ImportError { throw BatchError(error.reason, error.localizedDescription) }
+        } catch let error as FCPXMLImport.ImportError { throw BatchError(error.reason, wrapping: error) }
         let own = FolderPolicy.canonical(unpackTo.path).path + "/"
         for media in timeline.media where !FolderPolicy.canonical(media.path).path.hasPrefix(own) && !allowed(FolderPolicy.canonical(media.path)) {
-            throw BatchError("folder_not_allowed", "The timeline uses \(media.path), which isn't in a folder agents may use. The user allows folders in Jämmer › Settings… › Agents.")
+            throw BatchError("folder_not_allowed", Said("error.batch.timeline_uses_which_isn", "The timeline uses %@, which isn't in a folder agents may use. The user allows folders in Jämmer › Settings… › Agents.", "\(media.path)"))
         }
         return timeline
     }
@@ -82,20 +82,20 @@ public enum TimelineImport {
 /// `POST /api/v1/documents/{id}/export/timeline`: the document's clips as an EDL, OTIO or DAWproject file,
 /// as bytes. Nothing is rendered: the file names the audio files the clips play.
 public enum TimelineExport {
-    public struct File: Sendable { public var data: Data; public var contentType: String; public var fileExtension: String; public var warnings: [String] }
+    public struct File: Sendable { public var data: Data; public var contentType: String; public var fileExtension: String; public var warnings: [Said] }
 
     public static func make(_ project: Project, name: String, body: [String: Any], appVersion: String) throws -> File {
         if let unknown = body.keys.first(where: { $0 != "format" && $0 != AgentAPI.rationale }) {
-            throw BatchError("bad_request", "Unknown field \"\(unknown)\". export/timeline takes: format.")
+            throw BatchError("bad_request", Said("error.batch.unknown_field_export_timeline", "Unknown field \"%@\". export/timeline takes: format.", "\(unknown)"))
         }
         guard let s = body["format"] as? String, let format = TimelineFormat(rawValue: s.lowercased()) else {
-            throw BatchError("bad_request", "format must be one of \(TimelineFormat.allCases.map(\.rawValue).joined(separator: ", ")).")
+            throw BatchError("bad_request", Said("error.batch.format_one", "format must be one of %@.", "\(TimelineFormat.allCases.map(\.rawValue).joined(separator: ", "))"))
         }
         return try make(project, name: name, format: format, appVersion: appVersion)
     }
 
     public static func make(_ project: Project, name: String, format: TimelineFormat, appVersion: String) throws -> File {
-        guard project.tracks.contains(where: { !$0.clips.isEmpty }) else { throw BatchError("empty", "The document has no clips to write.") }
+        guard project.tracks.contains(where: { !$0.clips.isEmpty }) else { throw BatchError("empty", Said("error.batch.document_has_clips_write", "The document has no clips to write.")) }
         let t = ExchangeTimeline(project, name: name)
         switch format {
         case .edl:

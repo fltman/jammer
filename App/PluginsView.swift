@@ -143,7 +143,7 @@ struct PluginsSheet: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(insert.name)
                 if let f = session.inserts.failure(insert.id) {
-                    StateLine(kind: .error, text: f.localizedDescription)
+                    StateLine(kind: .error, text: L10n.error(f))
                 }
             }
             Spacer()
@@ -340,7 +340,7 @@ struct HostedPluginView: View {
             problem = nil
             changed()
         } catch {
-            problem = error.localizedDescription
+            problem = L10n.error(error)
         }
     }
 }

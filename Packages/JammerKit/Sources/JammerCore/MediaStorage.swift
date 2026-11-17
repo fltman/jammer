@@ -197,13 +197,15 @@ public enum MediaStorage {
         public var dryRun: Bool
     }
 
-    public enum Refusal: Error, LocalizedError, Equatable {
+    public enum Refusal: Error, LocalizedError, Equatable, KeyedFailure {
         case notFreeable([String])
-        public var errorDescription: String? {
+        var said: Said {
             switch self {
-            case .notFreeable(let names): "These can't be moved to the Trash, because they are in use, were not made by Jämmer, or belong to a project that can't be read just now: \(names.joined(separator: ", "))."
+            case .notFreeable(let names): Said("error.storage.notFreeable", "These can't be moved to the Trash, because they are in use, were not made by Jämmer, or belong to a project that can't be read just now: %@.", names.joined(separator: ", "))
             }
         }
+        public var errorDescription: String? { said.text }
+        public var keyed: KeyedMessage? { said.keyed }
     }
 
     /// Moves files to the Trash (nothing is ever deleted): only ones that the folder, read again here

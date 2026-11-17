@@ -24,7 +24,7 @@ public enum APACWriter {
     /// professional AV offline encoded content such as stereo and multichannel"; DRC configuration Movie.
     public static func export(_ plan: RenderPlan, range: Range<Frame>, to url: URL, progress: (Double) -> Bool = { _ in true }) throws {
         guard let layout = ChannelLayout.standard(channels: plan.channels), let tag = tag(layout) else {
-            throw ExportError.unsupported("APAC is written for 5.1, 7.1, 7.1.4 and Ambisonics documents.")
+            throw ExportError.unsupported(Said("error.export.apac_written_5_1", "APAC is written for 5.1, 7.1, 7.1.4 and Ambisonics documents."))
         }
         try? FileManager.default.removeItem(at: url)
         let sr = plan.sampleRate, ch = plan.channels
@@ -34,7 +34,7 @@ public enum APACWriter {
         dst.mFormatID = kAudioFormatAPAC
         var size = UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
         var status = AudioFormatGetProperty(kAudioFormatProperty_FormatInfo, 0, nil, &size, &dst)
-        guard status == noErr else { throw ExportError.unsupported("This Mac can't write APAC (it needs macOS 26 or later).") }
+        guard status == noErr else { throw ExportError.unsupported(Said("error.export.mac_can_t_write", "This Mac can't write APAC (it needs macOS 26 or later).")) }
         var channelLayout = AudioChannelLayout(mChannelLayoutTag: tag, mChannelBitmap: [], mNumberChannelDescriptions: 0, mChannelDescriptions: AudioChannelDescription())
         var ref: ExtAudioFileRef?
         status = ExtAudioFileCreateWithURL(url as CFURL, kAudioFileMPEG4Type, &dst, &channelLayout, AudioFileFlags.eraseFile.rawValue, &ref)

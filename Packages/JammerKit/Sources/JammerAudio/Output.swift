@@ -150,9 +150,9 @@ public final class AudioOutput {
             }
         }
         if let procID {
-            try check(AudioDeviceStart(device, procID), "start the output device")
+            try check(AudioDeviceStart(device, procID), Said("output.do.start_the_output_device", "start the output device"))
         } else if let unit {
-            try check(AudioOutputUnitStart(unit), "start the output")
+            try check(AudioOutputUnitStart(unit), Said("output.do.start_the_output", "start the output"))
         }
         isRunning = true
     }
@@ -181,16 +181,16 @@ public final class AudioOutput {
     }
 
     private func openHAL() throws {
-        guard let id = Self.defaultDevice() else { throw OutputError("No default output device.") }
+        guard let id = Self.defaultDevice() else { throw OutputError(Said("error.output.default_output_device", "No default output device.")) }
         let streams = try Self.outputChannels(id)
-        guard !streams.isEmpty, try Self.outputIsFloat32(id) else { throw OutputError("The output device doesn't take float audio.") }
+        guard !streams.isEmpty, try Self.outputIsFloat32(id) else { throw OutputError(Said("error.output.output_device_doesn_t", "The output device doesn't take float audio.")) }
         let rate = try Self.nominalRate(id)
         let slots = Self.slots(projectChannels: channels, streams: streams, stereo: Self.preferredStereo(id))
-        guard !slots.isEmpty else { throw OutputError("The output device has no channels.") }
+        guard !slots.isEmpty else { throw OutputError(Said("error.output.output_device_has_channels", "The output device has no channels.")) }
         var b = slots.map(\.buffer), c = slots.map(\.channel), s = slots.map(\.source), g = slots.map(\.gain)
         jm_engine_set_output(engine, rate, &b, &c, &s, &g, Int32(slots.count))
         var proc: AudioDeviceIOProcID?
-        try check(AudioDeviceCreateIOProcID(id, jm_engine_ioproc, UnsafeMutableRawPointer(engine), &proc), "connect to the output device")
+        try check(AudioDeviceCreateIOProcID(id, jm_engine_ioproc, UnsafeMutableRawPointer(engine), &proc), Said("output.do.connect_to_the_output_device", "connect to the output device"))
         device = id
         procID = proc
         path = .hal
@@ -213,19 +213,19 @@ public final class AudioOutput {
         spatialMixer = mixer
         var desc = AudioComponentDescription(componentType: kAudioUnitType_Output, componentSubType: kAudioUnitSubType_DefaultOutput,
                                              componentManufacturer: kAudioUnitManufacturer_Apple, componentFlags: 0, componentFlagsMask: 0)
-        guard let comp = AudioComponentFindNext(nil, &desc) else { throw OutputError("No default output device.") }
+        guard let comp = AudioComponentFindNext(nil, &desc) else { throw OutputError(Said("error.output.default_output_device", "No default output device.")) }
         var u: AudioUnit?
-        try check(AudioComponentInstanceNew(comp, &u), "open the output")
-        guard let out = u else { throw OutputError("No default output device.") }
+        try check(AudioComponentInstanceNew(comp, &u), Said("output.do.open_the_output", "open the output"))
+        guard let out = u else { throw OutputError(Said("error.output.default_output_device", "No default output device.")) }
         unit = out
         var stereo = Binaural.format(2, sampleRate)
         try check(AudioUnitSetProperty(out, kAudioUnitProperty_StreamFormat, kAudioUnitScope_Input, 0, &stereo,
-                                       UInt32(MemoryLayout<AudioStreamBasicDescription>.size)), "set the format")
+                                       UInt32(MemoryLayout<AudioStreamBasicDescription>.size)), Said("output.do.set_the_format", "set the format"))
         var connection = AudioUnitConnection(sourceAudioUnit: mixer, sourceOutputNumber: 0, destInputNumber: 0)
         try check(AudioUnitSetProperty(out, kAudioUnitProperty_MakeConnection, kAudioUnitScope_Input, 0, &connection,
-                                       UInt32(MemoryLayout<AudioUnitConnection>.size)), "connect the spatial mixer")
-        try check(AudioUnitInitialize(mixer), "initialize the spatial mixer")
-        try check(AudioUnitInitialize(out), "initialize the output")
+                                       UInt32(MemoryLayout<AudioUnitConnection>.size)), Said("output.do.connect_the_spatial_mixer", "connect the spatial mixer"))
+        try check(AudioUnitInitialize(mixer), Said("output.do.initialize_the_spatial_mixer", "initialize the spatial mixer"))
+        try check(AudioUnitInitialize(out), Said("output.do.initialize_the_output", "initialize the output"))
         path = headphones ? .binaural : .spatialSpeakers
         deviceName = Self.defaultDevice().flatMap(Self.name)
     }
@@ -313,7 +313,7 @@ public final class AudioOutput {
     nonisolated static func nominalRate(_ id: AudioObjectID) throws -> Double {
         var rate: Float64 = 0
         let status = get(id, kAudioDevicePropertyNominalSampleRate, &rate)
-        guard status == noErr, rate > 0 else { throw OutputError("Couldn't read the device's sample rate (error \(status)).") }
+        guard status == noErr, rate > 0 else { throw OutputError(Said("error.output.couldn_t_read_device", "Couldn't read the device's sample rate (error %@).", "\(status)")) }
         return rate
     }
 
@@ -332,10 +332,10 @@ public final class AudioOutput {
         var address = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyStreamConfiguration,
                                                  mScope: kAudioObjectPropertyScopeOutput, mElement: kAudioObjectPropertyElementMain)
         var size: UInt32 = 0
-        try check(AudioObjectGetPropertyDataSize(id, &address, 0, nil, &size), "read the device layout")
+        try check(AudioObjectGetPropertyDataSize(id, &address, 0, nil, &size), Said("output.do.read_the_device_layout", "read the device layout"))
         let raw = UnsafeMutableRawPointer.allocate(byteCount: Int(size), alignment: MemoryLayout<AudioBufferList>.alignment)
         defer { raw.deallocate() }
-        try check(AudioObjectGetPropertyData(id, &address, 0, nil, &size, raw), "read the device layout")
+        try check(AudioObjectGetPropertyData(id, &address, 0, nil, &size, raw), Said("output.do.read_the_device_layout", "read the device layout"))
         let list = UnsafeMutableAudioBufferListPointer(raw.assumingMemoryBound(to: AudioBufferList.self))
         return list.map { Int($0.mNumberChannels) }
     }
@@ -345,9 +345,9 @@ public final class AudioOutput {
         var address = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyStreams, mScope: kAudioObjectPropertyScopeOutput,
                                                  mElement: kAudioObjectPropertyElementMain)
         var size: UInt32 = 0
-        try check(AudioObjectGetPropertyDataSize(id, &address, 0, nil, &size), "read the device streams")
+        try check(AudioObjectGetPropertyDataSize(id, &address, 0, nil, &size), Said("output.do.read_the_device_streams", "read the device streams"))
         var streams = [AudioStreamID](repeating: 0, count: Int(size) / MemoryLayout<AudioStreamID>.size)
-        try check(AudioObjectGetPropertyData(id, &address, 0, nil, &size, &streams), "read the device streams")
+        try check(AudioObjectGetPropertyData(id, &address, 0, nil, &size, &streams), Said("output.do.read_the_device_streams", "read the device streams"))
         return !streams.isEmpty && streams.allSatisfy { s in
             var f = AudioStreamBasicDescription()
             guard get(s, kAudioStreamPropertyVirtualFormat, &f) == noErr else { return false }
@@ -376,10 +376,10 @@ public final class AudioOutput {
     private func makeUnit() throws -> AudioUnit {
         var desc = AudioComponentDescription(componentType: kAudioUnitType_Output, componentSubType: kAudioUnitSubType_DefaultOutput,
                                              componentManufacturer: kAudioUnitManufacturer_Apple, componentFlags: 0, componentFlagsMask: 0)
-        guard let comp = AudioComponentFindNext(nil, &desc) else { throw OutputError("No default output device.") }
+        guard let comp = AudioComponentFindNext(nil, &desc) else { throw OutputError(Said("error.output.default_output_device", "No default output device.")) }
         var u: AudioUnit?
-        try check(AudioComponentInstanceNew(comp, &u), "open the output")
-        guard let unit = u else { throw OutputError("No default output device.") }
+        try check(AudioComponentInstanceNew(comp, &u), Said("output.do.open_the_output", "open the output"))
+        guard let unit = u else { throw OutputError(Said("error.output.default_output_device", "No default output device.")) }
         // The unit converts rate and layout itself, so the engine runs at the project rate.
         var none: Int32 = 0
         jm_engine_set_output(engine, sampleRate, &none, &none, &none, nil, 0)
@@ -390,21 +390,22 @@ public final class AudioOutput {
             mBytesPerPacket: 4, mFramesPerPacket: 1, mBytesPerFrame: 4, mChannelsPerFrame: UInt32(channels),
             mBitsPerChannel: 32, mReserved: 0)
         try check(AudioUnitSetProperty(unit, kAudioUnitProperty_StreamFormat, kAudioUnitScope_Input, 0, &format,
-                                       UInt32(MemoryLayout<AudioStreamBasicDescription>.size)), "set the format")
+                                       UInt32(MemoryLayout<AudioStreamBasicDescription>.size)), Said("output.do.set_the_format", "set the format"))
         var callback = AURenderCallbackStruct(inputProc: jm_engine_au_render, inputProcRefCon: UnsafeMutableRawPointer(engine))
         try check(AudioUnitSetProperty(unit, kAudioUnitProperty_SetRenderCallback, kAudioUnitScope_Input, 0, &callback,
-                                       UInt32(MemoryLayout<AURenderCallbackStruct>.size)), "connect the engine")
-        try check(AudioUnitInitialize(unit), "initialize the output")
+                                       UInt32(MemoryLayout<AURenderCallbackStruct>.size)), Said("output.do.connect_the_engine", "connect the engine"))
+        try check(AudioUnitInitialize(unit), Said("output.do.initialize_the_output", "initialize the output"))
         return unit
     }
 }
 
-private func check(_ status: OSStatus, _ what: String) throws {
-    guard status == noErr else { throw OutputError("Couldn't \(what) (error \(status)).") }
+private func check(_ status: OSStatus, _ what: Said) throws {
+    guard status == noErr else { throw OutputError(Said("error.output.couldnt", "Couldn't %2$@ (error %1$@).", "\(status)", inner: what)) }
 }
 
-public struct OutputError: Error, LocalizedError {
+public struct OutputError: Error, LocalizedError, KeyedFailure {
     public let message: String
-    init(_ m: String) { message = m }
+    public let keyed: KeyedMessage?
+    init(_ said: Said) { message = said.text; keyed = said.keyed }
     public var errorDescription: String? { message }
 }

@@ -33,31 +33,31 @@ public enum Binaural {
     public static func makeMixer(layout: ChannelLayout, rate: Double, callback: AURenderCallbackStruct, headphones: Bool = true) throws -> AudioUnit {
         var desc = AudioComponentDescription(componentType: kAudioUnitType_Mixer, componentSubType: kAudioUnitSubType_SpatialMixer,
                                              componentManufacturer: kAudioUnitManufacturer_Apple, componentFlags: 0, componentFlagsMask: 0)
-        guard let comp = AudioComponentFindNext(nil, &desc) else { throw OutputError("This Mac has no spatial mixer.") }
+        guard let comp = AudioComponentFindNext(nil, &desc) else { throw OutputError(Said("error.output.mac_has_spatial_mixer", "This Mac has no spatial mixer.")) }
         var u: AudioUnit?
-        try binauralCheck(AudioComponentInstanceNew(comp, &u), "open the spatial mixer")
-        guard let mixer = u else { throw OutputError("This Mac has no spatial mixer.") }
-        func set<T>(_ id: AudioUnitPropertyID, _ scope: AudioUnitScope, _ value: T, _ what: String) throws {
+        try binauralCheck(AudioComponentInstanceNew(comp, &u), Said("output.do.open_the_spatial_mixer", "open the spatial mixer"))
+        guard let mixer = u else { throw OutputError(Said("error.output.mac_has_spatial_mixer", "This Mac has no spatial mixer.")) }
+        func set<T>(_ id: AudioUnitPropertyID, _ scope: AudioUnitScope, _ value: T, _ what: Said) throws {
             var v = value
             try binauralCheck(AudioUnitSetProperty(mixer, id, scope, 0, &v, UInt32(MemoryLayout<T>.size)), what)
         }
-        try set(kAudioUnitProperty_ElementCount, kAudioUnitScope_Input, UInt32(1), "give the spatial mixer one input")
-        try set(kAudioUnitProperty_StreamFormat, kAudioUnitScope_Input, format(layout.channels, rate), "set the bed's format")
-        try set(kAudioUnitProperty_StreamFormat, kAudioUnitScope_Output, format(2, rate), "set the headphones' format")
+        try set(kAudioUnitProperty_ElementCount, kAudioUnitScope_Input, UInt32(1), Said("output.do.give_the_spatial_mixer_one_input", "give the spatial mixer one input"))
+        try set(kAudioUnitProperty_StreamFormat, kAudioUnitScope_Input, format(layout.channels, rate), Said("output.do.set_the_bed_s_format", "set the bed's format"))
+        try set(kAudioUnitProperty_StreamFormat, kAudioUnitScope_Output, format(2, rate), Said("output.do.set_the_headphones_format", "set the headphones' format"))
         var channelLayout = AudioChannelLayout(mChannelLayoutTag: tag(layout), mChannelBitmap: [], mNumberChannelDescriptions: 0,
                                                mChannelDescriptions: AudioChannelDescription())
         try binauralCheck(AudioUnitSetProperty(mixer, kAudioUnitProperty_AudioChannelLayout, kAudioUnitScope_Input, 0, &channelLayout,
-                                               UInt32(MemoryLayout<AudioChannelLayout>.size)), "set the bed's loudspeakers")
-        try set(kAudioUnitProperty_SpatialMixerSourceMode, kAudioUnitScope_Input, AUSpatialMixerSourceMode.spatialMixerSourceMode_AmbienceBed.rawValue, "make the input a bed")
-        try set(kAudioUnitProperty_SpatializationAlgorithm, kAudioUnitScope_Input, AUSpatializationAlgorithm.spatializationAlgorithm_UseOutputType.rawValue, "choose the rendering")
+                                               UInt32(MemoryLayout<AudioChannelLayout>.size)), Said("output.do.set_the_bed_s_loudspeakers", "set the bed's loudspeakers"))
+        try set(kAudioUnitProperty_SpatialMixerSourceMode, kAudioUnitScope_Input, AUSpatialMixerSourceMode.spatialMixerSourceMode_AmbienceBed.rawValue, Said("output.do.make_the_input_a_bed", "make the input a bed"))
+        try set(kAudioUnitProperty_SpatializationAlgorithm, kAudioUnitScope_Input, AUSpatializationAlgorithm.spatializationAlgorithm_UseOutputType.rawValue, Said("output.do.choose_the_rendering", "choose the rendering"))
         try set(kAudioUnitProperty_SpatialMixerOutputType, kAudioUnitScope_Global,
                 headphones ? AUSpatialMixerOutputType.spatialMixerOutputType_Headphones.rawValue : AUSpatialMixerOutputType.spatialMixerOutputType_ExternalSpeakers.rawValue,
-                "choose headphones or loudspeakers")
-        try set(kAudioUnitProperty_SetRenderCallback, kAudioUnitScope_Input, callback, "connect the engine")
+                Said("output.do.choose_headphones_or_loudspeakers", "choose headphones or loudspeakers"))
+        try set(kAudioUnitProperty_SetRenderCallback, kAudioUnitScope_Input, callback, Said("output.do.connect_the_engine", "connect the engine"))
         return mixer
     }
 }
 
-func binauralCheck(_ status: OSStatus, _ what: String) throws {
-    guard status == noErr else { throw OutputError("Couldn't \(what) (error \(status)).") }
+func binauralCheck(_ status: OSStatus, _ what: Said) throws {
+    guard status == noErr else { throw OutputError(Said("error.output.couldnt", "Couldn't %2$@ (error %1$@).", "\(status)", inner: what)) }
 }

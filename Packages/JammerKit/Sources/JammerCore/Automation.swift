@@ -85,21 +85,21 @@ public enum Automation {
         case .elevation: SurroundPosition.elevationRange
         }
     }
-    static func unit(of param: AutomationLane.Param) -> String {
+    static func unit(of param: AutomationLane.Param) -> Said {
         switch param {
-        case .gain, .send: "a gain is \(Int(gainRange.lowerBound)) to \(Int(gainRange.upperBound)) dB"
-        case .pan: "a pan is −1 (left) to 1 (right)"
-        case .mute: "a mute is 1 (muted) or 0 (heard)"
-        case .plugin: "a plugin's parameter has its own range"
-        case .azimuth: "an azimuth is −360 to 360 degrees, positive to the left (past ±180 it goes on round behind)"
-        case .elevation: "an elevation is 0 to 90 degrees up"
+        case .gain, .send: Said("automation.unit.gain", "a gain is %1$@ to %2$@ dB", "\(Int(gainRange.lowerBound))", "\(Int(gainRange.upperBound))")
+        case .pan: Said("automation.unit.pan", "a pan is −1 (left) to 1 (right)")
+        case .mute: Said("automation.unit.mute", "a mute is 1 (muted) or 0 (heard)")
+        case .plugin: Said("automation.unit.plugin", "a plugin's parameter has its own range")
+        case .azimuth: Said("automation.unit.azimuth", "an azimuth is −360 to 360 degrees, positive to the left (past ±180 it goes on round behind)")
+        case .elevation: Said("automation.unit.elevation", "an elevation is 0 to 90 degrees up")
         }
     }
     /// The longest timeline a point may be on: 24 hours at 192 kHz.
     public static let maxFrame: Frame = 24 * 3600 * 192_000
 
     public enum Failure: Error, LocalizedError, Equatable {
-        case noStrip(String), notBuilt(String), badValue(String), tooMany, mono, noPan, noSend(String), groupHasNoPan, noInsert
+        case noStrip(String), notBuilt(String), badValue(Said), tooMany, mono, noPan, noSend(String), groupHasNoPan, noInsert
         /// A place (azimuth, elevation) automated on something that has none: in mono or stereo, or on anything but a track.
         case noPlace(String)
         /// Pan automation in a document wider than stereo. The value is the layout.
@@ -128,7 +128,7 @@ public enum Automation {
             case .groupHasNoPan: "a VCA group has a level and a mute to automate, not a pan or a send."
             case .noSend(let to): "that strip has no send to \(to); make the send first (set_send)."
             case .noInsert: "that strip has no plugin with that id; a parameter lane names a plugin on the strip (`insert`) and one of its parameters (`parameter`)."
-            case .badValue(let m): m
+            case .badValue(let m): m.text
             case .tooMany: "a lane can have \(Automation.maxPoints) points at most."
             }
         }
@@ -144,7 +144,7 @@ public enum Automation {
             case .groupHasNoPan: KeyedMessage("error.automation.groupHasNoPan")
             case .noSend(let to): KeyedMessage("error.automation.noSend", ["\(to)"])
             case .noInsert: KeyedMessage("error.automation.noInsert")
-            case .badValue: nil
+            case .badValue(let m): m.keyed
             case .tooMany: KeyedMessage("error.automation.tooMany", ["\(Automation.maxPoints)"])
             }
         }
@@ -264,14 +264,14 @@ extension Project {
         if param == .plugin {
             guard vca(strip) == nil, let insert, hasInsert(insert, on: strip), parameter?.isEmpty == false else { throw Automation.Failure.noInsert }
         } else if insert != nil || parameter != nil {
-            throw Automation.Failure.badValue("`insert` and `parameter` name a plugin's parameter and go with param plugin only.")
+            throw Automation.Failure.badValue(Said("error.value.insert_parameter_name_plugin", "`insert` and `parameter` name a plugin's parameter and go with param plugin only."))
         }
         if strip == Master.id, param != .gain, param != .plugin { throw Automation.Failure.noPan }
         if vca(strip) != nil, param == .pan || param == .send { throw Automation.Failure.groupHasNoPan }
         if param == .send {
             guard let to, hasSend(from: strip, to: to) else { throw Automation.Failure.noSend(to.flatMap { bus($0)?.name } ?? "that bus") }
         } else if to != nil {
-            throw Automation.Failure.badValue("`to` names a send's bus and goes with a send lane only.")
+            throw Automation.Failure.badValue(Said("error.value.names_send_s_bus", "`to` names a send's bus and goes with a send lane only."))
         }
         if param == .pan, channels != 2 { throw channels == 1 ? Automation.Failure.mono : Automation.Failure.wide(layout.rawValue) }
         if param == .azimuth || param == .elevation {
@@ -284,24 +284,25 @@ extension Project {
         }
         // A mute holds its value until the next point; a level and a pan go in a straight line.
         if let shape, shape != (param == .mute ? .hold : .linear) {
-            throw Automation.Failure.badValue(param == .mute ? "a mute lane holds each value until the next point (shape hold)." : "a \(param.rawValue) lane goes in a straight line between points (shape linear).")
+            throw Automation.Failure.badValue(param == .mute ? Said("error.value.muteHold", "a mute lane holds each value until the next point (shape hold).")
+                                              : Said("error.value.linear", "a %@ lane goes in a straight line between points (shape linear).", param.rawValue))
         }
         let allowed = values ?? Automation.range(of: param)
         let end = length
         for (i, p) in new.enumerated() {
             guard p.frame >= 0, p.frame <= end else {
-                throw Automation.Failure.badValue("points[\(i)] is at \(seconds(p.frame)) s, outside the document (0 to \(seconds(end)) s).")
+                throw Automation.Failure.badValue(Said("error.value.points_1_2_s", "points[%1$@] is at %2$@ s, outside the document (0 to %3$@ s).", "\(i)", "\(seconds(p.frame))", "\(seconds(end))"))
             }
             guard p.value.isFinite, allowed.contains(p.value), param != .mute || p.value == 0 || p.value == 1 else {
-                throw Automation.Failure.badValue("points[\(i)] has the value \(p.value); \(values.map { "the parameter takes \($0.lowerBound.formatted()) to \($0.upperBound.formatted())" } ?? Automation.unit(of: param)).")
+                throw Automation.Failure.badValue(Said("error.value.pointValue", "points[%1$@] has the value %2$@; %3$@.", "\(i)", "\(p.value)", inner: values.map { Said("automation.unit.parameter", "the parameter takes %1$@ to %2$@", $0.lowerBound.formatted(), $0.upperBound.formatted()) } ?? Automation.unit(of: param)))
             }
             if let r = range, !r.contains(p.frame) {
-                throw Automation.Failure.badValue("points[\(i)] is at \(seconds(p.frame)) s, outside the range given (\(seconds(r.lowerBound)) to \(seconds(r.upperBound)) s).")
+                throw Automation.Failure.badValue(Said("error.value.points_1_2_s2", "points[%1$@] is at %2$@ s, outside the range given (%3$@ to %4$@ s).", "\(i)", "\(seconds(p.frame))", "\(seconds(r.lowerBound))", "\(seconds(r.upperBound))"))
             }
         }
         let sorted = new.sorted { $0.frame < $1.frame }
         for (a, b) in zip(sorted, sorted.dropFirst()) where a.frame == b.frame {
-            throw Automation.Failure.badValue("two points are at \(seconds(a.frame)) s; a lane has one value at a time.")
+            throw Automation.Failure.badValue(Said("error.value.two_points_s_lane", "two points are at %@ s; a lane has one value at a time.", "\(seconds(a.frame))"))
         }
         var lane = lane(strip: strip, param: param, to: to, insert: insert, parameter: parameter)
             ?? AutomationLane(strip: strip, param: param, to: to, insert: insert, parameter: parameter, shape: param == .mute ? .hold : .linear, points: [])

@@ -243,7 +243,7 @@ extension Alignment {
         var outFmt = inFmt
         outFmt.mSampleRate = to
         var conv: AudioConverterRef?
-        guard AudioConverterNew(&inFmt, &outFmt, &conv) == noErr, let conv else { throw ExportError.unsupported("Can't resample.") }
+        guard AudioConverterNew(&inFmt, &outFmt, &conv) == noErr, let conv else { throw ExportError.unsupported(Said("error.export.can_t_resample", "Can't resample.")) }
         defer { AudioConverterDispose(conv) }
         var complexity = kAudioConverterSampleRateConverterComplexity_Mastering
         AudioConverterSetProperty(conv, kAudioConverterSampleRateConverterComplexity, 4, &complexity)
@@ -280,7 +280,7 @@ extension Project {
     /// fast) into a new file, anchored where it starts, so it stays in sync to the end.
     public func correctingDrift(of track: UUID, ppm: Double, pool: SourcePool, media: URL) throws -> Project {
         guard let t = tracks.firstIndex(where: { $0.id == track }), let first = tracks[t].clips.first?.start else { throw EffectError.nothingInRange }
-        guard abs(ppm) < 2_000 else { throw EffectError.badValue("A drift of \(ppm) ppm is beyond what a recorder does; check the measurement.") }
+        guard abs(ppm) < 2_000 else { throw EffectError.badValue(Said("error.value.drift_ppm_beyond_what", "A drift of %@ ppm is beyond what a recorder does; check the measurement.", "\(ppm)")) }
         let end = tracks[t].end
         var solo = self
         solo.tracks = [tracks[t]]

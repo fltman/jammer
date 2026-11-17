@@ -651,6 +651,16 @@ public struct StepFailure: Error, LocalizedError {
         self.keyed = keyed
     }
     public var errorDescription: String? { message }
+    /// A step's name and another error's reason ("set_tempo: …"): in the window by that error's own key when it
+    /// has one; otherwise its words as they are (a plugin host's own words stay its own).
+    public init(_ op: String, wrapping error: Error, reason: String? = nil) {
+        let said = Said("step.any.wrapped", "%1$@: %2$@", op, error.localizedDescription)
+        self.init(said.text, reason: reason, keyed: (error as? KeyedFailure)?.keyed ?? said.keyed)
+    }
+    /// A failure said by its key in the window and in its English to the API.
+    public init(_ said: Said, reason: String? = nil, details: [String: Double] = [:]) {
+        self.init(said.text, reason: reason, details: details, keyed: said.keyed)
+    }
 }
 
 public enum StepRunner {
@@ -675,7 +685,7 @@ public enum StepRunner {
                 // BS.1770 has no loudness for a sound field: in an Ambisonics document no step acts on a loudness number.
                 if state.project.layout.isAmbisonic, ["loudness_preset", "limit"].contains(step.op)
                     || (step.op == "normalize" && (step.params["target"]?.string ?? "loudness") == "loudness") {
-                    throw StepFailure("\(step.op): loudness isn't measured in an Ambisonics document (ITU-R BS.1770 has no weighting for a sound field). Export it for loudspeakers or headphones and measure that.", reason: "not_available")
+                    throw StepFailure(Said("step.any.loudness_isn_t_measured", "%@: loudness isn't measured in an Ambisonics document (ITU-R BS.1770 has no weighting for a sound field). Export it for loudspeakers or headphones and measure that.", "\(step.op)"), reason: "not_available")
                 }
                 let info = try apply(step, to: &state, measure: measure)
                 // A track moved by itself (lined up, stretched) under automation that stays on the timeline:
@@ -690,7 +700,7 @@ public enum StepRunner {
                 // A frozen strip is a file of what it was: nothing may change what that file was made from.
                 if let name = before.frozenViolation(in: state.project) {
                     state.project = before
-                    throw StepFailure("\(step.op): " + (FreezeError.frozen(name).errorDescription ?? ""), reason: "frozen")
+                    throw StepFailure(step.op, wrapping: FreezeError.frozen(name), reason: "frozen")
                 }
                 var result = StepResult(op: step.op, status: .done, info: info, ids: state.made)
                 result.warnings = state.warnings
@@ -722,91 +732,97 @@ public enum StepRunner {
         let p = step.params
         let name = p["strip"]?.string ?? ""
         guard name == "master" || UUID(uuidString: name).map({ id in project.tracks.contains { $0.id == id } || project.bus(id) != nil || project.vca(id) != nil }) == true else {
-            throw StepFailure("\(step.op): \"strip\" is the id of a track, a bus or a VCA group, or \"master\"; there is none with id \(name).", reason: "not_found")
+            throw StepFailure(Said("step.any.strip_id_track_bus", "%1$@: \"strip\" is the id of a track, a bus or a VCA group, or \"master\"; there is none with id %2$@.", "\(step.op)", "\(name)"), reason: "not_found")
         }
-        guard (p["start"] == nil) == (p["end"] == nil) else { throw StepFailure("\(step.op): \"start\" and \"end\" go together.") }
+        guard (p["start"] == nil) == (p["end"] == nil) else { throw StepFailure(Said("step.any.start_end_go_together", "%@: \"start\" and \"end\" go together.", "\(step.op)")) }
         let end = project.seconds(project.length)
         if let a = p["start"]?.double, let b = p["end"]?.double {
-            guard a <= b else { throw StepFailure("\(step.op): \"start\" is after \"end\".") }
-            guard b <= end + 1e-9 else { throw StepFailure("\(step.op): \"end\" is at \(b.plain) s, after the document's end (\(end.plain) s).") }
+            guard a <= b else { throw StepFailure(Said("step.any.start_after_end", "%@: \"start\" is after \"end\".", "\(step.op)")) }
+            guard b <= end + 1e-9 else { throw StepFailure(Said("step.any.end_2_s_after", "%1$@: \"end\" is at %2$@ s, after the document's end (%3$@ s).", "\(step.op)", "\(b.plain)", "\(end.plain)")) }
         }
         let param = AutomationLane.Param(rawValue: p["param"]?.string ?? "gain") ?? .gain
-        if name == "master", param != .gain, param != .plugin, param != .azimuth, param != .elevation { throw StepFailure("\(step.op): \"param\" is gain or plugin for the master; it has no pan, mute or send to automate.") }
+        if name == "master", param != .gain, param != .plugin, param != .azimuth, param != .elevation { throw StepFailure(Said("step.any.param_gain_plugin_master", "%@: \"param\" is gain or plugin for the master; it has no pan, mute or send to automate.", "\(step.op)")) }
         if param == .plugin {
             guard p["insert"]?.string?.isEmpty == false, p["parameter"]?.string?.isEmpty == false else {
-                throw StepFailure("\(step.op): \"insert\" and \"parameter\" are needed with param plugin: the plugin on the strip and which of its parameters.")
+                throw StepFailure(Said("step.any.insert_parameter_needed_param", "%@: \"insert\" and \"parameter\" are needed with param plugin: the plugin on the strip and which of its parameters.", "\(step.op)"))
             }
         } else if p["insert"] != nil || p["parameter"] != nil {
-            throw StepFailure("\(step.op): \"insert\" and \"parameter\" go with param plugin only.")
+            throw StepFailure(Said("step.any.insert_parameter_go_param", "%@: \"insert\" and \"parameter\" go with param plugin only.", "\(step.op)"))
         }
         let stripID = UUID(uuidString: name)
-        if let id = stripID, project.vca(id) != nil, param == .pan || param == .send { throw StepFailure("\(step.op): \"param\" is gain or mute for a VCA group; it has no pan or send.") }
+        if let id = stripID, project.vca(id) != nil, param == .pan || param == .send { throw StepFailure(Said("step.any.param_gain_mute_vca", "%@: \"param\" is gain or mute for a VCA group; it has no pan or send.", "\(step.op)")) }
         if param == .send {
-            guard let to = p["to"]?.string else { throw StepFailure("\(step.op): \"to\" is needed with param send: the id of the bus the send goes to.") }
+            guard let to = p["to"]?.string else { throw StepFailure(Said("step.any.needed_param_send_id", "%@: \"to\" is needed with param send: the id of the bus the send goes to.", "\(step.op)")) }
             guard let toID = UUID(uuidString: to), let from = stripID, project.hasSend(from: from, to: toID) else {
-                throw StepFailure("\(step.op): \"to\": that strip has no send to \(to). Make the send first (set_send).", reason: "not_found")
+                throw StepFailure(Said("step.any.strip_has_send_2", "%1$@: \"to\": that strip has no send to %2$@. Make the send first (set_send).", "\(step.op)", "\(to)"), reason: "not_found")
             }
         } else if p["to"] != nil {
-            throw StepFailure("\(step.op): \"to\" goes with param send only.")
+            throw StepFailure(Said("step.any.goes_param_send_only", "%@: \"to\" goes with param send only.", "\(step.op)"))
         }
         if param == .pan, project.channels != 2 {
-            throw StepFailure("\(step.op): \"param\" can't be pan in a \(project.channels == 1 ? "mono" : project.layout.rawValue) document\(project.channels > 2 ? "; a track's place is azimuth and elevation there" : "").", reason: "needs_stereo")
+            throw StepFailure(project.channels > 2
+                ? Said("step.any.pan_wide", "%1$@: \"param\" can't be pan in a %2$@ document; a track's place is azimuth and elevation there.", "\(step.op)", project.layout.rawValue)
+                : Said("step.any.pan_mono", "%@: \"param\" can't be pan in a mono document.", "\(step.op)"), reason: "needs_stereo")
         }
         if param == .azimuth || param == .elevation {
             guard project.channels > 2 else {
-                throw StepFailure("\(step.op): azimuth and elevation are a track's place in a document wider than stereo; this one is \(project.layout.rawValue). Use pan.", reason: "needs_surround")
+                throw StepFailure(Said("step.any.azimuth_elevation_track_s", "%1$@: azimuth and elevation are a track's place in a document wider than stereo; this one is %2$@. Use pan.", "\(step.op)", "\(project.layout.rawValue)"), reason: "needs_surround")
             }
             let onBus = param == .azimuth && stripID.map { project.bus($0) != nil } == true && !project.layout.isAmbisonic
             guard let id = stripID, project.tracks.contains(where: { $0.id == id }) || onBus else {
-                throw StepFailure("\(step.op): azimuth and elevation are a track's place, and azimuth a bus's turn in a loudspeaker layout; \(name == "master" ? "the master" : "this strip") has neither.", reason: "needs_surround")
+                throw StepFailure(name == "master"
+                    ? Said("step.any.place_master", "%@: azimuth and elevation are a track's place, and azimuth a bus's turn in a loudspeaker layout; the master has neither.", "\(step.op)")
+                    : Said("step.any.place_strip", "%@: azimuth and elevation are a track's place, and azimuth a bus's turn in a loudspeaker layout; this strip has neither.", "\(step.op)"), reason: "needs_surround")
             }
         }
         let allowed = Automation.range(of: param)
         for (i, pair) in (p["points"]?.pairs ?? []).enumerated() {
             guard allowed.contains(pair.1), param != .mute || pair.1 == 0 || pair.1 == 1 else {
-                throw StepFailure("\(step.op): points[\(i)] has the value \(pair.1.plain); " + (param == .gain || param == .send ? "a gain is −96 to 24 dB." : param == .pan ? "a pan is −1 (left) to 1 (right)." : "a mute is 1 (muted) or 0 (heard)."))
+                throw StepFailure(param == .gain || param == .send ? Said("step.any.point_gain", "%1$@: points[%2$@] has the value %3$@; a gain is −96 to 24 dB.", step.op, "\(i)", pair.1.plain)
+                                  : param == .pan ? Said("step.any.point_pan", "%1$@: points[%2$@] has the value %3$@; a pan is −1 (left) to 1 (right).", step.op, "\(i)", pair.1.plain)
+                                  : Said("step.any.point_mute", "%1$@: points[%2$@] has the value %3$@; a mute is 1 (muted) or 0 (heard).", step.op, "\(i)", pair.1.plain))
             }
-            guard pair.0 <= end + 1e-9 else { throw StepFailure("\(step.op): points[\(i)] is at \(pair.0.plain) s, after the document's end (\(end.plain) s).") }
+            guard pair.0 <= end + 1e-9 else { throw StepFailure(Said("step.any.points_2_3_s", "%1$@: points[%2$@] is at %3$@ s, after the document's end (%4$@ s).", "\(step.op)", "\(i)", "\(pair.0.plain)", "\(end.plain)")) }
             if let a = p["start"]?.double, let b = p["end"]?.double, pair.0 < a - 1e-9 || pair.0 > b + 1e-9 {
-                throw StepFailure("\(step.op): points[\(i)] is at \(pair.0.plain) s, outside \"start\"…\"end\" (\(a.plain) to \(b.plain) s).")
+                throw StepFailure(Said("step.any.points_2_3_s2", "%1$@: points[%2$@] is at %3$@ s, outside \"start\"…\"end\" (%4$@ to %5$@ s).", "\(step.op)", "\(i)", "\(pair.0.plain)", "\(a.plain)", "\(b.plain)"))
             }
         }
     }
 
     /// Checks names and required params before anything runs.
     public static func validate(_ step: Step) throws {
-        guard let spec = Operations.named(step.op) else { throw StepFailure("Unknown op \"\(step.op)\".") }
+        guard let spec = Operations.named(step.op) else { throw StepFailure(Said("step.step.unknown_op", "Unknown op \"%@\".", "\(step.op)")) }
         for p in spec.params where p.required && step.params[p.name] == nil {
-            throw StepFailure("\(step.op) needs \"\(p.name)\".")
+            throw StepFailure(Said("step.any.2", "%1$@ needs \"%2$@\".", "\(step.op)", "\(p.name)"))
         }
         for (key, value) in step.params where key != AgentAPI.rationale {
             guard let p = spec.params.first(where: { $0.name == key }) else {
-                throw StepFailure("\(step.op) has no parameter \"\(key)\". It takes: \(spec.params.map(\.name).joined(separator: ", ")).")
+                throw StepFailure(Said("step.any.parameter_2_takes_3", "%1$@ has no parameter \"%2$@\". It takes: %3$@.", "\(step.op)", "\(key)", "\(spec.params.map(\.name).joined(separator: ", "))"))
             }
             switch p.kind {
             case .seconds, .number:
-                guard let d = value.double, d.isFinite else { throw StepFailure("\(step.op): \"\(key)\" must be a number.") }
-                if p.kind == .seconds, d < 0 { throw StepFailure("\(step.op): \"\(key)\" can't be negative.") }
+                guard let d = value.double, d.isFinite else { throw StepFailure(Said("step.any.2_number", "%1$@: \"%2$@\" must be a number.", "\(step.op)", "\(key)")) }
+                if p.kind == .seconds, d < 0 { throw StepFailure(Said("step.any.2_can_t_negative", "%1$@: \"%2$@\" can't be negative.", "\(step.op)", "\(key)")) }
                 if let r = p.range, !r.contains(d) {
-                    throw StepFailure("\(step.op): \"\(key)\" must be between \(r.lowerBound.formatted()) and \(r.upperBound.formatted()).")
+                    throw StepFailure(Said("step.any.2_between_3_4", "%1$@: \"%2$@\" must be between %3$@ and %4$@.", "\(step.op)", "\(key)", "\(r.lowerBound.formatted())", "\(r.upperBound.formatted())"))
                 }
             case .string:
-                guard let s = value.string else { throw StepFailure("\(step.op): \"\(key)\" must be a string.") }
+                guard let s = value.string else { throw StepFailure(Said("step.any.2_string", "%1$@: \"%2$@\" must be a string.", "\(step.op)", "\(key)")) }
                 if let options = p.options, !options.contains(s) {
-                    throw StepFailure("\(step.op): \"\(key)\" must be one of \(options.joined(separator: ", ")).")
+                    throw StepFailure(Said("step.any.2_one_3", "%1$@: \"%2$@\" must be one of %3$@.", "\(step.op)", "\(key)", "\(options.joined(separator: ", "))"))
                 }
             case .boolean:
-                guard case .bool = value else { throw StepFailure("\(step.op): \"\(key)\" must be true or false.") }
+                guard case .bool = value else { throw StepFailure(Said("step.any.2_true_false", "%1$@: \"%2$@\" must be true or false.", "\(step.op)", "\(key)")) }
             case .list:
-                guard value.strings != nil else { throw StepFailure("\(step.op): \"\(key)\" must be a list of strings.") }
+                guard value.strings != nil else { throw StepFailure(Said("step.any.2_list_strings", "%1$@: \"%2$@\" must be a list of strings.", "\(step.op)", "\(key)")) }
             case .numbers:
-                guard let n = value.numbers, n.allSatisfy(\.isFinite) else { throw StepFailure("\(step.op): \"\(key)\" must be a list of numbers.") }
+                guard let n = value.numbers, n.allSatisfy(\.isFinite) else { throw StepFailure(Said("step.any.2_list_numbers", "%1$@: \"%2$@\" must be a list of numbers.", "\(step.op)", "\(key)")) }
             case .pairs:
-                guard let pairs = value.pairs else { throw StepFailure("\(step.op): \"\(key)\" must be a list of [seconds, value] pairs of numbers.") }
+                guard let pairs = value.pairs else { throw StepFailure(Said("step.any.2_list_seconds_value", "%1$@: \"%2$@\" must be a list of [seconds, value] pairs of numbers.", "\(step.op)", "\(key)")) }
                 for (i, pair) in pairs.enumerated() {
-                    if pair.0 < 0 { throw StepFailure("\(step.op): \(key)[\(i)] is at \(pair.0.plain) s; a point can't be before the start.") }
+                    if pair.0 < 0 { throw StepFailure(Said("step.any.2_3_4_s", "%1$@: %2$@[%3$@] is at %4$@ s; a point can't be before the start.", "\(step.op)", "\(key)", "\(i)", "\(pair.0.plain)")) }
                     if let r = p.range, !r.contains(pair.1) {
-                        throw StepFailure("\(step.op): \(key)[\(i)] has the value \(pair.1.plain); it must be between \(r.lowerBound.formatted()) and \(r.upperBound.formatted()).")
+                        throw StepFailure(Said("step.any.2_3_has_value", "%1$@: %2$@[%3$@] has the value %4$@; it must be between %5$@ and %6$@.", "\(step.op)", "\(key)", "\(i)", "\(pair.1.plain)", "\(r.lowerBound.formatted())", "\(r.upperBound.formatted())"))
                     }
                 }
             }
@@ -823,22 +839,22 @@ public enum StepRunner {
         func route(_ v: JSONValue?, _ op: String) throws -> UUID?? {
             guard let text = v?.string else { return nil }
             if text == "master" { return .some(nil) }
-            guard let id = UUID(uuidString: text) else { throw StepFailure("\(op): a route is a bus id or \"master\".", reason: "not_found") }
+            guard let id = UUID(uuidString: text) else { throw StepFailure(Said("step.any.route_bus_id_master", "%@: a route is a bus id or \"master\".", "\(op)"), reason: "not_found") }
             return .some(id)
         }
         func range(wholeIfNone: Bool = false) throws -> Range<Frame> {
             if let a = frames("start"), let b = frames("end") {
-                guard b > a else { throw StepFailure("\(step.op): end must be after start.") }
+                guard b > a else { throw StepFailure(Said("step.any.end_after_start", "%@: end must be after start.", "\(step.op)")) }
                 return a..<b
             }
-            if p["start"] != nil || p["end"] != nil { throw StepFailure("\(step.op): give both start and end, or neither.") }
+            if p["start"] != nil || p["end"] != nil { throw StepFailure(Said("step.any.give_both_start_end", "%@: give both start and end, or neither.", "\(step.op)")) }
             if let sel = s.selection, !sel.isEmpty { return sel }
             if wholeIfNone, project.length > 0 { return 0..<project.length }
-            throw StepFailure("\(step.op) needs a range: pass start and end, or select first.")
+            throw StepFailure(Said("step.any.range_pass_start_end", "%@ needs a range: pass start and end, or select first.", "\(step.op)"))
         }
         func checkInside(_ r: Range<Frame>) throws {
             guard r.lowerBound < project.length else {
-                throw StepFailure("\(step.op): the range starts after the end of the audio (\(String(format: "%.3f", project.duration)) s).")
+                throw StepFailure(Said("step.any.range_starts_after_end", "%1$@: the range starts after the end of the audio (%2$@ s).", "\(step.op)", "\(String(format: "%.3f", project.duration))"))
             }
         }
 
@@ -855,26 +871,26 @@ public enum StepRunner {
             s.playhead = min(max(0, frames("at") ?? 0), project.length)
         case "set_video_reference":
             let path = p["path"]?.string ?? ""
-            guard path.hasPrefix("/"), path.utf8.count <= 4_096 else { throw StepFailure("set_video_reference: \"path\" is the film's full path, starting with a slash.") }
+            guard path.hasPrefix("/"), path.utf8.count <= 4_096 else { throw StepFailure(Said("step.set_video_reference.path_film_s_full", "set_video_reference: \"path\" is the film's full path, starting with a slash.")) }
             guard ["mov", "mp4", "m4v"].contains(URL(fileURLWithPath: path).pathExtension.lowercased()) else {
-                throw StepFailure("set_video_reference: \(URL(fileURLWithPath: path).lastPathComponent) is not a film this app shows (.mov, .mp4 or .m4v).", reason: "not_a_film")
+                throw StepFailure(Said("step.set_video_reference.film_app_shows_mov", "set_video_reference: %@ is not a film this app shows (.mov, .mp4 or .m4v).", "\(URL(fileURLWithPath: path).lastPathComponent)"), reason: "not_a_film")
             }
             var isFolder: ObjCBool = false
             guard FileManager.default.fileExists(atPath: path, isDirectory: &isFolder), !isFolder.boolValue else {
-                throw StepFailure("set_video_reference: there is no file at \(path).", reason: "not_found")
+                throw StepFailure(Said("step.set_video_reference.there_file", "set_video_reference: there is no file at %@.", "\(path)"), reason: "not_found")
             }
             let at = min(max(0, frames("at") ?? 0), project.length)
             s.project.video = VideoReference(path: URL(fileURLWithPath: path).standardizedFileURL.path, start: at)
             return ["at": project.seconds(at)]
         case "remove_video_reference":
-            guard project.video != nil else { throw StepFailure("remove_video_reference: the document has no film.", reason: "not_found") }
+            guard project.video != nil else { throw StepFailure(Said("step.remove_video_reference.document_has_film", "remove_video_reference: the document has no film."), reason: "not_found") }
             s.project.video = nil
         case "go_to_timecode":
-            guard let settings = project.timecode else { throw StepFailure("go_to_timecode: the document has no timecode. Give it one with set_timecode.", reason: "no_timecode") }
+            guard let settings = project.timecode else { throw StepFailure(Said("step.go_to_timecode.document_has_timecode_give", "go_to_timecode: the document has no timecode. Give it one with set_timecode."), reason: "no_timecode") }
             let text = p["timecode"]?.string ?? ""
-            guard let wanted = Timecode(text, rate: settings.rate) else { throw StepFailure("go_to_timecode: \(text) is not a timecode at \(settings.rate.rawValue) (hh:mm:ss:ff, each two digits).") }
+            guard let wanted = Timecode(text, rate: settings.rate) else { throw StepFailure(Said("step.go_to_timecode.1_timecode_2_hh", "go_to_timecode: %1$@ is not a timecode at %2$@ (hh:mm:ss:ff, each two digits).", "\(text)", "\(settings.rate.rawValue)")) }
             guard let at = settings.frame(of: wanted, sampleRate: project.sampleRate), at <= project.length else {
-                throw StepFailure("go_to_timecode: \(wanted.text) is outside the document, which runs from \(settings.start.text) to \(settings.timecode(at: project.length, sampleRate: project.sampleRate).text).", reason: "outside")
+                throw StepFailure(Said("step.go_to_timecode.1_outside_document_which", "go_to_timecode: %1$@ is outside the document, which runs from %2$@ to %3$@.", "\(wanted.text)", "\(settings.start.text)", "\(settings.timecode(at: project.length, sampleRate: project.sampleRate).text)"), reason: "outside")
             }
             s.playhead = at
             return ["at": project.seconds(at)]
@@ -895,7 +911,7 @@ public enum StepRunner {
             let r = try range(); try checkInside(r)
             s.clipboard = try s.project.copy(r)
         case "paste":
-            guard let clip = s.clipboard else { throw StepFailure("The clipboard is empty. Copy or cut first.") }
+            guard let clip = s.clipboard else { throw StepFailure(Said("step.step.clipboard_empty_copy_cut", "The clipboard is empty. Copy or cut first.")) }
             let at = min(frames("at") ?? s.selection?.lowerBound ?? s.playhead, project.length)
             try s.project.paste(clip, at: at)
             s.selection = at..<(at + clip.length)
@@ -907,7 +923,7 @@ public enum StepRunner {
         case "insert_silence":
             let at = min(frames("at") ?? s.playhead, project.length)
             let n = frames("duration") ?? 0
-            guard n > 0 else { throw StepFailure("insert_silence: duration must be more than 0.") }
+            guard n > 0 else { throw StepFailure(Said("step.insert_silence.duration_more_than_0", "insert_silence: duration must be more than 0.")) }
             s.project.insertGap(at: at, length: n)
         case "gain":
             let r = try range(wholeIfNone: true); try checkInside(r)
@@ -927,18 +943,18 @@ public enum StepRunner {
             case "true_peak": current = m.truePeak.isFinite ? m.truePeak : nil
             default: current = m.integrated
             }
-            guard let current else { throw StepFailure("normalize: the range is silent, so there's nothing to match.") }
+            guard let current else { throw StepFailure(Said("step.normalize.range_silent_so_there", "normalize: the range is silent, so there's nothing to match.")) }
             let change = level - current
             try s.project.changeGain(r, by: change)
             return ["gainDB": (change * 100).rounded() / 100, "before": (current * 100).rounded() / 100]
         case "align_tracks":
-            guard let pool = s.pool else { throw StepFailure("align_tracks needs the app.") }
+            guard let pool = s.pool else { throw StepFailure(Said("step.align_tracks.app", "align_tracks needs the app.")) }
             let ref: UUID
             if let r = p["reference"]?.string {
-                guard let id = UUID(uuidString: r), project.tracks.contains(where: { $0.id == id }) else { throw StepFailure("align_tracks: no track with id \(r).", reason: "not_found") }
+                guard let id = UUID(uuidString: r), project.tracks.contains(where: { $0.id == id }) else { throw StepFailure(Said("step.align_tracks.track_id", "align_tracks: no track with id %@.", "\(r)"), reason: "not_found") }
                 ref = id
             } else {
-                guard project.tracks.count > 1, let id = project.suggestedReference(pool: pool) else { throw StepFailure("align_tracks needs at least two tracks.") }
+                guard project.tracks.count > 1, let id = project.suggestedReference(pool: pool) else { throw StepFailure(Said("step.align_tracks.least_two_tracks", "align_tracks needs at least two tracks.")) }
                 ref = id
             }
             let ids = p["tracks"]?.strings?.compactMap(UUID.init(uuidString:))
@@ -953,18 +969,18 @@ public enum StepRunner {
             if let refIndex = s.project.tracks.firstIndex(where: { $0.id == ref }) { info["referenceTrack"] = Double(refIndex + 1) }
             return info
         case "spectral_attenuate":
-            guard let pool = s.pool, let media = s.media else { throw StepFailure("spectral_attenuate needs the app.") }
+            guard let pool = s.pool, let media = s.media else { throw StepFailure(Said("step.spectral_attenuate.app", "spectral_attenuate needs the app.")) }
             let r = try range(); try checkInside(r)
             let lo = p["low"]?.double ?? 0, hi = p["high"]?.double ?? 0
-            guard hi > lo else { throw StepFailure("spectral_attenuate: high must be above low.") }
+            guard hi > lo else { throw StepFailure(Said("step.spectral_attenuate.high_above_low", "spectral_attenuate: high must be above low.")) }
             let ids = p["tracks"]?.strings.map { Set($0.compactMap(UUID.init(uuidString:))) }
             do {
                 s.project = try s.project.applyingSpectralAttenuation(range: r, freq: lo...hi, gainDB: p["db"]?.double ?? -20, tracks: ids, pool: pool, media: media)
             } catch let e as EffectError { throw StepFailure("spectral_attenuate: \(e.localizedDescription)", keyed: e.keyed) }
         case "correct_drift":
-            guard let pool = s.pool, let media = s.media else { throw StepFailure("correct_drift needs the app.") }
+            guard let pool = s.pool, let media = s.media else { throw StepFailure(Said("step.correct_drift.app", "correct_drift needs the app.")) }
             guard let track = UUID(uuidString: p["track"]?.string ?? ""), project.tracks.contains(where: { $0.id == track }) else {
-                throw StepFailure("correct_drift: no such track.", reason: "not_found")
+                throw StepFailure(Said("step.correct_drift.such_track", "correct_drift: no such track."), reason: "not_found")
             }
             var ppm = p["ppm"]?.double
             var confidence = 1.0
@@ -973,7 +989,7 @@ public enum StepRunner {
                     ?? project.suggestedReference(pool: pool).flatMap { $0 == track ? nil : $0 }
                     ?? project.tracks.first { $0.id != track }?.id
                 guard let against, let d = project.drift(of: track, against: against, pool: pool) else {
-                    throw StepFailure("correct_drift: the tracks overlap too little to measure drift (at least 90 s).", reason: "too_short")
+                    throw StepFailure(Said("step.correct_drift.tracks_overlap_too_little", "correct_drift: the tracks overlap too little to measure drift (at least 90 s)."), reason: "too_short")
                 }
                 confidence = min(d.start.confidence, d.end.confidence)
                 guard confidence >= 0.5 else {
@@ -985,22 +1001,22 @@ public enum StepRunner {
             s.project = try s.project.correctingDrift(of: track, ppm: ppm!, pool: pool, media: media)
             return ["ppm": (ppm! * 10).rounded() / 10, "msPerHour": (ppm! * 3.6 * 10).rounded() / 10, "confidence": (confidence * 1_000).rounded() / 1_000]
         case "spectral_edit":
-            guard let pool = s.pool, let media = s.media else { throw StepFailure("spectral_edit needs the app.") }
+            guard let pool = s.pool, let media = s.media else { throw StepFailure(Said("step.spectral_edit.app", "spectral_edit needs the app.")) }
             func pts() throws -> [SpectralPoint] {
                 let n = p["points"]?.numbers ?? []
-                guard n.count >= 2, n.count % 2 == 0 else { throw StepFailure("spectral_edit: points must be time and frequency pairs.", reason: "bad_shape") }
+                guard n.count >= 2, n.count % 2 == 0 else { throw StepFailure(Said("step.spectral_edit.points_time_frequency_pairs", "spectral_edit: points must be time and frequency pairs."), reason: "bad_shape") }
                 return stride(from: 0, to: n.count, by: 2).map { SpectralPoint(t: n[$0], f: n[$0 + 1]) }
             }
             let shape: SpectralShape
             switch p["shape"]?.string {
             case "box":
                 guard let a = p["start"]?.double, let b = p["end"]?.double, let lo = p["low"]?.double, let hi = p["high"]?.double else {
-                    throw StepFailure("spectral_edit: a box needs start, end, low and high.", reason: "bad_shape")
+                    throw StepFailure(Said("step.spectral_edit.box_needs_start_end", "spectral_edit: a box needs start, end, low and high."), reason: "bad_shape")
                 }
                 shape = .box(start: a, end: b, low: lo, high: hi)
             // (A where clause belongs to one pattern only, so each has its own.)
             case "polygon" where !Operations.spectralFreeform, "brush" where !Operations.spectralFreeform:
-                throw StepFailure("spectral_edit: only shape box is available in this build.", reason: "not_available")
+                throw StepFailure(Said("step.spectral_edit.only_shape_box_available", "spectral_edit: only shape box is available in this build."), reason: "not_available")
             case "polygon": shape = .polygon(try pts())
             default: shape = .brush(try pts(), radius: p["radius"]?.double ?? 200, radiusTime: p["radiusTime"]?.double ?? 0.02)
             }
@@ -1014,7 +1030,7 @@ public enum StepRunner {
                 throw StepFailure("spectral_edit: \(e.localizedDescription)", reason: "nothing_in_range", keyed: e.keyed)
             }
         case "debleed":
-            guard let pool = s.pool, let media = s.media else { throw StepFailure("debleed needs the app.") }
+            guard let pool = s.pool, let media = s.media else { throw StepFailure(Said("step.debleed.app", "debleed needs the app.")) }
             let ids = p["tracks"]?.strings.map { $0.compactMap(UUID.init(uuidString:)) }
             do {
                 let (q, report) = try s.project.debleeding(method: p["method"]?.string ?? "gate", tracks: ids, amountDB: p["amount"]?.double ?? -18,
@@ -1025,15 +1041,15 @@ public enum StepRunner {
                 throw StepFailure("debleed: \(e.localizedDescription)", reason: e.reason, keyed: e.keyed)
             }
         case "duck":
-            guard let pool = s.pool, let media = s.media else { throw StepFailure("duck needs the app.") }
+            guard let pool = s.pool, let media = s.media else { throw StepFailure(Said("step.duck.app", "duck needs the app.")) }
             func ids(_ key: String) throws -> [UUID]? {
                 guard let raw = p[key]?.strings else { return nil }
                 return try raw.map {
-                    guard let id = UUID(uuidString: $0) else { throw StepFailure("duck: no track with id \($0).", reason: "not_found") }
+                    guard let id = UUID(uuidString: $0) else { throw StepFailure(Said("step.duck.track_id", "duck: no track with id %@.", "\($0)"), reason: "not_found") }
                     return id
                 }
             }
-            guard let wanted = try ids("tracks"), !wanted.isEmpty else { throw StepFailure("duck: tracks must name at least one track.") }
+            guard let wanted = try ids("tracks"), !wanted.isEmpty else { throw StepFailure(Said("step.duck.tracks_name_least_one", "duck: tracks must name at least one track.")) }
             var settings = Ducking.Settings()
             settings.amountDB = p["amount"]?.double ?? settings.amountDB
             settings.threshold = p["threshold"]?.double ?? settings.threshold
@@ -1054,7 +1070,7 @@ public enum StepRunner {
             }
         case "set_track":
             guard let id = UUID(uuidString: p["track"]?.string ?? ""), let t = project.tracks.firstIndex(where: { $0.id == id }) else {
-                throw StepFailure("set_track: no such track.", reason: "not_found")
+                throw StepFailure(Said("step.set_track.such_track", "set_track: no such track."), reason: "not_found")
             }
             if let g = p["gainDB"]?.double { s.project.tracks[t].gainDB = g }
             if let m = p["muted"], case .bool(let v) = m { s.project.tracks[t].isMuted = v }
@@ -1076,7 +1092,7 @@ public enum StepRunner {
                 return ["bus": Double(s.project.buses.count), "buses": Double(s.project.buses.count)]
             } catch let e as Mixer.Failure { throw StepFailure("add_bus: " + (e.errorDescription ?? ""), reason: e.reason, keyed: e.keyed) }
         case "set_bus":
-            guard let id = UUID(uuidString: p["bus"]?.string ?? "") else { throw StepFailure("set_bus: no such bus.", reason: "not_found") }
+            guard let id = UUID(uuidString: p["bus"]?.string ?? "") else { throw StepFailure(Said("step.set_bus.such_bus", "set_bus: no such bus."), reason: "not_found") }
             var muted: Bool?
             if let m = p["muted"], case .bool(let v) = m { muted = v }
             do { try s.project.setBus(id, name: p["name"]?.string, gainDB: p["gainDB"]?.double, pan: p["pan"]?.double, muted: muted, output: try route(p["output"], "set_bus")) }
@@ -1089,7 +1105,7 @@ public enum StepRunner {
             }
         case "set_send":
             guard let from = UUID(uuidString: p["from"]?.string ?? ""), let to = UUID(uuidString: p["to"]?.string ?? "") else {
-                throw StepFailure("set_send: from is a track or bus id and to is a bus id.", reason: "not_found")
+                throw StepFailure(Said("step.set_send.from_track_bus_id", "set_send: from is a track or bus id and to is a bus id."), reason: "not_found")
             }
             var pre: Bool?, remove = false
             if let v = p["pre"], case .bool(let b) = v { pre = b }
@@ -1101,7 +1117,7 @@ public enum StepRunner {
                 guard let names = p[key]?.strings else { return nil }
                 return try names.map { n in
                     guard let id = UUID(uuidString: n), project.tracks.contains(where: { $0.id == id }) || project.bus(id) != nil else {
-                        throw StepFailure("\(step.op): no track or bus with id \(n).", reason: "not_found")
+                        throw StepFailure(Said("step.any.track_bus_id_2", "%1$@: no track or bus with id %2$@.", "\(step.op)", "\(n)"), reason: "not_found")
                     }
                     return id
                 }
@@ -1115,14 +1131,14 @@ public enum StepRunner {
                     return ["vcas": Double(s.project.vcas.count), "members": Double(members.count)]
                 }
                 guard let id = UUID(uuidString: p["vca"]?.string ?? ""), project.vca(id) != nil else {
-                    throw StepFailure("\(step.op): no VCA with id \(p["vca"]?.string ?? "").", reason: "not_found")
+                    throw StepFailure(Said("step.any.vca_id_2", "%1$@: no VCA with id %2$@.", "\(step.op)", "\(p["vca"]?.string ?? "")"), reason: "not_found")
                 }
                 if step.op == "remove_vca" { try s.project.removeVCA(id); return [:] }
                 var muted: Bool?
                 if let m = p["muted"], case .bool(let v) = m { muted = v }
                 let members = try strips("members"), add = try strips("add"), remove = try strips("remove")
                 guard p["name"] != nil || p["gainDB"] != nil || muted != nil || members != nil || add != nil || remove != nil else {
-                    throw StepFailure("set_vca: give name, gainDB, muted, members, add or remove.")
+                    throw StepFailure(Said("step.set_vca.give_name_gaindb_muted", "set_vca: give name, gainDB, muted, members, add or remove."))
                 }
                 try s.project.setVCA(id, name: p["name"]?.string, gainDB: p["gainDB"]?.double, muted: muted)
                 if let members {
@@ -1139,7 +1155,7 @@ public enum StepRunner {
                 return ["members": Double(count), "gainDB": s.project.vca(id)?.gainDB ?? 0]
             } catch let e as Mixer.Failure { throw StepFailure("\(step.op): " + (e.errorDescription ?? ""), reason: e.reason, keyed: e.keyed) }
         case "set_automation", "clear_automation":
-            guard Operations.automationOn else { throw StepFailure("\(step.op): this build has no automation.", reason: "not_available") }
+            guard Operations.automationOn else { throw StepFailure(Said("step.any.build_has_automation", "%@: this build has no automation.", "\(step.op)"), reason: "not_available") }
             do { try check(step, against: project) }
             let strip = p["strip"]?.string == "master" ? Master.id : UUID(uuidString: p["strip"]?.string ?? "") ?? UUID()
             let range: ClosedRange<Frame>? = frames("start").flatMap { a in frames("end").map { a...max(a, $0) } }
@@ -1154,7 +1170,7 @@ public enum StepRunner {
                     let named = on.filter { $0.name.caseInsensitiveCompare(key) == .orderedSame }
                     return named.count == 1 ? named[0] : nil
                 }()
-                guard let found else { throw StepFailure("\(step.op): \"insert\": that strip has no plugin \(key) (or several by that name: use the id).", reason: "not_found") }
+                guard let found else { throw StepFailure(Said("step.any.insert_strip_has_plugin", "%1$@: \"insert\": that strip has no plugin %2$@ (or several by that name: use the id).", "\(step.op)", "\(key)"), reason: "not_found") }
                 insert = found.id
                 // A lane that is there already is found by its plugin and the parameter's name as it was written.
                 if let lane = s.project.automation.first(where: { $0.strip == strip && $0.param == .plugin && $0.insert == found.id && $0.parameter?.caseInsensitiveCompare(wanted) == .orderedSame }) {
@@ -1165,12 +1181,12 @@ public enum StepRunner {
                 if parameter == nil || (step.op == "set_automation" && !(p["points"]?.pairs ?? []).isEmpty) {
                     let unit: any InsertUnit
                     do { unit = try InsertUnits.makeBlocking(found.plugin, channels: project.channels, sampleRate: project.sampleRate, state: found.state) }
-                    catch { throw StepFailure("\(step.op): \(error.localizedDescription)", reason: (error as? PluginError)?.reason ?? "plugin_failed") }
+                    catch { throw StepFailure(step.op, wrapping: error, reason: (error as? PluginError)?.reason ?? "plugin_failed") }
                     guard let known = unit.parameters.first(where: { $0.identifier == wanted }) ?? unit.parameters.first(where: { $0.name.caseInsensitiveCompare(wanted) == .orderedSame }) else {
-                        throw StepFailure("\(step.op): \"parameter\": \(found.name) has no parameter \(wanted).", reason: "not_found")
+                        throw StepFailure(Said("step.any.parameter_2_has_parameter", "%1$@: \"parameter\": %2$@ has no parameter %3$@.", "\(step.op)", "\(found.name)", "\(wanted)"), reason: "not_found")
                     }
                     guard unit.address(of: known.identifier) != nil else {
-                        throw StepFailure("\(step.op): \(found.name)'s parameters can't be automated yet: for now only an Audio Unit's can.", reason: "not_available")
+                        throw StepFailure(Said("step.any.2_s_parameters_can", "%1$@: %2$@'s parameters can't be automated yet: for now only an Audio Unit's can.", "\(step.op)", "\(found.name)"), reason: "not_available")
                     }
                     parameter = known.identifier
                     values = known.min...known.max
@@ -1184,10 +1200,10 @@ public enum StepRunner {
                 var enabled: Bool?
                 if let v = p["enabled"], case .bool(let b) = v { enabled = b }
                 let points = (p["points"]?.pairs ?? []).map { AutomationPoint(frame: min(project.frames($0.0), project.length), value: $0.1) }
-                guard !points.isEmpty || range != nil || enabled != nil else { throw StepFailure("set_automation: no points were given. To take a lane away, use clear_automation.") }
+                guard !points.isEmpty || range != nil || enabled != nil else { throw StepFailure(Said("step.set_automation.points_were_given_take", "set_automation: no points were given. To take a lane away, use clear_automation.")) }
                 if points.isEmpty, range == nil, let enabled {
                     // Only switching the lane on or off.
-                    guard let lane = s.project.lane(strip: strip, param: param, to: to, insert: insert, parameter: parameter) else { throw StepFailure("set_automation: there is no \(param.rawValue) lane on that strip to switch \(enabled ? "on" : "off").", reason: "not_found") }
+                    guard let lane = s.project.lane(strip: strip, param: param, to: to, insert: insert, parameter: parameter) else { throw StepFailure((enabled ? Said("step.set_automation.noLaneOn", "set_automation: there is no %@ lane on that strip to switch on.", param.rawValue) : Said("step.set_automation.noLaneOff", "set_automation: there is no %@ lane on that strip to switch off.", param.rawValue)), reason: "not_found") }
                     try s.project.setAutomation(strip: strip, param: param, to: to, insert: insert, parameter: parameter, points: lane.points, enabled: enabled)
                 } else {
                     try s.project.setAutomation(strip: strip, param: param, to: to, insert: insert, parameter: parameter, values: values, points: points, range: range, enabled: enabled)
@@ -1200,7 +1216,7 @@ public enum StepRunner {
             if let v = p["limiter"], case .bool(let b) = v { on = b }
             let values = p["ceiling"] != nil || p["release"] != nil || p["lookahead"] != nil
             if on == false {
-                guard !values else { throw StepFailure("set_master: limiter false takes the limiter off; ceiling, release and lookahead mean nothing then.") }
+                guard !values else { throw StepFailure(Said("step.set_master.limiter_false_takes_limiter", "set_master: limiter false takes the limiter off; ceiling, release and lookahead mean nothing then.")) }
                 limiter = .some(nil)
             } else if on == true || values {
                 // Values without `limiter` change a limiter that is on, and put one on that isn't.
@@ -1210,27 +1226,27 @@ public enum StepRunner {
                 if let a = p["lookahead"]?.double { l.lookaheadMs = a }
                 limiter = .some(l)
             }
-            guard p["gainDB"] != nil || limiter != nil else { throw StepFailure("set_master: give gainDB, limiter, or a value for the limiter.") }
+            guard p["gainDB"] != nil || limiter != nil else { throw StepFailure(Said("step.set_master.give_gaindb_limiter_value", "set_master: give gainDB, limiter, or a value for the limiter.")) }
             do { try s.project.setMaster(gainDB: p["gainDB"]?.double, limiter: limiter) }
             catch let e as Mixer.Failure { throw StepFailure("set_master: " + (e.errorDescription ?? ""), reason: e.reason, keyed: e.keyed) }
             if let l = s.project.master.limiter { return ["gainDB": s.project.master.gainDB, "limiter": 1, "ceilingDB": l.ceilingDB] }
             return ["gainDB": s.project.master.gainDB, "limiter": 0]
         case "remove_bus":
-            guard let id = UUID(uuidString: p["bus"]?.string ?? "") else { throw StepFailure("remove_bus: no such bus.", reason: "not_found") }
+            guard let id = UUID(uuidString: p["bus"]?.string ?? "") else { throw StepFailure(Said("step.remove_bus.such_bus", "remove_bus: no such bus."), reason: "not_found") }
             do { try s.project.removeBus(id, reroute: try route(p["reroute"], "remove_bus")) }
             catch let e as Mixer.Failure { throw StepFailure("remove_bus: " + (e.errorDescription ?? ""), reason: e.reason, keyed: e.keyed) }
         case "set_group":
             guard let id = UUID(uuidString: p["group"]?.string ?? ""), project.tracks.contains(where: { $0.group == id }) else {
-                throw StepFailure("set_group: no such group.", reason: "not_found")
+                throw StepFailure(Said("step.set_group.such_group", "set_group: no such group."), reason: "not_found")
             }
             for t in s.project.tracks.indices where s.project.tracks[t].group == id {
                 s.project.tracks[t].gainDB = ((s.project.tracks[t].gainDB + (p["gainDB"]?.double ?? 0)) * 100).rounded() / 100
             }
         case "level_speakers":
-            guard let pool = s.pool else { throw StepFailure("level_speakers needs the app.") }
+            guard let pool = s.pool else { throw StepFailure(Said("step.level_speakers.app", "level_speakers needs the app.")) }
             let only = p["speakers"]?.strings.map { Set($0.compactMap(Int.init)) }
             if p["mode"]?.string == "dynamic" {
-                guard let media = s.media else { throw StepFailure("level_speakers needs the app.") }
+                guard let media = s.media else { throw StepFailure(Said("step.level_speakers.app", "level_speakers needs the app.")) }
                 do {
                     let (q, r) = try s.project.levellingSpeakersDynamically(target: p["target"]?.double ?? -18, maxGain: p["maxGain"]?.double ?? 12,
                                                                             only: only, pool: pool, media: media)
@@ -1253,20 +1269,20 @@ public enum StepRunner {
             do {
                 try s.project.renameSpeaker(p["speaker"]?.string ?? "", to: p["name"]?.string ?? "")
             } catch SpeakerError.unknown(let k) {
-                throw StepFailure("rename_speaker: there's no speaker \(k) (GET …/speakers lists them).", reason: "not_found")
+                throw StepFailure(Said("step.rename_speaker.there_s_speaker_get", "rename_speaker: there's no speaker %@ (GET …/speakers lists them).", "\(k)"), reason: "not_found")
             }
         case "add_insert", "set_insert", "remove_insert":
             return try applyInsert(step, to: &s)
         case "loudness_preset":
             let r = try range(wholeIfNone: true); try checkInside(r)
-            guard let preset = LoudnessPreset(rawValue: p["preset"]?.string ?? "") else { throw StepFailure("loudness_preset: unknown preset.") }
+            guard let preset = LoudnessPreset(rawValue: p["preset"]?.string ?? "") else { throw StepFailure(Said("step.loudness_preset.unknown_preset", "loudness_preset: unknown preset.")) }
             let limit = p["limit"].map { $0 == .bool(true) } ?? false
-            if limit, s.pool == nil || s.media == nil { throw StepFailure("loudness_preset with limit needs the app to render audio.") }
+            if limit, s.pool == nil || s.media == nil { throw StepFailure(Said("step.loudness_preset.limit_needs_app", "loudness_preset with limit needs the app to render audio.")) }
             let matched: (Project, LoudnessMatch)?
             do { matched = try s.project.matching(preset, range: r, limit: limit, pool: s.pool, media: s.media, measure: measure) } catch let e as LimiterError {
-                throw StepFailure("loudness_preset: " + (e.errorDescription ?? "the limiter failed."), reason: "ceiling_not_met")
+                throw StepFailure("loudness_preset", wrapping: e, reason: "ceiling_not_met")
             }
-            guard let (project, m) = matched else { throw StepFailure("loudness_preset: the range is silent, so there's nothing to match.") }
+            guard let (project, m) = matched else { throw StepFailure(Said("step.loudness_preset.range_silent_so_there", "loudness_preset: the range is silent, so there's nothing to match.")) }
             s.project = project
             func r2(_ v: Double) -> Double { (v * 100).rounded() / 100 }
             var info = ["gainDB": m.gainDB, "integratedBefore": r2(m.integratedBefore), "integratedAfter": r2(m.integratedAfter),
@@ -1284,22 +1300,24 @@ public enum StepRunner {
             s.project.addMarker(at: at, length: frames("duration") ?? 0, name: p["name"]?.string ?? "Marker")
         case "set_layout":
             guard let layout = ChannelLayout(rawValue: p["layout"]?.string ?? "") else {
-                throw StepFailure("set_layout: \"layout\" is one of \(ChannelLayout.allCases.map(\.rawValue).joined(separator: ", ")).")
+                throw StepFailure(Said("step.set_layout.layout_one", "set_layout: \"layout\" is one of %@.", "\(ChannelLayout.allCases.map(\.rawValue).joined(separator: ", "))"))
             }
             s.project.channels = layout.channels
             return ["channels": Double(layout.channels)]
         case "set_timecode":
             let named = p["rate"]?.string ?? ""
             if named == "none" {
-                guard p["start"] == nil else { throw StepFailure("set_timecode: \"start\" means nothing with rate none.") }
+                guard p["start"] == nil else { throw StepFailure(Said("step.set_timecode.start_means_nothing_rate", "set_timecode: \"start\" means nothing with rate none.")) }
                 s.project.timecode = nil
                 return [:]
             }
-            guard let rate = Timecode.Rate(rawValue: named) else { throw StepFailure("set_timecode: \"rate\" is one of \(Timecode.Rate.allCases.map(\.rawValue).joined(separator: ", ")), or none.") }
+            guard let rate = Timecode.Rate(rawValue: named) else { throw StepFailure(Said("step.set_timecode.rate_one_none", "set_timecode: \"rate\" is one of %@, or none.", "\(Timecode.Rate.allCases.map(\.rawValue).joined(separator: ", "))")) }
             var start = 0
             if let text = p["start"]?.string {
                 guard let t = Timecode(text, rate: rate) else {
-                    throw StepFailure("set_timecode: \"start\": \(text) is not a timecode at \(rate.rawValue) (hh:mm:ss:ff, each two digits\(rate.dropsFrames ? "; at this rate the first \(rate.base / 15) frame numbers of a minute that isn't a tenth minute don't exist" : "")).")
+                    throw StepFailure(rate.dropsFrames
+                        ? Said("step.set_timecode.start_drop", "set_timecode: \"start\": %1$@ is not a timecode at %2$@ (hh:mm:ss:ff, each two digits; at this rate the first %3$@ frame numbers of a minute that isn't a tenth minute don't exist).", "\(text)", rate.rawValue, "\(rate.base / 15)")
+                        : Said("step.set_timecode.start_bad", "set_timecode: \"start\": %1$@ is not a timecode at %2$@ (hh:mm:ss:ff, each two digits).", "\(text)", rate.rawValue))
                 }
                 start = t.pictureFrames
             }
@@ -1309,62 +1327,62 @@ public enum StepRunner {
             let name = p["name"]?.string ?? ""
             let before = s.project.markers.count
             s.project.markers.removeAll { $0.name == name }
-            guard s.project.markers.count < before else { throw StepFailure("remove_marker: no marker named \"\(name)\".") }
+            guard s.project.markers.count < before else { throw StepFailure(Said("step.remove_marker.marker_named", "remove_marker: no marker named \"%@\".", "\(name)")) }
         case "delete_words":
             let bridge = frames("bridge") ?? 0
             let ids: Set<UUID>
             if let list = p["words"]?.strings {
-                guard p["text"] == nil else { throw StepFailure("delete_words: give words or text, not both.") }
+                guard p["text"] == nil else { throw StepFailure(Said("step.delete_words.give_words_text_both", "delete_words: give words or text, not both.")) }
                 var set = Set<UUID>()
                 let known = Set(project.placedWords().map(\.word.id))
                 for w in list {
                     guard let id = UUID(uuidString: w), known.contains(id) else {
-                        throw StepFailure("delete_words: no word with id \(w) plays in the document.", reason: "not_found")
+                        throw StepFailure(Said("step.delete_words.word_id_plays_document", "delete_words: no word with id %@ plays in the document.", "\(w)"), reason: "not_found")
                     }
                     set.insert(id)
                 }
                 ids = set
             } else if let text = p["text"]?.string {
                 let matches = project.findPhrase(text)
-                guard !matches.isEmpty else { throw StepFailure("delete_words: \"\(text)\" isn't in the transcript.", reason: "not_found", details: ["matches": 0]) }
+                guard !matches.isEmpty else { throw StepFailure(Said("step.delete_words.isn_t_transcript", "delete_words: \"%@\" isn't in the transcript.", "\(text)"), reason: "not_found", details: ["matches": 0]) }
                 if p["all"].map({ $0 == .bool(true) }) == true {
                     ids = Set(matches.flatMap { $0 })
                 } else if let n = p["occurrence"]?.double {
                     guard n == n.rounded(), n >= 1, Int(n) <= matches.count else {
-                        throw StepFailure("delete_words: occurrence must be 1–\(matches.count).", reason: "not_found", details: ["matches": Double(matches.count)])
+                        throw StepFailure(Said("step.delete_words.occurrence_1", "delete_words: occurrence must be 1–%@.", "\(matches.count)"), reason: "not_found", details: ["matches": Double(matches.count)])
                     }
                     ids = Set(matches[Int(n) - 1])
                 } else {
                     guard matches.count == 1 else {
-                        throw StepFailure("delete_words: \"\(text)\" occurs \(matches.count) times. Pass occurrence (1–\(matches.count)), all: true, or word ids.",
+                        throw StepFailure(Said("step.delete_words.1_occurs_2_times", "delete_words: \"%1$@\" occurs %2$@ times. Pass occurrence (1–%3$@), all: true, or word ids.", "\(text)", "\(matches.count)", "\(matches.count)"),
                                           reason: "ambiguous", details: ["matches": Double(matches.count)])
                     }
                     ids = Set(matches[0])
                 }
             } else {
-                throw StepFailure("delete_words needs words (ids) or text.")
+                throw StepFailure(Said("step.delete_words.words_ids_text", "delete_words needs words (ids) or text."))
             }
-            guard !project.areTextOnly(ids) else { throw StepFailure("delete_words: " + SourceTranscript.textOnlyReason, reason: "text_only") }
+            guard !project.areTextOnly(ids) else { throw StepFailure("delete_words: " + SourceTranscript.textOnlyReason, reason: "text_only", keyed: SourceTranscript.textOnly.keyed) }
             let removed = project.ranges(ofWords: ids, bridge: bridge).reduce(Frame(0)) { $0 + Frame($1.count) }
             try s.project.deleteWords(ids, bridge: bridge)
             s.selection = nil
             return ["words": Double(ids.count), "removedSeconds": (project.seconds(removed) * 1_000).rounded() / 1_000]
         case "correct_word":
-            guard let id = UUID(uuidString: p["word"]?.string ?? "") else { throw StepFailure("correct_word: word must be a word id.", reason: "not_found") }
+            guard let id = UUID(uuidString: p["word"]?.string ?? "") else { throw StepFailure(Said("step.correct_word.word_word_id", "correct_word: word must be a word id."), reason: "not_found") }
             let text = (p["text"]?.string ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !text.isEmpty else { throw StepFailure("correct_word: text can't be empty. Use delete_words to remove a word.") }
+            guard !text.isEmpty else { throw StepFailure(Said("step.correct_word.text_can_t_empty", "correct_word: text can't be empty. Use delete_words to remove a word.")) }
             do { try s.project.correctWord(id, to: text) } catch {
-                throw StepFailure("correct_word: no word with id \(id.uuidString).", reason: "not_found")
+                throw StepFailure(Said("step.correct_word.word_id", "correct_word: no word with id %@.", "\(id.uuidString)"), reason: "not_found")
             }
         case "limit":
-            guard let pool = s.pool, let media = s.media else { throw StepFailure("limit needs the app to render audio.") }
+            guard let pool = s.pool, let media = s.media else { throw StepFailure(Said("step.limit.app_render_audio", "limit needs the app to render audio.")) }
             let r = try range(wholeIfNone: true); try checkInside(r)
             var tracks: Set<UUID>?
             if let ids = p["tracks"]?.strings {
                 var set = Set<UUID>()
                 for t in ids {
                     guard let id = UUID(uuidString: t), project.tracks.contains(where: { $0.id == id }) else {
-                        throw StepFailure("limit: no track with id \(t).", reason: "not_found")
+                        throw StepFailure(Said("step.limit.track_id", "limit: no track with id %@.", "\(t)"), reason: "not_found")
                     }
                     set.insert(id)
                 }
@@ -1381,20 +1399,20 @@ public enum StepRunner {
                         "latencySamples": 0, "beforePlugins": report.beforePlugins ? 1 : 0]
             } catch let e as LimiterError {
                 switch e {
-                case .nothingToDo(let m): throw StepFailure("limit: " + m, reason: "nothing_to_do")
-                case .badValue(let m): throw StepFailure("limit: " + m, reason: "bad_request")
-                case .ceilingNotMet(let m): throw StepFailure("limit: " + m, reason: "ceiling_not_met")
+                case .nothingToDo: throw StepFailure("limit", wrapping: e, reason: "nothing_to_do")
+                case .badValue: throw StepFailure("limit", wrapping: e, reason: "bad_request")
+                case .ceilingNotMet: throw StepFailure("limit", wrapping: e, reason: "ceiling_not_met")
                 }
             }
         case "echo":
-            guard let pool = s.pool, let media = s.media else { throw StepFailure("echo needs the app to render audio.") }
+            guard let pool = s.pool, let media = s.media else { throw StepFailure(Said("step.echo.app_render_audio", "echo needs the app to render audio.")) }
             let r = try range(wholeIfNone: true); try checkInside(r)
             var tracks: Set<UUID>?
             if let ids = p["tracks"]?.strings {
                 var set = Set<UUID>()
                 for t in ids {
                     guard let id = UUID(uuidString: t), project.tracks.contains(where: { $0.id == id }) else {
-                        throw StepFailure("echo: no track with id \(t).", reason: "not_found")
+                        throw StepFailure(Said("step.echo.track_id", "echo: no track with id %@.", "\(t)"), reason: "not_found")
                     }
                     set.insert(id)
                 }
@@ -1405,15 +1423,15 @@ public enum StepRunner {
             s.project = try s.project.applyingEcho(e, range: r, tracks: tracks, tail: tail, pool: pool, media: media)
             return ["tailSeconds": tail ? (project.seconds(e.tail(sampleRate: project.sampleRate)) * 1_000).rounded() / 1_000 : 0]
         case "detect_tempo":
-            guard let pool = s.pool else { throw StepFailure("detect_tempo needs the app.") }
+            guard let pool = s.pool else { throw StepFailure(Said("step.detect_tempo.app", "detect_tempo needs the app.")) }
             let multiply = p["multiply"]?.double ?? 1
-            guard [0.5, 1, 2].contains(multiply) else { throw StepFailure("detect_tempo: multiply must be 0.5, 1 or 2.") }
-            guard !(p["multiply"] != nil && p["bpm"] != nil) else { throw StepFailure("detect_tempo: give multiply or bpm, not both.") }
+            guard [0.5, 1, 2].contains(multiply) else { throw StepFailure(Said("step.detect_tempo.multiply_0_5_1", "detect_tempo: multiply must be 0.5, 1 or 2.")) }
+            guard !(p["multiply"] != nil && p["bpm"] != nil) else { throw StepFailure(Said("step.detect_tempo.give_multiply_bpm_both", "detect_tempo: give multiply or bpm, not both.")) }
             var only: Set<UUID>?
             if let raw = p["tracks"]?.strings {
                 only = []
                 for r in raw {
-                    guard let id = UUID(uuidString: r), project.tracks.contains(where: { $0.id == id }) else { throw StepFailure("detect_tempo: no track with id \(r).", reason: "not_found") }
+                    guard let id = UUID(uuidString: r), project.tracks.contains(where: { $0.id == id }) else { throw StepFailure(Said("step.detect_tempo.track_id", "detect_tempo: no track with id %@.", "\(r)"), reason: "not_found") }
                     only?.insert(id)
                 }
             }
@@ -1432,22 +1450,25 @@ public enum StepRunner {
             case (nil, nil): meter = nil
             case let (b?, u?):
                 guard b == b.rounded(), u == u.rounded(), abs(b) < 1_000, abs(u) < 1_000 else {
-                    throw StepFailure("set_tempo: beats and unit must be whole numbers.")
+                    throw StepFailure(Said("step.set_tempo.beats_unit_whole_numbers", "set_tempo: beats and unit must be whole numbers."))
                 }
                 meter = Meter(Int(b), Int(u))
-            default: throw StepFailure("set_tempo: give both beats and unit, or neither.")
+            default: throw StepFailure(Said("step.set_tempo.give_both_beats_unit", "set_tempo: give both beats and unit, or neither."))
             }
             do {
                 try s.project.tempo.set(bpm: p["bpm"]?.double ?? 0, meter: meter, at: frames("at") ?? 0)
-            } catch { throw StepFailure("set_tempo: \(error.localizedDescription)") }
+            } catch { throw StepFailure("set_tempo", wrapping: error) }
         case "remove_tempo_change":
             let at = frames("at") ?? 0
             do { try s.project.tempo.removeChange(at: at) } catch {
                 let list = s.project.tempo.changes.dropFirst().map { String(format: "%.6g", project.seconds($0.position)) }
-                throw StepFailure("remove_tempo_change: \(error.localizedDescription)" + (list.isEmpty ? "" : " Changes are at: \(list.joined(separator: ", ")) s."))
+                if list.isEmpty { throw StepFailure("remove_tempo_change", wrapping: error) }
+                let said = Said("step.remove_tempo_change.where", "remove_tempo_change: %1$@ Changes are at: %2$@ s.", error.localizedDescription, list.joined(separator: ", "))
+                // The window says the reason by its own key; the list of places is for an agent.
+                throw StepFailure(said.text, keyed: (error as? KeyedFailure)?.keyed ?? said.keyed)
             }
         default:
-            throw StepFailure("Unknown op \"\(step.op)\".")
+            throw StepFailure(Said("step.step.unknown_op", "Unknown op \"%@\".", "\(step.op)"))
         }
         return [:]
     }
@@ -1463,12 +1484,12 @@ extension StepRunner {
         let named = p["track"]?.string ?? ""
         let id = named.lowercased() == "master" ? Master.id : UUID(uuidString: named)
         guard let id, let current = project.strip(id)?.inserts else {
-            throw StepFailure("\(step.op): no track or bus with id \(named).", reason: "not_found")
+            throw StepFailure(Said("step.any.track_bus_id_2", "%1$@: no track or bus with id %2$@.", "\(step.op)", "\(named)"), reason: "not_found")
         }
         func put(_ list: [Insert], _ s: inout EditState) { s.project.setInserts(list, on: id) }
         func failure(_ e: Error) -> StepFailure {
             if let e = e as? PluginError { return StepFailure("\(step.op): \(e.localizedDescription)", reason: e.reason, keyed: e.keyed) }
-            return StepFailure("\(step.op): \(e.localizedDescription)", reason: "plugin_failed")
+            return StepFailure(step.op, wrapping: e, reason: "plugin_failed")
         }
         func latencyMs(_ i: any InsertUnit) -> Double { (Double(i.latency) / project.sampleRate * 100_000).rounded() / 100 }
         func insertIndex() throws -> Int {
@@ -1477,15 +1498,15 @@ extension StepRunner {
             if let u = UUID(uuidString: key), let i = inserts.firstIndex(where: { $0.id == u }) { return i }
             let named = inserts.indices.filter { inserts[$0].name.caseInsensitiveCompare(key) == .orderedSame }
             if named.count == 1 { return named[0] }
-            if named.count > 1 { throw StepFailure("\(step.op): \(named.count) plugins on the track are called \(key); use the id.", reason: "ambiguous", details: ["matches": Double(named.count)]) }
-            throw StepFailure("\(step.op): the track has no plugin \(key).", reason: "not_found")
+            if named.count > 1 { throw StepFailure(Said("step.any.2_plugins_track_called", "%1$@: %2$@ plugins on the track are called %3$@; use the id.", "\(step.op)", "\(named.count)", "\(key)"), reason: "ambiguous", details: ["matches": Double(named.count)]) }
+            throw StepFailure(Said("step.any.track_has_plugin_2", "%1$@: the track has no plugin %2$@.", "\(step.op)", "\(key)"), reason: "not_found")
         }
         switch step.op {
         case "add_insert":
             let name = p["plugin"]?.string ?? ""
             guard let info = PluginCatalog.find(name) else {
-                if let why = PluginCatalog.whyUnavailable?(name) { throw StepFailure("add_insert: \(why)", reason: "plugin_blocked") }
-                throw StepFailure("add_insert: no effect \(name) is installed (GET /api/v1/plugins lists them).", reason: "plugin_not_found")
+                if let why = PluginCatalog.whyUnavailable?(name) { throw StepFailure(Said("step.add_insert.failed", "add_insert: %@", "\(why)"), reason: "plugin_blocked") }
+                throw StepFailure(Said("step.add_insert.effect_installed_get_api", "add_insert: no effect %@ is installed (GET /api/v1/plugins lists them).", "\(name)"), reason: "plugin_not_found")
             }
             do {
                 let unit = try InsertUnits.makeBlocking(info.id, channels: project.channels, sampleRate: project.sampleRate)
@@ -1505,8 +1526,8 @@ extension StepRunner {
             let i = try insertIndex()
             var insert = current[i]
             if let b = p["bypass"], case .bool(let v) = b { insert.bypass = v }
-            if p["value"] != nil, p["parameter"] == nil { throw StepFailure("set_insert: value needs parameter.") }
-            if p["parameter"] != nil, p["value"] == nil { throw StepFailure("set_insert: parameter needs value.") }
+            if p["value"] != nil, p["parameter"] == nil { throw StepFailure(Said("step.set_insert.value_needs_parameter", "set_insert: value needs parameter.")) }
+            if p["parameter"] != nil, p["value"] == nil { throw StepFailure(Said("step.set_insert.parameter_needs_value", "set_insert: parameter needs value.")) }
             var info: [String: Double] = [:]
             if p["preset"] != nil || p["parameter"] != nil {
                 do {
@@ -1521,17 +1542,18 @@ extension StepRunner {
             list[i] = insert
             put(list, &s)
             if let named = p["key"]?.string {
-                guard Operations.sidechainOn else { throw StepFailure("set_insert: this build has no sidechain keys.", reason: "not_available") }
+                guard Operations.sidechainOn else { throw StepFailure(Said("step.set_insert.build_has_sidechain_keys", "set_insert: this build has no sidechain keys."), reason: "not_available") }
                 do {
                     if named.lowercased() == "none" {
                         try s.project.setKey(strip: id, insert: insert.id, key: nil)
                     } else {
-                        guard let source = UUID(uuidString: named) else { throw StepFailure("set_insert: key is the id of a track or bus, or \"none\".", reason: "not_found") }
+                        guard let source = UUID(uuidString: named) else { throw StepFailure(Said("step.set_insert.key_id_track_bus", "set_insert: key is the id of a track or bus, or \"none\"."), reason: "not_found") }
                         // Asked of the plugin itself: does it have the input, and can it be fed here?
                         let unit: any InsertUnit
                         do { unit = try InsertUnits.makeBlocking(insert.plugin, channels: project.channels, sampleRate: project.sampleRate, state: nil) } catch { throw failure(error) }
                         guard unit.hasKeyInput else {
-                            throw StepFailure("set_insert: " + (unit.keyRefusal ?? "\(insert.name) has no sidechain input, so it can't be given a key."), reason: "no_key_input")
+                            let why = unit.keyRefusal ?? Said("plugin.key.none", "%@ has no sidechain input, so it can't be given a key.", insert.name)
+                            throw StepFailure("set_insert: " + why.text, reason: "no_key_input", keyed: why.keyed)
                         }
                         try s.project.setKey(strip: id, insert: insert.id, key: source)
                     }

@@ -145,7 +145,7 @@ final class TranscriptPanel: NSView, NSTextViewDelegate {
             if running {
                 empty.stringValue = L10n.text("transcript.working")
             } else if let job, job.status == .failed {
-                empty.stringValue = job.error?.message ?? L10n.text("transcript.failed")
+                empty.stringValue = job.errorKeyed.map(L10n.message) ?? job.error?.message ?? L10n.text("transcript.failed")
             } else {
                 // True for the choice that is made: on this Mac nothing leaves it; at OpenAI the audio does.
                 let away = engine.selectedItem?.representedObject as? String == SpeechEngines.Choice.openai.rawValue
@@ -312,7 +312,7 @@ final class TranscriptPanel: NSView, NSTextViewDelegate {
         }
         let models: [String]
         do { models = try await OpenAITranscription.models(endpoint: SpeechEngines.openAIEndpoint, key: key) } catch {
-            say(L10n.text("openai.models.failed.title"), L10n.text("openai.models.failed.text", error.localizedDescription))
+            say(L10n.text("openai.models.failed.title"), L10n.text("openai.models.failed.text", L10n.error(error)))
             return
         }
         guard !models.isEmpty else {

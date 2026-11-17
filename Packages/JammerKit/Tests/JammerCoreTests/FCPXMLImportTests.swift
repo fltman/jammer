@@ -290,7 +290,7 @@ struct HostileFCPXMLTests {
         #expect(!everything.contains("TOP-SECRET"), "an external entity was read: \(everything.prefix(300))")
         // And it is refused in words, not with a parser's error number.
         #expect(everything.contains("declares entities"), "\(everything.prefix(200))")
-        #expect(throws: FCPXMLImport.ImportError.unreadable("it isn't well-formed XML (line 1).")) { try FCPXMLImport.read(Data("<fcpxml><unclosed></fcpxml>".utf8), base: base, name: "x") }
+        #expect(throws: FCPXMLImport.ImportError.unreadable(Said("error.import.notXML", "it isn't well-formed XML (line %@).", "1"))) { try FCPXMLImport.read(Data("<fcpxml><unclosed></fcpxml>".utf8), base: base, name: "x") }
         // A billion laughs: ten levels of tenfold expansion would be gigabytes. Refused, quickly.
         var doctype = "<!DOCTYPE fcpxml [<!ENTITY a0 \"ha\">"
         for i in 1...10 { doctype += "<!ENTITY a\(i) \"" + String(repeating: "&a\(i - 1);", count: 10) + "\">" }

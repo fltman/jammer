@@ -57,7 +57,8 @@ public struct SourceTranscript: Codable, Hashable, Sendable {
     }
 
     /// Why an edit that needs to know when each word was said can't be done on this transcript.
-    public static let textOnlyReason = "This transcript has the text but not the time of each word (it came from a model that returns only text), so words can't be cut from the audio with it. Transcribe again with an engine on this Mac to edit by word."
+    public static let textOnly = Said("transcript.textOnly", "This transcript has the text but not the time of each word (it came from a model that returns only text), so words can't be cut from the audio with it. Transcribe again with an engine on this Mac to edit by word.")
+    public static var textOnlyReason: String { textOnly.text }
 }
 
 /// A word as it plays on the timeline right now.
@@ -91,7 +92,7 @@ public enum TranscriptError: Error, LocalizedError, Equatable {
         switch self {
         case .noWords: KeyedMessage("error.transcript.noWords")
         case .unknownWord: KeyedMessage("error.transcript.unknownWord")
-        case .textOnly: nil
+        case .textOnly: SourceTranscript.textOnly.keyed
         }
     }
 }

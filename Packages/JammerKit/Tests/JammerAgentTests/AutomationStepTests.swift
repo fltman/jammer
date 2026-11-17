@@ -261,7 +261,7 @@ struct AutomationStepTests {
         #expect(Self.run(&s, "remove_video_reference", [:]).reason == "not_found")
     }
 
-    @Test("A step that fails on an error with a key carries the key and its values beside the English words, which are as they were; a failure whose words were made in the step has none")
+    @Test("A step that fails on an error with a key carries the key and its values beside the English words, which are as they were; a failure written in the step has a key of its own")
     func keyedFailure() {
         Operations.$automationForThisTask.withValue(true) {
             var s = Self.state()
@@ -270,7 +270,8 @@ struct AutomationStepTests {
             #expect(r.status == .failed && r.reason == "not_found" && r.keyed == KeyedMessage("error.mixer.noBus", [bus.uuidString]), "\(String(describing: r.keyed))")
             #expect(r.error == "remove_bus: there is no bus with id \(bus.uuidString).")
             let own = Self.run(&s, "set_timecode", ["rate": .string("none"), "start": .string("00:00:00:00")])
-            #expect(own.status == .failed && own.keyed == nil)
+            #expect(own.status == .failed && own.keyed == KeyedMessage("step.set_timecode.start_means_nothing_rate")
+                    && own.error == "set_timecode: \"start\" means nothing with rate none.", "\(String(describing: own.keyed)) \(own.error ?? "")")
         }
     }
 

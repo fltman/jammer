@@ -29,7 +29,7 @@ struct HostileProjectTests {
         return (pkg, project)
     }
 
-    func open(_ pkg: URL) throws -> (project: Project, notes: [String]) {
+    func open(_ pkg: URL) throws -> (project: Project, notes: [Said]) {
         try ProjectPackage.readChecked(try FileWrapper(url: pkg, options: [.immediate]), packageURL: pkg)
     }
 
@@ -72,7 +72,7 @@ struct HostileProjectTests {
         }
         #expect(refused > 20)
         try FileManager.default.removeItem(at: pkg.appending(path: "project.json"))
-        #expect(throws: AudioFileError.unreadable("The project has no project.json.")) { _ = try open(pkg) }
+        #expect(throws: AudioFileError.unreadable(Said("error.file.project_has", "The project has no %@.", "project.json"))) { _ = try open(pkg) }
     }
 
     @Test("Sizes and positions that can't be: too many tracks, clips outside their audio or the timeline, absurd levels, impossible sample rates")
@@ -94,9 +94,9 @@ struct HostileProjectTests {
         let opened = try open(pkg)
         let clips = opened.project.tracks[0].clips
         // What can be played stays, clamped to its audio; the rest is left out and said.
-        #expect(clips.count == 6 && opened.notes.contains("8 clips pointed outside their audio or the timeline and were left out."), "\(clips.count) \(opened.notes)")
+        #expect(clips.count == 6 && opened.notes.map(\.text).contains("8 clips pointed outside their audio or the timeline and were left out."), "\(clips.count) \(opened.notes)")
         #expect(clips.allSatisfy { $0.sourceStart + $0.length <= 48_000 && $0.fadeIn <= $0.length && (-200...60).contains($0.gainDB) } && opened.project.tracks[0].gainDB == 60)
-        #expect(opened.project.markers.map(\.name) == ["ok"] && opened.notes.contains("3 markers outside the timeline were left out."))
+        #expect(opened.project.markers.map(\.name) == ["ok"] && opened.notes.map(\.text).contains("3 markers outside the timeline were left out."))
         _ = render(opened.project)
         #expect(opened.project.length <= 48_000 + 1_000)
         // Refused outright.

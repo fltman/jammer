@@ -412,8 +412,8 @@ struct AutomationSafetyTests {
         let notes = try ProjectSafety.check(&p)
         #expect(p.automation.count == 2 && p.automation[0] == good)
         #expect(p.automation[1].points == [AutomationPoint(frame: 100, value: -3), AutomationPoint(frame: 800, value: 24)])
-        #expect(notes.contains { $0.hasPrefix("4 automation lanes in the project were for a track or bus that isn't there") })
-        #expect(notes.contains { $0.hasPrefix("1 automation lane had points that were out of order") })
+        #expect(notes.contains { $0.text.hasPrefix("4 automation lanes in the project were for a track or bus that isn't there") })
+        #expect(notes.contains { $0.text.hasPrefix("1 automation lane had points that were out of order") })
         // It renders, and a second look finds nothing more.
         _ = MixerTests.render(p, pool)
         var again = p

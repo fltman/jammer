@@ -56,19 +56,19 @@ public struct Echo: Sendable, Equatable {
 
 public enum EffectError: Error, LocalizedError, Equatable {
     case nothingInRange
-    case badValue(String)
+    case badValue(Said)
 
     public var errorDescription: String? {
         switch self {
         case .nothingInRange: "There's no audio in that range on those tracks."
-        case .badValue(let m): m
+        case .badValue(let m): m.text
         }
     }
     /// The same message by its key in the app's string catalogue (see `KeyedMessage`).
     public var keyed: KeyedMessage? {
         switch self {
         case .nothingInRange: KeyedMessage("error.effect.nothingInRange")
-        case .badValue: nil
+        case .badValue(let m): m.keyed
         }
     }
 }
@@ -80,9 +80,9 @@ extension Project {
     /// track (ripple) so the echoes ring out. Originals are untouched; undo is the old value.
     public func applyingEcho(_ echo: Echo, range: Range<Frame>, tracks: Set<UUID>? = nil, tail: Bool,
                              pool: SourcePool, media: URL) throws -> Project {
-        guard Echo.delayRange.contains(echo.delay) else { throw EffectError.badValue("delay must be 0.02–2 seconds.") }
-        guard Echo.feedbackRange.contains(echo.feedback) else { throw EffectError.badValue("feedback must be 0–0.95.") }
-        guard (0...1).contains(echo.mix) else { throw EffectError.badValue("mix must be 0–1.") }
+        guard Echo.delayRange.contains(echo.delay) else { throw EffectError.badValue(Said("error.value.delay_0_02_2", "delay must be 0.02–2 seconds.")) }
+        guard Echo.feedbackRange.contains(echo.feedback) else { throw EffectError.badValue(Said("error.value.feedback_0_0_95", "feedback must be 0–0.95.")) }
+        guard (0...1).contains(echo.mix) else { throw EffectError.badValue(Said("error.value.mix_0_1", "mix must be 0–1.")) }
         let r = range.clamped(to: 0..<length)
         let targets = self.tracks.indices.filter { t in
             (tracks?.contains(self.tracks[t].id) ?? true) && self.tracks[t].clips.contains { $0.start < r.upperBound && $0.end > r.lowerBound }

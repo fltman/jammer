@@ -273,7 +273,7 @@ struct LimiterTests {
         try Limiter(ceilingDB: 0, releaseMs: 2_000, lookaheadMs: 0.5).validate()
         try Limiter(ceilingDB: -20, releaseMs: 1, lookaheadMs: 20).validate()
 
-        #expect(throws: LimiterError.badValue("channels must be 1 to 64.")) {
+        #expect(throws: LimiterError.badValue(Said("limiter.channels_1_64", "channels must be 1 to 64."))) {
             _ = try Limiter.limit([], channels: 0, sampleRate: Self.fs, settings: Limiter())
         }
         #expect(throws: LimiterError.self) { _ = try Limiter.limit([0.1], channels: 1, sampleRate: .nan, settings: Limiter()) }

@@ -366,7 +366,7 @@ final class TimelineOverlay: NSView {
             text += ", " + L10n.text("timeline.ax.selection", formatTime(p.seconds(sel.lowerBound)), formatTime(p.seconds(sel.upperBound)))
         }
         if p.tracks.count > 1 { text += ", " + L10n.count("import.tracks", p.tracks.count) }
-        if areaMode, let a = session.spectralArea { text += ", " + L10n.text("timeline.ax.area", a.shape.summary) }
+        if areaMode, let a = session.spectralArea { text += ", " + L10n.text("timeline.ax.area", L10n.message(a.shape.summarySaid.keyed)) }
         return text
     }
     override func accessibilityPerformIncrement() -> Bool {

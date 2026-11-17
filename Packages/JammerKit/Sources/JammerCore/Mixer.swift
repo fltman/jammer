@@ -138,7 +138,7 @@ public struct Master: Codable, Hashable, Sendable {
 
 /// An export through the master's limiter whose file still measured over the ceiling after every try.
 /// No file is left. `truePeakDB` is what the last try measured; nil when the file couldn't be read back.
-public struct MasterCeilingError: Error, LocalizedError, Equatable, Sendable {
+public struct MasterCeilingError: Error, LocalizedError, Equatable, Sendable, KeyedFailure {
     public var ceilingDB: Double
     public var truePeakDB: Double?
     public init(ceilingDB: Double, truePeakDB: Double?) {
@@ -146,11 +146,14 @@ public struct MasterCeilingError: Error, LocalizedError, Equatable, Sendable {
         self.truePeakDB = truePeakDB
     }
     public static let reason = "ceiling_not_met"
-    public var errorDescription: String? {
+    public var errorDescription: String? { said.text }
+    public var keyed: KeyedMessage? { said.keyed }
+    var said: Said {
         guard let truePeakDB else {
-            return String(format: "The file was written but couldn't be read back to check it against the master's ceiling of %.1f dBTP, so it was removed.", ceilingDB)
+            return Said("error.master.unread", "The file was written but couldn't be read back to check it against the master's ceiling of %@ dBTP, so it was removed.", Said.n(ceilingDB, 1))
         }
-        return String(format: "The master's limiter couldn't keep the file under %.1f dBTP: it measured %.2f dBTP after the last try, so no file was left. Lower the master's level or raise the ceiling, and export again.", ceilingDB, truePeakDB)
+        return Said("error.master.ceiling", "The master's limiter couldn't keep the file under %1$@ dBTP: it measured %2$@ dBTP after the last try, so no file was left. Lower the master's level or raise the ceiling, and export again.",
+                    Said.n(ceilingDB, 1), Said.n(truePeakDB, 2))
     }
 }
 
@@ -178,7 +181,7 @@ public enum Mixer {
     }
 
     public enum Failure: Error, LocalizedError, Equatable {
-        case noBus(String), loop(String), tooMany, inUse(String, Int), mono, badValue(String), noStrip(String), noSend(String, String), tooManySends(String)
+        case noBus(String), loop(String), tooMany, inUse(String, Int), mono, badValue(Said), noStrip(String), noSend(String, String), tooManySends(String)
         /// Pan in a document wider than stereo, before its surround panner is built. The value is the layout.
         case wide(String)
         /// A surround position in a document that is mono or stereo. The value is the layout.
@@ -203,14 +206,14 @@ public enum Mixer {
             case .noBus(let id): "there is no bus with id \(id)."
             case .loop(let name): "that would send \(name) back into itself through the buses it feeds."
             case .tooMany: "a document can have \(Mixer.maxBuses) buses at most."
-            case .inUse(let name, let n): "\(n) strip\(n == 1 ? " is" : "s are") routed to \(name). Say where they should go instead with reroute (a bus id, or \"master\"), or route them elsewhere first."
+            case .inUse(let name, let n): Self.inUseSaid(name, n).text
             case .mono: "pan needs a stereo document; this one is mono."
             case .wide(let layout): "pan is for stereo documents; this one is \(layout). Place a track with azimuth instead."
             case .narrow(let layout): "a place by azimuth is for documents wider than stereo; this one is \(layout). Use pan."
             case .noStrip(let id): "there is no track or bus with id \(id)."
             case .noSend(let from, let to): "\(from) has no send to \(to)."
             case .tooManySends(let name): "\(name) already has \(Mixer.maxSends) sends, which is the most a strip can have."
-            case .badValue(let m): m
+            case .badValue(let m): m.text
             case .noVCA(let id): "there is no VCA with id \(id)."
             case .tooManyVCAs: "a document can have \(Mixer.maxVCAs) VCAs at most."
             }
@@ -221,17 +224,21 @@ public enum Mixer {
             case .noBus(let id): KeyedMessage("error.mixer.noBus", ["\(id)"])
             case .loop(let name): KeyedMessage("error.mixer.loop", ["\(name)"])
             case .tooMany: KeyedMessage("error.mixer.tooMany", ["\(Mixer.maxBuses)"])
-            case .inUse: nil
+            case .inUse(let name, let n): Self.inUseSaid(name, n).keyed
             case .mono: KeyedMessage("error.mixer.mono")
             case .wide(let layout): KeyedMessage("error.mixer.wide", ["\(layout)"])
             case .narrow(let layout): KeyedMessage("error.mixer.narrow", ["\(layout)"])
             case .noStrip(let id): KeyedMessage("error.mixer.noStrip", ["\(id)"])
             case .noSend(let from, let to): KeyedMessage("error.mixer.noSend", ["\(from)", "\(to)"])
             case .tooManySends(let name): KeyedMessage("error.mixer.tooManySends", ["\(name)", "\(Mixer.maxSends)"])
-            case .badValue: nil
+            case .badValue(let m): m.keyed
             case .noVCA(let id): KeyedMessage("error.mixer.noVCA", ["\(id)"])
             case .tooManyVCAs: KeyedMessage("error.mixer.tooManyVCAs", ["\(Mixer.maxVCAs)"])
             }
+        }
+        static func inUseSaid(_ name: String, _ n: Int) -> Said {
+            counted(n, Said("error.mixer.inUse.one", "1 strip is routed to %@. Say where it should go instead with reroute (a bus id, or \"master\"), or route it elsewhere first.", name),
+                    Said("error.mixer.inUse.other", "%1$@ strips are routed to %2$@. Say where they should go instead with reroute (a bus id, or \"master\"), or route them elsewhere first.", "\(n)", name))
         }
     }
 }
@@ -367,7 +374,7 @@ extension Project {
     public mutating func addVCA(name: String) throws -> VCA {
         guard vcas.count < Mixer.maxVCAs else { throw Mixer.Failure.tooManyVCAs }
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, trimmed.count <= 200 else { throw Mixer.Failure.badValue("a VCA needs a name of 1 to 200 characters.") }
+        guard !trimmed.isEmpty, trimmed.count <= 200 else { throw Mixer.Failure.badValue(Said("error.value.vca_needs_name_1", "a VCA needs a name of 1 to 200 characters.")) }
         let v = VCA(name: trimmed)
         vcas.append(v)
         return v
@@ -377,11 +384,11 @@ extension Project {
         guard let i = vcas.firstIndex(where: { $0.id == id }) else { throw Mixer.Failure.noVCA(id.uuidString) }
         if let name {
             let t = name.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !t.isEmpty, t.count <= 200 else { throw Mixer.Failure.badValue("a VCA needs a name of 1 to 200 characters.") }
+            guard !t.isEmpty, t.count <= 200 else { throw Mixer.Failure.badValue(Said("error.value.vca_needs_name_1", "a VCA needs a name of 1 to 200 characters.")) }
             vcas[i].name = t
         }
         if let gainDB {
-            guard gainDB.isFinite, Mixer.gainRange.contains(gainDB) else { throw Mixer.Failure.badValue("gainDB must be \(Int(Mixer.gainRange.lowerBound)) to \(Int(Mixer.gainRange.upperBound)).") }
+            guard gainDB.isFinite, Mixer.gainRange.contains(gainDB) else { throw Mixer.Failure.badValue(Said("error.value.gaindb_1_2", "gainDB must be %1$@ to %2$@.", "\(Int(Mixer.gainRange.lowerBound))", "\(Int(Mixer.gainRange.upperBound))")) }
             vcas[i].gainDB = gainDB
         }
         if let muted { vcas[i].isMuted = muted }
@@ -436,14 +443,14 @@ extension Project {
     /// Changes the master: its gain, and its limiter (`.some(nil)` takes the limiter away).
     public mutating func setMaster(gainDB: Double? = nil, limiter: MasterLimiter?? = nil) throws {
         if let gainDB {
-            guard gainDB.isFinite, Mixer.gainRange.contains(gainDB) else { throw Mixer.Failure.badValue("gainDB must be \(Int(Mixer.gainRange.lowerBound)) to \(Int(Mixer.gainRange.upperBound)).") }
+            guard gainDB.isFinite, Mixer.gainRange.contains(gainDB) else { throw Mixer.Failure.badValue(Said("error.value.gaindb_1_2", "gainDB must be %1$@ to %2$@.", "\(Int(Mixer.gainRange.lowerBound))", "\(Int(Mixer.gainRange.upperBound))")) }
             master.gainDB = gainDB
         }
         if let limiter {
             if let l = limiter {
                 // The same checks as the limiter itself makes, so a master that is set is one that runs.
                 do { _ = try Limiter.Processor(l.settings, channels: channels, sampleRate: sampleRate) }
-                catch { throw Mixer.Failure.badValue(error.localizedDescription) }
+                catch { throw Mixer.Failure.badValue(Said.of(error)) }
             }
             master.limiter = limiter
         }
@@ -478,7 +485,7 @@ extension Project {
     /// Sets, changes or removes the send from a track or a bus to a bus. One send per pair.
     public mutating func setSend(from: UUID, to: UUID, gainDB: Double? = nil, pre: Bool? = nil, remove: Bool = false) throws {
         guard let target = bus(to) else { throw Mixer.Failure.noBus(to.uuidString) }
-        if let g = gainDB, !Mixer.gainRange.contains(g) { throw Mixer.Failure.badValue("gainDB must be −96 to 24.") }
+        if let g = gainDB, !Mixer.gainRange.contains(g) { throw Mixer.Failure.badValue(Said("error.value.gaindb_96_24", "gainDB must be −96 to 24.")) }
         func change(_ sends: inout [Send], name: String) throws {
             if remove {
                 guard sends.contains(where: { $0.to == to }) else { throw Mixer.Failure.noSend(name, target.name) }
@@ -509,7 +516,7 @@ extension Project {
         guard buses.count < Mixer.maxBuses else { throw Mixer.Failure.tooMany }
         if let output, bus(output) == nil { throw Mixer.Failure.noBus(output.uuidString) }
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, trimmed.count <= 200 else { throw Mixer.Failure.badValue("a bus needs a name of 1 to 200 characters.") }
+        guard !trimmed.isEmpty, trimmed.count <= 200 else { throw Mixer.Failure.badValue(Said("error.value.bus_needs_name_1", "a bus needs a name of 1 to 200 characters.")) }
         let b = Bus(name: trimmed, output: output)
         buses.append(b)
         return b
@@ -521,7 +528,7 @@ extension Project {
         guard channels > 2, !layout.isAmbisonic else { throw Mixer.Failure.narrow(layout.rawValue) }
         if turned == false, azimuth == nil { buses[i].azimuth = nil; return }
         if let azimuth {
-            guard azimuth.isFinite, abs(azimuth) <= 180 else { throw Mixer.Failure.badValue("azimuth is −180 to 180.") }
+            guard azimuth.isFinite, abs(azimuth) <= 180 else { throw Mixer.Failure.badValue(Said("error.value.azimuth_180_180", "azimuth is −180 to 180.")) }
             buses[i].azimuth = azimuth
         }
     }
@@ -530,15 +537,15 @@ extension Project {
         guard let i = buses.firstIndex(where: { $0.id == id }) else { throw Mixer.Failure.noBus(id.uuidString) }
         if let name {
             let t = name.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !t.isEmpty, t.count <= 200 else { throw Mixer.Failure.badValue("a bus needs a name of 1 to 200 characters.") }
+            guard !t.isEmpty, t.count <= 200 else { throw Mixer.Failure.badValue(Said("error.value.bus_needs_name_1", "a bus needs a name of 1 to 200 characters.")) }
             buses[i].name = t
         }
         if let gainDB {
-            guard Mixer.gainRange.contains(gainDB) else { throw Mixer.Failure.badValue("gainDB must be −96 to 24.") }
+            guard Mixer.gainRange.contains(gainDB) else { throw Mixer.Failure.badValue(Said("error.value.gaindb_96_24", "gainDB must be −96 to 24.")) }
             buses[i].gainDB = gainDB
         }
         if let pan {
-            guard Mixer.panRange.contains(pan) else { throw Mixer.Failure.badValue("pan must be −1 (left) to 1 (right).") }
+            guard Mixer.panRange.contains(pan) else { throw Mixer.Failure.badValue(Said("error.value.pan_1_left_1", "pan must be −1 (left) to 1 (right).")) }
             guard pan == 0 || channels == 2 else { throw channels == 1 ? Mixer.Failure.mono : Mixer.Failure.wide(layout.rawValue) }
             buses[i].pan = pan
         }
@@ -587,14 +594,14 @@ extension Project {
         if let azimuth { p.azimuth = azimuth }
         if let elevation { p.elevation = elevation }
         if let width { p.width = width }
-        guard p.isValid else { throw Mixer.Failure.badValue("azimuth is −180 to 180, elevation 0 to 90, width 0 to 180.") }
+        guard p.isValid else { throw Mixer.Failure.badValue(Said("error.value.azimuth_180_180_elevation", "azimuth is −180 to 180, elevation 0 to 90, width 0 to 180.")) }
         tracks[i].position = p
     }
 
     public mutating func setTrackRoute(_ track: UUID, pan: Double? = nil, output: UUID?? = nil) throws {
         guard let t = tracks.firstIndex(where: { $0.id == track }) else { throw EditError.noTrack }
         if let pan {
-            guard Mixer.panRange.contains(pan) else { throw Mixer.Failure.badValue("pan must be −1 (left) to 1 (right).") }
+            guard Mixer.panRange.contains(pan) else { throw Mixer.Failure.badValue(Said("error.value.pan_1_left_1", "pan must be −1 (left) to 1 (right).")) }
             guard pan == 0 || channels == 2 else { throw channels == 1 ? Mixer.Failure.mono : Mixer.Failure.wide(layout.rawValue) }
             tracks[t].pan = pan
         }

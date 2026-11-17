@@ -39,7 +39,7 @@ public struct OnDevicePlanner: AssistantPlanner {
 
     public func plan(goal: String, context: AssistantContext, history: [(user: String, reply: String)],
                      actions: [AssistantAction]) async throws -> AssistantPlan {
-        if let why = Self.availability { throw AssistantError.unavailable(why) }
+        if let why = Self.availability { throw AssistantError.unavailable(Said("error.assistant.unavailable", "The on-device model isn't available: %@", why)) }
         if let reply = PlanParser.guardrail(goal) { return AssistantPlan(reply: reply, steps: []) }
         // A list this model can hold (AssistantCatalog.onDeviceWhenNamed).
         let fitted = AssistantCatalog.forOnDevice(actions, goal: goal)
@@ -50,7 +50,7 @@ public struct OnDevicePlanner: AssistantPlanner {
             // names in so many words, and without the earlier turns; if it names none, the error stands.
             let words = Set(Project.tokens(goal).filter { $0.count >= 3 })
             let named = fitted.filter { a in !words.isDisjoint(with: Project.tokens(a.name.replacingOccurrences(of: "_", with: " ") + " " + a.description)) }
-            let tooLong = AssistantError.unavailable("The model on this Mac couldn't fit this request and its answer. Say it another way, or choose another model in the assistant's settings.")
+            let tooLong = AssistantError.unavailable(Said("error.assistant.tooLong", "The on-device model isn't available: The model on this Mac couldn't fit this request and its answer. Say it another way, or choose another model in the assistant's settings."))
             guard !named.isEmpty, named.count < fitted.count else { throw tooLong }
             do { return try await respond(goal: goal, context: context, history: [], actions: named) }
             catch LanguageModelError.contextSizeExceeded { throw tooLong }
@@ -221,7 +221,7 @@ public struct LocalServerPlanner: AssistantPlanner {
     public func plan(goal: String, context: AssistantContext, history: [(user: String, reply: String)],
                      actions: [AssistantAction]) async throws -> AssistantPlan {
         if let reply = PlanParser.guardrail(goal) { return AssistantPlan(reply: reply, steps: []) }
-        guard Self.isThisMac(endpoint) else { throw AssistantError.local("A local model's address has to be on this Mac (127.0.0.1); \(endpoint.host() ?? "that address") isn't.") }
+        guard Self.isThisMac(endpoint) else { throw AssistantError.local(Said("error.assistant.local_model_s_address", "A local model's address has to be on this Mac (127.0.0.1); %@ isn't.", "\(endpoint.host() ?? "that address")")) }
         var req = URLRequest(url: endpoint.appending(path: "chat/completions"))
         req.timeoutInterval = timeout
         req.httpMethod = "POST"
@@ -229,7 +229,7 @@ public struct LocalServerPlanner: AssistantPlanner {
         req.httpBody = try JSONSerialization.data(withJSONObject: requestBody(goal: goal, context: context, history: history, actions: actions))
         let data: Data, response: URLResponse
         do { (data, response) = try await KeyedRequest.data(for: req, session: session) } catch {
-            throw AssistantError.local("The local model server at \(endpoint.host() ?? "127.0.0.1"):\(endpoint.port ?? 80) didn't answer (\(error.localizedDescription)).")
+            throw AssistantError.local(Said("error.assistant.local_model_server_1", "The local model server at %1$@:%2$@ didn't answer (%3$@).", "\(endpoint.host() ?? "127.0.0.1")", "\(endpoint.port ?? 80)", "\(error.localizedDescription)"))
         }
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else { throw AssistantError.http(status, String(decoding: data.prefix(300), as: UTF8.self)) }
@@ -282,9 +282,10 @@ public struct OllamaPlanner: AssistantPlanner {
         if let reply = PlanParser.guardrail(goal) { return AssistantPlan(reply: reply, steps: []) }
         // Said before the request, not found out from a confusing answer: the model has to be one that calls tools.
         guard let caps = await Ollama.capabilities(model, session: session) else {
-            throw AssistantError.local(await Ollama.version(session: session) == nil ? "Ollama isn't running on this Mac." : "Ollama has no model called \(model).")
+            throw AssistantError.local(await Ollama.version(session: session) == nil ? Said("error.assistant.ollamaDown", "Ollama isn't running on this Mac.")
+                                                                                   : Said("error.assistant.ollamaNoModel", "Ollama has no model called %@.", model))
         }
-        guard caps.contains("tools") else { throw AssistantError.local("\(model) can't call tools, which the assistant needs. Pick a model that Ollama lists with tools.") }
+        guard caps.contains("tools") else { throw AssistantError.local(Said("error.assistant.can_t_call_tools", "%@ can't call tools, which the assistant needs. Pick a model that Ollama lists with tools.", "\(model)")) }
         var req = URLRequest(url: Ollama.base.appending(path: "api/chat"))
         req.timeoutInterval = timeout
         req.httpMethod = "POST"
@@ -292,7 +293,7 @@ public struct OllamaPlanner: AssistantPlanner {
         req.httpBody = try JSONSerialization.data(withJSONObject: requestBody(goal: goal, context: c, history: history, actions: actions, thinks: caps.contains("thinking")))
         let data: Data, response: URLResponse
         do { (data, response) = try await KeyedRequest.data(for: req, session: session) } catch {
-            throw AssistantError.local("Ollama didn't answer (\(error.localizedDescription)).")
+            throw AssistantError.local(Said("error.assistant.ollama_didn_t_answer", "Ollama didn't answer (%@).", "\(error.localizedDescription)"))
         }
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else { throw AssistantError.http(status, String(decoding: data.prefix(300), as: UTF8.self)) }

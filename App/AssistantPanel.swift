@@ -159,7 +159,7 @@ final class AssistantModel {
             if choices.isEmpty { listNote = L10n.text("assistant.list.none", provider.name) }
         } catch {
             // The provider's own words: a wrong key or a list that needs one is said, not hidden.
-            listNote = Keychain.get(provider.id) == nil ? L10n.text("assistant.list.needsKey", provider.name) : error.localizedDescription
+            listNote = Keychain.get(provider.id) == nil ? L10n.text("assistant.list.needsKey", provider.name) : L10n.error(error)
         }
     }
 
@@ -214,7 +214,7 @@ final class AssistantModel {
                     await run(plan)
                 }
             } catch {
-                messages.append(Message(role: .note, text: error.localizedDescription))
+                messages.append(Message(role: .note, text: L10n.replyError(error, replyLanguage)))
             }
         }
     }
@@ -280,7 +280,7 @@ final class AssistantModel {
                 }
                 return true
             } catch {
-                messages.append(Message(role: .note, text: error.localizedDescription))
+                messages.append(Message(role: .note, text: L10n.replyError(error, replyLanguage)))
                 return false
             }
         }
@@ -332,7 +332,7 @@ final class AssistantModel {
                 return await runJob(JobRegistry.shared.startFreeze(session, strip: id))
             }
             do { session.commit(try session.project.unfreezing(id), action: L10n.text("freeze.undo.action", strip.name)); return true }
-            catch { messages.append(Message(role: .note, text: error.localizedDescription)); return false }
+            catch { messages.append(Message(role: .note, text: L10n.replyError(error, replyLanguage))); return false }
         case "measure_loudness":
             let r = await session.analyze(session.selection)
             func f(_ v: Double?, _ u: String) -> String { v.map { L10n.number($0, 1) + " " + u } ?? "—" }
@@ -356,7 +356,7 @@ final class AssistantModel {
         }
         let done = JobRegistry.shared.job(job.id)
         if done?.status == .done { return true }
-        messages.append(Message(role: .note, text: done?.error?.message ?? L10n.reply("assistant.reply.jobUnfinished", replyLanguage, job.kind)))
+        messages.append(Message(role: .note, text: done?.errorKeyed.map { L10n.replyError(L10n.KeyedOnly(keyed: $0), replyLanguage) } ?? done?.error?.message ?? L10n.reply("assistant.reply.jobUnfinished", replyLanguage, job.kind)))
         return false
     }
 
@@ -365,7 +365,7 @@ final class AssistantModel {
     private func confirmPaid(_ goal: String) async -> Bool {
         guard let provider else { return false }
         guard Keychain.get(provider.id) != nil else {
-            messages.append(Message(role: .note, text: AssistantError.missingKey(provider.name).localizedDescription))
+            messages.append(Message(role: .note, text: L10n.replyError(AssistantError.missingKey(provider.name), replyLanguage)))
             return false
         }
         guard !model.isEmpty else {

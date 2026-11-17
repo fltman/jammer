@@ -26,7 +26,7 @@ public final class OggOpusWriter {
 
     /// `comments`: Vorbis comments ("KEY=value") for OpusTags, e.g. chapters.
     public init(url: URL, channels: Int, sampleRate: Double, bitRate: Int = 64_000, vendor: String = "Jammer", comments: [String] = []) throws {
-        guard (1...2).contains(channels) else { throw ExportError.unsupported("Opus here takes mono or stereo.") }
+        guard (1...2).contains(channels) else { throw ExportError.unsupported(Said("error.export.opus_here_takes_mono", "Opus here takes mono or stereo.")) }
         self.channels = channels
         inputRate = sampleRate
         var input = AudioStreamBasicDescription(
@@ -55,7 +55,7 @@ public final class OggOpusWriter {
         // frames, but its output sits 3 samples earlier than libopus's; 309 lines it up.
         preSkip = preSkip > Self.appleDelayCorrection ? preSkip - Self.appleDelayCorrection : preSkip
         FileManager.default.createFile(atPath: url.path, contents: nil)
-        guard let h = try? FileHandle(forWritingTo: url) else { throw ExportError.unsupported("Can't write \(url.lastPathComponent).") }
+        guard let h = try? FileHandle(forWritingTo: url) else { throw ExportError.unsupported(Said("error.export.can_t_write", "Can't write %@.", "\(url.lastPathComponent)")) }
         handle = h
         serial = UInt32.random(in: 1...UInt32.max)
         // OpusHead (RFC 7845 §5.1): version 1, channels, pre-skip, input rate, gain 0, mapping 0.

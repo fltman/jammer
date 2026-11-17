@@ -42,7 +42,7 @@ public struct LinkJournal: Sendable {
     public struct Read: Sendable {
         public var entry: Entry
         public var project: Project
-        public var notes: [String]
+        public var notes: [Said]
     }
 
     public static let fileExtension = "jammerlink"

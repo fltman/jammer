@@ -163,7 +163,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
                         added.append(p.addTrack(source: r.source, name: url.deletingPathExtension().lastPathComponent).id)
                         if let w = r.warning { short.append(w) }
                     } catch {
-                        session.status = L10n.text("importTracks.failed", url.lastPathComponent, error.localizedDescription)
+                        session.status = L10n.text("importTracks.failed", url.lastPathComponent, L10n.error(error))
                         return
                     }
                 }
@@ -232,7 +232,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
                     session.commit(q, action: L10n.text("attenuate.title"))
                     session.status = L10n.text("attenuate.done", L10n.number(band.lowerBound, 0), L10n.number(band.upperBound, 0), L10n.number(-gain, 0))
                 case .failure(let e):
-                    session.status = e.localizedDescription
+                    session.status = L10n.error(e)
                 }
             }
         }
@@ -246,7 +246,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         guard let window, session.spectralArea != nil else { NSSound.beep(); return }
         let alert = NSAlert()
         alert.messageText = L10n.text("spectral.attenuate.action")
-        alert.informativeText = session.spectralArea.map { $0.shape.summary } ?? ""
+        alert.informativeText = session.spectralArea.map { L10n.message($0.shape.summarySaid.keyed) } ?? ""
         let db = NSTextField(string: "-20")
         db.setAccessibilityLabel(L10n.text("attenuate.change.ax"))
         db.frame = NSRect(x: 0, y: 0, width: 80, height: 22)
@@ -386,12 +386,12 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
     @objc func separateStems(_ sender: Any?) {
         let model = (sender as? NSMenuItem)?.representedObject as? String ?? "music4"
         guard Stems.isInstalled(model) else {
-            session.status = StemError.modelMissing.localizedDescription
+            session.status = L10n.error(StemError.modelMissing)
             NSSound.beep()
             return
         }
         if let t = session.project.tracks.first(where: { !$0.inserts.isEmpty && !$0.clips.isEmpty }) {
-            session.status = StemError.hasInserts(t.name).localizedDescription
+            session.status = L10n.error(StemError.hasInserts(t.name))
             NSSound.beep()
             return
         }
@@ -494,8 +494,10 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
             let alert = NSAlert()
             alert.messageText = failed.isEmpty ? L10n.text("acx.none") : L10n.count("acx.failed", failed.count)
             alert.informativeText = rows.map { r in
-                L10n.text("acx.row", r.pass == true ? L10n.text("acx.met") : r.pass == false ? L10n.text("acx.notMet") : L10n.text("acx.notJudged"), r.required, r.measured) + (r.note.map { "\n" + $0 } ?? "")
-            }.joined(separator: "\n\n") + "\n\n\(ACX.wording)\n\(ACX.source)"
+                // ACX's requirement is quoted as ACX publishes it (in English); what Jämmer measured and why, in the window's language.
+                L10n.text("acx.row", r.pass == true ? L10n.text("acx.met") : r.pass == false ? L10n.text("acx.notMet") : L10n.text("acx.notJudged"), r.required,
+                          L10n.message(r.measuredSaid.keyed)) + (r.noteSaid.map { "\n" + L10n.message($0.keyed) } ?? "")
+            }.joined(separator: "\n\n") + "\n\n" + L10n.message(ACX.wordingSaid.keyed) + "\n\(ACX.source)"
             alert.addButton(withTitle: L10n.text("button.ok"))
             _ = await alert.beginSheetModal(for: window)
         }
@@ -671,7 +673,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
                         session.status = L10n.text("export.done", url.lastPathComponent)
                     }
                 } catch {
-                    session.status = L10n.text("export.failed", error.localizedDescription)
+                    session.status = L10n.text("export.failed", L10n.error(error))
                 }
             }
         }
@@ -707,9 +709,9 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
                 try file.data.write(to: url, options: .atomic)
                 let done = L10n.text("export.done", url.lastPathComponent)
                 self.session.status = file.warnings.isEmpty ? done
-                    : L10n.text("import.done.notes", done, L10n.count("import.notes", file.warnings.count), file.warnings[0] + (file.warnings.count > 1 ? " …" : ""))
+                    : L10n.text("import.done.notes", done, L10n.count("import.notes", file.warnings.count), L10n.message(file.warnings[0].keyed) + (file.warnings.count > 1 ? " …" : ""))
             } catch {
-                self.session.status = L10n.text("export.failed", (error as? BatchError)?.message ?? error.localizedDescription)
+                self.session.status = L10n.text("export.failed", L10n.error(error))
             }
         }
     }

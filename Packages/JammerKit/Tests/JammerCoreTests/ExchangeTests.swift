@@ -42,7 +42,7 @@ struct ExchangeTests {
         let w = try EDL.write(ExchangeTimeline(p, name: "Scene"))
         #expect(w.text.contains("TITLE: Scene") && w.text.contains("FCM: NON-DROP FRAME") && w.text.contains("001  AX       A     C        00:00:01:00 00:00:03:00 01:00:00:00 01:00:02:00"), "\(w.text.prefix(400))")
         #expect(w.text.contains("* SOURCE FILE: \(dir.file("music.wav").path)") && w.text.contains("A2   "))
-        #expect(w.warnings.contains { $0 == "1 track has a level, pan or mute, which a CMX 3600 list can't hold." } && w.warnings.contains { $0.contains("Markers") } && !w.warnings.contains { $0.contains("rounded") }, "\(w.warnings)")
+        #expect(w.warnings.contains { $0.text == "1 track has a level, pan or mute, which a CMX 3600 list can't hold." } && w.warnings.contains { $0.contains("Markers") } && !w.warnings.contains { $0.contains("rounded") }, "\(w.warnings)")
         let back = try built(try EDL.read(w.text, base: dir.url, name: "x"), dir)
         #expect(placement(back).map { Array($0.prefix(4)) } == placement(p).map { Array($0.prefix(4)) }, "\(placement(back))")
         #expect(back.timecode == p.timecode)

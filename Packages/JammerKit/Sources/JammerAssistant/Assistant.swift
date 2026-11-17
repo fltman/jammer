@@ -341,10 +341,11 @@ public protocol AssistantPlanner: Sendable {
               actions: [AssistantAction]) async throws -> AssistantPlan
 }
 
-public enum AssistantError: Error, LocalizedError, Equatable {
-    case unavailable(String)
+public enum AssistantError: Error, LocalizedError, Equatable, KeyedFailure {
+    /// The on-device model can't be used: a whole sentence.
+    case unavailable(Said)
     /// A model server on this Mac (Ollama, MLX) that can't do it, in words that stand on their own.
-    case local(String)
+    case local(Said)
     /// A provider answered with an error: its name, the status, and its own words.
     case provider(String, Int, String)
     /// No key for this provider in the Keychain.
@@ -353,15 +354,17 @@ public enum AssistantError: Error, LocalizedError, Equatable {
     case http(Int, String)
     case badResponse
 
-    public var errorDescription: String? {
+    public var errorDescription: String? { said.text }
+    public var keyed: KeyedMessage? { said.keyed }
+    var said: Said {
         switch self {
-        case .unavailable(let why): "The on-device model isn't available: \(why)"
-        case .local(let why): why
-        case .provider(let name, let status, let said): "\(name) answered \(status): \(said)"
-        case .missingKey(let name): "Add your \(name) key in the assistant's settings to use it."
-        case .noKey: "Add your OpenRouter key in Settings to use a cloud model."
-        case .http(let c, let m): "The model service answered \(c): \(m)"
-        case .badResponse: "The model's answer couldn't be read."
+        case .unavailable(let s), .local(let s): s
+        // The provider's own words are its own.
+        case .provider(let name, let status, let said): Said("error.assistant.provider", "%1$@ answered %2$@: %3$@", name, "\(status)", said)
+        case .missingKey(let name): Said("error.assistant.missingKey", "Add your %@ key in the assistant's settings to use it.", name)
+        case .noKey: Said("error.assistant.noKey", "Add your OpenRouter key in Settings to use a cloud model.")
+        case .http(let c, let m): Said("error.assistant.http", "The model service answered %1$@: %2$@", "\(c)", m)
+        case .badResponse: Said("error.assistant.badResponse", "The model's answer couldn't be read.")
         }
     }
 }
@@ -801,10 +804,10 @@ public enum MacroExpander {
             case "remove_fillers":
                 let extra = Set(s.params["words"]?.strings ?? [])
                 let ids = scratch.project.fillerWordIDs(extra: extra)
-                guard !scratch.project.areTextOnly(Set(ids)) else { throw StepFailure("remove_fillers: " + SourceTranscript.textOnlyReason, reason: "text_only") }
+                guard !scratch.project.areTextOnly(Set(ids)) else { throw StepFailure("remove_fillers: " + SourceTranscript.textOnlyReason, reason: "text_only", keyed: SourceTranscript.textOnly.keyed) }
                 concrete = ids.isEmpty ? [] : [Step(op: "delete_words", params: ["words": .array(ids.map { .string($0.uuidString) }), "bridge": .number(0.05)])]
             case "remove_silences":
-                guard let pool = scratch.pool else { throw StepFailure("remove_silences needs the app.") }
+                guard let pool = scratch.pool else { throw StepFailure(Said("step.remove_silences.app", "remove_silences needs the app.")) }
                 let p = scratch.project
                 let minLen = p.frames(s.params["min_length"]?.double ?? 1)
                 let keep = p.frames(s.params["keep"]?.double ?? 0.3)
@@ -820,7 +823,10 @@ public enum MacroExpander {
             }
             for c in concrete {
                 let r = StepRunner.run([c], on: &scratch, measure: measure)
-                if r.first?.status == .failed { throw StepFailure("\(c.op): \(r.first?.error ?? "failed")") }
+                if let f = r.first, f.status == .failed {
+                    let said = Said("step.any.wrapped", "%1$@: %2$@", c.op, f.error ?? "failed")
+                    throw StepFailure(said.text, reason: f.reason, keyed: f.keyed ?? said.keyed)
+                }
             }
             out += concrete
         }

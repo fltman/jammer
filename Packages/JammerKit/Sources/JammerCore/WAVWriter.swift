@@ -52,12 +52,12 @@ public final class WAVWriter {
     private var finished = false
 
     public init(url: URL, options: Options) throws {
-        guard options.channels > 0, options.sampleRate > 0 else { throw AudioFileError.unsupported("Invalid channel count or sample rate.") }
+        guard options.channels > 0, options.sampleRate > 0 else { throw AudioFileError.unsupported(Said("error.export.invalid_channel_count_sample", "Invalid channel count or sample rate.")) }
         self.url = url
         self.options = options
         FileManager.default.createFile(atPath: url.path, contents: nil)
         guard let h = try? FileHandle(forWritingTo: url) else {
-            throw AudioFileError.unreadable("Can't write to \(url.lastPathComponent).")
+            throw AudioFileError.unreadable(Said("error.file.can_t_write", "Can't write to %@.", "\(url.lastPathComponent)"))
         }
         handle = h
         var head = Data()

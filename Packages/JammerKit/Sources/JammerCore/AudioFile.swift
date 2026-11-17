@@ -13,13 +13,15 @@ public struct AudioFileInfo: Sendable, Equatable, Codable {
     public static let sampleRates: ClosedRange<Double> = 8_000...768_000
 
     /// Nil when the format is one Jämmer can work with; else why not, in words.
-    public static func refusal(channels: Int, sampleRate: Double) -> String? {
-        guard channels >= 1 else { return "The file says it has no channels." }
-        guard channels <= maxChannels else { return "The file says it has \(channels) channels; Jämmer takes up to \(maxChannels)." }
+    public static func refusal(channels: Int, sampleRate: Double) -> Said? {
+        guard channels >= 1 else { return Said("error.file.noChannels", "The file says it has no channels.") }
+        guard channels <= maxChannels else { return Said("error.file.tooManyChannels", "The file says it has %1$@ channels; Jämmer takes up to %2$@.", "\(channels)", "\(maxChannels)") }
         guard sampleRate.isFinite, sampleRates.contains(sampleRate) else {
             // Formatted as text: a rate like 1e300 doesn't fit in any integer.
-            let said = sampleRate.isFinite ? String(format: "%.0f Hz", sampleRate) : "not a number"
-            return "The file says its sample rate is \(said); Jämmer takes \(Int(sampleRates.lowerBound)) to \(Int(sampleRates.upperBound)) Hz."
+            let low = "\(Int(sampleRates.lowerBound))", high = "\(Int(sampleRates.upperBound))"
+            return sampleRate.isFinite
+                ? Said("error.file.badRate", "The file says its sample rate is %1$@ Hz; Jämmer takes %2$@ to %3$@ Hz.", Said.n(sampleRate, 0), low, high)
+                : Said("error.file.rateNaN", "The file says its sample rate is not a number; Jämmer takes %1$@ to %2$@ Hz.", low, high)
         }
         return nil
     }
@@ -141,12 +143,14 @@ public struct BroadcastExtension: Sendable, Equatable, Codable {
     public init() {}
 }
 
-public enum AudioFileError: Error, LocalizedError, Equatable {
-    case unreadable(String)
-    case notPCM(String)
-    case unsupported(String)
+public enum AudioFileError: Error, LocalizedError, Equatable, KeyedFailure {
+    case unreadable(Said)
+    case notPCM(Said)
+    case unsupported(Said)
 
-    public var errorDescription: String? {
+    public var errorDescription: String? { said.text }
+    public var keyed: KeyedMessage? { said.keyed }
+    var said: Said {
         switch self {
         case .unreadable(let m), .notPCM(let m), .unsupported(let m): m
         }
@@ -160,7 +164,7 @@ public enum AudioFileReader {
     /// Throws `notPCM` for files Jammer has to decode first (MP3, AAC, FLAC, CAF…).
     public static func info(at url: URL) throws -> AudioFileInfo {
         guard let handle = try? FileHandle(forReadingFrom: url) else {
-            throw AudioFileError.unreadable("Can't open \(url.lastPathComponent).")
+            throw AudioFileError.unreadable(Said("error.file.can_t_open", "Can't open %@.", "\(url.lastPathComponent)"))
         }
         defer { try? handle.close() }
         let fileSize = Int64((try? handle.seekToEnd()) ?? 0)
@@ -169,7 +173,7 @@ public enum AudioFileReader {
         switch magic {
         case "RIFF", "RF64", "BW64": return try parseWAV(&reader, magic: magic)
         case "FORM": return try parseAIFF(&reader)
-        default: throw AudioFileError.notPCM("\(url.lastPathComponent) isn't a WAV or AIFF file.")
+        default: throw AudioFileError.notPCM(Said("error.file.isn_t_wav_aiff", "%@ isn't a WAV or AIFF file.", "\(url.lastPathComponent)"))
         }
     }
 
@@ -179,7 +183,7 @@ public enum AudioFileReader {
     }
 
     private static func parseWAV(_ r: inout ByteReader, magic: String) throws -> AudioFileInfo {
-        guard try r.fourCC(at: 8) == "WAVE" else { throw AudioFileError.notPCM("RIFF file without WAVE.") }
+        guard try r.fourCC(at: 8) == "WAVE" else { throw AudioFileError.notPCM(Said("error.file.riff_file_without_wave", "RIFF file without WAVE.")) }
         let is64 = magic != "RIFF"
         var ds64Data: Int64?
         var ds64Table: [String: Int64] = [:]
@@ -210,14 +214,14 @@ public enum AudioFileReader {
             size = max(0, min(size, r.size - payload))
             chunks.append(.init(id: id, offset: payload, size: size))
             // A file made of nothing but headers doesn't get to keep us here.
-            guard chunks.count <= 100_000 else { throw AudioFileError.unreadable("The file has too many chunks to be a recording.") }
+            guard chunks.count <= 100_000 else { throw AudioFileError.unreadable(Said("error.file.file_has_too_many", "The file has too many chunks to be a recording.")) }
             pos = payload + size + (size & 1)
         }
         guard let fmt = chunks.first(where: { $0.id == "fmt " }), fmt.size >= 16 else {
-            throw AudioFileError.unreadable("The file is cut off or damaged: the part that says what kind of audio it holds is missing.")
+            throw AudioFileError.unreadable(Said("error.file.file_cut_off_damaged", "The file is cut off or damaged: the part that says what kind of audio it holds is missing."))
         }
         guard let data = chunks.first(where: { $0.id == "data" }) else {
-            throw AudioFileError.unreadable("The file is cut off or damaged: it has no audio in it.")
+            throw AudioFileError.unreadable(Said("error.file.file_cut_off_damaged2", "The file is cut off or damaged: it has no audio in it."))
         }
         var tag = try r.u16le(at: fmt.offset)
         let channels = Int(try r.u16le(at: fmt.offset + 2))
@@ -236,7 +240,7 @@ public enum AudioFileReader {
         case (1, 32): sampleFormat = .int32
         case (3, 32): sampleFormat = .float32
         case (3, 64): sampleFormat = .float64
-        default: throw AudioFileError.notPCM("WAV format \(tag) with \(bits) bits isn't plain PCM.")
+        default: throw AudioFileError.notPCM(Said("error.file.wav_format_1_2", "WAV format %1$@ with %2$@ bits isn't plain PCM.", "\(tag)", "\(bits)"))
         }
         if let no = AudioFileInfo.refusal(channels: channels, sampleRate: rate) { throw AudioFileError.unreadable(no) }
         let frameBytes = Int64(bits / 8 * channels)
@@ -322,21 +326,21 @@ public enum AudioFileReader {
 
     private static func parseAIFF(_ r: inout ByteReader) throws -> AudioFileInfo {
         let kind = try r.fourCC(at: 8)
-        guard kind == "AIFF" || kind == "AIFC" else { throw AudioFileError.notPCM("FORM file that isn't AIFF.") }
+        guard kind == "AIFF" || kind == "AIFC" else { throw AudioFileError.notPCM(Said("error.file.form_file_isn_t", "FORM file that isn't AIFF.")) }
         var chunks: [AudioFileInfo.Chunk] = []
         var pos: Int64 = 12
         while pos + 8 <= r.size {
             let id = try r.fourCC(at: pos)
             let size = Int64(try r.u32be(at: pos + 4))
             chunks.append(.init(id: id, offset: pos + 8, size: min(size, r.size - pos - 8)))
-            guard chunks.count <= 100_000 else { throw AudioFileError.unreadable("The file has too many chunks to be a recording.") }
+            guard chunks.count <= 100_000 else { throw AudioFileError.unreadable(Said("error.file.file_has_too_many", "The file has too many chunks to be a recording.")) }
             pos += 8 + size + (size & 1)
         }
         guard let comm = chunks.first(where: { $0.id == "COMM" }), comm.size >= 18 else {
-            throw AudioFileError.unreadable("The file is cut off or damaged: the part that says what kind of audio it holds is missing.")
+            throw AudioFileError.unreadable(Said("error.file.file_cut_off_damaged", "The file is cut off or damaged: the part that says what kind of audio it holds is missing."))
         }
         guard let ssnd = chunks.first(where: { $0.id == "SSND" }), ssnd.size >= 8 else {
-            throw AudioFileError.unreadable("The file is cut off or damaged: it has no audio in it.")
+            throw AudioFileError.unreadable(Said("error.file.file_cut_off_damaged2", "The file is cut off or damaged: it has no audio in it."))
         }
         let channels = Int(try r.u16be(at: comm.offset))
         let frames = Int64(try r.u32be(at: comm.offset + 2))
@@ -356,7 +360,7 @@ public enum AudioFileReader {
         case ("sowt", 32): format = .int32; bigEndian = false
         case ("fl32", _), ("FL32", _): format = .float32
         case ("fl64", _), ("FL64", _): format = .float64
-        default: throw AudioFileError.notPCM("AIFF-C compression \(compression) isn't plain PCM.")
+        default: throw AudioFileError.notPCM(Said("error.file.aiff_c_compression_isn", "AIFF-C compression %@ isn't plain PCM.", "\(compression)"))
         }
         if let no = AudioFileInfo.refusal(channels: channels, sampleRate: rate) { throw AudioFileError.unreadable(no) }
         let ssndOffset = Int64(try r.u32be(at: ssnd.offset))
@@ -406,11 +410,11 @@ struct ByteReader {
 
     func bytes(at offset: Int64, count: Int) throws -> Data {
         guard offset >= 0, count >= 0, offset + Int64(count) <= size else {
-            throw AudioFileError.unreadable("The file ends early (offset \(offset)).")
+            throw AudioFileError.unreadable(Said("error.file.file_ends_early_offset", "The file ends early (offset %@).", "\(offset)"))
         }
         try handle.seek(toOffset: UInt64(offset))
         let d = try handle.read(upToCount: count) ?? Data()
-        guard d.count == count else { throw AudioFileError.unreadable("The file ends early.") }
+        guard d.count == count else { throw AudioFileError.unreadable(Said("error.file.file_ends_early", "The file ends early.")) }
         return d
     }
 

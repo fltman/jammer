@@ -286,9 +286,11 @@ public struct Project: Codable, Equatable, Sendable {
     /// The document's loudspeakers. Every layout has its own channel count, so the count says which.
     public var layout: ChannelLayout { ChannelLayout.standard(channels: channels) ?? .stereo }
 
-    public struct NeedsNewer: Error, LocalizedError, Equatable {
+    public struct NeedsNewer: Error, LocalizedError, Equatable, KeyedFailure {
         public var version: Int
-        public var errorDescription: String? { "This project was saved by a newer Jämmer (format \(version)) and uses things this version doesn't have. Open it in a newer Jämmer." }
+        var said: Said { Said("error.project.newer", "This project was saved by a newer Jämmer (format %@) and uses things this version doesn't have. Open it in a newer Jämmer.", "\(version)") }
+        public var errorDescription: String? { said.text }
+        public var keyed: KeyedMessage? { said.keyed }
     }
 
     public var formatVersion: Int

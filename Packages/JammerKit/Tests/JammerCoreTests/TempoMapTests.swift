@@ -131,6 +131,6 @@ struct TempoMapTests {
         #expect(old.tempo == TempoMap())
 
         json["tempo"] = ["changes": [["position": 0, "bpm": 0, "meter": ["beats": 4, "unit": 4]]]]
-        #expect(throws: AudioFileError.unreadable("The project file is damaged or cut off and can't be opened.")) { try ProjectPackage.decode(JSONSerialization.data(withJSONObject: json)) }
+        #expect(throws: AudioFileError.unreadable(Said("error.file.project_file_damaged_cut", "The project file is damaged or cut off and can't be opened."))) { try ProjectPackage.decode(JSONSerialization.data(withJSONObject: json)) }
     }
 }

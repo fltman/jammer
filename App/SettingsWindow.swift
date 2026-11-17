@@ -92,7 +92,7 @@ final class ModelsModel {
                 let id = row.id
                 try await row.install { p in Task { @MainActor in self.progress[id] = p } }
             } catch {
-                errors[row.id] = L10n.text("settings.models.failed", error.localizedDescription)
+                errors[row.id] = L10n.text("settings.models.failed", L10n.error(error))
             }
             progress[row.id] = nil
             tick += 1
@@ -100,7 +100,7 @@ final class ModelsModel {
     }
 
     func remove(_ row: ModelRow) {
-        do { try row.remove() } catch { errors[row.id] = error.localizedDescription }
+        do { try row.remove() } catch { errors[row.id] = L10n.error(error) }
         tick += 1
     }
 }
