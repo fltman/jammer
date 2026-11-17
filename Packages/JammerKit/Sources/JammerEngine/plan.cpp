@@ -220,6 +220,28 @@ void jm_plan_set_gain_curve(jm_plan *plan, int32_t kind, int32_t index, const in
     jm_plan_set_curve(plan, kind, index, 0, frames, db, count);
 }
 
+extern "C++" {
+namespace jm {
+/// Whether `next` may go on from where `prev` is playing: the same plugins (the very same chains, whose
+/// state then carries on), the same master, and graphs of the same shape. Then the graph's state moves over.
+bool continuePlan(Plan &next, Plan &prev) {
+    if (&next == &prev) return true;
+    if (!next.finalized || !prev.finalized || !next.graph || !prev.graph) return false;
+    if (next.channels != prev.channels || next.sampleRate != prev.sampleRate) return false;
+    if (next.tracks.size() != prev.tracks.size() || next.buses.size() != prev.buses.size()) return false;
+    for (size_t i = 0; i < next.tracks.size(); ++i)
+        if (next.tracks[i].chain != prev.tracks[i].chain) return false;
+    for (size_t i = 0; i < next.buses.size(); ++i)
+        if (next.buses[i].chain != prev.buses[i].chain) return false;
+    if (next.masterChain != prev.masterChain) return false;
+    if (next.masterLimiter != prev.masterLimiter) return false;
+    return next.graph->continueFrom(*prev.graph);
+}
+} // namespace jm
+} // extern "C++"
+
+bool jm_plan_continue_from(jm_plan *plan, jm_plan *previous) { return jm::continuePlan(*plan->ptr, *previous->ptr); }
+
 int64_t jm_plan_total_latency(const jm_plan *plan) { return plan->ptr->graph ? plan->ptr->graph->total + plan->ptr->graph->masterLatency : 0; }
 int64_t jm_plan_master_latency(const jm_plan *plan) { return plan->ptr->graph ? plan->ptr->graph->masterLatency : 0; }
 

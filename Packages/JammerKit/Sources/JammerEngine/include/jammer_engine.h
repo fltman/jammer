@@ -103,6 +103,14 @@ int64_t jm_plan_total_latency(const jm_plan *_Nonnull plan);
 int64_t jm_plan_compensation(const jm_plan *_Nonnull plan, bool bus, int32_t index);
 /// Sorts and freezes the plan. Must be called before rendering or publishing.
 void jm_plan_finalize(jm_plan *_Nonnull plan);
+/// Lets `plan` go on from where `previous` has got to, instead of starting afresh: when both are
+/// finalized, have the very same plugin chains and graphs of the same shape (a mute, a level, a pan or a
+/// send's level changed, nothing added or removed), the running state moves over: delay lines, the place
+/// on the timeline, the plugins' tails. The next render of `plan` must then be from the frame after the
+/// last one rendered of `previous`. Returns false, with nothing done, when it can't be (the plan then
+/// starts afresh as it always did). The engine does this by itself when it is given a new plan while it
+/// plays. Not for use while either plan is being rendered on another thread.
+bool jm_plan_continue_from(jm_plan *_Nonnull plan, jm_plan *_Nonnull previous);
 void jm_plan_release(jm_plan *_Nullable plan);
 /// The end of the last clip, in frames.
 int64_t jm_plan_length(const jm_plan *_Nonnull plan);
@@ -219,6 +227,14 @@ int64_t jm_engine_underruns(const jm_engine *_Nonnull engine);
 /// The tap counts what is handed to the device before the volume (the sum of squares over every channel,
 /// and the device frames), from when it is switched on; switching it on or off starts the count afresh.
 void jm_engine_set_silent(jm_engine *_Nonnull engine, bool silent);
+/// How far ahead of the playhead the engine renders, in frames at the device's rate. 0 (the default):
+/// the whole ring, about a third of a second, which gives the render thread the most room. A small
+/// number (about 20 ms' worth) while a hand is on a control: a change to the plan is then heard that
+/// soon. Changing it never skips or repeats a frame and touches nothing that makes the sound; what it
+/// costs is the render thread's margin against a dropout.
+void jm_engine_set_ahead(jm_engine *_Nonnull engine, int32_t frames);
+/// Frames rendered and not yet played.
+int64_t jm_engine_buffered(const jm_engine *_Nonnull engine);
 void jm_engine_tap(jm_engine *_Nonnull engine, bool on);
 void jm_engine_tap_read(const jm_engine *_Nonnull engine, double *_Nonnull energy, int64_t *_Nonnull frames);
 /// True once the audio thread has taken the latest play request (the seek has happened).

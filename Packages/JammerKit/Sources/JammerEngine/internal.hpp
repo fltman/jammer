@@ -199,6 +199,13 @@ public:
     };
     explicit Graph(const Plan &plan);
     void process(const Plan &plan, Renderer &renderer, int64_t start, int64_t n, float *out);
+    /// Takes over the running state of the graph of the plan that played before this one (its delay
+    /// lines, its place on the timeline, what it had made and not yet handed over), when the two graphs
+    /// have the same shape. Then the next call to `process` goes on where the other stopped, with no
+    /// reset: the plugins' tails and the delay compensation are untouched, so a mute, a fader or a pan
+    /// that comes as a new plan doesn't cut a reverb off. False, and nothing done, when the shapes differ
+    /// (a bus added, a plugin's latency changed): the new graph then starts as it always did.
+    bool continueFrom(Graph &old);
     int64_t total = 0;                      // the longest path through the buses, in frames
     int64_t masterLatency = 0;              // what the master's plugins and its limiter add after that
     std::vector<int64_t> busLatency;        // each bus's own chain
@@ -240,6 +247,7 @@ private:
     bool plain_ = false;
     std::vector<float> direct_, directLine_;
     size_t directAt_ = 0;
+    bool sameShape(const Graph &o) const;
     void reset(const Plan &plan, int64_t start);
     void produce(const Plan &plan, Renderer &renderer);
     void send(Edge &e, const float *in, float gainL, float gainR, int64_t n);
@@ -281,6 +289,8 @@ struct Plan {
     int64_t length = 0;
     bool finalized = false;
 };
+
+bool continuePlan(Plan &next, Plan &prev);
 
 /// Renders a plan into interleaved float. Owns its scratch, so reuse one per thread.
 class Renderer {

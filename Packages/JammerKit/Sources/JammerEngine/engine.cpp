@@ -26,6 +26,8 @@ namespace jm {
 constexpr int32_t kMaxChannels = 32;
 constexpr int32_t kMaxSlots = 64;
 constexpr int64_t kBlock = 1024;
+/// The block the worker makes while the ring is kept short.
+constexpr int64_t kBrief = 256;
 
 /// One device output channel: interleaved channel `channel` of buffer `buffer`,
 /// fed from engine channel `source`.
@@ -149,6 +151,8 @@ struct Engine {
     std::atomic<double> tapEnergy{0.0};
     std::atomic<int64_t> tapFrames{0};
     std::atomic<float> gain{1.0f};
+    /// How many frames ahead of the playhead the worker keeps the ring; 0: all of it.
+    std::atomic<int64_t> ahead{0};
     std::atomic<float> peaks[kMaxChannels];
     std::atomic<uint64_t> renderedSinceAck{0};
 
@@ -189,6 +193,7 @@ void Engine::run() {
     int64_t renderFrame = 0;
     double parkRate = 0;
     bool streaming = false;
+    std::shared_ptr<Plan> last;
     while (!quit.load(std::memory_order_acquire)) {
         const uint64_t seq = requestSeq.load(std::memory_order_acquire);
         if (seq != workerSeq) {
@@ -224,17 +229,29 @@ void Engine::run() {
             std::lock_guard<std::mutex> lock(planMutex);
             current = plan;
         }
+        // A new plan while playing: where it has the same shape as the one before (a mute, a level, a
+        // pan), it goes on from that one's state instead of starting afresh, so that no tail is cut.
+        if (current != last) {
+            if (current && last && streaming) continuePlan(*current, *last);
+            last = current;
+        }
         endFrame.store(current ? current->length : 0, std::memory_order_relaxed);
         const uint64_t w = writePos.load(std::memory_order_relaxed);
         const uint64_t r = readPos.load(std::memory_order_acquire);
-        const uint64_t space = capacity - (w - r);
-        if (space < uint64_t(kBlock)) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        // How far ahead of the playhead the ring is kept: all of it, or, while a hand is on a control,
+        // only `ahead` frames, so that what the control does is heard at once. Going from one to the
+        // other changes only when the next block is made: no frame is skipped, none is made twice, and
+        // nothing that makes the sound is touched.
+        const int64_t want = ahead.load(std::memory_order_relaxed);
+        const bool brief = want > 0 && uint64_t(want) + uint64_t(kBlock) < capacity;
+        int64_t n = brief ? kBrief : kBlock;
+        const uint64_t limit = brief ? uint64_t(std::max<int64_t>(want, kBrief)) : capacity;
+        if ((w - r) + uint64_t(n) > limit) {
+            std::this_thread::sleep_for(brief ? std::chrono::microseconds(300) : std::chrono::microseconds(1000));
             continue;
         }
-        int64_t n = kBlock;
         if (resampler) {
-            n = resampler->render(current, kBlock, block.data());
+            n = resampler->render(current, n, block.data());
             if (n <= 0) continue;
         } else if (current && current->finalized) {
             renderer.render(*current, renderFrame, n, block.data());
@@ -390,6 +407,10 @@ void jm_engine_stop(jm_engine *engine) { engine->e.playing.store(false, std::mem
 bool jm_engine_is_playing(const jm_engine *engine) { return engine->e.playing.load(std::memory_order_acquire); }
 int64_t jm_engine_playhead(const jm_engine *engine) { return engine->e.playhead.load(std::memory_order_relaxed); }
 void jm_engine_set_gain(jm_engine *engine, float gain) { engine->e.gain.store(gain, std::memory_order_relaxed); }
+void jm_engine_set_ahead(jm_engine *engine, int32_t frames) { engine->e.ahead.store(std::max<int32_t>(0, frames), std::memory_order_relaxed); }
+int64_t jm_engine_buffered(const jm_engine *engine) {
+    return int64_t(engine->e.writePos.load(std::memory_order_acquire) - engine->e.readPos.load(std::memory_order_acquire));
+}
 void jm_engine_set_silent(jm_engine *engine, bool silent) { engine->e.silent.store(silent, std::memory_order_relaxed); }
 void jm_engine_tap(jm_engine *engine, bool on) {
     engine->e.tap.store(false, std::memory_order_relaxed);

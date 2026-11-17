@@ -200,6 +200,59 @@ void Graph::reset(const Plan &plan, int64_t start) {
     primed_ = true;
 }
 
+bool Graph::sameShape(const Graph &o) const {
+    auto edges = [](const std::vector<std::vector<Edge>> &a, const std::vector<std::vector<Edge>> &b) {
+        if (a.size() != b.size()) return false;
+        for (size_t i = 0; i < a.size(); ++i) {
+            if (a[i].size() != b[i].size()) return false;
+            for (size_t k = 0; k < a[i].size(); ++k) {
+                const Edge &x = a[i][k], &y = b[i][k];
+                if (x.to != y.to || x.pre != y.pre || x.main != y.main || x.delay != y.delay || x.line.size() != y.line.size()
+                    || x.keyNode != y.keyNode || x.keyUnit != y.keyUnit) return false;
+            }
+        }
+        return true;
+    };
+    if (channels_ != o.channels_ || total != o.total || masterLatency != o.masterLatency || preroll_ != o.preroll_ || plain_ != o.plain_) return false;
+    if (order_ != o.order_ || nodeIn_ != o.nodeIn_ || nodeOut_ != o.nodeOut_ || masterChainLatency_ != o.masterChainLatency_) return false;
+    if (directLine_.size() != o.directLine_.size() || bus_.size() != o.bus_.size() || keyBuffers_.size() != o.keyBuffers_.size()) return false;
+    for (size_t i = 0; i < keyBuffers_.size(); ++i) {
+        if (keyBuffers_[i].size() != o.keyBuffers_[i].size()) return false;
+        for (size_t k = 0; k < keyBuffers_[i].size(); ++k)
+            if (keyBuffers_[i][k].unit != o.keyBuffers_[i][k].unit) return false;
+    }
+    return edges(trackEdges_, o.trackEdges_) && edges(busEdges_, o.busEdges_);
+}
+
+bool Graph::continueFrom(Graph &old) {
+    if (this == &old) return true;
+    std::scoped_lock lock(mutex_, old.mutex_);
+    if (!old.primed_ || !sameShape(old)) return false;
+    for (size_t i = 0; i < trackEdges_.size(); ++i)
+        for (size_t k = 0; k < trackEdges_[i].size(); ++k) { trackEdges_[i][k].line.swap(old.trackEdges_[i][k].line); trackEdges_[i][k].at = old.trackEdges_[i][k].at; }
+    for (size_t i = 0; i < busEdges_.size(); ++i)
+        for (size_t k = 0; k < busEdges_[i].size(); ++k) { busEdges_[i][k].line.swap(old.busEdges_[i][k].line); busEdges_[i][k].at = old.busEdges_[i][k].at; }
+    directLine_.swap(old.directLine_);
+    directAt_ = old.directAt_;
+    // (Copied, not swapped: the chains' key feeds point into this graph's own buffers.)
+    for (size_t i = 0; i < bus_.size(); ++i)
+        if (bus_[i].size() == old.bus_[i].size()) std::copy(old.bus_[i].begin(), old.bus_[i].end(), bus_[i].begin());
+    for (size_t i = 0; i < keyBuffers_.size(); ++i)
+        for (size_t k = 0; k < keyBuffers_[i].size(); ++k)
+            if (keyBuffers_[i][k].data.size() == old.keyBuffers_[i][k].data.size())
+                std::copy(old.keyBuffers_[i][k].data.begin(), old.keyBuffers_[i][k].data.end(), keyBuffers_[i][k].data.begin());
+    cursor_ = old.cursor_;
+    discard_ = old.discard_;
+    readPos_ = old.readPos_;
+    fifo_.swap(old.fifo_);
+    fifoHead_ = old.fifoHead_;
+    primed_ = true;
+    // The other graph has given its state away: if it is ever used again it starts afresh.
+    old.primed_ = false;
+    old.fifoHead_ = 0;
+    return true;
+}
+
 /// Adds `n` frames of `in`, times the gains, to where the edge goes, as late as the edge's delay says.
 void Graph::send(Edge &e, const float *in, float gainL, float gainR, int64_t n) {
     float *to = mix_.data();

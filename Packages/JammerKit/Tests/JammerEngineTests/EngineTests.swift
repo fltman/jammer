@@ -287,3 +287,53 @@ struct EngineTests {
         #expect(jm_engine_ioproc(0, &ts, &empty, &ts, &output, &ts, UnsafeMutableRawPointer(engine)) == noErr)
     }
 }
+
+@Suite("The engine's ring, long and short")
+struct RingLengthTests {
+    @Test("The ring made short and long and short again while it plays: every frame comes out once, in order, the same samples as an unbroken render; and while short it is never far ahead")
+    func shortAndLong() throws {
+        let frames = 160_000
+        var signal = [Float](repeating: 0, count: frames * 2)
+        for i in 0..<frames { signal[i * 2] = Float(0.2 * sin(2 * .pi * 220 * Double(i) / 48_000)); signal[i * 2 + 1] = Float(i % 997) / 2_000 }
+        let src = jm_source_create_memory(signal, Int64(frames), 2)
+        defer { jm_source_release(src) }
+        let plan = jm_plan_create(2, 48_000)
+        defer { jm_plan_release(plan) }
+        let t = jm_plan_add_track(plan, 1, false)
+        jm_plan_add_clip(plan, t, jm_plan_add_source(plan, src), 0, 0, Int64(frames), 1, 0, 0, JM_FADE_LINEAR)
+        jm_plan_finalize(plan)
+        let engine = jm_engine_create(2, 48_000, 16_384)
+        defer { jm_engine_destroy(engine) }
+        jm_engine_set_plan(engine, plan)
+        var left = [Float](repeating: 0, count: 256), right = [Float](repeating: 0, count: 256)
+        func pull() {
+            left.withUnsafeMutableBufferPointer { l in
+                right.withUnsafeMutableBufferPointer { r in
+                    let outs: [UnsafeMutablePointer<Float>] = [l.baseAddress!, r.baseAddress!]
+                    outs.withUnsafeBufferPointer { jm_engine_pull(engine, $0.baseAddress!, 2, 256) }
+                }
+            }
+        }
+        jm_engine_play(engine, 0)
+        for _ in 0..<2_000 where !jm_engine_seek_settled(engine) { pull(); usleep(500) }
+        #expect(jm_engine_wait_primed(engine, 2_000))
+        var got: [Float] = []
+        var mostWhileShort: Int64 = 0
+        let short: Int32 = 960                                 // 20 ms
+        for round in 0..<480 {
+            // Long for 80 pulls, short for 80 (more than the whole ring, so it has time to drain), and so on: six changes while it plays.
+            let brief = (round / 80) % 2 == 1
+            jm_engine_set_ahead(engine, brief ? short : 0)
+            // Like a device that never runs dry: wait for the worker rather than take silence.
+            for _ in 0..<4_000 where jm_engine_buffered(engine) < 256 { usleep(200) }
+            try #require(jm_engine_buffered(engine) >= 256, "the worker stopped feeding the ring (round \(round))")
+            // Some pulls into a short stretch the ring has drained to its short length.
+            if brief, round % 80 > 72 { mostWhileShort = max(mostWhileShort, jm_engine_buffered(engine)) }
+            pull()
+            for i in 0..<256 { got.append(left[i]); got.append(right[i]) }
+        }
+        #expect(got == Array(signal[0..<got.count]), "a frame was skipped, repeated or changed")
+        #expect(mostWhileShort > 0 && mostWhileShort <= Int64(short), "while short the ring was \(mostWhileShort) frames ahead")
+        #expect(jm_engine_underruns(engine) == 0)
+    }
+}

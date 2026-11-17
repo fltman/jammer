@@ -8,6 +8,19 @@
 set -u
 root="$(cd "$(dirname "$0")/.." && pwd)"
 [[ "$(cat /tmp/gui-test.lock/owner 2>/dev/null)" == "jammer" ]] || { echo "with-app: the GUI lock isn't held by jammer; not starting." >&2; exit 75; }
+# A check that takes the foreground starts only when Anders isn't using the Mac (the series' rule): his
+# typing makes a check fail, and a check steals his window. Idle for 90 s or more: go. Otherwise wait
+# (JAMMER_IDLE_WAIT seconds, 600 by default) and, if he is still at it, give up with exit 76: "postponed,
+# Anders at the Mac", which is not a run against a budget. The seconds are printed beside the run.
+idle="$root/../the-apps/tools/user-idle.sh"
+if [[ -x "$idle" && -z "${JAMMER_IDLE_SKIP:-}" ]]; then
+  waited=0
+  until "$idle" --atleast 90 >/dev/null 2>&1; do
+    (( waited >= ${JAMMER_IDLE_WAIT:-600} )) && { echo "with-app: postponed, Anders at the Mac (idle $("$idle" 2>/dev/null) s after waiting $waited s)." >&2; exit 76; }
+    sleep 10; waited=$((waited + 10))
+  done
+  echo "with-app: the Mac has been idle $("$idle" 2>/dev/null) s; starting." >&2
+fi
 # JAMMER_APP_BUNDLE: another copy of the debug app to start (e.g. one re-signed with the
 # hardened runtime, to see what a release build will refuse).
 app="${JAMMER_APP_BUNDLE:-$root/build/dd/Build/Products/Debug/Jammer.app}/Contents/MacOS/Jammer"

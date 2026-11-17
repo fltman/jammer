@@ -197,3 +197,176 @@ struct MixerGraphTests {
         jm_plan_release(plan)
     }
 }
+
+/// A stand-in for a plugin with a tail and no latency: an echo that feeds back, so what went in goes on
+/// sounding after the input has stopped (what a reverb does).
+final class TailPlugin {
+    let delay: Int
+    private var lines: [[Float]]
+    private var at = 0
+    init(delay: Int = 600, channels: Int = 2) {
+        self.delay = delay
+        lines = Array(repeating: [Float](repeating: 0, count: delay), count: channels)
+    }
+    func unit(channels: Int32 = 2) -> OpaquePointer {
+        jm_unit_create_processor(channels, Unmanaged.passRetained(self).toOpaque(), { ctx, input, output, channels, frames in
+            let me = Unmanaged<TailPlugin>.fromOpaque(ctx!).takeUnretainedValue()
+            for i in 0..<Int(frames) {
+                for c in 0..<Int(channels) {
+                    let y = input[c * Int(frames) + i] + 0.6 * me.lines[c][me.at]
+                    output[c * Int(frames) + i] = y
+                    me.lines[c][me.at] = y
+                }
+                me.at = (me.at + 1) % me.delay
+            }
+            return true
+        }, { ctx in
+            let me = Unmanaged<TailPlugin>.fromOpaque(ctx!).takeUnretainedValue()
+            for c in me.lines.indices { me.lines[c] = [Float](repeating: 0, count: me.lines[c].count) }
+            me.at = 0
+        }, { ctx in Unmanaged<TailPlugin>.fromOpaque(ctx!).release() })
+    }
+}
+
+@Suite("Mixer: a new plan goes on from the one that was playing")
+struct PlanContinuationTests {
+    static let n = MixerGraphTests.n
+    /// A track into a bus with an echo on it. `mute`: the track's mute. `until`: the track's clip ends there (nil: the whole source).
+    static func plan(_ source: OpaquePointer, chain: OpaquePointer, mute: Bool, until: Int? = nil, extraBus: Bool = false) -> OpaquePointer {
+        let plan = jm_plan_create(2, 48_000)
+        let t = jm_plan_add_track(plan, 1, mute)
+        jm_plan_add_clip(plan, t, jm_plan_add_source(plan, source), 0, 0, Int64(until ?? n), 1, 0, 0, JM_FADE_LINEAR)
+        let bus = jm_plan_add_bus(plan, 1, false, 1, 1)
+        jm_plan_set_track_route(plan, t, bus, 1, 1)
+        jm_plan_set_bus_chain(plan, bus, chain)
+        if extraBus { _ = jm_plan_add_bus(plan, 1, false, 1, 1) }
+        jm_plan_finalize(plan)
+        return plan
+    }
+    static func echo() -> OpaquePointer {
+        let c = jm_chain_create(2, 512)
+        let u = TailPlugin().unit()
+        jm_chain_add(c, u, 0)
+        jm_unit_release(u)
+        return c
+    }
+
+    @Test("A track muted while it plays: the echo on its bus rings on, the same samples as if the track's sound had simply ended there; started afresh instead, the echo is cut")
+    func muteKeepsTheTail() {
+        let source = MixerGraphTests.source(220)
+        defer { jm_source_release(source) }
+        let at = 8_192, after = 6_000   // the mute comes between two blocks, as a new plan does
+        // What it has to be: the track's clip simply ends at `at`, through an echo of its own.
+        let wantChain = Self.echo(), want = Self.plan(source, chain: wantChain, mute: false, until: at)
+        let wanted = MixerGraphTests.render(want, from: 0, frames: at + after)
+        jm_plan_release(want); jm_chain_release(wantChain)
+        // Playing, then muted by a new plan that goes on from the first.
+        let chain = Self.echo()
+        let playing = Self.plan(source, chain: chain, mute: false), muted = Self.plan(source, chain: chain, mute: true)
+        let before = MixerGraphTests.render(playing, from: 0, frames: at)
+        #expect(before == Array(wanted[0..<(at * 2)]))
+        #expect(jm_plan_continue_from(muted, playing))
+        let tail = MixerGraphTests.render(muted, from: at, frames: after)
+        #expect(tail == Array(wanted[(at * 2)...]), "the tail is not what the echo would have gone on to give")
+        #expect(tail.contains { abs($0) > 0.01 }, "there is a tail to hear")
+        jm_plan_release(playing); jm_plan_release(muted)
+        // The same without going on: the new plan starts afresh, the plugin is reset, and the echo is gone.
+        let again = Self.plan(source, chain: chain, mute: false), cut = Self.plan(source, chain: chain, mute: true)
+        _ = MixerGraphTests.render(again, from: 0, frames: at)
+        let silence = MixerGraphTests.render(cut, from: at, frames: after)
+        #expect(silence.allSatisfy { $0 == 0 }, "(this is the fault the going-on puts right)")
+        jm_plan_release(again); jm_plan_release(cut)
+        // A plan of another shape (a bus more), or with other plugins, does not go on: it says so and starts afresh.
+        let first = Self.plan(source, chain: chain, mute: false), other = Self.plan(source, chain: chain, mute: true, extraBus: true)
+        _ = MixerGraphTests.render(first, from: 0, frames: at)
+        #expect(!jm_plan_continue_from(other, first))
+        let otherChain = Self.echo(), plugins = Self.plan(source, chain: otherChain, mute: true)
+        #expect(!jm_plan_continue_from(plugins, first))
+        // A plan that has not played has nothing to go on from.
+        let fresh = Self.plan(source, chain: chain, mute: false), next = Self.plan(source, chain: chain, mute: true)
+        #expect(!jm_plan_continue_from(next, fresh))
+        for p in [first, other, plugins, fresh, next] { jm_plan_release(p) }
+        jm_chain_release(chain); jm_chain_release(otherChain)
+    }
+
+    @Test("A level changed while it plays goes on without a break: the frames after the change are the next frames, at the new level, none skipped and none twice")
+    func levelGoesOn() {
+        let source = MixerGraphTests.source(220)
+        defer { jm_source_release(source) }
+        let at = 8_192, after = 4_096
+        func plan(_ chain: OpaquePointer, gain: Float) -> OpaquePointer {
+            let plan = jm_plan_create(2, 48_000)
+            let t = jm_plan_add_track(plan, gain, false)
+            jm_plan_add_clip(plan, t, jm_plan_add_source(plan, source), 0, 0, Int64(Self.n), 1, 0, 0, JM_FADE_LINEAR)
+            jm_plan_finalize(plan)
+            return plan
+        }
+        // No plugins at all here: the plain sum. Going on must not skip or repeat a frame.
+        let c = Self.echo()
+        defer { jm_chain_release(c) }
+        let a = plan(c, gain: 1), b = plan(c, gain: 0.5)
+        let whole = MixerGraphTests.render(a, from: 0, frames: at + after)
+        jm_plan_release(a)
+        let a2 = plan(c, gain: 1)
+        let first = MixerGraphTests.render(a2, from: 0, frames: at)
+        #expect(jm_plan_continue_from(b, a2))
+        let second = MixerGraphTests.render(b, from: at, frames: after)
+        #expect(first == Array(whole[0..<(at * 2)]))
+        #expect(zip(second, whole[(at * 2)...]).allSatisfy { abs($0 - $1 * 0.5) < 1e-7 }, "the frames after the change are the next frames, at the new level")
+        jm_plan_release(a2); jm_plan_release(b)
+    }
+
+    @Test("Through an echo on a bus, the engine's ring made short and long while it plays: the output is the unbroken render, bit for bit, and a mute given as a new plan in the middle leaves the echo ringing")
+    func ringAndMuteInTheEngine() throws {
+        let source = MixerGraphTests.source(220)
+        defer { jm_source_release(source) }
+        let total = 16_384, muteAt = 8_192
+        // What it has to be: the track's sound ends at `muteAt`, through an echo of its own, rendered in one go.
+        let wantChain = Self.echo(), want = Self.plan(source, chain: wantChain, mute: false, until: muteAt)
+        let wanted = MixerGraphTests.render(want, from: 0, frames: total)
+        jm_plan_release(want); jm_chain_release(wantChain)
+        let chain = Self.echo()
+        defer { jm_chain_release(chain) }
+        let playing = Self.plan(source, chain: chain, mute: false), muted = Self.plan(source, chain: chain, mute: true)
+        defer { jm_plan_release(playing); jm_plan_release(muted) }
+        let engine = jm_engine_create(2, 48_000, 4_096)
+        defer { jm_engine_destroy(engine) }
+        jm_engine_set_plan(engine, playing)
+        jm_engine_set_ahead(engine, 512)          // short from the start, so the new plan is taken up at a block we can name
+        var left = [Float](repeating: 0, count: 256), right = [Float](repeating: 0, count: 256)
+        func pull() {
+            left.withUnsafeMutableBufferPointer { l in
+                right.withUnsafeMutableBufferPointer { r in
+                    let outs: [UnsafeMutablePointer<Float>] = [l.baseAddress!, r.baseAddress!]
+                    outs.withUnsafeBufferPointer { jm_engine_pull(engine, $0.baseAddress!, 2, 256) }
+                }
+            }
+        }
+        jm_engine_play(engine, 0)
+        for _ in 0..<2_000 where !jm_engine_seek_settled(engine) { pull(); usleep(500) }
+        var got: [Float] = []
+        var changed = false
+        while got.count < total * 2 {
+            if !changed {
+                // Until the mute, the ring is short and full before every pull: the worker then has nothing it
+                // may make, so a plan given now is the one the very next block is made with.
+                for _ in 0..<20_000 where jm_engine_buffered(engine) < 512 { usleep(100) }
+                try #require(jm_engine_buffered(engine) == 512)
+                if got.count / 2 + 512 == muteAt {
+                    jm_engine_set_plan(engine, muted)
+                    changed = true
+                }
+            } else {
+                // After it, the ring long and short by turns.
+                jm_engine_set_ahead(engine, (got.count / 512) % 8 < 4 ? 512 : 0)
+                for _ in 0..<20_000 where jm_engine_buffered(engine) < 256 { usleep(100) }
+                try #require(jm_engine_buffered(engine) >= 256)
+            }
+            pull()
+            for i in 0..<256 { got.append(left[i]); got.append(right[i]) }
+        }
+        #expect(changed)
+        #expect(got == wanted, "not the unbroken render")
+        #expect(got[(muteAt * 2)...].contains { abs($0) > 0.01 }, "the echo rings on after the mute")
+    }
+}
