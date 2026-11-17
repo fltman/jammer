@@ -29,7 +29,10 @@ osa() { osascript -e "tell application \"System Events\" to tell (first process 
 front() { osa 'set frontmost to true' >/dev/null; sleep 0.3; }
 key() { front; osascript -e "tell application \"System Events\" to $1" >/dev/null 2>&1; sleep 0.3; }
 raise() { front; osa "perform action \"AXRaise\" of (first window whose name contains \"$1\")" >/dev/null; sleep 0.4; }
-menu() { front; "$SM" --pid $P "$@" >/dev/null || echo "   (menu not pressed: $*)"; sleep 1; }
+# Menus by their keys in the string catalogue, never by their words: the script works in either language.
+t() { "$(dirname "$0")/l10n.sh" "$1"; }
+menu() { front; "$SM" --pid $P "$(t $1)" "$(t $2)" >/dev/null || echo "   (menu not pressed: $1 › $2)"; sleep 1; }
+can() { "$SM" --pid $P --check "$(t $1)" "$(t $2)" >/dev/null 2>&1; }
 post() { curl -s -m 60 -X POST -H "$H" "$@"; }
 json() { python3 -c "import json,sys; d=json.load(sys.stdin); $1" 2>/dev/null; }
 open_audio() { post -H 'Content-Type: audio/wav' --data-binary @"$1" "$B/documents?name=$2" | json "print(d['document']['id'])"; }
@@ -43,9 +46,9 @@ winpos() { osa "get {position, size} of (first window whose name contains \"$1\"
 focused() { osa 'get value of attribute "AXDescription" of (value of attribute "AXFocusedUIElement")'; }
 ask() {
   raise "$1"
-  if [[ "$(focused)" != "Ask the assistant" ]]; then
-    for title in "Ask the Assistant" "Show Assistant"; do
-      "$SM" --pid $P --check View "$title" >/dev/null 2>&1 && { "$SM" --pid $P View "$title" >/dev/null; break; }
+  if [[ "$(focused)" != "$(t assistant.field.ax)" ]]; then
+    for key in view.askAssistant view.showAssistant; do
+      can menu.view $key && { "$SM" --pid $P "$(t menu.view)" "$(t $key)" >/dev/null; break; }
     done
     sleep 0.6
   fi
@@ -65,7 +68,13 @@ audit() {
   "$AR" $P > "${file%.txt}.read.txt" 2>&1
   if ! tail -1 "${file%.txt}.read.txt" | grep -q '^READ '; then unread=$(( unread + 1 )); echo "UNREAD   $1: the read did not complete"; fi
   if ! kill -0 $P 2>/dev/null; then died=$(( died + 1 )); echo "CRASHED  $1: the app is gone after being read"; return; fi
-  if ! grep -q -- "$2" "${file%.txt}.read.txt"; then unfilled=$(( unfilled + 1 )); echo "NOT FILLED $1: \"$2\" was not read, so the state was not there"; fi
+  # $2 is a catalogue key (the text in the test copy's language, up to its first value), a count's key with
+  # its number (import.tracks=2), or a name from the test material.
+  local want
+  if [[ "$2" == *=* ]]; then want="$("$(dirname "$0")/l10n.sh" "${2%%=*}" "" "$([[ ${2#*=} == 1 ]] && echo one || echo other)")"; want="${want/\%lld/${2#*=}}"
+  else want="$("$(dirname "$0")/l10n.sh" "$2" 2>/dev/null || echo "$2")"; want="${want%%\%*}"; fi
+  want="${want:0:40}"
+  if ! grep -q -F -- "$want" "${file%.txt}.read.txt"; then unfilled=$(( unfilled + 1 )); echo "NOT FILLED $1: \"$want\" was not read, so the state was not there"; fi
   local n=$(grep -c '^UNNAMED' "$file")
   unnamed=$(( unnamed + n ))
   echo "$( (( n > 0 )) && echo 'UNNAMED ' || echo 'ok      ') $1: $(tail -1 "$file") (exit $rc)"
@@ -84,7 +93,7 @@ if [[ "${3:-}" == note ]]; then
   echo "$states state read; $unnamed controls without a name; the app died $died time(s); $(( $(crashes) - crashes0 )) new crash report(s); $unread read(s) incomplete; $unfilled could not be filled."
   (( died == 0 && unnamed == 0 && unfilled == 0 && unread == 0 && $(crashes) == crashes0 )); exit
 fi
-audit "splash with the text for an agent" "Text for your agent: "
+audit "splash with the text for an agent" splash.agent.ax
 key 'key code 53'
 
 if [[ -f "$speech" && -f "$music" ]]; then
@@ -95,33 +104,33 @@ if [[ -f "$speech" && -f "$music" ]]; then
   # Nothing here should play; if something does, it is not at full volume.
   steps $DOC '{"op":"set_volume","params":{"db":-50}}'
   raise Reading
-  audit "document with two tracks and a plugin" "2 tracks"
+  audit "document with two tracks and a plugin" import.tracks=2
 
   J=$(post -H 'Content-Type: application/json' -d '{"language":"sv-SE","engine":"apple"}' "$B/documents/$DOC/transcribe" | json "print(d['job']['id'])"); wait_job "$J"
   J=$(post -H 'Content-Type: application/json' -d '{"mode":"by_track"}' "$B/documents/$DOC/diarize" | json "print(d['job']['id'])"); [[ -n "$J" ]] && wait_job "$J"
-  raise Reading; "$SM" --pid $P --check View "Show Transcript" >/dev/null 2>&1 && menu View "Show Transcript"
-  audit "transcript with words and speakers" "Description=Transcript  Value=."
+  raise Reading; can menu.view view.showTranscript && menu menu.view view.showTranscript
+  audit "transcript with words and speakers" transcript.title
 
   ask Reading "what is the loudness?" 10
   audit "assistant with a question and an answer" "You: what is the loudness"
   ask Reading "delete from 2 to 4 seconds" 10
-  audit "assistant with a plan waiting" "The plan"
+  audit "assistant with a plan waiting" assistant.plan
   ask Reading "write a poem about the sea" 6
   audit "assistant with a refusal" "You: write a poem"
   [[ -x "$root/build/winshot" ]] && "$root/build/winshot" --pid $P --only Reading "$out/assistant.png" >/dev/null 2>&1
   echo "         playing: $(curl -s "$B/documents/$DOC" | json "print(d['document']['playing'])")"
 
-  menu Audio "Remove Hum…"; sleep 4
-  audit "Repair sheet with what it found" "Value=Mains"
+  menu menu.audio audio.dehum; sleep 4
+  audit "Repair sheet with what it found" restore.mains
   key 'key code 53'
-  menu Audio "Plugins…"; sleep 1.5
+  menu menu.audio audio.plugins; sleep 1.5
   audit "Plugins sheet with a plugin on the track" "AULowpass"
   key 'key code 36'; key 'key code 53'
-  menu Audio "Duck Under Speech…"; sleep 1
-  audit "Duck Under Speech sheet" "Tick the tracks to lower"
+  menu menu.audio audio.duck; sleep 1
+  audit "Duck Under Speech sheet" duck.text
   key 'key code 53'
   key 'keystroke "k" using {command down}'; sleep 1
-  audit "command palette" "Ask the Assistant…"
+  audit "command palette" assistant.ask
   key 'key code 53'
 else
   echo "skipped  the document states: $speech or $music is missing"
@@ -130,9 +139,9 @@ fi
 if [[ -f "$data/flimmer/Morgon_i_hamnen.fcpxml" ]]; then
   post -o /dev/null -H 'Content-Type: application/json' -d "{\"path\":\"$data/flimmer/Morgon_i_hamnen.fcpxml\"}" "$B/import/fcpxml"; sleep 1.5
   raise "Morgon i hamnen"
-  if "$SM" --pid $P --check File "Send to Flimmer…" >/dev/null 2>&1; then
-    menu File "Send to Flimmer…"; sleep 1
-    audit "Send to Flimmer sheet" "The whole mix as one clip"
+  if can menu.file file.sendToFlimmer; then
+    menu menu.file file.sendToFlimmer; sleep 1
+    audit "Send to Flimmer sheet" flimmer.mode.mix
     key 'key code 53'
   else
     echo "skipped  Send to Flimmer: the menu item isn't there or isn't enabled"
@@ -144,7 +153,7 @@ fi
 if [[ -d "$data/packages/Settings.jammer" ]]; then
   open -b "$(defaults read "$JAMMER_APP/Contents/Info" CFBundleIdentifier)" "$data/packages/Settings.jammer"; sleep 3
   if [[ "$(osa 'get count of sheets of (first window whose name contains "Settings")')" == 1 ]]; then
-    audit "question about a project's plugin settings" "wants to load settings"
+    audit "question about a project's plugin settings" pluginSettings.ask.title.one
     raise Settings; key 'key code 36'
   else
     echo "skipped  plugin settings question: not asked (these settings are already allowed in this copy)"
@@ -159,7 +168,7 @@ if [[ -f "$data/link/clip.wav" ]]; then
   if [[ -n "$LINKED" ]]; then
     steps $LINKED '{"op":"gain","params":{"db":-1,"start":0,"end":1}}'; sleep 1
     raise clip; osa 'click button 1 of (first window whose name contains "clip")' >/dev/null; sleep 1.5
-    audit "question when a linked document is closed with changes" "Save your changes back"
+    audit "question when a linked document is closed with changes" link.close.title
     key 'key code 53'
   else
     echo "skipped  linked document: the file didn't open linked (start with -linkAnyOpen Flimmer)"

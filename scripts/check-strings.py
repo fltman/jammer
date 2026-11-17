@@ -63,6 +63,16 @@ def keyed_messages(root):
             for label, key in pending: out[key] = (name, texts.get(label))
     return out
 
+OPERATION = re.compile(r'\.init\("([a-z_0-9]+)", "([^"]*)"')
+def operation_titles(root):
+    """name -> title, from the schema (every Operations.swift in the packages)."""
+    out = {}
+    for folder, _, names in os.walk(os.path.join(root, 'Packages')):
+        if os.sep + 'Tests' in folder or os.sep + '.build' in folder: continue
+        if 'Operations.swift' in names:
+            out.update(OPERATION.findall(open(os.path.join(folder, 'Operations.swift'), encoding='utf-8').read()))
+    return out
+
 def check(root, require=None):
     faults = []
     cat_path = os.path.join(root, 'App', 'Localizable.xcstrings')
@@ -101,7 +111,8 @@ def check(root, require=None):
     for name in sorted(os.listdir(app)):
         if not name.endswith('.swift'): continue
         code = open(os.path.join(app, name), encoding='utf-8').read()
-        for m in re.finditer(r'L10n\.(text|count)\(\s*"([^"]+)"', code): used.setdefault(m.group(2), set()).add(m.group(1))
+        for m in re.finditer(r'L10n\.(text|count|reply|replyCount)\(\s*"([^"]+)"', code):
+            used.setdefault(m.group(2), set()).add({'reply': 'text', 'replyCount': 'count'}.get(m.group(1), m.group(1)))
     for key, how in sorted(used.items()):
         if key not in strings: faults.append(f'the code asks for "{key}", which is not in the catalogue'); continue
         if key in counts and how != {'count'}: faults.append(f'{key} is a count and must be asked for with L10n.count')
@@ -115,7 +126,16 @@ def check(root, require=None):
         if english is None: faults.append(f'{where}: "{key}" has no sentence of its own in errorDescription to hold the catalogue to')
         elif not have or have[0][1].replace('’', "'") != english.replace('’', "'"):
             faults.append(f'{key}: the catalogue says "{have[0][1] if have else ""}" where {where} says "{english}"')
-    for key in sorted(set(strings) - set(used) - set(keyed)): faults.append(f'{key} is in the catalogue and nothing uses it')
+    # The operations' titles (L10n.operation looks them up by name): one entry per operation in the schema,
+    # its English the schema's title, so the menus and the API name an operation the same way.
+    ops = operation_titles(root)
+    for name, title in sorted(ops.items()):
+        key = f'op.{name}.title'
+        have = units(strings.get(key, {}).get('localizations', {}).get(source, {}))
+        if key not in strings: faults.append(f'the operation {name} has no title in the catalogue ({key})')
+        elif not have or have[0][1] != title: faults.append(f'{key}: the catalogue says "{have[0][1] if have else ""}" where the schema says "{title}"')
+    op_keys = {f'op.{n}.title' for n in ops}
+    for key in sorted(set(strings) - set(used) - set(keyed) - op_keys): faults.append(f'{key} is in the catalogue and nothing uses it')
     # Files whose texts have all been moved.
     moved = os.path.join(root, 'scripts', 'l10n-moved.txt')
     if os.path.exists(moved):
@@ -215,16 +235,18 @@ def self_test(root):
                 'a.one': {'localizations': {'en': {'stringUnit': {'value': 'Level %@'}}, 'sv': {'stringUnit': {'value': 'Nivå %@'}}}},
                 'a.count': {'localizations': {'en': {'variations': {'plural': {'one': {'stringUnit': {'value': '%lld point'}}, 'other': {'stringUnit': {'value': '%lld points'}}}}},
                                               'sv': {'variations': {'plural': {'one': {'stringUnit': {'value': '%lld punkt'}}, 'other': {'stringUnit': {'value': '%lld punkter'}}}}}}}}}
+            cat['strings']['op.trim.title'] = {'localizations': {'en': {'stringUnit': {'value': 'Trim'}}, 'sv': {'stringUnit': {'value': 'Beskär'}}}}
             cat['strings']['e.gone'] = {'localizations': {'en': {'stringUnit': {'value': 'there is no bus with id %@.'}}, 'sv': {'stringUnit': {'value': 'det finns ingen buss med id %@.'}}}}
             code = 'let a = L10n.text("a.two", x, y); let b = L10n.text("a.one", x); let c = L10n.count("a.count", n)\n'
             return d, cat, code
-        def run(mutate, moved=None, extra='', package_key='e.gone'):
+        def run(mutate, moved=None, extra='', package_key='e.gone', op_extra=''):
             d, cat, code = fresh()
             if mutate: mutate(cat['strings'])
             json.dump(cat, open(os.path.join(d, 'App', 'Localizable.xcstrings'), 'w'))
             open(os.path.join(d, 'App', 'Code.swift'), 'w').write(code + extra)
             # A package error with a key: its sentence, and the key the catalogue has for it.
             os.makedirs(os.path.join(d, 'Packages', 'Kit', 'Sources'))
+            open(os.path.join(d, 'Packages', 'Kit', 'Sources', 'Operations.swift'), 'w').write('.init("trim", "Trim", "Cuts the ends.")\n' + op_extra)
             open(os.path.join(d, 'Packages', 'Kit', 'Sources', 'Fail.swift'), 'w').write(
                 'var reason: String {\n  case .gone(let n): "gone"\n}\nvar errorDescription: String? {\n  case .gone(let n): "there is no bus with id \\(n)."\n}\n'
                 'var keyed: KeyedMessage? {\n  case .gone(let n): KeyedMessage("' + package_key + '", ["\\(n)"])\n}\n')
@@ -264,7 +286,13 @@ def self_test(root):
         }
         for name, (mutate, key) in keyed_plants.items():
             if not run(mutate, package_key=key): bad.append('not caught: ' + name)
-        return bad, len(plants) + len(keyed_plants)
+        op_plants = {
+            'an operation without a title in the catalogue': (None, '.init("pad", "Pad", "Adds silence.")\n'),
+            'an operation title that is not the schema\'s': (lambda s: s['op.trim.title']['localizations']['en']['stringUnit'].update(value='Trim Ends'), ''),
+        }
+        for name, (mutate, extra) in op_plants.items():
+            if not run(mutate, op_extra=extra): bad.append('not caught: ' + name)
+        return bad, len(plants) + len(keyed_plants) + len(op_plants)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

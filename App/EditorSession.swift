@@ -510,7 +510,7 @@ final class EditorSession {
     /// One operation from the menu or the palette; shows failures in the status line.
     /// `saying`: what the status line says when the step went through and has nothing of its own to say.
     func perform(_ op: String, _ params: [String: JSONValue] = [:], saying: String? = nil) {
-        let title = Operations.named(op)?.title ?? op
+        let title = L10n.operation(op)
         Task {
             let r = await run([Step(op: op, params: params)], action: title)
             if let failed = r.first(where: { $0.status == .failed }) {

@@ -1,4 +1,5 @@
 import AppKit
+import NaturalLanguage
 import JammerAgent
 import JammerAssistant
 import JammerCore
@@ -60,6 +61,8 @@ final class AssistantModel {
 
     let session: EditorSession
     var messages: [Message] = []
+    /// The language of the question being answered: the conversation's own sentences follow it.
+    var replyLanguage: NLLanguage?
     var input = ""
     var busy = false
     /// A plan waiting for the user's go-ahead (destructive, or from a paid model).
@@ -165,19 +168,20 @@ final class AssistantModel {
         guard !goal.isEmpty, !busy else { return }
         input = ""
         messages.append(Message(role: .user, text: goal))
+        replyLanguage = ReplyGuard.language(of: goal)
         busy = true
         Task {
             defer { busy = false }
             // A source other than the Mac's own model needs a model chosen there: without one the
             // request is not quietly answered by another model than the one the settings name.
             if source != "device", model.isEmpty {
-                messages.append(Message(role: .note, text: "Choose one of \(sourceName)'s models in the assistant's settings (the gear) first. Nothing was sent."))
+                messages.append(Message(role: .note, text: L10n.reply("assistant.reply.chooseModel.gear", replyLanguage, sourceName)))
                 return
             }
             let p = planner
             // A paid model: the price first, and only on a yes.
             if p.paid {
-                guard await confirmPaid(goal) else { messages.append(Message(role: .note, text: "Not sent.")); return }
+                guard await confirmPaid(goal) else { messages.append(Message(role: .note, text: L10n.reply("assistant.reply.notSent", replyLanguage))); return }
             }
             do {
                 actions = await actions(for: goal)
@@ -187,15 +191,18 @@ final class AssistantModel {
                 let plan = try await p.answer(goal: goal, context: context, history: history, actions: actions)
                 history.append((goal, plan.reply))
                 var text = plan.reply
-                if let cost = plan.cost { text += String(format: text.isEmpty ? "Cost $%.4f." : " (cost $%.4f)", cost) }
+                if let cost = plan.cost {
+                    let amount = String(format: "%.4f", cost)
+                    text += text.isEmpty ? L10n.reply("assistant.reply.cost", replyLanguage, amount) : " " + L10n.reply("assistant.reply.costAfter", replyLanguage, amount)
+                }
                 if !text.isEmpty { messages.append(Message(role: .assistant, text: text)) }
                 if !plan.heldBack.isEmpty { messages.append(Message(role: .note, text: ReplyGuard.heldBackNote(ReplyGuard.language(of: goal), count: plan.heldBack.count))) }
-                if !plan.dropped.isEmpty { messages.append(Message(role: .note, text: "Left out: " + plan.dropped.joined(separator: "; "))) }
+                if !plan.dropped.isEmpty { messages.append(Message(role: .note, text: L10n.reply("assistant.reply.leftOut", replyLanguage, plan.dropped.joined(separator: "; ")))) }
                 guard !plan.steps.isEmpty else { return }
                 for line in plan.shownFirst { messages.append(Message(role: .note, text: line)) }
                 let unasked = plan.unasked(goal: goal, actions: actions)
                 if !unasked.isEmpty {
-                    messages.append(Message(role: .note, text: "You didn't ask for \(unasked.count == 1 ? "this change" : "these changes") in so many words, so nothing has been done. Run it only if it is what you meant."))
+                    messages.append(Message(role: .note, text: unasked.count == 1 ? L10n.reply("assistant.reply.unasked.one", replyLanguage) : L10n.reply("assistant.reply.unasked.many", replyLanguage)))
                 }
                 if plan.needsConfirmation(goal: goal, actions: actions) {
                     let state = EditState(project: session.project, selection: session.selection, playhead: session.playhead,
@@ -217,8 +224,7 @@ final class AssistantModel {
             let app = siblings.first { $0.slug == slug }?.name ?? slug
             return "\(app): \(s.op)" + (s.params.isEmpty ? "" : " (" + s.params.sorted { $0.key < $1.key }.map { "\($0.key) \($0.value.display)" }.joined(separator: ", ") + ")")
         }
-        let title = Operations.named(s.op)?.title ?? Operations.endpoints.first { $0.name == s.op }?.title
-            ?? s.op.replacingOccurrences(of: "_", with: " ").capitalized
+        let title = L10n.operation(s.op)
         let params = s.params.sorted { $0.key < $1.key }.compactMap { k, v -> String? in
             if k == "tracks", let ids = v.strings {
                 return "tracks " + ids.compactMap { id in session.project.tracks.first { $0.id.uuidString == id }?.name }.joined(separator: ", ")
@@ -239,7 +245,7 @@ final class AssistantModel {
     func cancelPending() {
         pending = nil
         pendingImpact = nil
-        messages.append(Message(role: .note, text: "Canceled; nothing changed."))
+        messages.append(Message(role: .note, text: L10n.reply("assistant.reply.canceled", replyLanguage)))
     }
 
     /// Steps (and macros) run together as one undo step; jobs and measurements run in
@@ -251,25 +257,25 @@ final class AssistantModel {
             defer { batch = [] }
             // Filler words need words: transcribe first if there are none.
             if batch.contains(where: { $0.op == "remove_fillers" }), session.project.transcripts.isEmpty {
-                messages.append(Message(role: .note, text: "Transcribing first…"))
+                messages.append(Message(role: .note, text: L10n.reply("assistant.reply.transcribingFirst", replyLanguage)))
                 guard await runJob(JobRegistry.shared.startTranscription(session, locale: transcriptLocale, replace: false)) else { return false }
             }
             do {
                 let state = EditState(project: session.project, selection: session.selection, playhead: session.playhead,
                                       pool: session.pool, media: MediaStore.folder)
                 let steps = try MacroExpander.expand(batch, state: state)
-                guard !steps.isEmpty else { messages.append(Message(role: .note, text: "Nothing to change.")); return true }
+                guard !steps.isEmpty else { messages.append(Message(role: .note, text: L10n.reply("assistant.reply.nothingToChange", replyLanguage))); return true }
                 let results = await session.run(steps, action: L10n.text("assistant.title"))
                 if let f = results.first(where: { $0.status == .failed }) {
-                    messages.append(Message(role: .note, text: "\(f.op) failed: \(f.error ?? ""). Nothing was changed."))
+                    messages.append(Message(role: .note, text: L10n.reply("assistant.reply.stepFailed", replyLanguage, L10n.operation(f.op), f.keyed.map(L10n.message) ?? f.error ?? "")))
                     return false
                 }
-                messages.append(Message(role: .note, text: "Done (\(steps.count) step\(steps.count == 1 ? "" : "s"), one undo step)."))
+                messages.append(Message(role: .note, text: L10n.replyCount("assistant.reply.done", replyLanguage, steps.count)))
                 for res in results where res.op == "loudness_preset" {
                     if res.info["limitedByPeak"] == 1, let after = res.info["integratedAfter"], let target = res.info["target"] {
-                        messages.append(Message(role: .assistant, text: String(format: "Reached %.1f instead of %.0f LUFS: the peaks held it back. Ask for the preset with the limiter to reach it.", after, target)))
+                        messages.append(Message(role: .assistant, text: L10n.reply("assistant.reply.peakHeld", replyLanguage, String(format: "%.1f", after), String(format: "%.0f", target))))
                     } else if let after = res.info["integratedAfter"] {
-                        messages.append(Message(role: .assistant, text: String(format: "Now at %.1f LUFS.", after)))
+                        messages.append(Message(role: .assistant, text: L10n.reply("assistant.reply.nowAt", replyLanguage, String(format: "%.1f", after))))
                     }
                 }
                 return true
@@ -318,11 +324,11 @@ final class AssistantModel {
         case "freeze", "unfreeze":
             // The same as the mixer's Frozen box: freezing is a job, thawing is at once, each one undo step.
             guard let id = UUID(uuidString: s.params["strip"]?.string ?? ""), let strip = session.project.strip(id), id != Master.id else {
-                messages.append(Message(role: .note, text: "I couldn't tell which track or bus you meant."))
+                messages.append(Message(role: .note, text: L10n.reply("assistant.reply.whichStrip", replyLanguage)))
                 return false
             }
             if s.op == "freeze" {
-                guard session.project.frozen(id) == nil else { messages.append(Message(role: .note, text: "\(strip.name) is frozen already.")); return true }
+                guard session.project.frozen(id) == nil else { messages.append(Message(role: .note, text: L10n.reply("error.freeze.alreadyFrozen", replyLanguage, strip.name))); return true }
                 return await runJob(JobRegistry.shared.startFreeze(session, strip: id))
             }
             do { session.commit(try session.project.unfreezing(id), action: L10n.text("freeze.undo.action", strip.name)); return true }
@@ -330,13 +336,14 @@ final class AssistantModel {
         case "measure_loudness":
             let r = await session.analyze(session.selection)
             func f(_ v: Double?, _ u: String) -> String { v.map { String(format: "%.1f %@", $0, u) } ?? "—" }
-            messages.append(Message(role: .assistant, text: "Loudness \(f(r.integrated, "LUFS")), range \(f(r.range, "LU")), true peak \(f(r.truePeak, "dBTP"))."))
+            messages.append(Message(role: .assistant, text: L10n.reply("assistant.reply.loudness", replyLanguage, f(r.integrated, "LUFS"), f(r.range, "LU"), f(r.truePeak, "dBTP"))))
             return true
         case "analyze_restoration":
             let p = session.project, pool = session.pool, range = session.selection ?? 0..<p.length
             let a = await Task.detached { Restoration.analyze(p, range: range, pool: pool) }.value
-            messages.append(Message(role: .assistant, text: (a.hum.map { String(format: "Hum at %.1f Hz. ", $0.frequency) } ?? "No hum. ")
-                                    + "\(a.clippedRuns) clipped stretches, \(a.clicks) clicks."))
+            let hum = a.hum.map { L10n.reply("assistant.reply.hum", replyLanguage, String(format: "%.1f", $0.frequency)) } ?? L10n.reply("assistant.reply.noHum", replyLanguage)
+            let found = L10n.reply("assistant.reply.found", replyLanguage, L10n.replyCount("assistant.reply.clipped", replyLanguage, a.clippedRuns), L10n.replyCount("assistant.reply.clicks", replyLanguage, a.clicks))
+            messages.append(Message(role: .assistant, text: hum + " " + found))
             return true
         default:
             return true
@@ -349,7 +356,7 @@ final class AssistantModel {
         }
         let done = JobRegistry.shared.job(job.id)
         if done?.status == .done { return true }
-        messages.append(Message(role: .note, text: done?.error?.message ?? "The \(job.kind) job didn't finish."))
+        messages.append(Message(role: .note, text: done?.error?.message ?? L10n.reply("assistant.reply.jobUnfinished", replyLanguage, job.kind)))
         return false
     }
 
@@ -362,13 +369,13 @@ final class AssistantModel {
             return false
         }
         guard !model.isEmpty else {
-            messages.append(Message(role: .note, text: "Choose one of \(provider.name)'s models in the assistant's settings first."))
+            messages.append(Message(role: .note, text: L10n.reply("assistant.reply.chooseModel", replyLanguage, provider.name)))
             return false
         }
         if choices.isEmpty { await loadChoices() }
         let choice = choices.first { $0.id == model }
         if choice?.tools == false {
-            messages.append(Message(role: .note, text: "\(model) can't call tools, which the assistant needs. Choose another of \(provider.name)'s models."))
+            messages.append(Message(role: .note, text: L10n.reply("assistant.reply.noTools", replyLanguage, model, provider.name)))
             return false
         }
         let price = choice?.estimate ?? L10n.text("assistant.paid.rate", provider.name)

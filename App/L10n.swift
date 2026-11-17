@@ -1,4 +1,6 @@
 import Foundation
+import NaturalLanguage
+import JammerAgent
 import JammerCore
 
 /// The window's texts come from the string catalogue (`Localizable.xcstrings`), by key: no text a user
@@ -23,6 +25,29 @@ enum L10n {
         let format = NSLocalizedString(m.key, comment: "")
         let text = m.args.isEmpty ? format : String(format: format, locale: Locale.current, arguments: m.args.map { $0 as CVarArg })
         return text.prefix(1).uppercased() + text.dropFirst()
+    }
+    /// An operation's title in the window's language (`op.<name>.title`), for the menus, the palette, the
+    /// assistant's plan and the undo names. The schema keeps the English title for the agent API, and is
+    /// what is shown if the catalogue has no entry (the catalogue check fails on that).
+    static func operation(_ name: String) -> String {
+        let english = Operations.named(name)?.title ?? Operations.endpoints.first { $0.name == name }?.title
+            ?? name.replacingOccurrences(of: "_", with: " ").capitalized
+        return Bundle.main.localizedString(forKey: "op.\(name).title", value: english, table: nil)
+    }
+    /// A sentence of the assistant's conversation: in the language of the user's question (a Swedish
+    /// question gets a Swedish answer in an English window), or the window's when that can't be told.
+    static func reply(_ key: String, _ language: NLLanguage?, _ args: String...) -> String {
+        let format = replyBundle(language).localizedString(forKey: key, value: nil, table: nil)
+        return args.isEmpty ? format : String(format: format, locale: Locale.current, arguments: args.map { $0 as CVarArg })
+    }
+    /// A count in the assistant's conversation, in the question's language.
+    static func replyCount(_ key: String, _ language: NLLanguage?, _ n: Int) -> String {
+        String.localizedStringWithFormat(replyBundle(language).localizedString(forKey: key, value: nil, table: nil), n)
+    }
+    private static func replyBundle(_ language: NLLanguage?) -> Bundle {
+        let code = language == .swedish ? "sv" : language == .english ? "en" : nil
+        guard let code, let path = Bundle.main.path(forResource: code, ofType: "lproj"), let b = Bundle(path: path) else { return .main }
+        return b
     }
     /// A count, in the plural form the language wants.
     static func count(_ key: String, _ n: Int) -> String {

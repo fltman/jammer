@@ -22,7 +22,7 @@ scripts/export-agents-guide.sh > "$out/guide.out" 2>&1 || fail "the agents guide
 scripts/test-guest-clean.sh > "$out/guestclean.out" 2>&1 || fail "guest-clean.sh: $(tail -1 "$out/guestclean.out")"
 scripts/check-fetch-guard.sh > "$out/fetch.out" 2>&1 || fail "a script can fetch third-party code without a yes ($(head -1 "$out/fetch.out"))"
 scripts/check-strings.py --self-test > "$out/strings.out" 2>&1 || fail "the catalogue check doesn't catch what it should ($(head -1 "$out/strings.out"))"
-scripts/check-strings.py >> "$out/strings.out" 2>&1 || fail "the string catalogue: $(grep -c 'check-strings:' "$out/strings.out") fault(s), the first: $(grep 'check-strings:' "$out/strings.out" | head -1)"
+scripts/check-strings.py --require sv >> "$out/strings.out" 2>&1 || fail "the string catalogue: $(grep -c 'check-strings:' "$out/strings.out") fault(s), the first: $(grep 'check-strings:' "$out/strings.out" | head -1)"
 # The project file is generated and not committed: made again whenever project.yml or the list of files is newer.
 xcodegen generate > /dev/null 2>&1 || fail "the project couldn't be generated"
 xcodebuild -project Jammer.xcodeproj -scheme Jammer -configuration Debug -derivedDataPath build/dd build > "$out/app.out" 2>&1 || fail "the app didn't build"

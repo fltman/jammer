@@ -930,7 +930,7 @@ enum AgentRouter {
                 throw APIError(400, "bad_request", "Step \(i): \(error.localizedDescription)", step: i)
             }
         }
-        let results = await session.run(steps, action: steps.count == 1 ? (Operations.named(steps[0].op)?.title ?? "Agent Edit") : "Agent Edits")
+        let results = await session.run(steps, action: steps.count == 1 ? L10n.operation(steps[0].op) : L10n.text("agent.edits"))
         let list: [[String: Any]] = results.enumerated().map { i, res in
             var d: [String: Any] = ["index": i, "op": res.op, "status": res.status.rawValue]
             if let e = res.error { d["error"] = e }

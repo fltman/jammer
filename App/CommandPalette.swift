@@ -52,8 +52,8 @@ enum CommandPalette {
             .init(id: "agent", title: L10n.text("help.agentAccess"), detail: L10n.text("menu.help"), shortcut: "") { AgentSplash.show() },
         ]
         for (title, op, params) in MenuPresets.all {
-            let spec = Operations.named(op)
-            list.append(.init(id: "\(op)-\(title)", title: title, detail: spec?.description ?? "", shortcut: "") {
+            // The detail is the operation the preset runs, in the window's language (the schema's description is the API's).
+            list.append(.init(id: "\(op)-\(title)", title: title, detail: L10n.operation(op), shortcut: "") {
                 session.perform(op, params)
             })
         }
