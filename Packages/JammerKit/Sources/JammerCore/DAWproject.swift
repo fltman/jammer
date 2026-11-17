@@ -73,7 +73,7 @@ public enum DAWproject {
         }
         x.append("  </Arrangement>")
         x.append("</Project>")
-        if gains > 0 { warnings.append("\(gains) clips have a gain of their own, which DAWproject has no place for.") }
+        if gains > 0 { warnings.append(counted(gains, "1 clip has a gain of its own, which DAWproject has no place for.", "\(gains) clips have a gain of their own, which DAWproject has no place for.")) }
         if t.markers.contains(where: { $0.duration > 0 }) { warnings.append("Regions are written as markers at their start: a DAWproject marker has no length.") }
         let meta = ["<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>", "<MetaData>", "  <Title>\(escape(t.name))</Title>", "  <Comment>Made with Jämmer</Comment>", "</MetaData>"]
         let data = Zip.write([("project.xml", Data(x.joined(separator: "\n").utf8)), ("metadata.xml", Data(meta.joined(separator: "\n").utf8))])
@@ -151,7 +151,7 @@ public enum DAWproject {
                         let volume = Double(channel?.first("Volume")?["value"] ?? "") ?? 1
                         let linear = channel?.first("Volume")?["unit"] != "decibel"
                         tracks[track] = .init(lane: order.count, name: tn?["name"] ?? "Track \(order.count + 1)",
-                                              gainDB: linear ? (volume > 0 ? 20 * log10(volume) : -96) : volume,
+                                              gainDB: linear ? (volume > 0 ? (20 * log10(volume) * 1e6).rounded() / 1e6 : -96) : volume,   // 0.501187 is −6 dB, not −5.99999999
                                               muted: channel?.first("Mute")?["value"] == "true", origin: nil, clips: [])
                         order.append(track)
                     }
@@ -163,9 +163,9 @@ public enum DAWproject {
         guard let arrangement = root.first("Arrangement") else { throw .noSequence }
         try walk(arrangement, unit: arrangement["timeUnit"] ?? "beats", track: nil)
         guard !order.isEmpty else { throw .noAudio("The project has no audio clips in its arrangement.") }
-        if warped > 0 { warnings.append(.init(code: "warped", message: "\(warped) warped (time-stretched) clips were left out: Jämmer doesn't stretch audio to a tempo.", clip: nil)) }
-        if nested > 0 { warnings.append(.init(code: "nested", message: "\(nested) clips holding other clips were left out.", clip: nil)) }
-        if notes > 0 { warnings.append(.init(code: "notes", message: "\(notes) note clips were left out: Jämmer has no instruments.", clip: nil)) }
+        if warped > 0 { warnings.append(.init(code: "warped", message: counted(warped, "1 warped (time-stretched) clip was left out: Jämmer doesn't stretch audio to a tempo.", "\(warped) warped (time-stretched) clips were left out: Jämmer doesn't stretch audio to a tempo."), clip: nil)) }
+        if nested > 0 { warnings.append(.init(code: "nested", message: counted(nested, "1 clip holding other clips was left out.", "\(nested) clips holding other clips were left out."), clip: nil)) }
+        if notes > 0 { warnings.append(.init(code: "notes", message: counted(notes, "1 note clip was left out: Jämmer has no instruments.", "\(notes) note clips were left out: Jämmer has no instruments."), clip: nil)) }
         let markers = root.first("Arrangement")?.first("Markers")
         let shots: [FCPXMLImport.Shot] = (markers?.all("Marker") ?? []).compactMap { m in
             seconds(m["time"], markers?["timeUnit"] ?? arrangement["timeUnit"] ?? "beats").map { .init(name: m["name"] ?? "", start: .init(seconds: $0), duration: .zero) }

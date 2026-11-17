@@ -69,6 +69,9 @@ public struct ExchangeTimeline: Sendable, Equatable {
     }
 }
 
+/// A note's sentence for one or for more ("1 clip has", "2 clips have").
+func counted(_ n: Int, _ one: String, _ many: String) -> String { n == 1 ? one : many }
+
 /// CMX 3600 EDL, audio only. There is no owner-published specification (docs/LICENSES.md): this writes what
 /// Autodesk's, Avid's and Premiere's documentation show and what the OTIO CMX reader reads, and reads the same.
 public enum EDL {
@@ -122,10 +125,10 @@ public enum EDL {
             lines.append("* SOURCE FILE: \(c.path)")
             lines.append("")
         }
-        if rounded > 0 { warnings.append("\(rounded) times fell between two frames and were rounded to the nearest.") }
-        if levels > 0 { warnings.append("\(levels) clips have a gain or fades, which a CMX 3600 list can't hold.") }
+        if rounded > 0 { warnings.append(counted(rounded, "1 time fell between two frames and was rounded to the nearest.", "\(rounded) times fell between two frames and were rounded to the nearest.")) }
+        if levels > 0 { warnings.append(counted(levels, "1 clip has a gain or fades, which a CMX 3600 list can't hold.", "\(levels) clips have a gain or fades, which a CMX 3600 list can't hold.")) }
         let mixed = t.tracks.prefix(maxTracks).filter { $0.gainDB != 0 || $0.pan != 0 || $0.muted }.count
-        if mixed > 0 { warnings.append("\(mixed) tracks have a level, pan or mute, which a CMX 3600 list can't hold.") }
+        if mixed > 0 { warnings.append(counted(mixed, "1 track has a level, pan or mute, which a CMX 3600 list can't hold.", "\(mixed) tracks have a level, pan or mute, which a CMX 3600 list can't hold.")) }
         if !t.markers.isEmpty { warnings.append("Markers aren't written: a CMX 3600 list has none.") }
         return Written(text: lines.joined(separator: "\r\n"), warnings: warnings)
     }
@@ -201,10 +204,10 @@ public enum EDL {
                                                        start: seconds(e.recIn - zero), sourceStart: seconds(e.srcIn), duration: seconds(max(0, e.recOut - e.recIn)),
                                                        gainDB: 0, fadeIn: .zero, fadeOut: .zero, enabled: true, origin: nil))
         }
-        if video > 0 { warnings.append(.init(code: "video", message: "\(video) video events were left out: Jämmer reads the audio.", clip: nil)) }
-        if black > 0 { warnings.append(.init(code: "black", message: "\(black) black events were left out (they are silence).", clip: nil)) }
-        if dissolves > 0 { warnings.append(.init(code: "dissolve", message: "\(dissolves) dissolves were read as cuts.", clip: nil)) }
-        if past > 0 { warnings.append(.init(code: "tracks", message: "\(past) events on audio channels past 64 were left out.", clip: nil)) }
+        if video > 0 { warnings.append(.init(code: "video", message: counted(video, "1 video event was left out: Jämmer reads the audio.", "\(video) video events were left out: Jämmer reads the audio."), clip: nil)) }
+        if black > 0 { warnings.append(.init(code: "black", message: counted(black, "1 black event was left out (it is silence).", "\(black) black events were left out (they are silence)."), clip: nil)) }
+        if dissolves > 0 { warnings.append(.init(code: "dissolve", message: counted(dissolves, "1 dissolve was read as a cut.", "\(dissolves) dissolves were read as cuts."), clip: nil)) }
+        if past > 0 { warnings.append(.init(code: "tracks", message: counted(past, "1 event on an audio channel past 64 was left out.", "\(past) events on audio channels past 64 were left out."), clip: nil)) }
         let tracks = byTrack.keys.sorted().map { k in
             FCPXMLImport.TrackItem(lane: k, name: "A\(k + 1)", gainDB: 0, muted: false, origin: nil, clips: byTrack[k]!.sorted { $0.start.seconds < $1.start.seconds })
         }

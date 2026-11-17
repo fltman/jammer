@@ -46,7 +46,7 @@ public enum OTIO {
                     "effects": [] as [Any], "markers": [] as [Any], "source_range": NSNull(),
                     "metadata": ["jammer": ["gainDB": track.gainDB, "pan": track.pan, "muted": track.muted]]]
         }
-        if overlaps > 0 { warnings.append("\(overlaps) clips that lay over the clip before them on their track were left out (an OTIO track is a sequence).") }
+        if overlaps > 0 { warnings.append(counted(overlaps, "1 clip that lay over the clip before it on its track was left out (an OTIO track is a sequence).", "\(overlaps) clips that lay over the clip before them on their track were left out (an OTIO track is a sequence).")) }
         let markers: [[String: Any]] = t.markers.map {
             ["OTIO_SCHEMA": "Marker.2", "name": $0.name, "color": "GREEN", "comment": "", "metadata": [:] as [String: Any],
              "marked_range": range($0.start, $0.duration, sr)]
@@ -61,7 +61,7 @@ public enum OTIO {
         } else {
             timeline["global_start_time"] = NSNull()
         }
-        let data = try JSONSerialization.data(withJSONObject: timeline, options: [.prettyPrinted, .sortedKeys])
+        let data = try JSONSerialization.data(withJSONObject: timeline, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
         return Written(data: data, warnings: warnings)
     }
 
@@ -116,10 +116,10 @@ public enum OTIO {
                                 gainDB: (md["gainDB"] as? Double) ?? 0, muted: (md["muted"] as? Bool) ?? ((t["enabled"] as? Bool) == false), origin: nil, clips: clips))
         }
         guard tracks.contains(where: { !$0.clips.isEmpty }) else { throw .noAudio("The timeline has no audio clips with a file\(video > 0 ? " (\(video) video tracks were left out)" : "").") }
-        if video > 0 { warnings.append(.init(code: "video", message: "\(video) video tracks were left out: Jämmer reads the audio.", clip: nil)) }
-        if transitions > 0 { warnings.append(.init(code: "transition", message: "\(transitions) transitions were read as cuts.", clip: nil)) }
-        if nested > 0 { warnings.append(.init(code: "nested", message: "\(nested) nested stacks or unknown items were left out.", clip: nil)) }
-        if missing > 0 { warnings.append(.init(code: "missing_media", message: "\(missing) clips have no file (a missing reference) and were left out.", clip: nil)) }
+        if video > 0 { warnings.append(.init(code: "video", message: counted(video, "1 video track was left out: Jämmer reads the audio.", "\(video) video tracks were left out: Jämmer reads the audio."), clip: nil)) }
+        if transitions > 0 { warnings.append(.init(code: "transition", message: counted(transitions, "1 transition was read as a cut.", "\(transitions) transitions were read as cuts."), clip: nil)) }
+        if nested > 0 { warnings.append(.init(code: "nested", message: counted(nested, "1 nested stack or unknown item was left out.", "\(nested) nested stacks or unknown items were left out."), clip: nil)) }
+        if missing > 0 { warnings.append(.init(code: "missing_media", message: counted(missing, "1 clip has no file (a missing reference) and was left out.", "\(missing) clips have no file (a missing reference) and were left out."), clip: nil)) }
         let shots: [FCPXMLImport.Shot] = ((stack["markers"] as? [[String: Any]]) ?? []).compactMap { m in
             guard let r = span(m["marked_range"] ?? m["range"]) else { return nil }
             return .init(name: (m["name"] as? String) ?? "", start: .init(seconds: r.start), duration: .init(seconds: r.duration))

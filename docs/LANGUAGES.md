@@ -19,7 +19,7 @@ Jämmer still starts in English whatever the Mac's language is; Swedish only wit
 **Still English in a Swedish window** (each is a message made where it is thrown, from parts, in the packages):
 - a failed step whose reason is written in the step itself rather than by a typed error (about 140 in `JammerAgent/Operations.swift`; most can only be reached through the API, since the menus send valid steps);
 - the cases of typed errors that carry a message made at the throw (`badValue(String)`, `PluginError.failed`, the limiter's three, export's `unsupported`, `AudioFileError`);
-- reports built in the packages: the ACX report's lines, Separate Stems' summary, the spectral area's status, a plugin host's own words when it dies;
+- reports built in the packages: what a timeline format couldn't hold or read (EDL, OTIO, DAWproject, FCPXML notes), the ACX report's lines, Separate Stems' summary, the spectral area's status, a plugin host's own words when it dies;
 - the API's own answers and anything a model writes, as the rule says.
 
 These move as they are rewritten into typed errors; matching on English words (the earlier plan's second way) is not used.

@@ -1,5 +1,6 @@
 // Captures only one app's windows (ScreenCaptureKit), never the desktop, for site screenshots.
 //   winshot --pid P [--only "Title prefix"] out.png
+// An app-modal alert (layer 8, no title) is taken with the window it stands over.
 // Without --only: every on-screen window of the app, cropped to their union. With --only:
 // windows whose title starts with the prefix, plus untitled ones (sheets, popovers) that
 // overlap them.
@@ -18,7 +19,7 @@ let sem = DispatchSemaphore(value: 0)
 Task {
     do {
         let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
-        var windows = content.windows.filter { $0.owningApplication?.processID == pid && $0.windowLayer == 0 && $0.frame.width > 40 && $0.frame.height > 40 }
+        var windows = content.windows.filter { $0.owningApplication?.processID == pid && ($0.windowLayer == 0 || (($0.title ?? "").isEmpty && $0.windowLayer <= 8)) && $0.frame.width > 40 && $0.frame.height > 40 }
         if let only {
             let main = windows.filter { ($0.title ?? "").hasPrefix(only) }
             let frame = main.reduce(CGRect.null) { $0.union($1.frame) }
