@@ -70,7 +70,8 @@ struct RestorationTests {
     @Test("Click detection on the test recordings, as a table (calibration, not a check)", .enabled(if: ProcessInfo.processInfo.environment["JAMMER_CLICK_TABLE"] != nil))
     func clickTable() throws {
         for name in ["Kitchen take", "Episode 7", "Daniel", "Flo", "Church hall", "Booth", "Demo song", "interview"] {
-            let url = URL(fileURLWithPath: "$JAMMER_TEST_MEDIA/site/\(name).wav")
+            // JAMMER_TEST_MEDIA: the folder of test recordings on this Mac (scripts/local.env), never in the repository.
+            let url = URL(fileURLWithPath: (ProcessInfo.processInfo.environment["JAMMER_TEST_MEDIA"] ?? "/nonexistent") + "/site/\(name).wav")
             guard let info = try? AudioFileReader.info(at: url) else { continue }
             let raw = SourcePool().read(SourceRef(name: name, path: url.path, info: info), from: 0, count: Int(min(info.frames, Int64(info.sampleRate * 30))))
             let ch = info.channels

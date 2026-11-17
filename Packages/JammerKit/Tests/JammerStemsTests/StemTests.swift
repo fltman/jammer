@@ -5,6 +5,11 @@ import Testing
 /// Against Deezer's Spleeter 4stems checkpoint and reference outputs computed with
 /// TensorFlow's own ops (ref/reference.py), when they're on this machine (JAMMER_SPLEETER_DIR).
 let spleeterDir = ProcessInfo.processInfo.environment["JAMMER_SPLEETER_DIR"].map { URL(fileURLWithPath: $0) }
+/// A file in the folder of test recordings on this Mac (JAMMER_TEST_MEDIA, set in scripts/local.env), never in the repository.
+func testMedia(_ name: String) throws -> URL {
+    let folder = try #require(ProcessInfo.processInfo.environment["JAMMER_TEST_MEDIA"], "JAMMER_TEST_MEDIA names the folder of test recordings")
+    return URL(fileURLWithPath: folder).appending(path: name)
+}
 
 func npy(_ url: URL) throws -> [Float] {
     let d = try Data(contentsOf: url)
@@ -118,7 +123,7 @@ struct SeparatorTests {
 struct RealSeparationTests {
     /// A synthetic "song" at 44.1 kHz stereo: a spoken voice (macOS Alva), a bass line and drum hits.
     func song() throws -> (mix: [Float], voice: [Float], bass: [Float], drums: [Float]) {
-        let url = URL(fileURLWithPath: "$JAMMER_TEST_MEDIA/iso-speech.aiff")
+        let url = try testMedia("iso-speech.aiff")
         let info = try AudioFileReader.info(at: url)
         let raw = SourcePool().read(SourceRef(name: "s", path: url.path, info: info), from: 0, count: Int(info.frames))
         let mono48 = stride(from: 0, to: raw.count, by: info.channels).map { raw[$0] }
@@ -304,7 +309,7 @@ struct SoundtrackTests {
     func separates() throws {
         let net = try MRXNet(checkpoint: TorchCheckpoint(url: mrxDir!.appending(path: "default_mrx_pre_trained_weights.pth")))
         // Speech (macOS Alva) over a chord and noise bursts, 7 s, stereo at 44.1 kHz.
-        let url = URL(fileURLWithPath: "$JAMMER_TEST_MEDIA/iso-speech.aiff")
+        let url = try testMedia("iso-speech.aiff")
         let info = try AudioFileReader.info(at: url)
         let raw = SourcePool().read(SourceRef(name: "s", path: url.path, info: info), from: 0, count: Int(info.frames))
         let v = try Alignment.resample(stride(from: 0, to: raw.count, by: info.channels).map { raw[$0] }, channels: 1, from: info.sampleRate, to: 44_100)

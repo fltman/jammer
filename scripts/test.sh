@@ -2,6 +2,9 @@
 # Runs the package tests. The engine's realtime guard runs as part of the build
 # (-Werror=function-effects), so a passing build is itself a check.
 set -eu
+# This Mac's own settings (JAMMER_TEST_MEDIA, model folders), never in the repository: scripts/local.env.
+local_env="$(dirname "$0")/local.env"
+if [ -f "$local_env" ]; then set -a; . "$local_env"; set +a; fi
 cd "$(dirname "$0")/../Packages/JammerKit"
 swift build
 # Tests reach only this Mac (Tests/Support/TestNetGuard): a request to anywhere else is refused and

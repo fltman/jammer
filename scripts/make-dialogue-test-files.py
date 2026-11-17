@@ -11,7 +11,7 @@ made (integrated loudness of the part alone, by ffmpeg's ebur128).
 """
 import json, os, re, subprocess, sys, tempfile
 
-OUT = sys.argv[1] if len(sys.argv) > 1 else "$JAMMER_TEST_MEDIA/dialogue"
+OUT = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.environ.get("JAMMER_TEST_MEDIA", "."), "dialogue")
 SR = 48000
 TEXT = [
     "The ferry leaves at a quarter past six, and nobody on the island has ever seen it leave on time. My aunt keeps a list of its excuses on the kitchen wall. Fog, a goat on the ramp, the captain's birthday.",

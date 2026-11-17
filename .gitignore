@@ -14,3 +14,5 @@ research/
 # Built from pinned sources by scripts/build-*.sh
 Packages/JammerKit/Vendor/
 .claude/worktrees/
+# This Mac's own settings (test media folder and the like): scripts/local.env.example says what goes in.
+scripts/local.env

@@ -8,7 +8,7 @@
 #   JAMMER_PRECOMMIT_LOCKED=1 is set for the inner run; don't set it yourself.
 set -u
 root="$(cd "$(dirname "$0")/.." && pwd)"
-tools=$root/../the-apps/tools
+tools="$root/../the-apps/tools"
 if [[ -z "${JAMMER_PRECOMMIT_LOCKED:-}" && -x "$tools/with-build-lock.sh" ]]; then
   exec "$tools/with-build-lock.sh" jammer --wait "${BUILD_WAIT:-1800}" -- env JAMMER_PRECOMMIT_LOCKED=1 "$0" "$@"
 fi
