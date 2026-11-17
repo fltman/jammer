@@ -246,7 +246,7 @@ final class EditorSession {
     /// Turns safe mode on or off and starts every plugin again.
     func restartPlugins() {
         inserts = InsertHost(channels: project.channels, sampleRate: project.sampleRate, outOfProcess: Self.pluginSafeMode)
-        plan = PlanCompiler.compile(project.listening(solo: solo), pool: pool, inserts: inserts, ridable: mixerAhead != nil)
+        plan = PlanCompiler.compile(project.listening(solo: solo), pool: pool, inserts: inserts, ridable: mixerAhead != nil, limiters: limiters)
         output.setPlan(plan)
         pluginsVersion += 1
         syncInserts()
@@ -439,7 +439,7 @@ final class EditorSession {
         project = newProject
         if let s = selection { selection = s.clamped(to: 0..<max(1, project.length)) }
         playhead = min(playhead, project.length)
-        plan = PlanCompiler.compile(project.listening(solo: solo), pool: pool, inserts: inserts, ridable: mixerAhead != nil)
+        plan = PlanCompiler.compile(project.listening(solo: solo), pool: pool, inserts: inserts, ridable: mixerAhead != nil, limiters: limiters)
         output.setPlan(plan)
         version += 1
         syncInserts()
@@ -566,7 +566,7 @@ final class EditorSession {
     }
     func setSolo(_ strips: Set<UUID>) {
         solo = strips.filter { id in project.tracks.contains { $0.id == id } || project.bus(id) != nil }
-        plan = PlanCompiler.compile(project.listening(solo: solo), pool: pool, inserts: inserts, ridable: mixerAhead != nil)
+        plan = PlanCompiler.compile(project.listening(solo: solo), pool: pool, inserts: inserts, ridable: mixerAhead != nil, limiters: limiters)
         output.setPlan(plan)
         // Said in the window for as long as it is on, so that a quiet mix is never a puzzle.
         (window?.windowController as? EditorWindowController)?.showLink()
@@ -577,6 +577,9 @@ final class EditorSession {
     /// rendered: each is a gap that was heard. (The engine counts nothing finer: a block that was late
     /// but in time for the card isn't heard and isn't counted.)
     var underruns: Int64 { max(0, output.underruns - underrunsAtStart) }
+
+    /// The master's limiter, kept from one playing plan to the next, so that a mix change goes on without starting it afresh.
+    @ObservationIgnored private let limiters = LimiterKeeper()
 
     // MARK: A hand on the mixer
 
@@ -604,7 +607,7 @@ final class EditorSession {
             mixerAhead = Self.mixerAheadSteps[0]
             output.setAhead(seconds: Self.mixerAheadSteps[0])
             // Every track a strip of its own from now, so that a fader has something to be ridden on.
-            plan = PlanCompiler.compile(project.listening(solo: solo), pool: pool, inserts: inserts, ridable: true)
+            plan = PlanCompiler.compile(project.listening(solo: solo), pool: pool, inserts: inserts, ridable: true, limiters: limiters)
             output.setPlan(plan)
             aheadWatch = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
                 MainActor.assumeIsolated { self?.watchDropouts() }

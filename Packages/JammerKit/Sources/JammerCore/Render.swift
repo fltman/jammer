@@ -173,7 +173,8 @@ public enum PlanCompiler {
     /// its file over the ceiling renders again with more.
     /// `ridable`: every track is worked as a strip of its own, so that a fader can be ridden on it while
     /// the plan plays (the mixer window is in use). The sound is the same; only the playing plan asks for it.
-    public static func compile(_ project: Project, pool: SourcePool, inserts: ChainProvider? = nil, masterMargin: Double = Mixer.masterMargins[0], ridable: Bool = false) -> RenderPlan {
+    public static func compile(_ project: Project, pool: SourcePool, inserts: ChainProvider? = nil, masterMargin: Double = Mixer.masterMargins[0], ridable: Bool = false,
+                               limiters: LimiterKeeper? = nil) -> RenderPlan {
         // A frozen strip is played from its file (see `Project.played`); everything below sees that project.
         let project = project.played()
         let plan = jm_plan_create(Int32(project.channels), project.sampleRate)
@@ -259,9 +260,15 @@ public enum PlanCompiler {
         let master = project.master
         if !master.isDefault {
             let chain = inserts.flatMap { master.inserts.contains(where: { !$0.bypass }) ? $0.masterChain(for: master) : nil }
-            let limiter = master.limiter.flatMap { MasterLimiterUnit.chain($0.settings, channels: project.channels, sampleRate: project.sampleRate, marginDB: masterMargin) }
-            jm_plan_set_master(plan, Float(dbToGain(master.gainDB)), chain, limiter)
-            if let limiter { jm_chain_release(limiter) }
+            // The plan that plays keeps its limiter from the plan before it (see LimiterKeeper); any other render makes its own.
+            if let limiters {
+                let limiter = master.limiter.flatMap { limiters.chain($0.settings, channels: project.channels, sampleRate: project.sampleRate, marginDB: masterMargin) }
+                jm_plan_set_master(plan, Float(dbToGain(master.gainDB)), chain, limiter)
+            } else {
+                let limiter = master.limiter.flatMap { MasterLimiterUnit.chain($0.settings, channels: project.channels, sampleRate: project.sampleRate, marginDB: masterMargin) }
+                jm_plan_set_master(plan, Float(dbToGain(master.gainDB)), chain, limiter)
+                if let limiter { jm_chain_release(limiter) }
+            }
         }
         jm_plan_finalize(plan)
         let made = RenderPlan(plan, channels: project.channels, sampleRate: project.sampleRate)

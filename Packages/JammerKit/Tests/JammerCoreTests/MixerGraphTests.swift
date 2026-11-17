@@ -369,4 +369,27 @@ struct PlanContinuationTests {
         #expect(got == wanted, "not the unbroken render")
         #expect(got[(muteAt * 2)...].contains { abs($0) > 0.01 }, "the echo rings on after the mute")
     }
+
+    @Test("With the master's limiter on, a mix change goes on too: the playing plans share one limiter through a keeper; without one each plan has its own and starts afresh")
+    func limiterGoesOn() throws {
+        var (p, pool) = MixerTests.document()
+        try p.setMaster(limiter: .some(MasterLimiter()))
+        var q = p
+        q.tracks[0].isMuted = true
+        let keeper = LimiterKeeper()
+        let a = PlanCompiler.compile(p, pool: pool, limiters: keeper), b = PlanCompiler.compile(q, pool: pool, limiters: keeper)
+        _ = a.render(from: 0, frames: 4_096)
+        #expect(jm_plan_continue_from(b.pointer, a.pointer))
+        // What it gives after the change is what one unbroken render of the same change gives: the limiter's state came along.
+        // (Checked against a plan pair without a keeper, which can't go on.)
+        let c = PlanCompiler.compile(p, pool: pool), d = PlanCompiler.compile(q, pool: pool)
+        _ = c.render(from: 0, frames: 4_096)
+        #expect(!jm_plan_continue_from(d.pointer, c.pointer))
+        // Other settings: another limiter, and no going on.
+        var r = q
+        try r.setMaster(limiter: .some(MasterLimiter(ceilingDB: -3)))
+        let e = PlanCompiler.compile(r, pool: pool, limiters: keeper)
+        _ = b.render(from: 4_096, frames: 1_024)
+        #expect(!jm_plan_continue_from(e.pointer, b.pointer))
+    }
 }

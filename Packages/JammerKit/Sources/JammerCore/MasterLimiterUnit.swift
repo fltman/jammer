@@ -67,3 +67,31 @@ final class MasterLimiterUnit: @unchecked Sendable {
         return chain
     }
 }
+
+/// Keeps the master's limiter alive from one playing plan to the next. A limiter made anew for every
+/// plan has no memory of the level it was holding, and a plan with a new limiter can't go on from the
+/// one before it (every plugin would start afresh, cutting a reverb's tail at each mix change). With a
+/// keeper, plans whose limiter settings are the same get the very same limiter, state and all. Only
+/// the plan that plays uses one: an export or a measurement makes its own limiter, as before.
+public final class LimiterKeeper: @unchecked Sendable {
+    private struct Key: Equatable { var settings: Limiter; var channels: Int; var sampleRate: Double; var marginDB: Double }
+    private var key: Key?
+    private var kept: OpaquePointer?
+    private let lock = NSLock()
+    public init() {}
+    deinit { if let kept { jm_chain_release(kept) } }
+
+    /// The limiter's chain for these settings: the one from last time when they are the same, a new one
+    /// otherwise. Owned by the keeper: the caller hands it to a plan and does not release it.
+    func chain(_ settings: Limiter, channels: Int, sampleRate: Double, marginDB: Double) -> OpaquePointer? {
+        lock.lock()
+        defer { lock.unlock() }
+        let wanted = Key(settings: settings, channels: channels, sampleRate: sampleRate, marginDB: marginDB)
+        if wanted == key, let kept { return kept }
+        if let kept { jm_chain_release(kept) }
+        kept = MasterLimiterUnit.chain(settings, channels: channels, sampleRate: sampleRate, marginDB: marginDB)
+        key = kept == nil ? nil : wanted
+        return kept
+    }
+}
+
