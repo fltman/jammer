@@ -273,7 +273,9 @@ final class AutomationLanesView: NSView {
             if !all.contains(where: { $0.track == focus }) {
                 NSColor.systemOrange.withAlphaComponent(0.35).setFill()
                 NSRect(x: 0, y: y(shown == .mute ? 1 : 0, shown, in: r).rounded(), width: bounds.width, height: 1).fill()
-                drawCaption(shown == .send ? sendCaption(list[focus].id, lane: false) : L10n.text("automation.caption.empty"), track: focus, colour: NSColor.systemOrange.withAlphaComponent(0.8))
+                drawCaption(shown == .send ? sendCaption(list[focus].id, lane: false)
+                            : shown == .plugin ? L10n.text("automation.caption.plugin.empty") : L10n.text("automation.caption.empty"),
+                            track: focus, colour: NSColor.systemOrange.withAlphaComponent(0.8))
             }
         }
         for (i, lane) in all {
