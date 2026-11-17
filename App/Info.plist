@@ -67,6 +67,8 @@
 	<string>Jämmer transcribes your recordings on this Mac so you can edit them as text. The audio never leaves the Mac.</string>
 	<key>SUFeedURL</key>
 	<string>https://jammer.brattoo.com/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>hrZ3zKoaguRUnHgwwWFmKhpr7UUKP5la6bEeO+QNIo4=</string>
 	<key>UTExportedTypeDeclarations</key>
 	<array>
 		<dict>

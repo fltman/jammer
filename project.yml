@@ -129,6 +129,10 @@ targets:
         JammerHomepage: https://jammer.brattoo.com
         # Sparkle: the appcast (the one server of ours, PROVIDERS.md) and the public half of the update key.
         SUFeedURL: https://jammer.brattoo.com/appcast.xml
+        # The public half of the EdDSA key (made 2026-11-17 in Anders's Keychain, account "jammer"; the private half never leaves it).
+        SUPublicEDKey: hrZ3zKoaguRUnHgwwWFmKhpr7UUKP5la6bEeO+QNIo4=
+        # The public half of the EdDSA key (made 2026-11-17 in Anders's Keychain, account "jammer"; the private half never leaves it).
+        SUPublicEDKey: hrZ3zKoaguRUnHgwwWFmKhpr7UUKP5la6bEeO+QNIo4=
         NSSpeechRecognitionUsageDescription: Jämmer transcribes your recordings on this Mac so you can edit them as text. The audio never leaves the Mac.
         NSMotionUsageDescription: When you choose Follow Head Movements, Jämmer turns what you hear on headphones as your head turns. It reads only your headphones' motion, only while you listen, and keeps nothing.
         CFBundleDocumentTypes:
