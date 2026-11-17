@@ -6,3 +6,4 @@ App/UnknownPrice.swift
 App/AutomationLanesView.swift
 App/LinkJournalStore.swift
 App/LinkedWaiting.swift
+App/StateLine.swift

@@ -26,7 +26,17 @@ final class EditorSession {
     private(set) var version = 0
     private(set) var peaks: [UUID: PeakIndex] = [:]
     private(set) var peakProgress: [UUID: Double] = [:]
-    var status: String?
+    /// What the status line says. Set as a text, it is information; `say` sets what kind of line it is
+    /// (an error, a warning, something done), which gives it its symbol and what VoiceOver says first.
+    var status: String? { didSet { if !sayingKind { statusKind = .info } } }
+    private(set) var statusKind: StateKind = .info
+    @ObservationIgnored private var sayingKind = false
+    func say(_ text: String?, _ kind: StateKind) {
+        sayingKind = true
+        status = text
+        statusKind = kind
+        sayingKind = false
+    }
     var lastAnalysis: LoudnessResult?
     var volume: Float = (UserDefaults.standard.object(forKey: "playback.volume") as? Float) ?? 1 {
         didSet {
@@ -478,7 +488,7 @@ final class EditorSession {
         if isPlaying, end.playhead != start.playhead { try? output.play(from: playhead) }
         // What a step wants said with its result (automation that stayed where it was under a moved track):
         // in the status line, where it happens.
-        if let warning = results.flatMap(\.warnings).first { status = warning }
+        if let warning = results.flatMap(\.warnings).first { say(warning, .warning) }
         return results
     }
 
@@ -490,9 +500,10 @@ final class EditorSession {
             let r = await run([Step(op: op, params: params)], action: title)
             if let failed = r.first(where: { $0.status == .failed }) {
                 // The step's name means nothing in the status bar, and the reason has to fit there.
-                status = op == "detect_tempo" && failed.reason == "no_steady_tempo" ? "No steady tempo was found, so the tempo is as it was."
+                // (A line that says what didn't go: an error, by its symbol and to VoiceOver.)
+                say(op == "detect_tempo" && failed.reason == "no_steady_tempo" ? "No steady tempo was found, so the tempo is as it was."
                     : op == "duck" && failed.reason == "no_speech" ? "No speech was found to duck under, so nothing was changed."
-                    : failed.error
+                    : failed.error, .error)
                 NSSound.beep()
             } else if op == "limit", let info = r.first?.info, let after = info["truePeakAfter"], let cut = info["reductionMaxDB"], let secs = info["limitedSeconds"] {
                 status = String(format: "Limited: true peak now %.2f dBTP, at most %.1f dB taken off, over %.1f s.", after, cut, secs)

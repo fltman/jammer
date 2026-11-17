@@ -59,8 +59,7 @@ struct MixerSheet: View {
                                  remove: { session.perform("remove_vca", ["vca": .string(v.id.uuidString)]) })
                         // A group's lanes move every member: said here, where the group's level is.
                         if let text = MixerStrip.automationText(project.lanes(of: v.id)) {
-                            Text(L10n.text("mixer.automation.forGroup", text))
-                                .font(.caption).foregroundStyle(.orange)
+                            StateLine(kind: .info, text: L10n.text("mixer.automation.forGroup", text))
                                 .lineLimit(1).padding(.leading, 160).frame(height: 16)
                                 .accessibilityIdentifier("mixer.vca.automation")
                         }
@@ -72,8 +71,7 @@ struct MixerSheet: View {
             // its last rows off (seen in a picture of the sheet, 2026-11-16).
             .frame(height: min(440, listHeight))
             if !session.solo.isEmpty {
-                Text("Solo is on (\(session.soloNames.joined(separator: ", "))): only what reaches those strips is heard. It is a way of listening; exports and measurements are not affected, and it isn't saved.")
-                    .font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+                StateLine(kind: .warning, text: "Solo is on (\(session.soloNames.joined(separator: ", "))): only what reaches those strips is heard. It is a way of listening; exports and measurements are not affected, and it isn't saved.")
                     .accessibilityIdentifier("mixer.solo.note")
             }
             // Outside the list that scrolls: the master and what its limiter promises are always in view.
@@ -245,7 +243,8 @@ private struct MasterStrip: View {
             }
             .frame(height: 28)
             if let automation {
-                Text(automation).font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+                // Information, not a warning: neutral, with the information's symbol.
+                StateLine(kind: .info, text: automation)
                     .accessibilityIdentifier("mixer.master.automation")
             }
             // Said where it is switched on: what the limiter promises, and for what.
@@ -336,8 +335,7 @@ private struct MixerStrip: View {
                     .accessibilityIdentifier("mixer.strip.frozen.note")
             }
             if let automation {
-                Text(automation)
-                    .font(.caption).foregroundStyle(.orange)
+                StateLine(kind: .info, text: automation)
                     .lineLimit(1).padding(.leading, 160).frame(height: 16)
                     .accessibilityIdentifier("mixer.strip.automation")
             }

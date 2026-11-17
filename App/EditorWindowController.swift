@@ -738,7 +738,11 @@ struct StatusBar: View {
                 Text("\(job.kind == "transcribe" ? "Transcribing" : "Repairing")… \(Int(job.progress * 100)) %")
                     .foregroundStyle(Theme.neonColor)
             // What was just done is said whole; the selection's text gives way to it first.
-            } else if let status = session.status { Text(status).foregroundStyle(Theme.neonColor).lineLimit(1).layoutPriority(2).help(status) }
+            } else if let status = session.status {
+                StateLine(kind: session.statusKind, text: status, font: .system(size: 11, design: .monospaced))
+                    .foregroundStyle(.primary).lineLimit(1).layoutPriority(2).help(status)
+                    .accessibilityIdentifier("status.line")
+            }
             Spacer()
             if !session.missingSources.isEmpty {
                 Label("\(session.missingSources.count) missing file(s)", systemImage: "exclamationmark.triangle").foregroundStyle(.orange)
