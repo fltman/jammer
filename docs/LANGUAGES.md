@@ -69,6 +69,7 @@ How an English term is written in Swedish text: unchanged, with a capital only w
 | pan | panorering ("Pan": Panorera; centre: Mitten) | kept: "panorera" is said in Swedish |
 | mute | tysta ("Muted": Tystad) | kept |
 | solo | solo | |
+| strip (a track, a bus, the master or a VCA group in the mixer) | kanal | added 2026-11-17: what is said at a desk ("kanalremsa" is the full form; "remsa" alone sounds translated) |
 | VCA group | VCA-grupp | |
 | plugin | plugin (en plugin, flera pluginer) | |
 | insert | the word isn't shown; a plugin on a strip is just "plugin" | |

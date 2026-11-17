@@ -62,7 +62,7 @@ enum HostedPluginsController {
         let first = c.blocked.insert(plugin.description).inserted
         HostedPlugins.update(c)
         try? c.save(file)
-        let message = "\(name) \(how.description) and was switched off. Tracks that use it play without it; the document is untouched. Switch it on again in Audio › Plugins…."
+        let message = L10n.text("plugins.died", name, how.description)
         for doc in NSDocumentController.shared.documents.compactMap({ ($0 as? JammerDocument)?.session }) { doc.status = message }
         if first { NSSound.beep() }
     }

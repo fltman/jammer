@@ -153,6 +153,13 @@ public enum PluginError: Error, LocalizedError, Equatable {
         case .withheld(let name): "\(name) wasn't started: its settings came with this project, and the user hasn't allowed them to be loaded into the plugin. The track plays without it."
         }
     }
+    /// The same message by its key in the app's string catalogue (see `KeyedMessage`).
+    public var keyed: KeyedMessage? {
+        switch self {
+        case .notFound, .unsupportedFormat, .failed, .unknownParameter, .outOfRange, .unknownPreset: nil
+        case .withheld(let name): KeyedMessage("error.plugin.withheld", ["\(name)"])
+        }
+    }
 }
 
 public enum PluginCatalog {
@@ -721,3 +728,5 @@ extension Project {
     /// Any track has an insert that isn't bypassed.
     public var hasActiveInserts: Bool { allInserts.contains { !$0.bypass } }
 }
+
+extension PluginError: KeyedFailure {}

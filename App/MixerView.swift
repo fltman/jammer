@@ -22,12 +22,12 @@ struct MixerSheet: View {
 
     private var content: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Mixer").font(.title2.bold())
-            Text("Tracks go to the output, or to a bus that gathers several of them under one level. A document without buses, with every pan in the center, plays exactly as it always did.")
+            Text(L10n.text("mixer.title")).font(.title2.bold())
+            Text(L10n.text("mixer.intro"))
                 .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             ScrollView {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Tracks").font(.headline)
+                    Text(L10n.text("mixer.tracks")).font(.headline)
                     ForEach(project.tracks) { t in
                         MixerStrip(id: t.id, session: session, name: t.name, kind: "track", gainDB: t.gainDB, pan: t.pan, muted: t.isMuted, output: t.output, stereo: stereo,
                                    group: t.vca.flatMap { project.vca($0) }, groupAutomated: t.vca.map { !project.lanes(of: $0).isEmpty } ?? false,
@@ -40,8 +40,8 @@ struct MixerSheet: View {
                                    change: { session.perform("set_track", ["track": .string(t.id.uuidString)].merging($0) { $1 }) },
                                    send: { session.perform("set_send", ["from": .string(t.id.uuidString)].merging($0) { $1 }) }, remove: nil)
                     }
-                    Text("Buses").font(.headline).padding(.top, 8)
-                    if project.buses.isEmpty { Text("No buses yet.").foregroundStyle(.secondary) }
+                    Text(L10n.text("mixer.buses")).font(.headline).padding(.top, 8)
+                    if project.buses.isEmpty { Text(L10n.text("mixer.buses.none")).foregroundStyle(.secondary) }
                     ForEach(project.buses) { b in
                         MixerStrip(id: b.id, session: session, name: b.name, kind: "bus", gainDB: b.gainDB, pan: b.pan, muted: b.isMuted, output: b.output, stereo: stereo,
                                    group: b.vca.flatMap { project.vca($0) }, groupAutomated: b.vca.map { !project.lanes(of: $0).isEmpty } ?? false,
@@ -56,11 +56,11 @@ struct MixerSheet: View {
                                    send: { session.perform("set_send", ["from": .string(b.id.uuidString)].merging($0) { $1 }) },
                                    remove: { session.perform("remove_bus", ["bus": .string(b.id.uuidString), "reroute": .string(b.output?.uuidString ?? "master")]) })
                     }
-                    Text("VCA groups").font(.headline).padding(.top, 8)
-                    if project.vcas.isEmpty { Text("No VCA groups yet. A group moves the level of several tracks and buses together; each keeps its own level, plugins and route.").foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }
+                    Text(L10n.text("mixer.vcas")).font(.headline).padding(.top, 8)
+                    if project.vcas.isEmpty { Text(L10n.text("mixer.vcas.none")).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }
                     ForEach(project.vcas) { v in
                         VCAStrip(vca: v,
-                                 strips: project.tracks.map { ($0.id, $0.name, $0.vca == v.id) } + project.buses.map { ($0.id, "\($0.name) (bus)", $0.vca == v.id) },
+                                 strips: project.tracks.map { ($0.id, $0.name, $0.vca == v.id) } + project.buses.map { ($0.id, L10n.text("strip.bus.named", $0.name), $0.vca == v.id) },
                                  change: { session.perform("set_vca", ["vca": .string(v.id.uuidString)].merging($0) { $1 }) },
                                  remove: { session.perform("remove_vca", ["vca": .string(v.id.uuidString)]) })
                         // A group's lanes move every member: said here, where the group's level is.
@@ -87,21 +87,21 @@ struct MixerSheet: View {
                 }
             }
             if !session.solo.isEmpty {
-                StateLine(kind: .warning, text: "Solo is on (\(session.soloNames.joined(separator: ", "))): only what reaches those strips is heard. It is a way of listening; exports and measurements are not affected, and it isn't saved.")
+                StateLine(kind: .warning, text: L10n.text("mixer.solo.on", session.soloNames.joined(separator: ", ")))
                     .accessibilityIdentifier("mixer.solo.note")
             }
             // Outside the list that scrolls: the master and what its limiter promises are always in view.
-            Text("Master").font(.headline)
+            Text(L10n.text("strip.master")).font(.headline)
             MasterStrip(master: project.master, automation: MixerStrip.automationText(project.lanes(of: Master.id)), change: { session.perform("set_master", $0) })
             HStack {
-                TextField("Name of a new bus or VCA group", text: $newBus)
-                    .accessibilityLabel("Name of a new bus or VCA group")
+                TextField(L10n.text("mixer.new.name"), text: $newBus)
+                    .accessibilityLabel(L10n.text("mixer.new.name"))
                     .accessibilityIdentifier("mixer.newName")
                     .onSubmit(add)
-                Button("Add Bus", action: add).disabled(newBus.trimmingCharacters(in: .whitespaces).isEmpty || project.buses.count >= Mixer.maxBuses)
+                Button(L10n.text("mixer.addBus"), action: add).disabled(newBus.trimmingCharacters(in: .whitespaces).isEmpty || project.buses.count >= Mixer.maxBuses)
                     .accessibilityIdentifier("mixer.addBus")
                 // The same name field makes a VCA group.
-                Button("Add VCA") {
+                Button(L10n.text("mixer.addVCA")) {
                     let name = newBus.trimmingCharacters(in: .whitespaces)
                     guard !name.isEmpty else { return }
                     session.perform("add_vca", ["name": .string(name)])
@@ -112,7 +112,7 @@ struct MixerSheet: View {
             }
             HStack {
                 Spacer()
-                Button("Done", action: done).keyboardShortcut(.defaultAction)
+                Button(L10n.text("button.done"), action: done).keyboardShortcut(.defaultAction)
             }
         }
         .padding(20)
@@ -134,10 +134,10 @@ struct MixerSheet: View {
     /// Freezing is a job (it renders the strip); thawing is at once. Each is one undo step.
     private func toggleFreeze(_ id: UUID, _ name: String, _ on: Bool) {
         if on {
-            session.status = "Freezing \(name)…"
+            session.status = L10n.text("freeze.working", name)
             _ = JobRegistry.shared.startFreeze(session, strip: id)
         } else if let thawed = try? session.project.unfreezing(id) {
-            session.commit(thawed, action: "Unfreeze \(name)")
+            session.commit(thawed, action: L10n.text("freeze.undo.action", name))
         }
     }
 
@@ -181,38 +181,38 @@ private struct VCAStrip: View {
         let members = strips.filter(\.2).count
         HStack(spacing: 10) {
             Text(vca.name).lineLimit(1).truncationMode(.middle).frame(width: 150, alignment: .leading)
-            Toggle("Mute", isOn: Binding(get: { vca.isMuted }, set: { change(["muted": .bool($0)]) }))
+            Toggle(L10n.text("mixer.mute"), isOn: Binding(get: { vca.isMuted }, set: { change(["muted": .bool($0)]) }))
                 .toggleStyle(.checkbox)
                 .fixedSize()
-                .accessibilityLabel("Mute the group \(vca.name)")
+                .accessibilityLabel(L10n.text("mixer.vca.mute.ax", vca.name))
                 .accessibilityIdentifier("mixer.vca.mute")
             Slider(value: $level, in: -60...12, onEditingChanged: { editing in
                 dragging = editing
                 if !editing, level != vca.gainDB { change(["gainDB": .number((level * 10).rounded() / 10)]) }
             })
             .frame(width: 150)
-            .accessibilityLabel("Level of the group \(vca.name)")
+            .accessibilityLabel(L10n.text("mixer.vca.level.ax", vca.name))
             .accessibilityValue(Text(MixerStrip.levelText(level)))
             .accessibilityIdentifier("mixer.vca.level")
             Text(MixerStrip.levelText(level)).monospacedDigit().lineLimit(1).frame(width: 72, alignment: .trailing)
-            Menu(members == 0 ? "Members" : "Members (\(members))") {
+            Menu(members == 0 ? L10n.text("mixer.vca.members") : L10n.text("mixer.vca.members.count", String(members))) {
                 ForEach(strips, id: \.0) { strip in
-                    Button("\(strip.2 ? "✓ " : "")\(strip.1)") { change([strip.2 ? "remove" : "add": .array([.string(strip.0.uuidString)])]) }
+                    Button((strip.2 ? "✓ " : "") + strip.1) { change([strip.2 ? "remove" : "add": .array([.string(strip.0.uuidString)])]) }
                 }
             }
             .fixedSize()
-            .accessibilityLabel("Members of the group \(vca.name)")
+            .accessibilityLabel(L10n.text("mixer.vca.members.ax", vca.name))
             .accessibilityIdentifier("mixer.vca.members")
-            Button(action: remove) { Label("Remove the group \(vca.name)", systemImage: "minus.circle").labelStyle(.iconOnly) }
+            Button(action: remove) { Label(L10n.text("mixer.vca.remove.ax", vca.name), systemImage: "minus.circle").labelStyle(.iconOnly) }
                 .buttonStyle(.borderless)
-                .help("Remove this group. Its members keep the level they had with it.")
+                .help(L10n.text("mixer.vca.remove.help"))
             Spacer(minLength: 0)
         }
         .frame(height: 28)
         .onAppear { level = vca.gainDB }
         .onChange(of: vca.gainDB) { if !dragging { level = vca.gainDB } }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("\(vca.name), VCA group")
+        .accessibilityLabel(L10n.text("mixer.vca.ax", vca.name))
     }
 }
 
@@ -229,20 +229,20 @@ private struct MasterStrip: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 10) {
-                Text("Master").frame(width: 150, alignment: .leading)
+                Text(L10n.text("strip.master")).frame(width: 150, alignment: .leading)
                 Slider(value: $level, in: -60...12, onEditingChanged: { editing in
                     dragging = editing
                     if !editing, level != master.gainDB { change(["gainDB": .number((level * 10).rounded() / 10)]) }
                 })
                 .frame(width: 150)
-                .accessibilityLabel("Level of the master")
+                .accessibilityLabel(L10n.text("mixer.master.level.ax"))
                 .accessibilityValue(Text(MixerStrip.levelText(level)))
                 .accessibilityIdentifier("mixer.master.level")
                 Text(MixerStrip.levelText(level)).monospacedDigit().lineLimit(1).frame(width: 72, alignment: .trailing)
-                Toggle("Limiter", isOn: Binding(get: { master.limiter != nil }, set: { change(["limiter": .bool($0)]) }))
+                Toggle(L10n.text("mixer.master.limiter"), isOn: Binding(get: { master.limiter != nil }, set: { change(["limiter": .bool($0)]) }))
                     .toggleStyle(.checkbox)
                     .fixedSize()
-                    .accessibilityLabel("Limiter on the master")
+                    .accessibilityLabel(L10n.text("mixer.master.limiter.ax"))
                     .accessibilityIdentifier("mixer.master.limiter")
                 if master.limiter != nil {
                     Slider(value: $ceiling, in: -12...0, onEditingChanged: { editing in
@@ -250,7 +250,7 @@ private struct MasterStrip: View {
                         if !editing, ceiling != master.limiter?.ceilingDB { change(["ceiling": .number((ceiling * 10).rounded() / 10)]) }
                     })
                     .frame(width: 120)
-                    .accessibilityLabel("Ceiling of the master's limiter")
+                    .accessibilityLabel(L10n.text("mixer.master.ceiling.ax"))
                     .accessibilityValue(Text(String(format: "%.1f dBTP", ceiling)))
                     .accessibilityIdentifier("mixer.master.ceiling")
                     Text(String(format: "%.1f dBTP", ceiling).replacingOccurrences(of: "-", with: "−")).monospacedDigit().lineLimit(1).fixedSize()
@@ -265,7 +265,7 @@ private struct MasterStrip: View {
             }
             // Said where it is switched on: what the limiter promises, and for what.
             if master.limiter != nil {
-                Text("The limiter comes after everything else. An exported file is measured and held under the ceiling; playback has one pass and can go a little over.")
+                Text(L10n.text("mixer.master.limiter.text"))
                     .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("mixer.master.limiter.note")
             }
@@ -274,7 +274,7 @@ private struct MasterStrip: View {
         .onChange(of: master.gainDB) { if !dragging { level = master.gainDB } }
         .onChange(of: master.limiter?.ceilingDB) { if !dragging { ceiling = master.limiter?.ceilingDB ?? -1 } }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Master")
+        .accessibilityLabel(L10n.text("strip.master"))
     }
 }
 
@@ -333,22 +333,24 @@ private struct MixerStrip: View {
         }
         return parts.isEmpty ? nil : L10n.text("mixer.automation.line", parts.joined(separator: L10n.text("mixer.automation.separator")))
     }
-    static func panText(_ p: Double) -> String { p == 0 ? "Center" : "\(Int((abs(p) * 100).rounded())) % \(p < 0 ? "left" : "right")" }
+    static func panText(_ p: Double) -> String {
+        let percent = String(Int((abs(p) * 100).rounded()))
+        return p == 0 ? L10n.text("mixer.pan.center") : p < 0 ? L10n.text("mixer.pan.left", percent) : L10n.text("mixer.pan.right", percent)
+    }
 
     /// What is heard when the strip is in a group: the slider is the strip's own level, and this says
     /// the level with the group's, or that the group's mute is why it is silent.
     static func heardText(own: Double, muted: Bool, group: VCA) -> String {
-        if group.isMuted { return "Silent: the group \(group.name) is muted" }
-        if muted { return "Muted; \(levelText(own + group.gainDB)) with the group \(group.name) when it isn't" }
-        return "Heard at \(levelText(own + group.gainDB)) with the group \(group.name) (\(levelText(group.gainDB)))"
+        if group.isMuted { return L10n.text("mixer.heard.groupMuted", group.name) }
+        if muted { return L10n.text("mixer.heard.muted", levelText(own + group.gainDB), group.name) }
+        return L10n.text("mixer.heard", levelText(own + group.gainDB), group.name, levelText(group.gainDB))
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             controls
             if frozen {
-                Text(kind == "bus" ? "Frozen: plays from a file, its plugins rest. Unfreeze it to change its plugins or anything that feeds it."
-                                   : "Frozen: plays from a file, its plugins rest. Unfreeze it to change its clips or plugins.")
+                Text(kind == "bus" ? L10n.text("mixer.frozen.bus") : L10n.text("mixer.frozen.track"))
                     .font(.caption).foregroundStyle(.secondary)
                     .lineLimit(1).padding(.leading, 160).frame(height: 16)
                     .accessibilityIdentifier("mixer.strip.frozen.note")
@@ -375,23 +377,23 @@ private struct MixerStrip: View {
     private var controls: some View {
         HStack(spacing: 10) {
             Text(name).lineLimit(1).truncationMode(.middle).frame(width: 150, alignment: .leading)
-            Toggle("Mute", isOn: Binding(get: { muted }, set: { change(["muted": .bool($0)]) }))
+            Toggle(L10n.text("mixer.mute"), isOn: Binding(get: { muted }, set: { change(["muted": .bool($0)]) }))
                 .toggleStyle(.checkbox)
                 .fixedSize()
-                .accessibilityLabel("Mute \(name)")
+                .accessibilityLabel(L10n.text("mixer.mute.ax", name))
             // Listening only: not a change to the document.
-            Toggle("Solo", isOn: Binding(get: { soloed }, set: { solo($0) }))
+            Toggle(L10n.text("mixer.solo"), isOn: Binding(get: { soloed }, set: { solo($0) }))
                 .toggleStyle(.checkbox)
                 .fixedSize()
-                .accessibilityLabel("Solo \(name)")
+                .accessibilityLabel(L10n.text("mixer.solo.ax", name))
                 .accessibilityIdentifier("mixer.strip.solo")
-                .help("Hear only this strip (and any others that are soloed). Listening only: exports are not affected.")
-            Toggle("Frozen", isOn: Binding(get: { frozen }, set: { freeze($0) }))
+                .help(L10n.text("mixer.solo.help"))
+            Toggle(L10n.text("mixer.frozen"), isOn: Binding(get: { frozen }, set: { freeze($0) }))
                 .toggleStyle(.checkbox)
                 .fixedSize()
-                .accessibilityLabel("Freeze \(name)")
+                .accessibilityLabel(L10n.text("mixer.freeze.ax", name))
                 .accessibilityIdentifier("mixer.strip.frozen")
-                .help("Play this strip from a file made through its plugins, and let the plugins rest. Its level, pan, mute and sends still work.")
+                .help(L10n.text("mixer.frozen.help"))
             Slider(value: $level, in: -60...12, onEditingChanged: { editing in
                 dragging = editing
                 if editing {
@@ -406,7 +408,7 @@ private struct MixerStrip: View {
             })
             .onChange(of: level) { if dragging { session.faderMoved(id, level: level) } }
             .frame(width: 150)
-            .accessibilityLabel("Level of \(name)")
+            .accessibilityLabel(L10n.text("mixer.level.ax", name))
             .accessibilityValue(Text(Self.levelText(level)))
             Text(Self.levelText(level)).monospacedDigit().lineLimit(1).frame(width: 72, alignment: .trailing)
             if Operations.automationOn {
@@ -433,42 +435,42 @@ private struct MixerStrip: View {
                 .frame(width: 90)
                 .disabled(panAutomated)
                 .help(panAutomated ? L10n.text("mixer.pan.automated.help") : "")
-                .accessibilityLabel("Pan of \(name)")
+                .accessibilityLabel(L10n.text("mixer.pan.ax", name))
                 .accessibilityValue(Text(panAutomated ? L10n.text("mixer.pan.automated.help") : Self.panText(position)))
                 .accessibilityIdentifier("mixer.strip.pan")
                 Text(panAutomated ? L10n.text("mixer.pan.automated") : Self.panText(position)).font(.caption).lineLimit(1).frame(width: 72, alignment: .leading)
                     .foregroundStyle(panAutomated ? .secondary : .primary)
                     .help(panAutomated ? L10n.text("mixer.pan.automated.help") : "")
             }
-            Picker("Output of \(name)", selection: Binding(get: { output }, set: { change(["output": .string($0?.uuidString ?? "master")]) })) {
-                Text("Output").tag(UUID?.none)
+            Picker(L10n.text("mixer.output.ax", name), selection: Binding(get: { output }, set: { change(["output": .string($0?.uuidString ?? "master")]) })) {
+                Text(L10n.text("mixer.output")).tag(UUID?.none)
                 ForEach(destinations, id: \.0) { Text($0.1).tag(Optional($0.0)) }
             }
             .labelsHidden()
             .frame(width: 150)
             // Sends: a copy of the strip to a bus, each with a level and whether it is taken before the fader.
-            Menu(sends.isEmpty ? "Sends" : "Sends (\(sends.count))") {
-                if sendTargets.isEmpty { Text("Add a bus to send to") }
+            Menu(sends.isEmpty ? L10n.text("mixer.sends") : L10n.text("mixer.sends.count", String(sends.count))) {
+                if sendTargets.isEmpty { Text(L10n.text("mixer.sends.none")) }
                 ForEach(sendTargets, id: \.0) { target in
                     let now = sends.first { $0.to == target.0 }
-                    Menu(now.map { "\(target.1): \(Self.levelText($0.gainDB))\($0.pre ? ", before the fader" : "")" } ?? target.1) {
+                    Menu(now.map { $0.pre ? L10n.text("mixer.send.line.pre", target.1, Self.levelText($0.gainDB)) : L10n.text("mixer.send.line", target.1, Self.levelText($0.gainDB)) } ?? target.1) {
                         ForEach([0.0, -6, -12, -18, -24], id: \.self) { db in
-                            Button("\(now?.gainDB == db ? "✓ " : "")\(Self.levelText(db))") { send(["to": .string(target.0.uuidString), "gainDB": .number(db)]) }
+                            Button((now?.gainDB == db ? "✓ " : "") + Self.levelText(db)) { send(["to": .string(target.0.uuidString), "gainDB": .number(db)]) }
                         }
                         Divider()
-                        Button("\(now?.pre == true ? "✓ " : "")Before the fader") { send(["to": .string(target.0.uuidString), "pre": .bool(!(now?.pre ?? false))]) }
-                        if now != nil { Button("Remove This Send") { send(["to": .string(target.0.uuidString), "remove": .bool(true)]) } }
+                        Button((now?.pre == true ? "✓ " : "") + L10n.text("mixer.send.pre")) { send(["to": .string(target.0.uuidString), "pre": .bool(!(now?.pre ?? false))]) }
+                        if now != nil { Button(L10n.text("mixer.send.remove")) { send(["to": .string(target.0.uuidString), "remove": .bool(true)]) } }
                     }
                 }
             }
             .fixedSize()
-            .accessibilityLabel("Sends of \(name)")
+            .accessibilityLabel(L10n.text("mixer.sends.ax", name))
             // The same width on every row, with or without the button, so the columns line up.
             Group {
                 if let remove {
-                    Button(action: remove) { Label("Remove \(name)", systemImage: "minus.circle").labelStyle(.iconOnly) }
+                    Button(action: remove) { Label(L10n.text("button.remove.ax", name), systemImage: "minus.circle").labelStyle(.iconOnly) }
                         .buttonStyle(.borderless)
-                        .help("Remove this bus. What goes to it goes where the bus went.")
+                        .help(L10n.text("mixer.bus.remove.help"))
                 } else {
                     Color.clear
                 }

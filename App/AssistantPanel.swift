@@ -86,7 +86,7 @@ final class AssistantModel {
 
     var provider: TextProvider? { TextProvider.offered().first { $0.id == source } }
     var model: String { chosen[source] ?? "" }
-    var sourceName: String { source == "device" ? "On this Mac" : source == "ollama" ? "Ollama" : provider?.name ?? "On this Mac" }
+    var sourceName: String { source == "device" ? L10n.text("assistant.source.device") : source == "ollama" ? "Ollama" : provider?.name ?? L10n.text("assistant.source.device") }
     var summary: String { source == "device" || model.isEmpty ? sourceName : "\(sourceName): \(model)" }
 
     @ObservationIgnored private var history: [(user: String, reply: String)] = []
@@ -153,10 +153,10 @@ final class AssistantModel {
         guard let provider else { return }
         do {
             choices = try await ModelCatalog.list(provider, key: Keychain.get(provider.id))
-            if choices.isEmpty { listNote = "\(provider.name)'s list has no text models." }
+            if choices.isEmpty { listNote = L10n.text("assistant.list.none", provider.name) }
         } catch {
             // The provider's own words: a wrong key or a list that needs one is said, not hidden.
-            listNote = Keychain.get(provider.id) == nil ? "Add your key to see \(provider.name)'s models." : error.localizedDescription
+            listNote = Keychain.get(provider.id) == nil ? L10n.text("assistant.list.needsKey", provider.name) : error.localizedDescription
         }
     }
 
@@ -259,7 +259,7 @@ final class AssistantModel {
                                       pool: session.pool, media: MediaStore.folder)
                 let steps = try MacroExpander.expand(batch, state: state)
                 guard !steps.isEmpty else { messages.append(Message(role: .note, text: "Nothing to change.")); return true }
-                let results = await session.run(steps, action: "Assistant")
+                let results = await session.run(steps, action: L10n.text("assistant.title"))
                 if let f = results.first(where: { $0.status == .failed }) {
                     messages.append(Message(role: .note, text: "\(f.op) failed: \(f.error ?? ""). Nothing was changed."))
                     return false
@@ -309,7 +309,7 @@ final class AssistantModel {
             do {
                 let req = try RestoreRequest.parse(s.params.mapValues(\.any))
                 let range: Range<Frame>? = req.start.flatMap { a in req.end.map { session.project.frames(a)..<session.project.frames($0) } } ?? session.selection
-                let title = ["dehum": "Remove Hum", "declip": "Repair Clipping", "declick": "Remove Clicks", "denoise": "Reduce Noise", "dereverb": "Reduce Reverb"][req.settings.kind.rawValue] ?? "Restore"
+                let title = ["dehum": L10n.text("restore.kind.dehum"), "declip": L10n.text("restore.kind.declip"), "declick": L10n.text("restore.kind.declick"), "denoise": L10n.text("restore.kind.denoise"), "dereverb": L10n.text("restore.kind.dereverb")][req.settings.kind.rawValue] ?? L10n.text("restore.title")
                 return await runJob(JobRegistry.shared.startRestoration(session, settings: req.settings, range: range, tracks: req.tracks.map(Set.init), action: title))
             } catch {
                 messages.append(Message(role: .note, text: (error as? AgentAPI.APIError)?.message ?? error.localizedDescription))
@@ -325,7 +325,7 @@ final class AssistantModel {
                 guard session.project.frozen(id) == nil else { messages.append(Message(role: .note, text: "\(strip.name) is frozen already.")); return true }
                 return await runJob(JobRegistry.shared.startFreeze(session, strip: id))
             }
-            do { session.commit(try session.project.unfreezing(id), action: "Unfreeze \(strip.name)"); return true }
+            do { session.commit(try session.project.unfreezing(id), action: L10n.text("freeze.undo.action", strip.name)); return true }
             catch { messages.append(Message(role: .note, text: error.localizedDescription)); return false }
         case "measure_loudness":
             let r = await session.analyze(session.selection)
@@ -371,12 +371,12 @@ final class AssistantModel {
             messages.append(Message(role: .note, text: "\(model) can't call tools, which the assistant needs. Choose another of \(provider.name)'s models."))
             return false
         }
-        let price = choice?.estimate ?? "Your \(provider.name) account is charged at the model's rate."
+        let price = choice?.estimate ?? L10n.text("assistant.paid.rate", provider.name)
         let alert = NSAlert()
-        alert.messageText = "Send this to \(model) at \(provider.name)?"
-        alert.informativeText = "\(price) The request and a short description of the document go to \(provider.name); the audio doesn't. \(provider.note)"
-        alert.addButton(withTitle: "Send")
-        alert.addButton(withTitle: "Cancel")
+        alert.messageText = L10n.text("assistant.paid.title", model, provider.name)
+        alert.informativeText = L10n.text("assistant.paid.text", price, provider.name, provider.note)
+        alert.addButton(withTitle: L10n.text("button.send"))
+        alert.addButton(withTitle: L10n.text("button.cancel"))
         // No price on the provider's list for this model: Send stays grey until that is ticked as understood.
         // (A price from the provider's own list counts as known. Asked once per provider, not per model.)
         let unknown = UnknownPriceBox(service: "text.\(provider.id)", name: provider.name)
@@ -412,12 +412,12 @@ struct AssistantView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Text("Assistant").font(.system(size: 11, weight: .semibold))
+                Text(L10n.text("assistant.title")).font(.system(size: 11, weight: .semibold))
                 Spacer()
                 Text(model.summary).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
-                Button { showSettings.toggle() } label: { Label("Assistant model", systemImage: "gearshape").labelStyle(.iconOnly) }
+                Button { showSettings.toggle() } label: { Label(L10n.text("assistant.settings.ax"), systemImage: "gearshape").labelStyle(.iconOnly) }
                     .buttonStyle(.borderless)
-                    .help("Model")
+                    .help(L10n.text("assistant.model"))
                     .popover(isPresented: $showSettings) { settings.padding(14).frame(width: 320) }
             }
             .padding(.horizontal, 12).padding(.vertical, 7)
@@ -425,7 +425,7 @@ struct AssistantView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 8) {
                         if model.messages.isEmpty {
-                            Text("Ask in Swedish or English, for example \"ta bort alla ehm och tystnader längre än en sekund\" or \"normalize to −16 LUFS\". Plans that remove audio are shown before they run, and everything is one undo step.")
+                            Text(L10n.text("assistant.intro"))
                                 .font(.callout).foregroundStyle(.secondary)
                         }
                         ForEach(model.messages) { m in
@@ -439,19 +439,19 @@ struct AssistantView: View {
                             }
                             // One string, "who: text": on macOS 27 a text element shows its value and loses its label.
                             .accessibilityElement(children: .ignore)
-                            .accessibilityLabel(Text(verbatim: "\(m.role == .user ? "You" : m.role == .assistant ? "Assistant" : "Note"): \(m.text)"))
+                            .accessibilityLabel(Text(verbatim: (m.role == .user ? L10n.text("assistant.ax.you") : m.role == .assistant ? L10n.text("assistant.title") : L10n.text("assistant.ax.note")) + ": " + m.text))
                             .id(m.id)
                         }
                         if let plan = model.pending {
                             let impact = model.pendingImpact
                             let alarming = impact?.isAlarming ?? false
                             VStack(alignment: .leading, spacing: 6) {
-                                Text("The plan").font(.caption.weight(.semibold))
+                                Text(L10n.text("assistant.plan")).font(.caption.weight(.semibold))
                                 ForEach(Array(plan.steps.enumerated()), id: \.offset) { i, s in
                                     Text("\(i + 1). \(model.describe(s))").font(.caption)
                                 }
                                 if let impact, !impact.lines.isEmpty {
-                                    Text("What it does").font(.caption.weight(.semibold)).padding(.top, 2)
+                                    Text(L10n.text("assistant.plan.does")).font(.caption.weight(.semibold)).padding(.top, 2)
                                     ForEach(Array(impact.lines.enumerated()), id: \.offset) { _, line in
                                         Text("• " + line).font(.caption).foregroundStyle(.secondary)
                                     }
@@ -461,11 +461,11 @@ struct AssistantView: View {
                                 }
                                 HStack {
                                     if alarming {
-                                        Button("Cancel") { model.cancelPending() }.keyboardShortcut(.defaultAction)
-                                        Button("Run anyway") { model.confirmPending() }
+                                        Button(L10n.text("button.cancel")) { model.cancelPending() }.keyboardShortcut(.defaultAction)
+                                        Button(L10n.text("assistant.runAnyway")) { model.confirmPending() }
                                     } else {
-                                        Button("Run") { model.confirmPending() }.keyboardShortcut(.defaultAction)
-                                        Button("Cancel") { model.cancelPending() }
+                                        Button(L10n.text("batch.run")) { model.confirmPending() }.keyboardShortcut(.defaultAction)
+                                        Button(L10n.text("button.cancel")) { model.cancelPending() }
                                     }
                                 }
                             }
@@ -480,15 +480,15 @@ struct AssistantView: View {
                 .onChange(of: model.messages.count) { if let last = model.messages.last { proxy.scrollTo(last.id) } }
             }
             HStack {
-                TextField("Ask the assistant…", text: $model.input, axis: .vertical)
+                TextField(L10n.text("assistant.placeholder"), text: $model.input, axis: .vertical)
                     .textFieldStyle(.plain)
-                    .accessibilityLabel("Ask the assistant")
+                    .accessibilityLabel(L10n.text("assistant.field.ax"))
                     .lineLimit(1...4)
                     .focused($focused)
                     .onChange(of: model.focusRequest) { focused = true }
                     .onChange(of: focused) { model.fieldFocused = focused }
                     .onSubmit { model.send() }
-                Button { model.send() } label: { Label("Send", systemImage: "arrow.up.circle.fill").labelStyle(.iconOnly) }
+                Button { model.send() } label: { Label(L10n.text("button.send"), systemImage: "arrow.up.circle.fill").labelStyle(.iconOnly) }
                     .buttonStyle(.borderless)
                     .disabled(model.input.trimmingCharacters(in: .whitespaces).isEmpty || model.busy)
             }
@@ -501,45 +501,45 @@ struct AssistantView: View {
 
     private var settings: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Picker("Model", selection: $model.source) {
-                Text("On this Mac (Apple, free, private)").tag("device")
-                if model.ollamaVersion != nil { Text("Ollama on this Mac (free, private)").tag("ollama") }
+            Picker(L10n.text("assistant.model"), selection: $model.source) {
+                Text(L10n.text("assistant.source.device.long")).tag("device")
+                if model.ollamaVersion != nil { Text(L10n.text("assistant.source.ollama")).tag("ollama") }
                 ForEach(TextProvider.offered()) { p in
-                    Text("\(p.name) (your key, paid)").tag(p.id)
+                    Text(L10n.text("assistant.source.paid", p.name)).tag(p.id)
                 }
             }
             .pickerStyle(.radioGroup)
             if model.source == "ollama" {
                 if !model.ollamaAsked {
-                    Text("Asking Ollama what it has…").font(.caption).foregroundStyle(.secondary)
+                    Text(L10n.text("assistant.ollama.asking")).font(.caption).foregroundStyle(.secondary)
                 } else if model.ollamaModels.isEmpty {
-                    Text("None of the models installed in Ollama can call tools, which the assistant needs.")
+                    Text(L10n.text("assistant.ollama.none"))
                         .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 } else {
-                    Picker("Ollama model", selection: Binding(get: { model.model }, set: { model.chosen["ollama"] = $0 })) {
-                        Text("Choose…").tag("")
+                    Picker(L10n.text("assistant.ollama.model"), selection: Binding(get: { model.model }, set: { model.chosen["ollama"] = $0 })) {
+                        Text(L10n.text("choice.choose")).tag("")
                         ForEach(model.ollamaModels, id: \.self) { name in
-                            Text(AssistantModel.evaluatedLocally.contains(name) ? name : "\(name) (not evaluated with Jämmer)").tag(name)
+                            Text(AssistantModel.evaluatedLocally.contains(name) ? name : L10n.text("assistant.ollama.notEvaluated", name)).tag(name)
                         }
                     }
                 }
-                Text("Slower than the on-device model, and the model takes about 6 GB of memory while it runs. Tried with qwen3:8b on one Mac. Jämmer doesn't download models; it uses the ones you have installed.")
+                Text(L10n.text("assistant.ollama.text"))
                     .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             } else if let p = model.provider {
-                Picker("\(p.name) model", selection: Binding(get: { model.model }, set: { model.chosen[p.id] = $0 })) {
-                    Text("Choose…").tag("")
+                Picker(L10n.text("assistant.provider.model", p.name), selection: Binding(get: { model.model }, set: { model.chosen[p.id] = $0 })) {
+                    Text(L10n.text("choice.choose")).tag("")
                     // A model saved earlier that the list no longer has is still shown, so it isn't silently replaced.
                     if !model.model.isEmpty, !model.choices.contains(where: { $0.id == model.model }) { Text(model.model).tag(model.model) }
                     ForEach(model.choices) { c in
-                        Text(c.tools == false ? "\(c.id) (no tool calls: can't be used)" : c.id).tag(c.id)
+                        Text(c.tools == false ? L10n.text("assistant.model.noTools", c.id) : c.id).tag(c.id)
                     }
                 }
                 if let note = model.listNote { StateLine(kind: .error, text: note) }
-                SecureField(Keychain.get(p.id) == nil ? "\(p.name) key" : "Key saved; type to replace", text: $key)
-                Text("\(p.note) The key stays in your Keychain. Every request asks first and shows the price.")
+                SecureField(Keychain.get(p.id) == nil ? L10n.text("assistant.key", p.name) : L10n.text("assistant.key.saved"), text: $key)
+                Text(L10n.text("assistant.key.text", p.note))
                     .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
-            Button("Done") {
+            Button(L10n.text("button.done")) {
                 if !key.isEmpty, let p = model.provider { Keychain.set(p.id, key); key = "" }
                 model.saveSettings()
                 showSettings = false

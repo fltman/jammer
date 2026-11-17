@@ -202,6 +202,22 @@ public enum Mixer {
             case .tooManyVCAs: "a document can have \(Mixer.maxVCAs) VCAs at most."
             }
         }
+        /// The same message by its key in the app's string catalogue (see `KeyedMessage`).
+        public var keyed: KeyedMessage? {
+            switch self {
+            case .noBus(let id): KeyedMessage("error.mixer.noBus", ["\(id)"])
+            case .loop(let name): KeyedMessage("error.mixer.loop", ["\(name)"])
+            case .tooMany: KeyedMessage("error.mixer.tooMany", ["\(Mixer.maxBuses)"])
+            case .inUse: nil
+            case .mono: KeyedMessage("error.mixer.mono")
+            case .noStrip(let id): KeyedMessage("error.mixer.noStrip", ["\(id)"])
+            case .noSend(let from, let to): KeyedMessage("error.mixer.noSend", ["\(from)", "\(to)"])
+            case .tooManySends(let name): KeyedMessage("error.mixer.tooManySends", ["\(name)", "\(Mixer.maxSends)"])
+            case .badValue: nil
+            case .noVCA(let id): KeyedMessage("error.mixer.noVCA", ["\(id)"])
+            case .tooManyVCAs: KeyedMessage("error.mixer.tooManyVCAs", ["\(Mixer.maxVCAs)"])
+            }
+        }
     }
 }
 
@@ -551,3 +567,5 @@ extension Project {
         }
     }
 }
+
+extension Mixer.Failure: KeyedFailure {}

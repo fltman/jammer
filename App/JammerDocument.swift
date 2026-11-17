@@ -72,7 +72,7 @@ final class JammerDocument: NSDocument {
     }
 
     override func makeWindowControllers() {
-        let project = pendingProject ?? session?.project ?? Project(sampleRate: 48_000, channels: 2, tracks: [Track(name: "Track 1")])
+        let project = pendingProject ?? session?.project ?? Project(sampleRate: 48_000, channels: 2, tracks: [Track(name: L10n.text("track.default.first"))])
         let s = session ?? EditorSession(project: project, fromPackage: readFromPackage, package: fileURL)
         if session == nil, let h = pendingHistory { s.load(project, history: h) }
         s.document = self
@@ -411,9 +411,9 @@ final class JammerDocument: NSDocument {
                     self.mediaWrapper = try? FileWrapper(url: package.appending(path: ProjectPackage.mediaFolderName))
                     self.session?.adoptCollected(resolved.sources.filter { $0.packagePath != nil })
                     let n = self.pendingCopies.count
-                    self.session?.status = n == 0 ? "Everything is already in the project." : "Collected \(n) file\(n == 1 ? "" : "s") into the project."
+                    self.session?.status = n == 0 ? L10n.text("collect.nothing") : L10n.count("collect.done", n)
                 } else if let error, collecting {
-                    self.session?.status = "Couldn't collect: \(error.localizedDescription)"
+                    self.session?.status = L10n.text("collect.failed", error.localizedDescription)
                 }
                 self.pendingCopies = []
                 self.pendingCollected = nil

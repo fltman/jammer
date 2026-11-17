@@ -19,7 +19,8 @@ enum TimelineImporter {
         let doc = controller.open(result.project, name: result.name)
         if let s = doc.session {
             let w = result.warnings.count
-            s.status = "Imported \(result.project.tracks.count) tracks, \(result.clips) clips" + (w > 0 ? " (\(w) note\(w == 1 ? "" : "s"): \(result.warnings[0].message)\(w > 1 ? " …" : ""))" : "")
+            let done = L10n.text("import.done", L10n.count("import.tracks", result.project.tracks.count), L10n.count("import.clips", result.clips))
+            s.status = w > 0 ? L10n.text("import.done.notes", done, L10n.count("import.notes", w), result.warnings[0].message + (w > 1 ? " …" : "")) : done
         }
         return (doc.session, result)
     }
@@ -28,7 +29,7 @@ enum TimelineImporter {
     static func choose() {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.init(filenameExtension: "fcpxml"), .init(filenameExtension: "fcpxmld"), .xml].compactMap { $0 }
-        panel.message = "Choose a Final Cut Pro XML file (from Flimmer, Final Cut Pro or DaVinci Resolve). Its sound opens as a new document; the files it uses aren't changed."
+        panel.message = L10n.text("import.panel.message")
         guard panel.runModal() == .OK, let url = panel.url else { return }
         Task {
             do {
@@ -39,13 +40,12 @@ enum TimelineImporter {
                 let outside = timeline.media.filter { !SourcePool.real($0).path.hasPrefix(home) && FileManager.default.fileExists(atPath: $0.path) }
                 if !outside.isEmpty {
                     let alert = NSAlert()
-                    alert.messageText = "This timeline uses audio from other folders"
-                    alert.informativeText = "“\(url.lastPathComponent)” names \(outside.count) audio file\(outside.count == 1 ? "" : "s") outside its own folder:\n\n"
-                        + outside.prefix(6).map { "• " + ($0.path as NSString).abbreviatingWithTildeInPath }.joined(separator: "\n")
-                        + (outside.count > 6 ? "\n… and \(outside.count - 6) more" : "")
-                        + "\n\nIf the timeline is your own, or you trust where it came from, use them. Otherwise import without: those clips are left out, and nothing outside the timeline's folder is read."
-                    alert.addButton(withTitle: "Import Without Them")
-                    alert.addButton(withTitle: "Use These Files")
+                    alert.messageText = L10n.text("import.outside.title")
+                    let shown = outside.prefix(6).map { "• " + ($0.path as NSString).abbreviatingWithTildeInPath }.joined(separator: "\n")
+                        + (outside.count > 6 ? "\n" + L10n.text("ask.more", String(outside.count - 6)) : "")
+                    alert.informativeText = L10n.text("import.outside.text", url.lastPathComponent, L10n.count("access.ask.files", outside.count), shown)
+                    alert.addButton(withTitle: L10n.text("import.outside.without"))
+                    alert.addButton(withTitle: L10n.text("access.ask.use"))
                     if alert.runModal() == .alertFirstButtonReturn {
                         let drop = Set(outside)
                         for i in timeline.tracks.indices { timeline.tracks[i].clips.removeAll { drop.contains($0.media) } }
@@ -55,7 +55,7 @@ enum TimelineImporter {
                 _ = try await open(timeline)
             } catch {
                 let alert = NSAlert()
-                alert.messageText = "The timeline couldn't be imported"
+                alert.messageText = L10n.text("import.failed.title")
                 alert.informativeText = error.localizedDescription
                 alert.runModal()
             }

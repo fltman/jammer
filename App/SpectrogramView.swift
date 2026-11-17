@@ -9,7 +9,7 @@ final class SpectrogramLayerView: NSView {
     let viewport: Viewport
     private var shownKey: [Double] = []
     private var task: Task<Void, Never>?
-    private let message = NSTextField(labelWithString: "Zoom in to ten minutes or less to see the spectrogram.")
+    private let message = NSTextField(labelWithString: L10n.text("spectrogram.zoomIn"))
 
     init(session: EditorSession, viewport: Viewport) {
         self.session = session

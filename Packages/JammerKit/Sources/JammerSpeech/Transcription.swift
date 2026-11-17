@@ -27,6 +27,14 @@ public enum TranscriptionError: Error, LocalizedError, Equatable {
         case .failed(let m): "Transcription failed: \(m)"
         }
     }
+    /// The same message by its key in the app's string catalogue (see `KeyedMessage`).
+    public var keyed: KeyedMessage? {
+        switch self {
+        case .unsupportedLanguage(let l): KeyedMessage("error.transcription.unsupportedLanguage", ["\(l)"])
+        case .unreadableSource: KeyedMessage("error.transcription.unreadableSource")
+        case .failed(let m): KeyedMessage("error.transcription.failed", ["\(m)"])
+        }
+    }
 }
 
 /// A recognised piece of text with its time range, as engines report it.
@@ -225,3 +233,5 @@ struct SourceFeeder {
         }
     }
 }
+
+extension TranscriptionError: KeyedFailure {}

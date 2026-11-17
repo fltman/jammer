@@ -63,6 +63,15 @@ public enum TempoError: Error, LocalizedError, Equatable {
         case .badPosition: "That bar or beat doesn't exist in the time signature."
         }
     }
+    /// The same message by its key in the app's string catalogue (see `KeyedMessage`).
+    public var keyed: KeyedMessage? {
+        switch self {
+        case .badTempo: KeyedMessage("error.tempo.badTempo", ["\(Int(TempoMap.bpmRange.lowerBound))", "\(Int(TempoMap.bpmRange.upperBound))"])
+        case .badMeter: KeyedMessage("error.tempo.badMeter")
+        case .noSuchChange: KeyedMessage("error.tempo.noSuchChange")
+        case .badPosition: KeyedMessage("error.tempo.badPosition")
+        }
+    }
 }
 
 /// Tempo and time signature over the timeline. The audio stays in frames; the map
@@ -276,3 +285,5 @@ public struct TempoMap: Codable, Hashable, Sendable {
         return out
     }
 }
+
+extension TempoError: KeyedFailure {}

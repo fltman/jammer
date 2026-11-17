@@ -34,6 +34,35 @@ def shape(text):
     """The placeholders of a text as written: [(number or None, kind), …]."""
     return [(m.group(1), m.group(2)) for m in PLACEHOLDER.finditer(text.replace('%%', ''))]
 
+CASE_TEXT = re.compile(r'^\s*case (.+?): "((?:[^"\\]|\\.)*)"\s*$')
+CASE_KEY = re.compile(r'^\s*case (.+?): KeyedMessage\("([^"]+)"')
+INTERPOLATION = re.compile(r'\\\(((?:[^()]|\((?:[^()]|\((?:[^()]|\([^()]*\))*\))*\))*)\)')
+def labels(pattern):
+    return tuple(re.findall(r'\.(\w+)', pattern))
+def keyed_messages(root):
+    """key -> (file, the English of errorDescription for the same case as a format, or None)."""
+    out = {}
+    for folder, _, names in os.walk(os.path.join(root, 'Packages')):
+        if os.sep + 'Tests' in folder or os.sep + '.build' in folder: continue
+        for name in names:
+            if not name.endswith('.swift'): continue
+            texts, pending, describing = {}, [], False
+            for row in open(os.path.join(folder, name), encoding='utf-8').read().splitlines():
+                # Only the sentences of errorDescription count (a `reason` beside it has strings by the same cases).
+                if re.search(r'\b(?:var|func) \w+', row): describing = 'var errorDescription' in row
+                m = CASE_TEXT.match(row) if describing else None
+                if m:
+                    n = [0]
+                    def rep(x):
+                        n[0] += 1; return '%' + str(n[0]) + '$@'
+                    fmt = INTERPOLATION.sub(rep, m.group(2))
+                    if n[0] == 1: fmt = fmt.replace('%1$@', '%@')
+                    texts[labels(m.group(1))] = fmt.replace('\\"', '"')
+                m = CASE_KEY.match(row)
+                if m: pending.append((labels(m.group(1)), m.group(2)))
+            for label, key in pending: out[key] = (name, texts.get(label))
+    return out
+
 def check(root, require=None):
     faults = []
     cat_path = os.path.join(root, 'App', 'Localizable.xcstrings')
@@ -76,7 +105,16 @@ def check(root, require=None):
         if key not in strings: faults.append(f'the code asks for "{key}", which is not in the catalogue'); continue
         if key in counts and how != {'count'}: faults.append(f'{key} is a count and must be asked for with L10n.count')
         if key not in counts and 'count' in how: faults.append(f'{key} is not a count but is asked for with L10n.count')
-    for key in sorted(set(strings) - set(used)): faults.append(f'{key} is in the catalogue and nothing uses it')
+    # The packages' errors that have a key (KeyedMessage): the key is in the catalogue, and its English is
+    # the words of the error's own errorDescription for the same case, so the window and the API say one thing.
+    keyed = keyed_messages(root)
+    for key, (where, english) in sorted(keyed.items()):
+        if key not in strings: faults.append(f'{where} names the key "{key}", which is not in the catalogue'); continue
+        have = units(strings[key].get('localizations', {}).get(source, {}))
+        if english is None: faults.append(f'{where}: "{key}" has no sentence of its own in errorDescription to hold the catalogue to')
+        elif not have or have[0][1].replace('’', "'") != english.replace('’', "'"):
+            faults.append(f'{key}: the catalogue says "{have[0][1] if have else ""}" where {where} says "{english}"')
+    for key in sorted(set(strings) - set(used) - set(keyed)): faults.append(f'{key} is in the catalogue and nothing uses it')
     # Files whose texts have all been moved.
     moved = os.path.join(root, 'scripts', 'l10n-moved.txt')
     if os.path.exists(moved):
@@ -176,13 +214,19 @@ def self_test(root):
                 'a.one': {'localizations': {'en': {'stringUnit': {'value': 'Level %@'}}, 'sv': {'stringUnit': {'value': 'Nivå %@'}}}},
                 'a.count': {'localizations': {'en': {'variations': {'plural': {'one': {'stringUnit': {'value': '%lld point'}}, 'other': {'stringUnit': {'value': '%lld points'}}}}},
                                               'sv': {'variations': {'plural': {'one': {'stringUnit': {'value': '%lld punkt'}}, 'other': {'stringUnit': {'value': '%lld punkter'}}}}}}}}}
+            cat['strings']['e.gone'] = {'localizations': {'en': {'stringUnit': {'value': 'there is no bus with id %@.'}}, 'sv': {'stringUnit': {'value': 'det finns ingen buss med id %@.'}}}}
             code = 'let a = L10n.text("a.two", x, y); let b = L10n.text("a.one", x); let c = L10n.count("a.count", n)\n'
             return d, cat, code
-        def run(mutate, moved=None, extra=''):
+        def run(mutate, moved=None, extra='', package_key='e.gone'):
             d, cat, code = fresh()
             if mutate: mutate(cat['strings'])
             json.dump(cat, open(os.path.join(d, 'App', 'Localizable.xcstrings'), 'w'))
             open(os.path.join(d, 'App', 'Code.swift'), 'w').write(code + extra)
+            # A package error with a key: its sentence, and the key the catalogue has for it.
+            os.makedirs(os.path.join(d, 'Packages', 'Kit', 'Sources'))
+            open(os.path.join(d, 'Packages', 'Kit', 'Sources', 'Fail.swift'), 'w').write(
+                'var reason: String {\n  case .gone(let n): "gone"\n}\nvar errorDescription: String? {\n  case .gone(let n): "there is no bus with id \\(n)."\n}\n'
+                'var keyed: KeyedMessage? {\n  case .gone(let n): KeyedMessage("' + package_key + '", ["\\(n)"])\n}\n')
             if moved is not None: open(os.path.join(d, 'scripts', 'l10n-moved.txt'), 'w').write(moved)
             return check(d, require='sv')
         def sv(s, key, value): s[key]['localizations']['sv']['stringUnit']['value'] = value
@@ -210,7 +254,15 @@ def self_test(root):
         if clean: bad.append('the clean copy was faulted: ' + '; '.join(clean))
         for name, (mutate, moved, extra) in plants.items():
             if not run(mutate, moved, extra): bad.append('not caught: ' + name)
-        return bad, len(plants)
+        # The packages' keyed errors.
+        keyed_plants = {
+            'a keyed error whose catalogue English is not the error\'s own words': (lambda s: s['e.gone']['localizations']['en']['stringUnit'].update(value='no bus with id %@.'), 'e.gone'),
+            'a keyed error whose key is not in the catalogue': (lambda s: s.pop('e.gone'), 'e.gone'),
+            'a keyed error under another key, leaving the entry unused': (None, 'e.other'),
+        }
+        for name, (mutate, key) in keyed_plants.items():
+            if not run(mutate, package_key=key): bad.append('not caught: ' + name)
+        return bad, len(plants) + len(keyed_plants)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

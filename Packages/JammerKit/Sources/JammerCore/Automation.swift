@@ -119,6 +119,20 @@ public enum Automation {
             case .tooMany: "a lane can have \(Automation.maxPoints) points at most."
             }
         }
+        /// The same message by its key in the app's string catalogue (see `KeyedMessage`).
+        public var keyed: KeyedMessage? {
+            switch self {
+            case .noStrip(let id): KeyedMessage("error.automation.noStrip", ["\(id)"])
+            case .notBuilt(let what): KeyedMessage("error.automation.notBuilt", ["\(what)"])
+            case .mono: KeyedMessage("error.automation.mono")
+            case .noPan: KeyedMessage("error.automation.noPan")
+            case .groupHasNoPan: KeyedMessage("error.automation.groupHasNoPan")
+            case .noSend(let to): KeyedMessage("error.automation.noSend", ["\(to)"])
+            case .noInsert: KeyedMessage("error.automation.noInsert")
+            case .badValue: nil
+            case .tooMany: KeyedMessage("error.automation.tooMany", ["\(Automation.maxPoints)"])
+            }
+        }
     }
 }
 
@@ -352,3 +366,5 @@ extension AutomationLane {
         return out.pinned((t > 0 ? [AutomationPoint(frame: t - 1, value: before)] : []) + [AutomationPoint(frame: t + length, value: after)])
     }
 }
+
+extension Automation.Failure: KeyedFailure {}

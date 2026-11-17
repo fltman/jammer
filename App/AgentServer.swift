@@ -235,7 +235,7 @@ enum AgentRouter {
         if let sib = r.headers["x-sibling"]?.lowercased() {
             siblingLog.notice("\(r.method, privacy: .public) \(r.path, privacy: .public) requested by \(sib, privacy: .public)")
             if s.count >= 4, s[2] == "documents", let session = AgentRegistry.shared.session(s[3]), r.method != "GET" {
-                session.status = "Requested by \(siblingNames[sib] ?? sib)"
+                session.status = L10n.text("status.requestedBy", siblingNames[sib] ?? sib)
             }
         }
         // A name the route doesn't take, in the query or in a JSON body, is refused before anything is done.
@@ -471,7 +471,7 @@ enum AgentRouter {
                     throw APIError.notFound("No track or bus with id \(body["strip"] as? String ?? ""). GET …/mixer lists them.")
                 }
                 if p.last == "unfreeze" {
-                    do { session.commit(try session.project.unfreezing(id), action: "Unfreeze \(strip.name)") }
+                    do { session.commit(try session.project.unfreezing(id), action: L10n.text("freeze.undo.action", strip.name)) }
                     catch let e as FreezeError { throw APIError.unprocessable(e.reason, e.localizedDescription) }
                     return .json(["mixer": mixerJSON(session.project, plan: session.plan, session: session)])
                 }
@@ -849,7 +849,7 @@ enum AgentRouter {
         guard let session = doc.session else { throw APIError.internalError("The document window didn't open.") }
         if let warning { session.status = warning }
         // A sibling that makes a document is shown too, not only one that changes it.
-        if let sib = r.headers["x-sibling"]?.lowercased() { session.status = "Requested by \(siblingNames[sib] ?? sib)" }
+        if let sib = r.headers["x-sibling"]?.lowercased() { session.status = L10n.text("status.requestedBy", siblingNames[sib] ?? sib) }
         var answer: [String: Any] = ["document": detail(session)]
         if let warning { answer["warning"] = warning }
         return .json(answer, status: 201)
@@ -974,7 +974,7 @@ enum AgentRouter {
             p.tracks[t].gainDB = gain
             for c in p.tracks[t].clips.indices { p.tracks[t].clips[c].start += at }
         }
-        session.commit(p, action: "Add Track")
+        session.commit(p, action: L10n.text("action.addTrack"))
         var answer: [String: Any] = ["track": ["id": track.id.uuidString, "name": track.name, "gainDB": gain, "at": seconds(session, at)] as [String: Any],
                                      "document": detail(session)]
         if let warning {

@@ -44,6 +44,16 @@ public enum FreezeError: Error, LocalizedError, Equatable {
         case .frozen(let name): "\(name) is frozen, and this would change what it was frozen from. Unfreeze it first."
         }
     }
+    /// The same message by its key in the app's string catalogue (see `KeyedMessage`).
+    public var keyed: KeyedMessage? {
+        switch self {
+        case .noStrip(let id): KeyedMessage("error.freeze.noStrip", ["\(id)"])
+        case .alreadyFrozen(let name): KeyedMessage("error.freeze.alreadyFrozen", ["\(name)"])
+        case .notFrozen(let name): KeyedMessage("error.freeze.notFrozen", ["\(name)"])
+        case .nothing(let name): KeyedMessage("error.freeze.nothing", ["\(name)"])
+        case .frozen(let name): KeyedMessage("error.freeze.frozen", ["\(name)"])
+        }
+    }
 }
 
 extension Project {
@@ -274,3 +284,5 @@ extension Project {
         return p
     }
 }
+
+extension FreezeError: KeyedFailure {}

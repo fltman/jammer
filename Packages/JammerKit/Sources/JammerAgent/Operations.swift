@@ -617,16 +617,23 @@ public struct StepResult: Sendable, Equatable {
     public var warnings: [String] = []
     /// Ids of things the step made, e.g. ["insert": "…"].
     public var ids: [String: String] = [:]
+    /// Why it failed, by its key in the app's string catalogue (not part of the API's answer): for the
+    /// window, which says it in its own language. nil when the words were made where the step failed.
+    public var keyed: KeyedMessage?
 }
 
 public struct StepFailure: Error, LocalizedError {
     public var message: String
     public var reason: String?
     public var details: [String: Double]
-    public init(_ message: String, reason: String? = nil, details: [String: Double] = [:]) {
+    /// The reason by its key in the app's string catalogue, when the failure came from an error that has
+    /// one: the window says it in its own language, the API says `message`.
+    public var keyed: KeyedMessage?
+    public init(_ message: String, reason: String? = nil, details: [String: Double] = [:], keyed: KeyedMessage? = nil) {
         self.message = message
         self.reason = reason
         self.details = details
+        self.keyed = keyed
     }
     public var errorDescription: String? { message }
 }
@@ -672,8 +679,10 @@ public enum StepRunner {
                 state.warnings = []
             } catch {
                 let f = error as? StepFailure
-                results.append(StepResult(op: step.op, status: .failed, error: error.localizedDescription,
-                                          reason: f?.reason, details: f?.details ?? [:]))
+                var result = StepResult(op: step.op, status: .failed, error: error.localizedDescription,
+                                        reason: f?.reason, details: f?.details ?? [:])
+                result.keyed = f?.keyed ?? (error as? any KeyedFailure)?.keyed
+                results.append(result)
                 failed = true
                 // Nothing from a failed request is kept.
                 for i in results.indices where results[i].status == .done { results[i].status = .reverted }
@@ -920,7 +929,7 @@ public enum StepRunner {
             let ids = p["tracks"]?.strings.map { Set($0.compactMap(UUID.init(uuidString:))) }
             do {
                 s.project = try s.project.applyingSpectralAttenuation(range: r, freq: lo...hi, gainDB: p["db"]?.double ?? -20, tracks: ids, pool: pool, media: media)
-            } catch let e as EffectError { throw StepFailure("spectral_attenuate: \(e.localizedDescription)") }
+            } catch let e as EffectError { throw StepFailure("spectral_attenuate: \(e.localizedDescription)", keyed: e.keyed) }
         case "correct_drift":
             guard let pool = s.pool, let media = s.media else { throw StepFailure("correct_drift needs the app.") }
             guard let track = UUID(uuidString: p["track"]?.string ?? ""), project.tracks.contains(where: { $0.id == track }) else {
@@ -969,9 +978,9 @@ public enum StepRunner {
                 s.project = try s.project.applyingSpectralEdit(shape, action: p["action"]?.string == "heal" ? .heal : .attenuate,
                                                                gainDB: p["db"]?.double ?? -20, tracks: ids, pool: pool, media: media)
             } catch let e as SpectralEditError {
-                throw StepFailure("spectral_edit: \(e.localizedDescription)", reason: e.reason)
+                throw StepFailure("spectral_edit: \(e.localizedDescription)", reason: e.reason, keyed: e.keyed)
             } catch let e as EffectError {
-                throw StepFailure("spectral_edit: \(e.localizedDescription)", reason: "nothing_in_range")
+                throw StepFailure("spectral_edit: \(e.localizedDescription)", reason: "nothing_in_range", keyed: e.keyed)
             }
         case "debleed":
             guard let pool = s.pool, let media = s.media else { throw StepFailure("debleed needs the app.") }
@@ -982,7 +991,7 @@ public enum StepRunner {
                 s.project = q
                 return ["tracks": Double(report.tracks), "reductionDB": report.reductionDB]
             } catch let e as DebleedError {
-                throw StepFailure("debleed: \(e.localizedDescription)", reason: e.reason)
+                throw StepFailure("debleed: \(e.localizedDescription)", reason: e.reason, keyed: e.keyed)
             }
         case "duck":
             guard let pool = s.pool, let media = s.media else { throw StepFailure("duck needs the app.") }
@@ -1010,7 +1019,7 @@ public enum StepRunner {
                 s.made["trigger"] = report.trigger
                 return ["tracks": Double(report.tracks), "regions": Double(report.regions), "duckedSeconds": report.duckedSeconds, "replaced": Double(report.replaced)]
             } catch let e as DuckError {
-                throw StepFailure("duck: \(e.localizedDescription)", reason: e.reason)
+                throw StepFailure("duck: \(e.localizedDescription)", reason: e.reason, keyed: e.keyed)
             }
         case "set_track":
             guard let id = UUID(uuidString: p["track"]?.string ?? ""), let t = project.tracks.firstIndex(where: { $0.id == id }) else {
@@ -1021,20 +1030,20 @@ public enum StepRunner {
             if let n = p["name"]?.string, !n.trimmingCharacters(in: .whitespaces).isEmpty { s.project.tracks[t].name = n }
             if p["pan"] != nil || p["output"] != nil {
                 do { try s.project.setTrackRoute(id, pan: p["pan"]?.double, output: try route(p["output"], "set_track")) }
-                catch let e as Mixer.Failure { throw StepFailure("set_track: " + (e.errorDescription ?? ""), reason: e.reason) }
+                catch let e as Mixer.Failure { throw StepFailure("set_track: " + (e.errorDescription ?? ""), reason: e.reason, keyed: e.keyed) }
             }
         case "add_bus":
             do {
                 let out = try route(p["output"], "add_bus")
                 try s.project.addBus(name: p["name"]?.string ?? "", output: out ?? nil)
                 return ["bus": Double(s.project.buses.count), "buses": Double(s.project.buses.count)]
-            } catch let e as Mixer.Failure { throw StepFailure("add_bus: " + (e.errorDescription ?? ""), reason: e.reason) }
+            } catch let e as Mixer.Failure { throw StepFailure("add_bus: " + (e.errorDescription ?? ""), reason: e.reason, keyed: e.keyed) }
         case "set_bus":
             guard let id = UUID(uuidString: p["bus"]?.string ?? "") else { throw StepFailure("set_bus: no such bus.", reason: "not_found") }
             var muted: Bool?
             if let m = p["muted"], case .bool(let v) = m { muted = v }
             do { try s.project.setBus(id, name: p["name"]?.string, gainDB: p["gainDB"]?.double, pan: p["pan"]?.double, muted: muted, output: try route(p["output"], "set_bus")) }
-            catch let e as Mixer.Failure { throw StepFailure("set_bus: " + (e.errorDescription ?? ""), reason: e.reason) }
+            catch let e as Mixer.Failure { throw StepFailure("set_bus: " + (e.errorDescription ?? ""), reason: e.reason, keyed: e.keyed) }
         case "set_send":
             guard let from = UUID(uuidString: p["from"]?.string ?? ""), let to = UUID(uuidString: p["to"]?.string ?? "") else {
                 throw StepFailure("set_send: from is a track or bus id and to is a bus id.", reason: "not_found")
@@ -1043,7 +1052,7 @@ public enum StepRunner {
             if let v = p["pre"], case .bool(let b) = v { pre = b }
             if let v = p["remove"], case .bool(let b) = v { remove = b }
             do { try s.project.setSend(from: from, to: to, gainDB: p["gainDB"]?.double, pre: pre, remove: remove) }
-            catch let e as Mixer.Failure { throw StepFailure("set_send: " + (e.errorDescription ?? ""), reason: e.reason) }
+            catch let e as Mixer.Failure { throw StepFailure("set_send: " + (e.errorDescription ?? ""), reason: e.reason, keyed: e.keyed) }
         case "add_vca", "set_vca", "remove_vca":
             func strips(_ key: String) throws -> [UUID]? {
                 guard let names = p[key]?.strings else { return nil }
@@ -1085,7 +1094,7 @@ public enum StepRunner {
                 }
                 let count = s.project.tracks.filter { $0.vca == id }.count + s.project.buses.filter { $0.vca == id }.count
                 return ["members": Double(count), "gainDB": s.project.vca(id)?.gainDB ?? 0]
-            } catch let e as Mixer.Failure { throw StepFailure("\(step.op): " + (e.errorDescription ?? ""), reason: e.reason) }
+            } catch let e as Mixer.Failure { throw StepFailure("\(step.op): " + (e.errorDescription ?? ""), reason: e.reason, keyed: e.keyed) }
         case "set_automation", "clear_automation":
             guard Operations.automationOn else { throw StepFailure("\(step.op): this build has no automation.", reason: "not_available") }
             do { try check(step, against: project) }
@@ -1141,7 +1150,7 @@ public enum StepRunner {
                     try s.project.setAutomation(strip: strip, param: param, to: to, insert: insert, parameter: parameter, values: values, points: points, range: range, enabled: enabled)
                 }
                 return ["points": Double(s.project.lane(strip: strip, param: param, to: to, insert: insert, parameter: parameter)?.points.count ?? 0)]
-            } catch let e as Automation.Failure { throw StepFailure("\(step.op): " + (e.errorDescription ?? ""), reason: e.reason) }
+            } catch let e as Automation.Failure { throw StepFailure("\(step.op): " + (e.errorDescription ?? ""), reason: e.reason, keyed: e.keyed) }
         case "set_master":
             var limiter: MasterLimiter?? = nil
             var on: Bool?
@@ -1160,13 +1169,13 @@ public enum StepRunner {
             }
             guard p["gainDB"] != nil || limiter != nil else { throw StepFailure("set_master: give gainDB, limiter, or a value for the limiter.") }
             do { try s.project.setMaster(gainDB: p["gainDB"]?.double, limiter: limiter) }
-            catch let e as Mixer.Failure { throw StepFailure("set_master: " + (e.errorDescription ?? ""), reason: e.reason) }
+            catch let e as Mixer.Failure { throw StepFailure("set_master: " + (e.errorDescription ?? ""), reason: e.reason, keyed: e.keyed) }
             if let l = s.project.master.limiter { return ["gainDB": s.project.master.gainDB, "limiter": 1, "ceilingDB": l.ceilingDB] }
             return ["gainDB": s.project.master.gainDB, "limiter": 0]
         case "remove_bus":
             guard let id = UUID(uuidString: p["bus"]?.string ?? "") else { throw StepFailure("remove_bus: no such bus.", reason: "not_found") }
             do { try s.project.removeBus(id, reroute: try route(p["reroute"], "remove_bus")) }
-            catch let e as Mixer.Failure { throw StepFailure("remove_bus: " + (e.errorDescription ?? ""), reason: e.reason) }
+            catch let e as Mixer.Failure { throw StepFailure("remove_bus: " + (e.errorDescription ?? ""), reason: e.reason, keyed: e.keyed) }
         case "set_group":
             guard let id = UUID(uuidString: p["group"]?.string ?? ""), project.tracks.contains(where: { $0.group == id }) else {
                 throw StepFailure("set_group: no such group.", reason: "not_found")
@@ -1185,7 +1194,7 @@ public enum StepRunner {
                     s.project = q
                     return ["speakers": Double(r.speakers), "maxChangeDB": r.maxChangeDB, "spreadBeforeLU": r.spreadBefore, "spreadAfterLU": r.spreadAfter]
                 } catch let e as LevelError {
-                    throw StepFailure("level_speakers: \(e.localizedDescription)", reason: e.reason)
+                    throw StepFailure("level_speakers: \(e.localizedDescription)", reason: e.reason, keyed: e.keyed)
                 }
             }
             do {
@@ -1195,7 +1204,7 @@ public enum StepRunner {
                 return ["speakers": Double(report.gains.count), "maxChangeDB": (report.maxChangeDB * 100).rounded() / 100,
                         "limitedByMaxGain": report.limited ? 1 : 0]
             } catch let e as LevelError {
-                throw StepFailure("level_speakers: \(e.localizedDescription)", reason: e.reason)
+                throw StepFailure("level_speakers: \(e.localizedDescription)", reason: e.reason, keyed: e.keyed)
             }
         case "rename_speaker":
             do {
@@ -1366,7 +1375,7 @@ public enum StepRunner {
                 s.project.tempo = try Rhythm.tempoMap(bpm: e.bpm, firstBeat: first, sampleRate: project.sampleRate, meter: project.tempo.meter(at: 0))
                 return ["bpm": e.bpm, "firstBeat": (first * 1_000).rounded() / 1_000, "pulse": e.pulse, "beats": Double(e.beats.count)]
             } catch let e as Rhythm.Failure {
-                throw StepFailure("detect_tempo: \(e.localizedDescription)", reason: e.reason)
+                throw StepFailure("detect_tempo: \(e.localizedDescription)", reason: e.reason, keyed: e.keyed)
             }
         case "set_tempo":
             var meter: Meter?
@@ -1409,7 +1418,7 @@ extension StepRunner {
         }
         func put(_ list: [Insert], _ s: inout EditState) { s.project.setInserts(list, on: id) }
         func failure(_ e: Error) -> StepFailure {
-            if let e = e as? PluginError { return StepFailure("\(step.op): \(e.localizedDescription)", reason: e.reason) }
+            if let e = e as? PluginError { return StepFailure("\(step.op): \(e.localizedDescription)", reason: e.reason, keyed: e.keyed) }
             return StepFailure("\(step.op): \(e.localizedDescription)", reason: "plugin_failed")
         }
         func latencyMs(_ i: any InsertUnit) -> Double { (Double(i.latency) / project.sampleRate * 100_000).rounded() / 100 }
@@ -1477,7 +1486,7 @@ extension StepRunner {
                         }
                         try s.project.setKey(strip: id, insert: insert.id, key: source)
                     }
-                } catch let e as Mixer.Failure { throw StepFailure("set_insert: " + (e.errorDescription ?? ""), reason: e.reason) }
+                } catch let e as Mixer.Failure { throw StepFailure("set_insert: " + (e.errorDescription ?? ""), reason: e.reason, keyed: e.keyed) }
             }
             return info
         default:

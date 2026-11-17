@@ -144,6 +144,15 @@ public enum Rhythm {
             case .noSteadyTempo: "no steady tempo was found (speech, noise, silence, or music whose tempo changes). If you know the tempo, give bpm."
             }
         }
+        /// The same message by its key in the app's string catalogue (see `KeyedMessage`).
+        public var keyed: KeyedMessage? {
+            switch self {
+            case .unavailable: KeyedMessage("error.rhythm.unavailable")
+            case .tooShort: KeyedMessage("error.rhythm.tooShort", ["\(Int(minSeconds))"])
+            case .doesNotFit(let found): KeyedMessage("error.rhythm.doesNotFit", [found.formatted(.number.precision(.fractionLength(0...2)))])
+            case .noSteadyTempo: KeyedMessage("error.rhythm.noSteadyTempo")
+            }
+        }
     }
 
     /// The tempo of `range` of the mix (of `tracks` alone when given): rendered to temporary files, read
@@ -215,3 +224,5 @@ public enum Rhythm {
         return try TempoMap(changes: [TempoChange(position: 0, bpm: 60 / leadSeconds, meter: meter), TempoChange(position: position, bpm: bpm, meter: meter)])
     }
 }
+
+extension Rhythm.Failure: KeyedFailure {}

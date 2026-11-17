@@ -113,7 +113,7 @@ final class EditorSession {
     struct SpectralArea { var shape: SpectralShape; var track: Int }
     var spectralTool: SpectralTool = .box
     var spectralArea: SpectralArea? {
-        didSet { if let a = spectralArea { status = "Area: \(a.shape.summary) on \(project.tracks[safe: a.track]?.name ?? "a track")" } }
+        didSet { if let a = spectralArea { status = L10n.text("spectral.area.status", a.shape.summary, project.tracks[safe: a.track]?.name ?? L10n.text("spectral.area.aTrack")) } }
     }
 
     /// Runs spectral_edit on the drawn area.
@@ -129,10 +129,10 @@ final class EditorSession {
             params["shape"] = .string("brush"); params["points"] = .array(pts.flatMap { [.number($0.t), .number($0.f)] })
             params["radius"] = .number(r); params["radiusTime"] = .number(rt)
         }
-        let title = action == .heal ? "Heal Area" : "Attenuate Area"
+        let title = action == .heal ? L10n.text("audio.healArea") : L10n.text("spectral.attenuate.action")
         Task {
             let r = await run([Step(op: "spectral_edit", params: params)], action: title)
-            if let f = r.first(where: { $0.status == .failed }) { status = f.error; NSSound.beep() } else { spectralArea = nil; status = "\(title): done." }
+            if let f = r.first(where: { $0.status == .failed }) { status = f.error; NSSound.beep() } else { spectralArea = nil; status = L10n.text("status.done", title) }
         }
     }
 
@@ -216,12 +216,12 @@ final class EditorSession {
         case .linked(let link):
             guard linkedFile == nil else { return }
             linkedFile = link
-            status = "\(link.fileName) is back: ⌘S saves it back to \(link.requester) again."
+            status = L10n.text("link.back", link.fileName, link.requester)
         case .lost(let name, let requester, let why):
             guard lostLink?.why != why || linkedFile != nil else { return }
             linkedFile = nil
             lostLink = (name, requester, why)
-            status = "\(name) can't be saved back to \(requester): \(why)"
+            status = L10n.text("link.cantSaveBack", name, requester, why)
             (window?.windowController as? EditorWindowController)?.showLink()
             document?.invalidateRestorableState()
         }
@@ -238,7 +238,7 @@ final class EditorSession {
         case .lost(let name, let requester, let why):
             linkedFile = nil
             lostLink = (name, requester, why)
-            status = "\(name) can't be saved back to \(requester): \(why)"
+            status = L10n.text("link.cantSaveBack", name, requester, why)
             (window?.windowController as? EditorWindowController)?.showLink()
         }
     }
@@ -271,11 +271,11 @@ final class EditorSession {
         list[i].state = state
         p.setInserts(list, on: track)
         inserts.markApplied(insert, state: state)
-        commit(p, action: "Change \(list[i].name)")
+        commit(p, action: L10n.text("action.change", list[i].name))
     }
 
     var undoManager: UndoManager? { document?.undoManager }
-    var name: String { document?.displayName ?? project.tracks.first?.name ?? "Untitled" }
+    var name: String { document?.displayName ?? project.tracks.first?.name ?? L10n.text("document.untitled") }
     var duration: Double { project.duration }
     var missingSources: [SourceRef] { project.sources.filter { pool.missing.contains($0.id) } }
 
@@ -287,7 +287,7 @@ final class EditorSession {
         guard newProject != old else { return }
         // A frozen strip is a file of what it was: a change to what it was made from is not taken.
         if let name = old.frozenViolation(in: newProject) {
-            status = "\(name) is frozen. Unfreeze it (Audio › Mixer…) before changing what it was frozen from."
+            status = L10n.text("freeze.refused", name)
             NSSound.beep()
             return
         }
@@ -346,7 +346,7 @@ final class EditorSession {
         let from = h.current
         guard from != id else { return }
         moveHistory(to: id)
-        let action = "Go to \(node.action)"
+        let action = L10n.text("history.goTo", node.action)
         undoGroup {
             registerMove(back: from, forward: id, action: action)
             undoManager?.setActionName(action)
@@ -362,13 +362,13 @@ final class EditorSession {
         p.speakerTurns = diarized.speakerTurns.filter { p.source($0.sourceID) != nil }
         p.compactSpeakers()
         p.labelWords()
-        commit(p, action: "Find Speakers")
+        commit(p, action: L10n.text("audio.findSpeakers"))
     }
 
     func applyTranscripts(_ ts: [SourceTranscript]) {
         var p = project
         for t in ts where p.source(t.sourceID) != nil { p.setTranscript(t) }
-        commit(p, action: "Transcribe")
+        commit(p, action: L10n.text("transcript.transcribe"))
     }
 
     /// A finished repair. If the user edited meanwhile, the repaired clips are carried
@@ -391,7 +391,7 @@ final class EditorSession {
                 touched = true
             }
         }
-        guard touched else { status = "The audio changed while repairing; nothing was applied."; return }
+        guard touched else { status = L10n.text("restore.changed"); return }
         for s in repaired.sources where p.source(s.id) == nil { p.sources.append(s) }
         for t in repaired.transcripts where !p.transcripts.contains(where: { $0.sourceID == t.sourceID }) { p.transcripts.append(t) }
         p.pruneSources()
@@ -516,29 +516,29 @@ final class EditorSession {
             if let failed = r.first(where: { $0.status == .failed }) {
                 // The step's name means nothing in the status bar, and the reason has to fit there.
                 // (A line that says what didn't go: an error, by its symbol and to VoiceOver.)
-                say(op == "detect_tempo" && failed.reason == "no_steady_tempo" ? "No steady tempo was found, so the tempo is as it was."
-                    : op == "duck" && failed.reason == "no_speech" ? "No speech was found to duck under, so nothing was changed."
-                    : failed.error, .error)
+                say(op == "detect_tempo" && failed.reason == "no_steady_tempo" ? L10n.text("tempo.none")
+                    : op == "duck" && failed.reason == "no_speech" ? L10n.text("duck.noSpeech")
+                    : failed.keyed.map(L10n.message) ?? failed.error, .error)
                 NSSound.beep()
             } else if op == "limit", let info = r.first?.info, let after = info["truePeakAfter"], let cut = info["reductionMaxDB"], let secs = info["limitedSeconds"] {
-                status = String(format: "Limited: true peak now %.2f dBTP, at most %.1f dB taken off, over %.1f s.", after, cut, secs)
-                    + (info["beforePlugins"] == 1 ? " The plugins on the tracks and buses come after it." : "")
+                status = L10n.text("limit.done", String(format: "%.2f", after), String(format: "%.1f", cut), String(format: "%.1f", secs))
+                    + (info["beforePlugins"] == 1 ? " " + L10n.text("limit.done.beforePlugins") : "")
             } else if let info = r.first?.info, let after = info["integratedAfter"], let target = info["target"] {
                 status = info["limited"] == 1
-                    ? String(format: "%@: %.1f LUFS. The limiter took at most %.1f dB off the peaks, over %.1f s.", title, after, info["reductionMaxDB"] ?? 0, info["limitedSeconds"] ?? 0)
-                        + (info["limitedByPeak"] == 1 ? String(format: " The target was %.0f.", target) : "")
+                    ? L10n.text("loudness.done.limited", title, String(format: "%.1f", after), String(format: "%.1f", info["reductionMaxDB"] ?? 0), String(format: "%.1f", info["limitedSeconds"] ?? 0))
+                        + (info["limitedByPeak"] == 1 ? " " + L10n.text("loudness.done.target", String(format: "%.0f", target)) : "")
                     : info["limitedByPeak"] == 1
-                    ? String(format: "Reached %.1f instead of %.0f LUFS: the peaks held it back. Loudness Preset With Limiter reaches it.", after, target)
-                    : String(format: "%@: %.1f LUFS (%+.2f dB)", title, after, info["gainDB"] ?? 0)
+                    ? L10n.text("loudness.done.short", String(format: "%.1f", after), String(format: "%.0f", target))
+                    : L10n.text("loudness.done", title, String(format: "%.1f", after), String(format: "%+.2f", info["gainDB"] ?? 0))
             } else if op == "detect_tempo", let info = r.first?.info, let bpm = info["bpm"] {
                 let shown = bpm == bpm.rounded() ? String(format: "%.0f", bpm) : String(format: "%.2f", bpm)
-                status = "Tempo \(shown) BPM, first beat at \(String(format: "%.3f", info["firstBeat"] ?? 0)) s."
+                status = L10n.text("tempo.done", shown, String(format: "%.3f", info["firstBeat"] ?? 0))
             } else if op == "duck", let info = r.first?.info, let regions = info["regions"] {
                 let n = Int(regions), by = params["amount"]?.double ?? -12
-                status = "Ducked under \(n) passage\(n == 1 ? "" : "s") of speech, \(by < 0 ? "−" : "")\(abs(by).formatted(.number.precision(.fractionLength(0...1)))) dB"
-                    + (info["replaced"] ?? 0 > 0 ? " (in place of the earlier ducking)" : "") + "."
+                let amount = "\(by < 0 ? "−" : "")\(abs(by).formatted(.number.precision(.fractionLength(0...1))))"
+                status = info["replaced"] ?? 0 > 0 ? L10n.text("duck.done.replaced", L10n.count("duck.passages", n), amount) : L10n.text("duck.done", L10n.count("duck.passages", n), amount)
             } else if let gain = r.first?.info["gainDB"] {
-                status = String(format: "%@: %+.2f dB", title, gain)
+                status = L10n.text("gain.done", title, String(format: "%+.2f", gain))
             } else {
                 status = saying
             }

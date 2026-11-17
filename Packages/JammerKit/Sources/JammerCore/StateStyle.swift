@@ -8,10 +8,12 @@ import Foundation
 public enum StateKind: String, Sendable, CaseIterable {
     case error, warning, info, success, progress
 
-    /// The SF Symbol. An error is an octagon with a cross, never the triangle, which is the warning's.
+    /// The SF Symbol. An error is a cross in a filled square: never a round or eight-sided plate (at 12 to
+    /// 16 points an octagon can't be told from the circle that carries the tick for "done", and to a
+    /// red-green colour-blind eye the two have one colour), and never the triangle, which is the warning's.
     public var symbol: String {
         switch self {
-        case .error: "xmark.octagon.fill"
+        case .error: "xmark.square.fill"
         case .warning: "exclamationmark.triangle.fill"
         case .info: "info.circle"
         case .success: "checkmark.circle.fill"

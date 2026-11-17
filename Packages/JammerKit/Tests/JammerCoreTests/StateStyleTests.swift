@@ -8,7 +8,7 @@ struct StateStyleTests {
     func kinds() {
         let all = StateKind.allCases
         #expect(Set(all.map(\.symbol)).count == all.count)
-        #expect(StateKind.error.symbol.contains("octagon") && !StateKind.error.symbol.contains("triangle") && StateKind.warning.symbol.contains("triangle"))
+        #expect(StateKind.error.symbol == "xmark.square.fill" && !StateKind.error.symbol.contains("circle") && !StateKind.error.symbol.contains("octagon") && !StateKind.error.symbol.contains("triangle") && StateKind.warning.symbol.contains("triangle"))
         for k in all { #expect(StateKind.contrast(k.colour, StateKind.ground) >= 3, "\(k)") }
         // Hues: 30 degrees or more from the accent, and from each other where two kinds have a hue at all.
         let accent = StateKind.hue(StateKind.accent)!

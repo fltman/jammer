@@ -15,7 +15,7 @@ enum SettingsWindow {
     static func show() {
         if let window { window.makeKeyAndOrderFront(nil); return }
         let w = EscClosingWindow(contentRect: .zero, styleMask: [.titled, .closable], backing: .buffered, defer: false)
-        w.title = "Settings"
+        w.title = L10n.text("settings.title")
         w.isReleasedWhenClosed = false
         w.contentViewController = NSHostingController(rootView: SettingsTabs())
         w.center()
@@ -51,32 +51,32 @@ final class ModelsModel {
     let rows: [ModelRow] = {
         let store = SpeechEngines.store
         var rows = ModelSpec.catalogue.map { spec in
-            ModelRow(id: spec.id, title: spec.title, use: "Transcription in Swedish; the best Swedish engine here.", bytes: spec.size, licence: spec.licence,
+            ModelRow(id: spec.id, title: spec.title, use: L10n.text("settings.models.whisper.use"), bytes: spec.size, licence: spec.licence,
                      installed: { store.isInstalled(spec) },
                      install: { p in try await store.install(spec, progress: p) },
                      remove: { try store.remove(spec) })
         }
         let parakeet = SpeechEngines.parakeet
-        rows.append(ModelRow(id: "parakeet", title: ParakeetEngine.title, use: "Transcription in 25 European languages, Swedish and English among them.",
+        rows.append(ModelRow(id: "parakeet", title: ParakeetEngine.title, use: L10n.text("settings.models.parakeet.use"),
                              bytes: ParakeetEngine.downloadBytes, licence: ParakeetEngine.licence,
                              installed: { parakeet.isInstalled },
                              install: { p in try await parakeet.install(progress: p) },
                              remove: { try parakeet.remove() }))
         if let d = Diarization.engine as? FluidDiarizer {
-            rows.append(ModelRow(id: "diarisation", title: "Speaker diarisation (pyannote Community-1)", use: "Find Speakers on a mixed recording. Also fetched by itself the first time it's used.",
+            rows.append(ModelRow(id: "diarisation", title: L10n.text("settings.models.diarisation.title"), use: L10n.text("settings.models.diarisation.use"),
                                  bytes: 21_000_000, licence: "CC-BY-4.0 (pyannote, WeSpeaker, BUT Speech@FIT; Core ML by Fluid Inference)",
                                  installed: { d.isInstalled },
                                  install: { p in try await d.install(progress: p) },
                                  remove: { try d.remove() }))
         }
         let stems = Stems.model
-        rows.append(ModelRow(id: "stems", title: StemModel.title, use: "Audio › Separate Stems: vocals, drums, bass and other from a music track. From Deezer's own release.",
+        rows.append(ModelRow(id: "stems", title: StemModel.title, use: L10n.text("settings.models.stems.use"),
                              bytes: StemModel.downloadBytes, licence: StemModel.licence,
                              installed: { stems.isInstalled },
                              install: { p in try await stems.install(progress: p) },
                              remove: { Stems.forget(); try stems.remove() }))
         let soundtrack = Stems.soundtrack
-        rows.append(ModelRow(id: "soundtrack", title: StemModel.Soundtrack.title, use: "Audio › Separate Stems › Speech, Music, Effects: for film and video sound. From MERL's own repository.",
+        rows.append(ModelRow(id: "soundtrack", title: StemModel.Soundtrack.title, use: L10n.text("settings.models.soundtrack.use"),
                              bytes: StemModel.Soundtrack.downloadBytes, licence: StemModel.Soundtrack.licence,
                              installed: { soundtrack.isInstalled },
                              install: { p in try await soundtrack.install(progress: p) },
@@ -92,7 +92,7 @@ final class ModelsModel {
                 let id = row.id
                 try await row.install { p in Task { @MainActor in self.progress[id] = p } }
             } catch {
-                errors[row.id] = "The download didn't finish (\(error.localizedDescription)). Check the network and try again; everything else in Jämmer works without one."
+                errors[row.id] = L10n.text("settings.models.failed", error.localizedDescription)
             }
             progress[row.id] = nil
             tick += 1
@@ -110,12 +110,12 @@ struct ModelsSettings: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Models").font(.title2.bold())
+            Text(L10n.text("settings.models")).font(.title2.bold())
             HStack(alignment: .firstTextBaseline) {
-                Text("Models run on this Mac. Each is downloaded once from its publisher (speech models from \(SpeechEngines.store.source.host() ?? "the model source")), and can be removed again.")
+                Text(L10n.text("settings.models.text", SpeechEngines.store.source.host() ?? L10n.text("settings.models.source")))
                     .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 Spacer()
-                Button("Show in Finder") {
+                Button(L10n.text("settings.models.showInFinder")) {
                     try? FileManager.default.createDirectory(at: SpeechEngines.store.folder, withIntermediateDirectories: true)
                     NSWorkspace.shared.activateFileViewerSelecting([SpeechEngines.store.folder])
                 }
@@ -133,11 +133,11 @@ struct ModelsSettings: View {
                     }
                     Spacer()
                     if let p = model.progress[row.id] {
-                        ProgressView(value: p).frame(width: 90).accessibilityLabel("Downloading \(row.title)")
+                        ProgressView(value: p).frame(width: 90).accessibilityLabel(L10n.text("settings.models.downloading.ax", row.title))
                     } else if row.installed() {
-                        Button("Remove") { model.remove(row) }.accessibilityLabel("Remove \(row.title)")
+                        Button(L10n.text("button.remove")) { model.remove(row) }.accessibilityLabel(L10n.text("button.remove.ax", row.title))
                     } else {
-                        Button("Download") { model.install(row) }.accessibilityLabel("Download \(row.title)")
+                        Button(L10n.text("settings.models.download")) { model.install(row) }.accessibilityLabel(L10n.text("settings.models.download.ax", row.title))
                     }
                 }
                 .id("\(row.id)-\(model.tick)")
@@ -155,25 +155,25 @@ struct AgentSettings: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Agents").font(.title2.bold())
-            Text("Folders agents may use").font(.headline)
-            Text("Agents work on the documents you have open. Batch processing is the one thing that reads and writes files by path, and an agent can only do that inside the folders listed here. The list starts empty.")
+            Text(L10n.text("settings.agents")).font(.title2.bold())
+            Text(L10n.text("settings.agents.folders")).font(.headline)
+            Text(L10n.text("settings.agents.text"))
                 .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             ForEach(folders, id: \.self) { url in
                 HStack {
                     Image(systemName: "folder").accessibilityHidden(true)
                     Text(url.path).lineLimit(1).truncationMode(.middle)
                     Spacer()
-                    Button("Remove") { AgentFolders.remove(url); folders = AgentFolders.urls }.accessibilityLabel("Remove \(url.lastPathComponent)")
+                    Button(L10n.text("button.remove")) { AgentFolders.remove(url); folders = AgentFolders.urls }.accessibilityLabel(L10n.text("button.remove.ax", url.lastPathComponent))
                 }
             }
-            if folders.isEmpty { Text("No folders: agents can't run batches.").foregroundStyle(.secondary) }
-            Button("Add Folder…") {
+            if folders.isEmpty { Text(L10n.text("settings.agents.none")).foregroundStyle(.secondary) }
+            Button(L10n.text("settings.agents.add")) {
                 let p = NSOpenPanel()
                 p.canChooseDirectories = true
                 p.canChooseFiles = false
                 p.canCreateDirectories = true
-                p.message = "Agents may read audio from this folder and write results into it"
+                p.message = L10n.text("settings.agents.panel")
                 if p.runModal() == .OK, let url = p.url { AgentFolders.add(url); folders = AgentFolders.urls }
             }
         }
@@ -185,8 +185,8 @@ struct AgentSettings: View {
 struct SettingsTabs: View {
     var body: some View {
         TabView {
-            ModelsSettings().tabItem { Label("Models", systemImage: "square.and.arrow.down") }
-            AgentSettings().tabItem { Label("Agents", systemImage: "terminal") }
+            ModelsSettings().tabItem { Label(L10n.text("settings.models"), systemImage: "square.and.arrow.down") }
+            AgentSettings().tabItem { Label(L10n.text("settings.agents"), systemImage: "terminal") }
             PaidSettings().tabItem { Label(L10n.text("paid.settings.tab"), systemImage: "creditcard") }
         }
     }

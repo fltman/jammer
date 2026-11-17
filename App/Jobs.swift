@@ -156,8 +156,8 @@ final class JobRegistry {
             let single = !byTrack && minSpeakers == nil && results.contains { $0.names.count == 1 }
             let hint = "Only one speaker was found. If more people talk, run it again with the number of speakers: the model often merges voices that sound alike."
             session?.status = single
-                ? "Found one speaker. If more people talk, choose Audio › Find Speakers › 2 Speakers (or more)."
-                : "Found \(diarized.speakers.count) speaker\(diarized.speakers.count == 1 ? "" : "s")."
+                ? L10n.text("speakers.found.single")
+                : L10n.count("speakers.found", diarized.speakers.count)
             job.status = .done
             job.progress = 1
             job.result = ["mode": .string(byTrack ? "by_track" : "ml"),
@@ -244,13 +244,13 @@ final class JobRegistry {
             guard self?.jobs[id]?.status != .cancelled else { return }
             switch result {
             case .success(let (separated, report)):
-                if session?.project == project { session?.commit(separated, action: "Separate Stems") } else {
+                if session?.project == project { session?.commit(separated, action: L10n.text("audio.stems")) } else {
                     job.status = .failed
                     job.error = ("document_changed", "The document changed while separating; nothing was applied. Run it again.")
                     self?.finish(job)
                     return
                 }
-                session?.status = "Separated into \(report.stems.joined(separator: ", ")). The stems add up to the original."
+                session?.status = L10n.text("stems.done", report.stems.joined(separator: ", "))
                 job.status = .done
                 job.progress = 1
                 job.result = ["stems": .array(report.stems.map { .string($0) }), "tracks": .array(report.tracks.map { .string($0.uuidString) }),
@@ -273,7 +273,7 @@ final class JobRegistry {
         var job = Job(kind: "freeze", documentID: session.agentID)
         jobs[job.id] = job
         let project = session.project, pool = session.pool, id = job.id, safe = EditorSession.pluginSafeMode, media = MediaStore.folder
-        let name = project.strip(strip)?.name ?? "the strip"
+        let name = project.strip(strip)?.name ?? L10n.text("freeze.strip.fallback")
         tasks[id] = Task { [weak self, weak session] in
             job.status = .running
             self?.update(job)
@@ -301,8 +301,8 @@ final class JobRegistry {
                     self?.finish(job)
                     return
                 }
-                session?.commit(frozen, action: "Freeze \(name)")
-                session?.status = "\(name) is frozen: it plays from a file and its plugins rest. Its level, pan, mute and sends still work."
+                session?.commit(frozen, action: L10n.text("freeze.action", name))
+                session?.status = L10n.text("freeze.done", name)
                 job.status = .done
                 job.progress = 1
                 if let f = frozen.frozen(strip) {

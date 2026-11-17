@@ -64,6 +64,13 @@ public enum EffectError: Error, LocalizedError, Equatable {
         case .badValue(let m): m
         }
     }
+    /// The same message by its key in the app's string catalogue (see `KeyedMessage`).
+    public var keyed: KeyedMessage? {
+        switch self {
+        case .nothingInRange: KeyedMessage("error.effect.nothingInRange")
+        case .badValue: nil
+        }
+    }
 }
 
 extension Project {
@@ -150,3 +157,5 @@ extension Project {
         return p
     }
 }
+
+extension EffectError: KeyedFailure {}

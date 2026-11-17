@@ -251,6 +251,16 @@ public enum EditError: Error, LocalizedError, Equatable {
         case .unknownSource: "The pasted audio refers to a file this project doesn't have."
         }
     }
+    /// The same message by its key in the app's string catalogue (see `KeyedMessage`).
+    public var keyed: KeyedMessage? {
+        switch self {
+        case .emptyRange: KeyedMessage("error.edit.emptyRange")
+        case .outOfRange: KeyedMessage("error.edit.outOfRange")
+        case .noTrack: KeyedMessage("error.edit.noTrack")
+        case .spansClips: KeyedMessage("error.edit.spansClips")
+        case .unknownSource: KeyedMessage("error.edit.unknownSource")
+        }
+    }
 }
 
 /// The whole document. A value: an undo step is the previous value.
@@ -589,3 +599,5 @@ public struct Project: Codable, Equatable, Sendable {
         speakerTurns.removeAll { !used.contains($0.sourceID) }
     }
 }
+
+extension EditError: KeyedFailure {}

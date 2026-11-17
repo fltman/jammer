@@ -23,13 +23,13 @@ struct AgentSplashView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(verbatim: "Jämmer").font(.largeTitle.bold())
                         .shadow(color: Theme.neonColor.opacity(0.6), radius: 10)
-                    Text("An audio editor for the Mac that agents can drive too.")
+                    Text(L10n.text("splash.tagline"))
                         .foregroundStyle(.secondary)
                 }
             }
             VStack(alignment: .leading, spacing: 8) {
-                Text("For your agent").font(.headline)
-                Text("Paste this into Claude or another AI agent. It fetches the guide from Jämmer on this Mac and can then open, measure, edit and export audio in your open windows.")
+                Text(L10n.text("splash.agent.heading")).font(.headline)
+                Text(L10n.text("splash.agent.text"))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 if let prompt = server.agentPrompt {
@@ -49,14 +49,14 @@ struct AgentSplashView: View {
                             .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.neonColor.opacity(0.55)))
                         }
                         .accessibilityElement(children: .ignore)
-                        .accessibilityLabel(Text(verbatim: "Text for your agent: \(prompt)"))
+                        .accessibilityLabel(Text(verbatim: L10n.text("splash.agent.ax", prompt)))
                         Button {
                             NSPasteboard.general.clearContents()
                             NSPasteboard.general.setString(prompt, forType: .string)
                             copied = true
                             Task { try? await Task.sleep(for: .seconds(2)); copied = false }
                         } label: {
-                            Label(copied ? "Copied" : "Copy", systemImage: copied ? "checkmark" : "doc.on.doc")
+                            Label(copied ? L10n.text("splash.copied") : L10n.text("splash.copy"), systemImage: copied ? "checkmark" : "doc.on.doc")
                                 .frame(minWidth: 70)
                         }
                         // Dark text on the neon: about 14:1, where white gives 1.4:1.
@@ -70,9 +70,9 @@ struct AgentSplashView: View {
                 }
             }
             HStack {
-                Toggle("Show at launch", isOn: $showAtLaunch)
+                Toggle(L10n.text("splash.showAtLaunch"), isOn: $showAtLaunch)
                 Spacer()
-                Button("Close") { dismiss() }
+                Button(L10n.text("button.close")) { dismiss() }
                     .buttonStyle(NeonButtonStyle())
                     .keyboardShortcut(.defaultAction)
             }
@@ -117,7 +117,7 @@ enum AgentSplash {
         w.titlebarAppearsTransparent = true
         w.titleVisibility = .hidden
         // Not drawn, but what the window is called to VoiceOver and in the Window menu.
-        w.title = "Welcome to Jämmer"
+        w.title = L10n.text("splash.window.title")
         w.isMovableByWindowBackground = true
         w.appearance = NSAppearance(named: .darkAqua)
         w.backgroundColor = Theme.ink

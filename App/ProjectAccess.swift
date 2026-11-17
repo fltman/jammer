@@ -69,26 +69,27 @@ extension EditorSession {
         guard !outside.isEmpty, !askedAboutOutside else {
             if !filesNotAsDescribed.isEmpty, status == nil || status?.isEmpty == true {
                 let n = filesNotAsDescribed.count
-                status = "\(n) file\(n == 1 ? " isn't" : "s aren't") the audio this project says \(n == 1 ? "it is" : "they are") and \(n == 1 ? "was" : "were") left out."
+                status = L10n.count("access.notAsDescribed", n)
             }
             return
         }
         askedAboutOutside = true
         let alert = NSAlert()
-        alert.messageText = "This project uses audio from outside itself"
+        alert.messageText = L10n.text("access.ask.title")
         let folders = Array(Set(outside.map { $0.deletingLastPathComponent().path })).sorted()
         let shown = outside.prefix(6).map { "• " + ($0.path as NSString).abbreviatingWithTildeInPath }.joined(separator: "\n")
-        alert.informativeText = "“\(name)” wants to play \(outside.count) audio file\(outside.count == 1 ? "" : "s") from \(folders.count == 1 ? "another folder" : "\(folders.count) other folders") on this Mac:\n\n\(shown)\(outside.count > 6 ? "\n… and \(outside.count - 6) more" : "")\n\nIf the project is your own, or you trust where it came from, use them. Otherwise open it without: those clips stay silent, and nothing outside the project is read."
-        alert.addButton(withTitle: "Open Without Them")
-        alert.addButton(withTitle: "Use These Files")
+            + (outside.count > 6 ? "\n" + L10n.text("ask.more", String(outside.count - 6)) : "")
+        alert.informativeText = L10n.text("access.ask.text", name, L10n.count("access.ask.files", outside.count), L10n.count("access.ask.folders", folders.count), shown)
+        alert.addButton(withTitle: L10n.text("ask.openWithout"))
+        alert.addButton(withTitle: L10n.text("access.ask.use"))
         alert.beginSheetModal(for: window) { [weak self] answer in
             MainActor.assumeIsolated {
                 guard let self else { return }
                 if answer == .alertSecondButtonReturn {
                     self.allowOutside(outside)
-                    self.status = "Using \(outside.count) file\(outside.count == 1 ? "" : "s") from outside the project."
+                    self.status = L10n.count("access.using", outside.count)
                 } else {
-                    self.status = "\(outside.count) file\(outside.count == 1 ? "" : "s") outside the project \(outside.count == 1 ? "wasn't" : "weren't") read. Their clips are silent."
+                    self.status = L10n.count("access.notRead", outside.count)
                 }
             }
         }

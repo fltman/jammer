@@ -40,6 +40,14 @@ public enum DiarizationError: Error, LocalizedError, Equatable {
         case .model(let m): m
         }
     }
+    /// The same message by its key in the app's string catalogue (see `KeyedMessage`).
+    public var keyed: KeyedMessage? {
+        switch self {
+        case .noEngine: KeyedMessage("error.diarization.noEngine")
+        case .nothingToDo: KeyedMessage("error.diarization.nothingToDo")
+        case .model: nil
+        }
+    }
 }
 
 public enum Diarization {
@@ -340,3 +348,5 @@ public enum DiarizationScore {
                       confusion: Double(confusion) / t, referenceSeconds: Double(total) * step)
     }
 }
+
+extension DiarizationError: KeyedFailure {}

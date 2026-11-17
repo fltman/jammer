@@ -1,4 +1,5 @@
 import Foundation
+import JammerCore
 
 /// The window's texts come from the string catalogue (`Localizable.xcstrings`), by key: no text a user
 /// sees is written straight in the code (the-apps/SIBLINGS.md, "Språk"; docs/LANGUAGES.md). The agent
@@ -13,6 +14,13 @@ enum L10n {
     static func text(_ key: String, _ args: CVarArg...) -> String {
         let format = NSLocalizedString(key, comment: "")
         return args.isEmpty ? format : String(format: format, locale: Locale.current, arguments: args)
+    }
+    /// An error's reason by its key (`KeyedMessage`, from the packages), in the window's language, as a
+    /// sentence of its own: the packages write it to follow a step's name and a colon, so it may start small.
+    static func message(_ m: KeyedMessage) -> String {
+        let format = NSLocalizedString(m.key, comment: "")
+        let text = m.args.isEmpty ? format : String(format: format, locale: Locale.current, arguments: m.args.map { $0 as CVarArg })
+        return text.prefix(1).uppercased() + text.dropFirst()
     }
     /// A count, in the plural form the language wants.
     static func count(_ key: String, _ n: Int) -> String {

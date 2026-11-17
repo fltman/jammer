@@ -86,6 +86,14 @@ public enum TranscriptError: Error, LocalizedError, Equatable {
         case .textOnly: SourceTranscript.textOnlyReason
         }
     }
+    /// The same message by its key in the app's string catalogue (see `KeyedMessage`).
+    public var keyed: KeyedMessage? {
+        switch self {
+        case .noWords: KeyedMessage("error.transcript.noWords")
+        case .unknownWord: KeyedMessage("error.transcript.unknownWord")
+        case .textOnly: nil
+        }
+    }
 }
 
 extension Project {
@@ -245,3 +253,5 @@ extension Array {
         return lo
     }
 }
+
+extension TranscriptError: KeyedFailure {}

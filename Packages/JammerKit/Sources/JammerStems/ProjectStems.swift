@@ -22,6 +22,14 @@ public enum StemError: Error, LocalizedError, Equatable {
         case .nothing: "There's no audio on those tracks."
         }
     }
+    /// The same message by its key in the app's string catalogue (see `KeyedMessage`).
+    public var keyed: KeyedMessage? {
+        switch self {
+        case .modelMissing: KeyedMessage("error.stem.modelMissing")
+        case .hasInserts(let n): KeyedMessage("error.stem.hasInserts", ["\(n)"])
+        case .nothing: KeyedMessage("error.stem.nothing")
+        }
+    }
 }
 
 /// Deezer's Spleeter 4stems weights as they publish them (MIT), fetched from their GitHub
@@ -287,3 +295,5 @@ extension Project {
         return (p, StemReport(stems: names, tracks: replacement.keys.sorted().flatMap { replacement[$0]!.map(\.id) }))
     }
 }
+
+extension StemError: KeyedFailure {}

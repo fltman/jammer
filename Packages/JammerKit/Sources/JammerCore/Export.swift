@@ -65,6 +65,13 @@ public enum ExportError: Error, LocalizedError, Equatable {
         case .encoder(let what, let status): "The encoder couldn't \(what) (error \(status))."
         }
     }
+    /// The same message by its key in the app's string catalogue (see `KeyedMessage`).
+    public var keyed: KeyedMessage? {
+        switch self {
+        case .unsupported: nil
+        case .encoder(let what, let status): KeyedMessage("error.export.encoder", ["\(what)", "\(status)"])
+        }
+    }
 }
 
 /// A file writer fed interleaved float blocks (MP3 plugs in through this).
@@ -201,3 +208,5 @@ public final class EncodedWriter {
         }
     }
 }
+
+extension ExportError: KeyedFailure {}

@@ -13,7 +13,7 @@ enum HistoryPanel {
         if let w = windows[key] { w.makeKeyAndOrderFront(nil); return }
         let w = EscClosingWindow(contentRect: NSRect(x: 0, y: 0, width: 360, height: 460), styleMask: [.titled, .closable, .resizable, .utilityWindow],
                                  backing: .buffered, defer: false)
-        w.title = "History — \(session.name)"
+        w.title = L10n.text("history.window.title", session.name)
         w.isReleasedWhenClosed = false
         w.contentViewController = NSHostingController(rootView: HistoryView(session: session))
         w.center()
@@ -52,7 +52,7 @@ struct HistoryView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             if let pruned = session.history?.pruned, pruned > 0 {
-                Label("\(pruned) older step\(pruned == 1 ? " was" : "s were") removed to keep the history at \(session.history?.limit ?? 500) steps.",
+                Label(L10n.text("history.pruned", L10n.count("history.pruned.steps", pruned), String(session.history?.limit ?? 500)),
                       systemImage: "info.circle")
                     .font(.caption).foregroundStyle(.secondary).padding(10)
             }
@@ -68,7 +68,7 @@ struct HistoryView: View {
                     .contentShape(.rect)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("\(r.action)\(r.current ? ", current" : "")\(r.active ? "" : ", other branch")")
+                .accessibilityLabel(r.current ? L10n.text("history.ax.current", r.action) : r.active ? r.action : L10n.text("history.ax.otherBranch", r.action))
             }
         }
         .frame(minWidth: 300, minHeight: 300)

@@ -28,7 +28,7 @@ struct PluginsSheet: View {
         session.project.tracks.map { Strip(id: $0.id, name: $0.name, inserts: $0.inserts, isBus: false) }
             + session.project.buses.map { Strip(id: $0.id, name: $0.name, inserts: $0.inserts, isBus: true) }
             // The master is offered once the document has a mixer; before that a plugin on the one track is the same thing.
-            + (session.project.usesMixer ? [Strip(id: Master.id, name: "Master", inserts: session.project.master.inserts, isBus: true)] : [])
+            + (session.project.usesMixer ? [Strip(id: Master.id, name: L10n.text("strip.master"), inserts: session.project.master.inserts, isBus: true)] : [])
     }
     private var track: Strip? {
         #if DEBUG
@@ -40,26 +40,26 @@ struct PluginsSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Plugins").font(.title2.bold())
+            Text(L10n.text("plugins.title")).font(.title2.bold())
             if strips.count > 1 {
-                Picker(session.project.buses.isEmpty ? "Track" : "Track or bus", selection: Binding(get: { track?.id }, set: { trackID = $0 })) {
-                    ForEach(strips) { Text($0.id == Master.id ? "Master" : $0.isBus ? "\($0.name) (bus)" : $0.name).tag(Optional($0.id)) }
+                Picker(session.project.buses.isEmpty ? L10n.text("plugins.strip.track") : L10n.text("plugins.strip.trackOrBus"), selection: Binding(get: { track?.id }, set: { trackID = $0 })) {
+                    ForEach(strips) { Text($0.id == Master.id ? L10n.text("strip.master") : $0.isBus ? L10n.text("strip.bus.named", $0.name) : $0.name).tag(Optional($0.id)) }
                 }
             }
             if let track {
                 List {
                     if track.inserts.isEmpty {
-                        Text(track.id == Master.id ? "No plugins on the master. Add one below; it runs on the whole mix, before the master's level and its limiter."
-                             : track.isBus ? "No plugins on the bus \(track.name). Add one below; it runs on everything that goes through the bus, before the bus's level. What it adds in delay is made up for across the mixer."
-                                         : "No plugins on \(track.name). Add one below; it runs after the clips and before the track's gain.")
+                        Text(track.id == Master.id ? L10n.text("plugins.none.master")
+                             : track.isBus ? L10n.text("plugins.none.bus", track.name)
+                                         : L10n.text("plugins.none.track", track.name))
                             .foregroundStyle(.secondary)
                     }
                     ForEach(track.inserts) { insert in row(track, insert) }
                 }
                 .frame(minHeight: 170)
                 .id(session.pluginsVersion)
-                Menu("Add Plugin") {
-                    if catalogue.isEmpty { Text("Looking for plugins…") }
+                Menu(L10n.text("plugins.add")) {
+                    if catalogue.isEmpty { Text(L10n.text("plugins.looking")) }
                     ForEach(Dictionary(grouping: catalogue, by: \.manufacturer).sorted { $0.key < $1.key }, id: \.key) { group in
                         Menu(group.key) {
                             ForEach(group.value, id: \.id) { info in
@@ -74,7 +74,7 @@ struct PluginsSheet: View {
             }
             if HostedPluginsController.available {
                 HStack {
-                    Button(scanning ? "Scanning…" : "Scan for CLAP Plugins") {
+                    Button(scanning ? L10n.text("plugins.scanning") : L10n.text("plugins.scan")) {
                         scanning = true
                         Task {
                             await HostedPluginsController.scan(force: true)
@@ -84,22 +84,22 @@ struct PluginsSheet: View {
                         }
                     }
                     .disabled(scanning)
-                    .help("Looks in the CLAP plugin folders again. Each plugin is loaded in a helper process, so one that crashes can't affect Jämmer.")
+                    .help(L10n.text("plugins.scan.help"))
                     Spacer()
                 }
                 ForEach(failed, id: \.name) { f in
                     HStack(alignment: .firstTextBaseline, spacing: 5) {
                         // Still listed from before: a warning. Not usable: an error. Told apart by the symbol.
                         Image(systemName: (f.kept ? StateKind.warning : .error).symbol).foregroundStyle((f.kept ? StateKind.warning : .error).color).accessibilityHidden(true)
-                        Text(f.reason == "blocked" ? "\(f.name) is switched off: it failed while it was in use."
-                             : f.kept ? "\(f.name) is still listed from an earlier scan; the last scan of it didn't succeed (\(f.reason == "timed_out" ? "it didn't answer in time" : f.reason == "scan_failed" ? "the scanner got no answer" : f.reason)). It will be tried again."
-                             : ["timed_out", "scan_failed"].contains(f.reason) ? (f.reason == "timed_out" ? "\(f.name) didn't answer in time when it was scanned. A plugin that keeps doing that is tried again only now and then, so it doesn't hold up every start; Scan for CLAP Plugins tries it at once."
-                                                                                : "\(f.name) couldn't be scanned (the scanner got no answer). It will be tried again at the next scan.")
-                             : "\(f.name) couldn't be used (\(f.reason)).")
+                        Text(f.reason == "blocked" ? L10n.text("plugins.failed.blocked", f.name)
+                             : f.kept ? L10n.text("plugins.failed.kept", f.name, f.reason == "timed_out" ? L10n.text("plugins.failed.why.timedOut") : f.reason == "scan_failed" ? L10n.text("plugins.failed.why.noAnswer") : f.reason)
+                             : f.reason == "timed_out" ? L10n.text("plugins.failed.timedOut", f.name)
+                             : f.reason == "scan_failed" ? L10n.text("plugins.failed.noAnswer", f.name)
+                             : L10n.text("plugins.failed.other", f.name, f.reason))
                             .font(.callout)
                         Spacer()
                         if f.reason == "blocked", let key = HostedPlugins.current().blocked.first(where: { k in HostedPlugins.current().entries.flatMap(\.plugins).contains { PluginCatalogue.key($0) == k && $0.name == f.name } }) {
-                            Button("Switch On") {
+                            Button(L10n.text("plugins.switchOn")) {
                                 HostedPluginsController.unblock(key)
                                 failed = HostedPlugins.current().failed
                                 Task { catalogue = await Task.detached { PluginCatalog.effects() }.value }
@@ -109,18 +109,18 @@ struct PluginsSheet: View {
                 }
             }
             Divider()
-            Toggle("Safe mode: run every Audio Unit in a separate process", isOn: $safeMode)
+            Toggle(L10n.text("plugins.safeMode"), isOn: $safeMode)
                 .onChange(of: safeMode) { _, on in
                     EditorSession.pluginSafeMode = on
                     session.restartPlugins()
                 }
-            Text((HostedPluginsController.available ? "Plugins are third-party code. CLAP plugins each run in a helper process of their own, never inside Jämmer. Audio Units run inside Jämmer; if one crashes or misbehaves, turn on safe mode: every Audio Unit then runs in macOS's separate plugin host process." : "Plugins are third-party code that runs inside Jämmer. If one crashes or misbehaves, turn on safe mode: every Audio Unit then runs in macOS's separate plugin host process.") + " Plugins play 0.3 s ahead, so a change is heard a moment later.")
+            Text((HostedPluginsController.available ? L10n.text("plugins.about.hosted") : L10n.text("plugins.about.audioUnits")) + " " + L10n.text("plugins.about.ahead"))
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             HStack {
                 Spacer()
-                Button("Done") { done() }.keyboardShortcut(.defaultAction)
+                Button(L10n.text("button.done")) { done() }.keyboardShortcut(.defaultAction)
             }
         }
         .padding(20)
@@ -139,7 +139,7 @@ struct PluginsSheet: View {
                 .toggleStyle(.switch)
                 .controlSize(.mini)
                 .labelsHidden()
-                .accessibilityLabel("\(insert.name) on")
+                .accessibilityLabel(L10n.text("plugins.on.ax", insert.name))
             VStack(alignment: .leading, spacing: 2) {
                 Text(insert.name)
                 if let f = session.inserts.failure(insert.id) {
@@ -150,31 +150,31 @@ struct PluginsSheet: View {
             // A sidechain key, where the build has them and the plugin has the input: the track or bus the
             // plugin listens to. (Not on the master; and never the strip the plugin sits on.)
             if Operations.sidechain, track.id != Master.id, session.inserts.instance(insert.id)?.hasKeyInput == true {
-                let sources = session.project.tracks.map { ($0.id, $0.name) } + session.project.buses.map { ($0.id, "\($0.name) (bus)") }
+                let sources = session.project.tracks.map { ($0.id, $0.name) } + session.project.buses.map { ($0.id, L10n.text("strip.bus.named", $0.name)) }
                 let now = insert.key.flatMap { k in sources.first { $0.0 == k }?.1 }
-                Menu(now.map { "Key: \($0)" } ?? "Key: none") {
-                    Button("\(insert.key == nil ? "✓ " : "")None") {
+                Menu(now.map { L10n.text("plugins.key", $0) } ?? L10n.text("plugins.key.none")) {
+                    Button((insert.key == nil ? "✓ " : "") + L10n.text("plugins.key.choice.none")) {
                         session.perform("set_insert", ["track": .string(track.id.uuidString), "insert": .string(insert.id.uuidString), "key": .string("none")])
                     }
                     ForEach(sources.filter { $0.0 != track.id }, id: \.0) { source in
-                        Button("\(insert.key == source.0 ? "✓ " : "")\(source.1)") {
+                        Button((insert.key == source.0 ? "✓ " : "") + source.1) {
                             session.perform("set_insert", ["track": .string(track.id.uuidString), "insert": .string(insert.id.uuidString), "key": .string(source.0.uuidString)])
                         }
                     }
                 }
                 .fixedSize()
-                .accessibilityLabel("Sidechain key of \(insert.name)")
+                .accessibilityLabel(L10n.text("plugins.key.ax", insert.name))
                 .accessibilityIdentifier("plugins.key")
-                .help("The track or bus this plugin listens to on its sidechain input.")
+                .help(L10n.text("plugins.key.help"))
             }
-            Button("Edit…") { PluginWindows.show(session, track: track.id, insert: insert.id) }
-                .accessibilityLabel("Edit \(insert.name)")
+            Button(L10n.text("plugins.edit")) { PluginWindows.show(session, track: track.id, insert: insert.id) }
+                .accessibilityLabel(L10n.text("plugins.edit.ax", insert.name))
                 .disabled(session.inserts.instance(insert.id) == nil)
             Button { session.perform("remove_insert", ["track": .string(track.id.uuidString), "insert": .string(insert.id.uuidString)]) } label: {
-                Label("Remove \(insert.name)", systemImage: "trash").labelStyle(.iconOnly)
+                Label(L10n.text("button.remove.ax", insert.name), systemImage: "trash").labelStyle(.iconOnly)
             }
             .buttonStyle(.borderless)
-            .help("Remove \(insert.name)")
+            .help(L10n.text("button.remove.ax", insert.name))
         }
     }
 }
@@ -282,7 +282,7 @@ struct GenericPluginView: View {
     var body: some View {
         let params = unit.au.parameterTree?.allParameters ?? []
         Form {
-            if params.isEmpty { Text("This plugin has no parameters to show.").foregroundStyle(.secondary) }
+            if params.isEmpty { Text(L10n.text("plugins.noParameters")).foregroundStyle(.secondary) }
             ForEach(params, id: \.keyPath) { p in
                 LabeledContent(p.displayName) {
                     HStack {
@@ -313,7 +313,7 @@ struct HostedPluginView: View {
 
     var body: some View {
         Form {
-            if params.isEmpty { Text("This plugin has no parameters to show.").foregroundStyle(.secondary) }
+            if params.isEmpty { Text(L10n.text("plugins.noParameters")).foregroundStyle(.secondary) }
             ForEach(params, id: \.identifier) { p in
                 LabeledContent(p.name) {
                     HStack {

@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import JammerCore
 
 /// A downloadable model file: where it lives upstream and what it must hash to.
 public struct ModelSpec: Sendable, Equatable, Identifiable {
@@ -37,6 +38,15 @@ public enum ModelError: Error, LocalizedError, Equatable {
         case .wrongSize(let e, let g): "The download has the wrong size (\(g) bytes, expected \(e))."
         case .wrongChecksum: "The download doesn't match its checksum, so it wasn't used."
         case .notEnoughSpace(let n): "Not enough free disk space (\(n / 1_000_000) MB needed)."
+        }
+    }
+    /// The same message by its key in the app's string catalogue (see `KeyedMessage`).
+    public var keyed: KeyedMessage? {
+        switch self {
+        case .http(let c): KeyedMessage("error.model.http", ["\(c)"])
+        case .wrongSize(let e, let g): KeyedMessage("error.model.wrongSize", ["\(g)", "\(e)"])
+        case .wrongChecksum: KeyedMessage("error.model.wrongChecksum")
+        case .notEnoughSpace(let n): KeyedMessage("error.model.notEnoughSpace", ["\(n / 1_000_000)"])
         }
     }
 }
@@ -144,3 +154,5 @@ final class Box<T>: @unchecked Sendable {
     var value: T?
     var task: URLSessionTask?
 }
+
+extension ModelError: KeyedFailure {}

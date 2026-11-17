@@ -61,6 +61,15 @@ extension Restoration {
             case .notAvailable: "That repair isn't available in this build."
             }
         }
+        /// The same message by its key in the app's string catalogue (see `KeyedMessage`).
+        public var keyed: KeyedMessage? {
+            switch self {
+            case .nothingInRange: KeyedMessage("error.apply.nothingInRange")
+            case .noHum: KeyedMessage("error.apply.noHum")
+            case .unreadable(let n): KeyedMessage("error.apply.unreadable", ["\(n)"])
+            case .notAvailable: KeyedMessage("error.apply.notAvailable")
+            }
+        }
     }
 
     /// Repairs the clips inside `range` (everything when nil). New files go in `media`.
@@ -313,3 +322,5 @@ extension Restoration {
         return (repaired, plan.render(from: range.lowerBound, frames: range.count))
     }
 }
+
+extension Restoration.ApplyError: KeyedFailure {}

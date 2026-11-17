@@ -357,16 +357,16 @@ final class TimelineOverlay: NSView {
     // the playhead and the selection are; increment and decrement move 1 s, like the arrows.
     override func isAccessibilityElement() -> Bool { true }
     override func accessibilityRole() -> NSAccessibility.Role? { .slider }
-    override func accessibilityRoleDescription() -> String? { "timeline" }
-    override func accessibilityLabel() -> String? { "Timeline" }
+    override func accessibilityRoleDescription() -> String? { L10n.text("timeline.ax.role") }
+    override func accessibilityLabel() -> String? { L10n.text("timeline.ax.label") }
     override func accessibilityValue() -> Any? {
         let p = session.project
-        var text = "Playhead \(formatTime(p.seconds(session.playhead))) of \(formatTime(p.duration))"
+        var text = L10n.text("timeline.ax.playhead", formatTime(p.seconds(session.playhead)), formatTime(p.duration))
         if let sel = session.selection {
-            text += ", selection \(formatTime(p.seconds(sel.lowerBound))) to \(formatTime(p.seconds(sel.upperBound)))"
+            text += ", " + L10n.text("timeline.ax.selection", formatTime(p.seconds(sel.lowerBound)), formatTime(p.seconds(sel.upperBound)))
         }
-        if p.tracks.count > 1 { text += ", \(p.tracks.count) tracks" }
-        if areaMode, let a = session.spectralArea { text += ", area: \(a.shape.summary)" }
+        if p.tracks.count > 1 { text += ", " + L10n.count("import.tracks", p.tracks.count) }
+        if areaMode, let a = session.spectralArea { text += ", " + L10n.text("timeline.ax.area", a.shape.summary) }
         return text
     }
     override func accessibilityPerformIncrement() -> Bool {
@@ -446,7 +446,7 @@ final class TimelineOverlay: NSView {
             (track.name as NSString).draw(at: NSPoint(x: 8, y: y + 22), withAttributes: nameAttrs)
             if session.peaks.isEmpty, !session.peakProgress.isEmpty, session.project.length > Frame(project.sampleRate * 600) {
                 let p = session.peakProgress.values.first ?? 0
-                ("Reading waveform… \(Int(p * 100)) %" as NSString).draw(at: NSPoint(x: 8, y: y + 24), withAttributes: nameAttrs)
+                (L10n.text("timeline.reading", String(Int(p * 100))) as NSString).draw(at: NSPoint(x: 8, y: y + 24), withAttributes: nameAttrs)
             }
         }
 
@@ -674,9 +674,9 @@ final class TimelineOverlay: NSView {
         case 36: session.seek(0) // return
         case 53 where areaMode && session.spectralArea != nil: session.spectralArea = nil; needsDisplay = true // escape: the area first
         case 53: session.selection = nil // escape
-        case 11 where areaMode: session.spectralTool = .box; session.status = "Box: drag a rectangle in the spectrogram." // B
-        case 37 where areaMode && Operations.spectralFreeform: session.spectralTool = .lasso; session.status = "Lasso: draw round the sound." // L
-        case 35 where areaMode && Operations.spectralFreeform: session.spectralTool = .brush; session.status = "Brush: paint over the sound." // P
+        case 11 where areaMode: session.spectralTool = .box; session.status = L10n.text("spectral.tool.box") // B
+        case 37 where areaMode && Operations.spectralFreeform: session.spectralTool = .lasso; session.status = L10n.text("spectral.tool.lasso") // L
+        case 35 where areaMode && Operations.spectralFreeform: session.spectralTool = .brush; session.status = L10n.text("spectral.tool.brush") // P
         case 51, 117: delete(nil) // delete, forward delete
         case 123: session.seek(session.playhead - Frame(project.sampleRate)) // left: 1 s
         case 124: session.seek(session.playhead + Frame(project.sampleRate))

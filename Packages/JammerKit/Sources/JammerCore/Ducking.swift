@@ -38,6 +38,15 @@ public enum DuckError: Error, LocalizedError, Equatable {
         case .noSpeech: "the tracks to duck under never reach the threshold in that range, so nothing was changed."
         }
     }
+    /// The same message by its key in the app's string catalogue (see `KeyedMessage`).
+    public var keyed: KeyedMessage? {
+        switch self {
+        case .notFound(let id): KeyedMessage("error.duck.notFound", ["\(id)"])
+        case .overlap(let name): KeyedMessage("error.duck.overlap", ["\(name)"])
+        case .needsTracks: KeyedMessage("error.duck.needsTracks")
+        case .noSpeech: KeyedMessage("error.duck.noSpeech")
+        }
+    }
 }
 
 public enum Ducking {
@@ -245,3 +254,5 @@ extension Project {
         return (p, report)
     }
 }
+
+extension DuckError: KeyedFailure {}

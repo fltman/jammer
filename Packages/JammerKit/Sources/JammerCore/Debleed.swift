@@ -18,6 +18,13 @@ public enum DebleedError: Error, LocalizedError, Equatable {
         case .needsTracks: "Cancel needs two or more tracks that play at the same time."
         }
     }
+    /// The same message by its key in the app's string catalogue (see `KeyedMessage`).
+    public var keyed: KeyedMessage? {
+        switch self {
+        case .noSpeakers: KeyedMessage("error.debleed.noSpeakers")
+        case .needsTracks: KeyedMessage("error.debleed.needsTracks")
+        }
+    }
 }
 
 public struct DebleedReport: Sendable, Equatable {
@@ -246,3 +253,5 @@ extension Project {
         return (p, DebleedReport(tracks: targets.count, reductionDB: (mean * 10).rounded() / 10))
     }
 }
+
+extension DebleedError: KeyedFailure {}

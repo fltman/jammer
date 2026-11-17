@@ -139,6 +139,14 @@ public enum FCPXMLImport {
             case .noAudio(let why): "The timeline has no audio clips that could be opened." + (why.map { " \($0)" } ?? "")
             }
         }
+        /// The same message by its key in the app's string catalogue (see `KeyedMessage`).
+        public var keyed: KeyedMessage? {
+            switch self {
+            case .unreadable(let why): KeyedMessage("error.import.unreadable", ["\(why)"])
+            case .noSequence: KeyedMessage("error.import.noSequence")
+            case .noAudio: nil
+            }
+        }
         public var reason: String {
             switch self {
             case .unreadable: "unreadable"
@@ -502,3 +510,5 @@ public enum FCPXMLImport {
         return Result(project: project, name: timeline.name, warnings: warnings, shots: timeline.shots, flimmerExportVersion: timeline.flimmerExportVersion)
     }
 }
+
+extension FCPXMLImport.ImportError: KeyedFailure {}

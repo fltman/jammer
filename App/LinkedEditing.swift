@@ -45,7 +45,7 @@ enum LinkedEditing {
             edited.session?.checkLink()
             edited.windowControllers.first?.window?.makeKeyAndOrderFront(nil)
             NSApp.activate()
-            if edited.isDocumentEdited { edited.session?.status = "\(url.lastPathComponent) is already open here, with your changes. ⌘S saves them back to \(requester)." }
+            if edited.isDocumentEdited { edited.session?.status = L10n.text("link.alreadyOpen", url.lastPathComponent, requester) }
             return true
         }
         // Open without changes: what the sibling sent now may differ from what was opened then, so the
@@ -91,7 +91,7 @@ enum LinkedEditing {
         } catch {
             // In the words of the file the sibling sent, not of the copy made of it.
             let alert = NSAlert()
-            alert.messageText = "\(url.lastPathComponent) couldn't be opened"
+            alert.messageText = L10n.text("open.failed.title", url.lastPathComponent)
             alert.informativeText = error.localizedDescription.replacingOccurrences(of: copyName ?? "", with: url.lastPathComponent)
             alert.runModal()
             return true
@@ -105,7 +105,7 @@ extension EditorSession {
         guard let link = linkedFile else { done?(false); return }
         let project = self.project, pool = self.pool
         let markers = project.markers.map { FileMarker(position: $0.position, length: $0.length, name: $0.cueLabel) }
-        status = "Saving \(link.fileName)…"
+        status = L10n.text("link.saving", link.fileName)
         Task {
             do {
                 let plan = await PlanCompiler.mix(project, pool: pool, outOfProcess: Self.pluginSafeMode)
@@ -119,10 +119,10 @@ extension EditorSession {
                 stepsNotSavedBack = 0
                 LinkJournalStore.note(self)
                 (window?.windowController as? EditorWindowController)?.showLink()
-                status = "Saved \(link.fileName) for \(link.requester)."
+                status = L10n.text("link.saved", link.fileName, link.requester)
                 done?(true)
             } catch {
-                status = "Couldn't save \(link.fileName): \(error.localizedDescription)"
+                status = L10n.text("link.saveFailed", link.fileName, error.localizedDescription)
                 NSSound.beep()
                 done?(false)
             }
@@ -140,10 +140,10 @@ extension EditorSession {
         }
         guard let lost = lostLink else { return }
         let alert = NSAlert()
-        alert.messageText = "“\(lost.name)” can't be saved back to \(lost.requester)"
-        alert.informativeText = "\(lost.why)\n\nYour edit is still here. Save it as a Jämmer project to keep it, or put the file back where it was and press ⌘S again."
-        alert.addButton(withTitle: "Save a Jämmer Copy…")
-        alert.addButton(withTitle: "Cancel")
+        alert.messageText = L10n.text("link.lost.title", lost.name, lost.requester)
+        alert.informativeText = L10n.text("link.lost.text", lost.why)
+        alert.addButton(withTitle: L10n.text("link.lost.saveCopy"))
+        alert.addButton(withTitle: L10n.text("button.cancel"))
         alert.beginSheetModal(for: window) { [weak self] answer in
             MainActor.assumeIsolated { if answer == .alertFirstButtonReturn { self?.saveJammerCopy() } }
         }

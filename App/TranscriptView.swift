@@ -21,7 +21,7 @@ final class TranscriptPanel: NSView, NSTextViewDelegate {
     private let language = NSPopUpButton()
     /// Where the transcribing is done. Shown only while the paid route is being tried out (hidden providers on).
     private let engine = NSPopUpButton()
-    private let transcribeButton = NSButton(title: "Transcribe", target: nil, action: nil)
+    private let transcribeButton = NSButton(title: L10n.text("transcript.transcribe"), target: nil, action: nil)
     private let progress = NSProgressIndicator()
     private var placed: [PlacedWord] = []
     private var ranges: [NSRange] = []
@@ -29,10 +29,10 @@ final class TranscriptPanel: NSView, NSTextViewDelegate {
     private var litWord: Int?
     private var updatingSelection = false
 
-    static let languages: [(String, String)] = [
-        ("Swedish", "sv-SE"), ("English (US)", "en-US"), ("English (UK)", "en-GB"), ("German", "de-DE"),
-        ("French", "fr-FR"), ("Spanish", "es-ES"), ("Italian", "it-IT"), ("Portuguese (Brazil)", "pt-BR"),
-    ]
+    static var languages: [(String, String)] { [
+        (L10n.text("lang.sv"), "sv-SE"), (L10n.text("lang.enUS"), "en-US"), (L10n.text("lang.enGB"), "en-GB"), (L10n.text("lang.de"), "de-DE"),
+        (L10n.text("lang.fr"), "fr-FR"), (L10n.text("lang.es"), "es-ES"), (L10n.text("lang.it"), "it-IT"), (L10n.text("lang.ptBR"), "pt-BR"),
+    ] }
 
     init(session: EditorSession) {
         self.session = session
@@ -40,7 +40,7 @@ final class TranscriptPanel: NSView, NSTextViewDelegate {
         wantsLayer = true
         layer?.backgroundColor = Theme.lane.cgColor
 
-        let title = NSTextField(labelWithString: "Transcript")
+        let title = NSTextField(labelWithString: L10n.text("transcript.title"))
         title.font = .systemFont(ofSize: 11, weight: .semibold)
         title.textColor = Theme.text
         for (name, code) in Self.languages {
@@ -50,7 +50,7 @@ final class TranscriptPanel: NSView, NSTextViewDelegate {
         let preferred = UserDefaults.standard.string(forKey: "transcript.language") ?? Locale.current.identifier(.bcp47)
         if let i = Self.languages.firstIndex(where: { $0.1 == preferred || $0.1.hasPrefix(preferred.prefix(2)) }) { language.selectItem(at: i) }
         language.controlSize = .small
-        language.setAccessibilityLabel("Transcription language")
+        language.setAccessibilityLabel(L10n.text("transcript.language.ax"))
         transcribeButton.target = self
         transcribeButton.action = #selector(transcribe(_:))
         transcribeButton.controlSize = .small
@@ -62,15 +62,15 @@ final class TranscriptPanel: NSView, NSTextViewDelegate {
         progress.isIndeterminate = false
         progress.isHidden = true
         progress.widthAnchor.constraint(equalToConstant: 120).isActive = true
-        engine.addItem(withTitle: "On this Mac")
+        engine.addItem(withTitle: L10n.text("transcript.engine.local"))
         engine.lastItem?.representedObject = SpeechEngines.Choice.auto.rawValue
-        engine.addItem(withTitle: "OpenAI (your key, paid)")
+        engine.addItem(withTitle: L10n.text("transcript.engine.openai"))
         engine.lastItem?.representedObject = SpeechEngines.Choice.openai.rawValue
         // Said where it is chosen: what this choice means, before the sheet says it in full.
-        engine.lastItem?.toolTip = "The audio is uploaded to OpenAI and transcribed there, for a price. The text comes back without the time of each word: you can read, search and correct it, but not edit the audio with it. Built from OpenAI's documentation, not tried with a real request."
-        engine.toolTip = "Where the document is transcribed. On this Mac nothing leaves it."
+        engine.lastItem?.toolTip = L10n.text("transcript.engine.openai.help")
+        engine.toolTip = L10n.text("transcript.engine.help")
         engine.controlSize = .small
-        engine.setAccessibilityLabel("Transcription engine")
+        engine.setAccessibilityLabel(L10n.text("transcript.engine.ax"))
         engine.target = self
         engine.action = #selector(engineChanged(_:))
         let header = NSStackView(views: [title, NSView(), progress, engine, language, transcribeButton])
@@ -85,7 +85,7 @@ final class TranscriptPanel: NSView, NSTextViewDelegate {
         textView.font = .systemFont(ofSize: 14)
         textView.delegate = self
         textView.panel = self
-        textView.setAccessibilityLabel("Transcript")
+        textView.setAccessibilityLabel(L10n.text("transcript.title"))
         scroll.documentView = textView
         scroll.hasVerticalScroller = true
         scroll.drawsBackground = false
@@ -136,19 +136,19 @@ final class TranscriptPanel: NSView, NSTextViewDelegate {
         progress.isHidden = !running
         progress.doubleValue = job?.progress ?? 0
         transcribeButton.isEnabled = !running
-        transcribeButton.title = session.project.transcripts.isEmpty ? "Transcribe" : "Transcribe Again"
+        transcribeButton.title = session.project.transcripts.isEmpty ? L10n.text("transcript.transcribe") : L10n.text("transcript.transcribeAgain")
         if placed.isEmpty {
             empty.isHidden = false
             scroll.isHidden = true
             if running {
-                empty.stringValue = "Transcribing on this Mac…"
+                empty.stringValue = L10n.text("transcript.working")
             } else if let job, job.status == .failed {
-                empty.stringValue = job.error?.message ?? "Transcription failed."
+                empty.stringValue = job.error?.message ?? L10n.text("transcript.failed")
             } else {
                 // True for the choice that is made: on this Mac nothing leaves it; at OpenAI the audio does.
                 let away = engine.selectedItem?.representedObject as? String == SpeechEngines.Choice.openai.rawValue
-                empty.stringValue = away ? "No transcript yet. Choose the language and click Transcribe. With OpenAI chosen, the audio is uploaded there; Jämmer asks first."
-                                         : "No transcript yet. Choose the language and click Transcribe. Transcribed on this Mac, nothing leaves it."
+                empty.stringValue = away ? L10n.text("transcript.empty.openai")
+                                         : L10n.text("transcript.empty.local")
             }
         } else {
             empty.isHidden = true
@@ -261,7 +261,7 @@ final class TranscriptPanel: NSView, NSTextViewDelegate {
             if let i = ranges.firstIndex(where: { NSLocationInRange(sel.location, $0) || NSMaxRange($0) == sel.location }) {
                 // Without word times the word's place is a guess; going there would look like knowing.
                 if session.project.areTextOnly([placed[i].word.id]) {
-                    session.status = "This transcript has no word times, so a click can't find the word in the audio."
+                    session.status = L10n.text("transcript.noTimes")
                     return
                 }
                 session.selection = nil
@@ -305,16 +305,16 @@ final class TranscriptPanel: NSView, NSTextViewDelegate {
             if let w = window { a.beginSheetModal(for: w) } else { a.runModal() }
         }
         guard let key = SpeechEngines.openAIKey, !key.isEmpty else {
-            say("There is no OpenAI key", "Add your OpenAI key in the assistant's settings (the gear in the assistant panel, under OpenAI). Nothing was sent.")
+            say(L10n.text("openai.noKey.title"), L10n.text("openai.noKey.text"))
             return
         }
         let models: [String]
         do { models = try await OpenAITranscription.models(endpoint: SpeechEngines.openAIEndpoint, key: key) } catch {
-            say("OpenAI's list of models couldn't be read", "\(error.localizedDescription) Nothing was sent.")
+            say(L10n.text("openai.models.failed.title"), L10n.text("openai.models.failed.text", error.localizedDescription))
             return
         }
         guard !models.isEmpty else {
-            say("OpenAI lists no transcription model for this key", "Nothing was sent.")
+            say(L10n.text("openai.models.none.title"), L10n.text("openai.nothingSent"))
             return
         }
         // What goes: the whole of each file the document plays from that has no transcript yet (or all of them, when transcribing again).
@@ -324,28 +324,18 @@ final class TranscriptPanel: NSView, NSTextViewDelegate {
         let todo = p.sources.filter { s in used.contains(s.id) && (replace || !p.transcripts.contains { $0.sourceID == s.id }) }
         let seconds = todo.reduce(0.0) { $0 + Double($1.info.frames) / $1.info.sampleRate }
         let pieces = todo.reduce(0) { $0 + max(1, Int((Double($1.info.frames) / $1.info.sampleRate / 600).rounded(.up))) }
-        let length = seconds >= 3600 ? String(format: "%d h %d min", Int(seconds) / 3600, Int(seconds) % 3600 / 60) : String(format: "%d min %d s", Int(seconds) / 60, Int(seconds) % 60)
+        let length = seconds >= 3600 ? L10n.text("duration.hoursMinutes", String(Int(seconds) / 3600), String(Int(seconds) % 3600 / 60)) : L10n.text("duration.minutesSeconds", String(Int(seconds) / 60), String(Int(seconds) % 60))
 
         let pick = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 300, height: 26))
         pick.addItems(withTitles: models)
-        pick.setAccessibilityLabel("OpenAI model")
+        pick.setAccessibilityLabel(L10n.text("openai.model.ax"))
         if let last = models.firstIndex(of: SpeechEngines.openAIModel) { pick.selectItem(at: last) }
         let alert = NSAlert()
-        alert.messageText = "Send the audio to OpenAI?"
-        alert.informativeText = """
-        \(todo.count == 1 ? "The file" : "The \(todo.count) files") this document plays from (\(length) in all, the whole of each file, not only the parts on the timeline) will be uploaded to OpenAI in \(pieces) piece\(pieces == 1 ? "" : "s") and transcribed there.
-
-        OpenAI charges your account for it by its own price list for the model you choose; Jämmer can't read that price list and doesn't guess the cost.
-
-        The transcript comes back as text without the time of each word. You can read, search and correct it; you can't delete words or filler words from the audio with it.
-
-        Jämmer hasn't been able to read OpenAI's terms for what it does with uploaded audio. Read them at OpenAI before sending anything that isn't yours to share.
-
-        This route is built from OpenAI's documentation and has not been tried with a real request. If OpenAI answers with an error, Jämmer shows it as it came.
-        """
+        alert.messageText = L10n.text("openai.ask.title")
+        alert.informativeText = L10n.text("openai.ask.text", L10n.count("storage.files", todo.count), length, L10n.count("openai.ask.pieces", pieces))
         let unknown = UnknownPriceBox(service: "openai.transcription", name: "OpenAI")
-        alert.addButton(withTitle: "Send")
-        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: L10n.text("button.send"))
+        alert.addButton(withTitle: L10n.text("button.cancel"))
         UnknownPriceBox.place([pick, unknown.view], in: alert)
         unknown.gate(alert.buttons[0])
         let answer: NSApplication.ModalResponse

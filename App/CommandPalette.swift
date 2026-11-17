@@ -18,38 +18,38 @@ enum CommandPalette {
 
     static func commands(session: EditorSession, timeline: TimelineView) -> [PaletteCommand] {
         var list: [PaletteCommand] = [
-            .init(id: "play", title: session.isPlaying ? "Stop" : "Play", detail: "Transport", shortcut: "Space") { session.togglePlay() },
-            .init(id: "start", title: "Go to Start", detail: "Transport", shortcut: "↩") { session.seek(0) },
-            .init(id: "fit", title: "Zoom to Fit", detail: "View", shortcut: "⌘0") { timeline.zoomToFit() },
-            .init(id: "zsel", title: "Zoom to Selection", detail: "View", shortcut: "⌘E") { timeline.zoomToSelection() },
-            .init(id: "export", title: "Export Audio…", detail: "File", shortcut: "⇧⌘E") {
+            .init(id: "play", title: session.isPlaying ? L10n.text("transport.stop") : L10n.text("transport.play"), detail: L10n.text("menu.transport"), shortcut: L10n.text("key.space")) { session.togglePlay() },
+            .init(id: "start", title: L10n.text("transport.goToStart"), detail: L10n.text("menu.transport"), shortcut: "↩") { session.seek(0) },
+            .init(id: "fit", title: L10n.text("view.zoomToFit"), detail: L10n.text("menu.view"), shortcut: "⌘0") { timeline.zoomToFit() },
+            .init(id: "zsel", title: L10n.text("view.zoomToSelection"), detail: L10n.text("menu.view"), shortcut: "⌘E") { timeline.zoomToSelection() },
+            .init(id: "export", title: L10n.text("file.export"), detail: L10n.text("menu.file"), shortcut: "⇧⌘E") {
                 NSApp.sendAction(#selector(EditorWindowController.exportAudio(_:)), to: nil, from: nil)
             },
-            .init(id: "loud", title: "Measure Loudness", detail: "Analysis", shortcut: "⌥⌘L") {
+            .init(id: "loud", title: L10n.text("audio.measureLoudness"), detail: L10n.text("palette.group.analysis"), shortcut: "⌥⌘L") {
                 NSApp.sendAction(#selector(EditorWindowController.analyzeLoudness(_:)), to: nil, from: nil)
             },
-            .init(id: "collect", title: "Collect Audio and Save", detail: "File: copy every file the project plays from into it", shortcut: "") {
+            .init(id: "collect", title: L10n.text("file.collect"), detail: L10n.text("palette.collect.detail"), shortcut: "") {
                 NSApp.sendAction(#selector(JammerDocument.collectAudio(_:)), to: nil, from: nil)
             },
-            .init(id: "mixer", title: "Mixer…", detail: "Audio: levels, pan and buses", shortcut: "⌥⌘X") {
+            .init(id: "mixer", title: L10n.text("audio.mixer"), detail: L10n.text("palette.mixer.detail"), shortcut: "⌥⌘X") {
                 NSApp.sendAction(#selector(EditorWindowController.showMixer(_:)), to: nil, from: nil)
             },
-            .init(id: "limit", title: "Limit Peaks…", detail: "Audio: hold the true peak under a ceiling", shortcut: "") {
+            .init(id: "limit", title: L10n.text("audio.limit"), detail: L10n.text("palette.limit.detail"), shortcut: "") {
                 NSApp.sendAction(#selector(EditorWindowController.limitPeaks(_:)), to: nil, from: nil)
             },
-            .init(id: "assistant", title: "Ask the Assistant…", detail: "In Swedish or English: \"ta bort alla ehm\", \"normalize to −16 LUFS\"", shortcut: "⌥⌘A") {
+            .init(id: "assistant", title: L10n.text("assistant.ask"), detail: L10n.text("palette.assistant.detail"), shortcut: "⌥⌘A") {
                 NSApp.sendAction(#selector(EditorWindowController.askAssistant(_:)), to: nil, from: nil)
             },
-            .init(id: "transcript", title: "Show or Hide Transcript", detail: "View", shortcut: "⌥⌘T") {
+            .init(id: "transcript", title: L10n.text("palette.transcript"), detail: L10n.text("menu.view"), shortcut: "⌥⌘T") {
                 NSApp.sendAction(#selector(EditorWindowController.toggleTranscript(_:)), to: nil, from: nil)
             },
-            .init(id: "restore", title: "Restore… (hum, clipping, clicks)", detail: "Audio", shortcut: "") {
+            .init(id: "restore", title: L10n.text("palette.restore"), detail: L10n.text("menu.audio"), shortcut: "") {
                 NSApp.sendAction(#selector(EditorWindowController.showRestore(_:)), to: nil, from: nil)
             },
-            .init(id: "tempo", title: "Set Tempo…", detail: "Audio", shortcut: "") {
+            .init(id: "tempo", title: L10n.text("audio.setTempo"), detail: L10n.text("menu.audio"), shortcut: "") {
                 NSApp.sendAction(#selector(EditorWindowController.setTempo(_:)), to: nil, from: nil)
             },
-            .init(id: "agent", title: "Agent Access…", detail: "Help", shortcut: "") { AgentSplash.show() },
+            .init(id: "agent", title: L10n.text("help.agentAccess"), detail: L10n.text("menu.help"), shortcut: "") { AgentSplash.show() },
         ]
         for (title, op, params) in MenuPresets.all {
             let spec = Operations.named(op)
@@ -107,9 +107,9 @@ struct PaletteView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            TextField("Type a command", text: $query)
+            TextField(L10n.text("palette.placeholder"), text: $query)
                 .textFieldStyle(.plain)
-                .accessibilityLabel("Command")
+                .accessibilityLabel(L10n.text("palette.field.ax"))
                 .font(.title3)
                 .padding(14)
                 .focused($focused)

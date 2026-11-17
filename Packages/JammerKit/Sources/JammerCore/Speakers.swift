@@ -223,4 +223,13 @@ public enum SpeakerError: Error, LocalizedError, Equatable {
         case .emptyName: "A speaker needs a name."
         }
     }
+    /// The same message by its key in the app's string catalogue (see `KeyedMessage`).
+    public var keyed: KeyedMessage? {
+        switch self {
+        case .unknown(let k): KeyedMessage("error.speaker.unknown", ["\(k)"])
+        case .emptyName: KeyedMessage("error.speaker.emptyName")
+        }
+    }
 }
+
+extension SpeakerError: KeyedFailure {}

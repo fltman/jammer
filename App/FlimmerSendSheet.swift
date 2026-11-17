@@ -38,7 +38,7 @@ final class FlimmerSendModel {
     /// Renders and uploads the files and asks Flimmer what it would do.
     func check() {
         let project = session.project, pool = session.pool, safe = EditorSession.pluginSafeMode, mode = self.mode
-        stage = .working("Looking for Flimmer…")
+        stage = .working(L10n.text("flimmer.looking"))
         task = Task {
             do {
                 let debug = Bundle.main.bundleIdentifier?.hasSuffix(".debug") ?? false
@@ -47,12 +47,12 @@ final class FlimmerSendModel {
                 }
                 let client = FlimmerSend.Client(base: base, transport: Self.transport)
                 self.client = client
-                stage = .working("Preparing the files…")
+                stage = .working(L10n.text("flimmer.preparing"))
                 let p = try await FlimmerSend.prepare(project, mode: mode, client: client, render: { item, depth, rate in
                     // Plugins included, as the track sounds here.
                     try FlimmerSend.wavFile(PlanCompiler.mixBlocking(item.render, pool: pool, outOfProcess: safe), range: item.range,
                                             bitDepth: depth, sampleRate: rate, monoIfSame: item.monoSource, scratch: MediaStore.folder)
-                }, progress: { p in Task { @MainActor in if case .working = self.stage { self.stage = .working("Preparing the files… \(Int(p * 100)) %") } } })
+                }, progress: { p in Task { @MainActor in if case .working = self.stage { self.stage = .working(L10n.text("flimmer.preparing.percent", String(Int(p * 100)))) } } })
                 prepared = p
                 lines = p.lines
                 flimmerLines = p.flimmerLines
@@ -72,7 +72,7 @@ final class FlimmerSendModel {
                 (flimmerLines, flimmerWarnings) = try await FlimmerSend.sendCounting(prepared, client: client)
                 self.prepared = nil
                 stage = .done
-                session.status = "Sent to Flimmer. One undo step there takes it back."
+                session.status = L10n.text("flimmer.sent")
             } catch {
                 stage = .failed(error.localizedDescription)
             }
@@ -93,15 +93,15 @@ struct FlimmerSendSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Send to Flimmer").font(.title3.weight(.semibold))
-            Picker("What to send", selection: $model.mode) {
-                Text("Each changed clip as a new take").tag(FlimmerSend.Mode.takes)
-                Text("The whole mix as one clip").tag(FlimmerSend.Mode.mix)
+            Text(L10n.text("flimmer.title")).font(.title3.weight(.semibold))
+            Picker(L10n.text("flimmer.what"), selection: $model.mode) {
+                Text(L10n.text("flimmer.mode.takes")).tag(FlimmerSend.Mode.takes)
+                Text(L10n.text("flimmer.mode.mix")).tag(FlimmerSend.Mode.mix)
             }
             .pickerStyle(.radioGroup)
             .labelsHidden()
             .disabled(model.stage != .choose)
-            Text("Nothing is overwritten in Flimmer: originals are muted and kept, and one undo there takes everything back.")
+            Text(L10n.text("flimmer.promise"))
                 .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             switch model.stage {
             case .choose: EmptyView()
@@ -124,10 +124,10 @@ struct FlimmerSendSheet: View {
             }
             HStack {
                 Spacer()
-                Button(model.stage == .done ? "Close" : "Cancel") { model.close(); close() }.keyboardShortcut(.cancelAction)
+                Button(model.stage == .done ? L10n.text("button.close") : L10n.text("button.cancel")) { model.close(); close() }.keyboardShortcut(.cancelAction)
                 switch model.stage {
-                case .choose: Button("Check with Flimmer") { model.check() }.keyboardShortcut(.defaultAction)
-                case .ready: Button("Send") { model.send() }.keyboardShortcut(.defaultAction)
+                case .choose: Button(L10n.text("flimmer.check")) { model.check() }.keyboardShortcut(.defaultAction)
+                case .ready: Button(L10n.text("button.send")) { model.send() }.keyboardShortcut(.defaultAction)
                 case .sending: ProgressView().controlSize(.small)
                 default: EmptyView()
                 }

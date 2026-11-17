@@ -68,11 +68,12 @@ extension EditorSession {
         guard !unknown.isEmpty else { return }
         let alert = NSAlert()
         let names = Array(Set(unknown.map(\.insert.name))).sorted()
-        alert.messageText = names.count == 1 ? "This project wants to load settings into \(names[0])" : "This project wants to load settings into \(names.count) plugins"
-        let shown = unknown.prefix(6).map { "• \($0.insert.name) on “\($0.track)”" }.joined(separator: "\n")
-        alert.informativeText = "“\(name)” brings saved settings for:\n\n\(shown)\(unknown.count > 6 ? "\n… and \(unknown.count - 6) more" : "")\n\nSettings are data the plugin reads, and they weren't made in this Jämmer. If the project is your own, or you trust where it came from, load them. Otherwise open it without: those plugins aren't started and their tracks play without them."
-        alert.addButton(withTitle: "Open Without Them")
-        alert.addButton(withTitle: "Load Settings")
+        alert.messageText = names.count == 1 ? L10n.text("pluginSettings.ask.title.one", names[0]) : L10n.text("pluginSettings.ask.title.many", String(names.count))
+        let shown = unknown.prefix(6).map { L10n.text("pluginSettings.ask.row", $0.insert.name, $0.track) }.joined(separator: "\n")
+            + (unknown.count > 6 ? "\n" + L10n.text("ask.more", String(unknown.count - 6)) : "")
+        alert.informativeText = L10n.text("pluginSettings.ask.text", name, shown)
+        alert.addButton(withTitle: L10n.text("ask.openWithout"))
+        alert.addButton(withTitle: L10n.text("pluginSettings.ask.load"))
         alert.beginSheetModal(for: window) { [weak self] answer in
             MainActor.assumeIsolated {
                 guard let self else { return }
@@ -80,10 +81,10 @@ extension EditorSession {
                 if answer == .alertSecondButtonReturn {
                     PluginStateTrust.allow(unknown.map(\.insert))
                     self.syncInserts()
-                    self.status = "Loaded the project's settings into \(n) plugin\(n == 1 ? "" : "s")."
+                    self.status = L10n.count("pluginSettings.loaded", n)
                 } else {
-                    self.status = n == 1 ? "\(unknown[0].insert.name) wasn't started: the project's settings for it weren't loaded."
-                        : "\(n) plugins weren't started: the project's settings for them weren't loaded."
+                    self.status = n == 1 ? L10n.text("pluginSettings.notStarted.one", unknown[0].insert.name)
+                        : L10n.text("pluginSettings.notStarted.many", String(n))
                 }
             }
         }

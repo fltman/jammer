@@ -96,13 +96,13 @@ struct BatchRecipe: @preconcurrency Identifiable, @preconcurrency Hashable {
     func hash(into h: inout Hasher) { h.combine(name) }
 
     static let builtIn: [BatchRecipe] = [
-        .init(name: "Podcast: remove hum, Spotify loudness", body: ["jobs": [["op": "restore", "params": ["kind": "dehum"]]],
+        .init(name: L10n.text("batch.recipe.podcast"), body: ["jobs": [["op": "restore", "params": ["kind": "dehum"]]],
                                                                      "steps": [["op": "loudness_preset", "params": ["preset": "spotify"]]]]),
-        .init(name: "Loudness: Apple Podcasts", body: ["steps": [["op": "loudness_preset", "params": ["preset": "apple_podcasts"]]]]),
-        .init(name: "Loudness: EBU R 128 (−23 LUFS)", body: ["steps": [["op": "loudness_preset", "params": ["preset": "ebu_r128"]]]]),
-        .init(name: "Reduce noise, normalize to −16 LUFS", body: ["jobs": [["op": "restore", "params": ["kind": "denoise", "amount": 0.6]]],
+        .init(name: L10n.text("batch.recipe.apple"), body: ["steps": [["op": "loudness_preset", "params": ["preset": "apple_podcasts"]]]]),
+        .init(name: L10n.text("batch.recipe.ebu"), body: ["steps": [["op": "loudness_preset", "params": ["preset": "ebu_r128"]]]]),
+        .init(name: L10n.text("batch.recipe.denoise"), body: ["jobs": [["op": "restore", "params": ["kind": "denoise", "amount": 0.6]]],
                                                                   "steps": [["op": "normalize", "params": ["target": "loudness", "level": -16]]]]),
-        .init(name: "Convert only", body: [:]),
+        .init(name: L10n.text("batch.recipe.convert"), body: [:]),
     ]
 
     static var folder: URL {
@@ -136,7 +136,7 @@ final class BatchModel {
         let p = NSOpenPanel()
         p.allowsMultipleSelection = true
         p.canChooseDirectories = true
-        p.message = "Choose audio files, or folders of them"
+        p.message = L10n.text("batch.panel.files")
         guard p.runModal() == .OK else { return }
         files = p.urls.flatMap { url -> [URL] in
             var isDir: ObjCBool = false
@@ -151,7 +151,7 @@ final class BatchModel {
         p.canChooseDirectories = true
         p.canChooseFiles = false
         p.canCreateDirectories = true
-        p.message = "Where the processed files go"
+        p.message = L10n.text("batch.panel.output")
         if p.runModal() == .OK { output = p.url }
     }
 
@@ -165,16 +165,16 @@ final class BatchModel {
             // The user picked these files and this folder here, so no agent-folder check.
             let request = try BatchRequest.parse(body, policy: nil)
             running = true
-            status = "Starting…"
+            status = L10n.text("batch.starting")
             let job = JobRegistry.shared.startBatch(request) { [weak self] result in
                 self?.running = false
-                var parts = ["\(result.outputs.count) done"]
+                var parts = [L10n.text("batch.result.done", String(result.outputs.count))]
                 let short = zip(result.outputs, zip(result.loudness, result.limitedByPeak)).filter { $0.1.1 }
                 if !short.isEmpty {
-                    parts.append("\(short.count) quieter than the target because of their peaks (" + short.map { String(format: "%@ %.1f LUFS", ($0.0 as NSString).lastPathComponent, $0.1.0 ?? 0) }.joined(separator: ", ") + ")")
+                    parts.append(L10n.text("batch.result.short", String(short.count), short.map { String(format: "%@ %.1f LUFS", ($0.0 as NSString).lastPathComponent, $0.1.0 ?? 0) }.joined(separator: ", ")))
                 }
-                if !result.skipped.isEmpty { parts.append("\(result.skipped.count) skipped (already there)") }
-                if !result.failed.isEmpty { parts.append("\(result.failed.count) failed: " + result.failed.map { "\(($0.file as NSString).lastPathComponent) (\($0.message))" }.joined(separator: "; ")) }
+                if !result.skipped.isEmpty { parts.append(L10n.text("batch.result.skipped", String(result.skipped.count))) }
+                if !result.failed.isEmpty { parts.append(L10n.text("batch.result.failed", String(result.failed.count), result.failed.map { "\(($0.file as NSString).lastPathComponent) (\($0.message))" }.joined(separator: "; "))) }
                 self?.status = parts.joined(separator: ", ") + "."
             }
             _ = job
@@ -189,27 +189,27 @@ struct BatchView: View {
 
     var body: some View {
         Form {
-            LabeledContent("Files") {
+            LabeledContent(L10n.text("batch.files")) {
                 HStack {
-                    Text(model.files.isEmpty ? "None chosen" : "\(model.files.count) file\(model.files.count == 1 ? "" : "s")").foregroundStyle(.secondary)
-                    Button("Choose…") { model.chooseFiles() }.accessibilityLabel("Choose files")
+                    Text(model.files.isEmpty ? L10n.text("batch.files.none") : L10n.count("storage.files", model.files.count)).foregroundStyle(.secondary)
+                    Button(L10n.text("button.choose")) { model.chooseFiles() }.accessibilityLabel(L10n.text("batch.files.choose.ax"))
                 }
             }
-            Picker("Recipe", selection: $model.recipe) { ForEach(model.recipes) { Text($0.name).tag($0) } }
-            Picker("Format", selection: $model.format) { ForEach(ExportFormat.available, id: \.self) { Text($0.rawValue.uppercased()).tag($0) } }
-            LabeledContent("Save in") {
+            Picker(L10n.text("batch.recipe"), selection: $model.recipe) { ForEach(model.recipes) { Text($0.name).tag($0) } }
+            Picker(L10n.text("batch.format"), selection: $model.format) { ForEach(ExportFormat.available, id: \.self) { Text($0.rawValue.uppercased()).tag($0) } }
+            LabeledContent(L10n.text("batch.saveIn")) {
                 HStack {
-                    Text(model.output?.lastPathComponent ?? "Not chosen").foregroundStyle(.secondary)
-                    Button("Choose…") { model.chooseOutput() }.accessibilityLabel("Choose output folder")
+                    Text(model.output?.lastPathComponent ?? L10n.text("batch.output.none")).foregroundStyle(.secondary)
+                    Button(L10n.text("button.choose")) { model.chooseOutput() }.accessibilityLabel(L10n.text("batch.output.choose.ax"))
                 }
             }
-            Text("Each file is processed without opening a window and saved as “name (Jämmer)” in the folder you choose. Your files are never changed, and a file that's already there is skipped.")
+            Text(L10n.text("batch.text"))
                 .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             if !model.status.isEmpty { Text(model.status).font(.callout).foregroundStyle(Theme.neonColor).fixedSize(horizontal: false, vertical: true) }
             HStack {
                 Spacer()
                 if model.running { ProgressView().controlSize(.small) }
-                Button("Run") { model.run() }.keyboardShortcut(.defaultAction).disabled(model.files.isEmpty || model.output == nil || model.running)
+                Button(L10n.text("batch.run")) { model.run() }.keyboardShortcut(.defaultAction).disabled(model.files.isEmpty || model.output == nil || model.running)
             }
         }
         .formStyle(.grouped)
@@ -224,7 +224,7 @@ enum BatchWindow {
     static func show() {
         if let window { window.makeKeyAndOrderFront(nil); return }
         let w = EscClosingWindow(contentRect: .zero, styleMask: [.titled, .closable], backing: .buffered, defer: false)
-        w.title = "Batch"
+        w.title = L10n.text("batch.title")
         w.isReleasedWhenClosed = false
         let host = NSHostingController(rootView: BatchView())
         w.contentViewController = host

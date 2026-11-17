@@ -79,13 +79,13 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         if session.linkRecord != nil { window?.isRestorable = false }
         var parts: [String] = []
         if let lost = session.lostLink {
-            parts.append("\(lost.name) · For \(lost.requester) – can't be saved back")
+            parts.append(L10n.text("link.subtitle.lost", lost.name, lost.requester))
         } else if let link = session.linkedFile {
-            parts.append("\(link.fileName) · For \(link.requester) – ⌘S saves back")
+            parts.append(L10n.text("link.subtitle", link.fileName, link.requester))
         }
         // Said in the window for as long as it is so, not only once in the status line.
         if session.recovered, session.wasLinked { parts.append(session.keptFromBefore ? L10n.text("link.kept.subtitle") : L10n.text("link.recovered.subtitle")) }
-        if !session.solo.isEmpty { parts.append("Solo: \(session.soloNames.joined(separator: ", ")) (listening only; exports are not affected)") }
+        if !session.solo.isEmpty { parts.append(L10n.text("solo.subtitle", session.soloNames.joined(separator: ", "))) }
         window?.subtitle = parts.joined(separator: " · ")
     }
 
@@ -124,7 +124,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = true
         panel.allowedContentTypes = [.audio]
-        panel.message = "Choose each speaker's own recording. Jämmer adds them as tracks and lines them up with the first track."
+        panel.message = L10n.text("importTracks.panel")
         panel.beginSheetModal(for: window) { [weak self] response in
             guard response == .OK, let self else { return }
             let urls = panel.urls
@@ -132,7 +132,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
             ProjectAccess.approve(urls)
             let session = self.session
             Task {
-                session.status = "Importing \(urls.count) track\(urls.count == 1 ? "" : "s")…"
+                session.status = L10n.count("importTracks.working", urls.count)
                 var p = session.project
                 var added: [UUID] = [], short: [String] = []
                 for url in urls {
@@ -143,16 +143,16 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
                         added.append(p.addTrack(source: r.source, name: url.deletingPathExtension().lastPathComponent).id)
                         if let w = r.warning { short.append(w) }
                     } catch {
-                        session.status = "Couldn't import \(url.lastPathComponent): \(error.localizedDescription)"
+                        session.status = L10n.text("importTracks.failed", url.lastPathComponent, error.localizedDescription)
                         return
                     }
                 }
                 guard p.tracks.count > 1 else {
-                    session.commit(p, action: "Import Tracks")
-                    session.status = (["Imported \(added.count) tracks."] + short).joined(separator: " ")
+                    session.commit(p, action: L10n.text("importTracks.action"))
+                    session.status = ([L10n.count("importTracks.done", added.count)] + short).joined(separator: " ")
                     return
                 }
-                session.status = "Lining up the tracks…"
+                session.status = L10n.text("importTracks.aligning")
                 let pool = session.pool
                 let (aligned, notes) = await Task.detached { () -> (Project, [String]) in
                     var q = p
@@ -160,25 +160,25 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
                     let reference = q.suggestedReference(pool: pool) ?? q.tracks[0].id
                     let others = q.tracks.map(\.id).filter { $0 != reference }
                     let results = q.alignTracks(to: reference, tracks: others, pool: pool, minConfidence: 0.3)
-                    var notes = ["reference \(q.tracks.first { $0.id == reference }?.name ?? "?")"]
+                    var notes = [L10n.text("importTracks.note.reference", q.tracks.first { $0.id == reference }?.name ?? "?")]
                     for id in others {
                         guard let t = q.tracks.first(where: { $0.id == id }), let r = results[id] else { continue }
                         if r.confidence < 0.3 {
-                            notes.append("\(t.name): no clear match (\(String(format: "%.2f", r.confidence))), left at the start")
+                            notes.append(L10n.text("importTracks.note.noMatch", t.name, String(format: "%.2f", r.confidence)))
                         } else {
-                            var note = "\(t.name): \(String(format: "%+.3f", q.seconds(r.offset))) s"
+                            var note = L10n.text("importTracks.note.moved", t.name, String(format: "%+.3f", q.seconds(r.offset)))
                             // Recorders' clocks can disagree; say so when they part noticeably.
                             if let d = q.drift(of: id, against: reference, pool: pool), d.start.confidence > 0.5, d.end.confidence > 0.5,
                                abs(d.partsPerMillion) > 10 {
-                                note += String(format: ", drifts %.0f ms per hour", d.partsPerMillion * 3.6)
+                                note += ", " + L10n.text("importTracks.note.drift", String(format: "%.0f", d.partsPerMillion * 3.6))
                             }
                             notes.append(note)
                         }
                     }
                     return (q, notes)
                 }.value
-                session.commit(aligned, action: "Import Tracks")
-                session.status = (short + ["Imported and lined up: " + notes.joined(separator: "; ")]).joined(separator: " ")
+                session.commit(aligned, action: L10n.text("importTracks.action"))
+                session.status = (short + [L10n.text("importTracks.aligned", notes.joined(separator: "; "))]).joined(separator: " ")
             }
         }
     }
@@ -187,30 +187,30 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
     @objc func attenuateFrequencies(_ sender: Any?) {
         guard let window, let sel = session.selection else { NSSound.beep(); return }
         let alert = NSAlert()
-        alert.messageText = "Attenuate Frequencies"
-        alert.informativeText = "Lowers a frequency band inside the selection, on every track. The original audio stays one undo away."
+        alert.messageText = L10n.text("attenuate.title")
+        alert.informativeText = L10n.text("attenuate.text")
         let low = NSTextField(string: "4000"), high = NSTextField(string: "8000"), db = NSTextField(string: "-20")
         for f in [low, high, db] { f.widthAnchor.constraint(equalToConstant: 80).isActive = true }
-        low.setAccessibilityLabel("From, in hertz")
-        high.setAccessibilityLabel("To, in hertz")
-        db.setAccessibilityLabel("Change, in decibels")
-        let grid = NSGridView(views: [[NSTextField(labelWithString: "From (Hz):"), low], [NSTextField(labelWithString: "To (Hz):"), high],
-                                      [NSTextField(labelWithString: "Change (dB):"), db]])
+        low.setAccessibilityLabel(L10n.text("attenuate.from.ax"))
+        high.setAccessibilityLabel(L10n.text("attenuate.to.ax"))
+        db.setAccessibilityLabel(L10n.text("attenuate.change.ax"))
+        let grid = NSGridView(views: [[NSTextField(labelWithString: L10n.text("attenuate.from")), low], [NSTextField(labelWithString: L10n.text("attenuate.to")), high],
+                                      [NSTextField(labelWithString: L10n.text("attenuate.change")), db]])
         grid.frame = NSRect(x: 0, y: 0, width: 240, height: 90)
         alert.accessoryView = grid
-        alert.addButton(withTitle: "Attenuate")
-        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: L10n.text("attenuate.button"))
+        alert.addButton(withTitle: L10n.text("button.cancel"))
         alert.beginSheetModal(for: window) { [session] response in
             guard response == .alertFirstButtonReturn else { return }
             let p = session.project, pool = session.pool
             let band = min(low.doubleValue, high.doubleValue)...max(low.doubleValue, high.doubleValue), gain = min(0, db.doubleValue)
             Task {
-                session.status = "Attenuating…"
+                session.status = L10n.text("attenuate.working")
                 let result = await Task.detached { Result { try p.applyingSpectralAttenuation(range: sel, freq: band, gainDB: gain, pool: pool, media: MediaStore.folder) } }.value
                 switch result {
                 case .success(let q):
-                    session.commit(q, action: "Attenuate Frequencies")
-                    session.status = String(format: "Attenuated %.0f–%.0f Hz by %.0f dB.", band.lowerBound, band.upperBound, -gain)
+                    session.commit(q, action: L10n.text("attenuate.title"))
+                    session.status = L10n.text("attenuate.done", String(format: "%.0f", band.lowerBound), String(format: "%.0f", band.upperBound), String(format: "%.0f", -gain))
                 case .failure(let e):
                     session.status = e.localizedDescription
                 }
@@ -225,14 +225,14 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
     @objc func attenuateArea(_ sender: Any?) {
         guard let window, session.spectralArea != nil else { NSSound.beep(); return }
         let alert = NSAlert()
-        alert.messageText = "Attenuate Area"
+        alert.messageText = L10n.text("spectral.attenuate.action")
         alert.informativeText = session.spectralArea.map { $0.shape.summary } ?? ""
         let db = NSTextField(string: "-20")
-        db.setAccessibilityLabel("Change, in decibels")
+        db.setAccessibilityLabel(L10n.text("attenuate.change.ax"))
         db.frame = NSRect(x: 0, y: 0, width: 80, height: 22)
         alert.accessoryView = db
-        alert.addButton(withTitle: "Attenuate")
-        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: L10n.text("attenuate.button"))
+        alert.addButton(withTitle: L10n.text("button.cancel"))
         alert.beginSheetModal(for: window) { [session] r in
             guard r == .alertFirstButtonReturn else { return }
             session.editArea(.attenuate, db: max(-80, min(0, db.doubleValue)))
@@ -243,9 +243,9 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
     @objc func editSpectrumNumerically(_ sender: Any?) {
         guard let window, !session.project.tracks.isEmpty else { NSSound.beep(); return }
         let alert = NSAlert()
-        alert.messageText = "Edit Spectrum"
-        alert.informativeText = "An area by its time (seconds) and frequency (Hz). Heal rebuilds up to 0.5 s from the sound around it; attenuate lowers it."
-        let fields = ["Start (s)", "End (s)", "From (Hz)", "To (Hz)", "Change (dB)"].map { label -> (String, NSTextField) in
+        alert.messageText = L10n.text("spectrum.title")
+        alert.informativeText = L10n.text("spectrum.text")
+        let fields = [L10n.text("spectrum.field.start"), L10n.text("spectrum.field.end"), L10n.text("spectrum.field.from"), L10n.text("spectrum.field.to"), L10n.text("spectrum.field.change")].map { label -> (String, NSTextField) in
             let f = NSTextField(string: "")
             f.setAccessibilityLabel(label)
             f.widthAnchor.constraint(equalToConstant: 90).isActive = true
@@ -255,13 +255,13 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         fields[0].1.stringValue = String(format: "%.3f", session.project.seconds(sel?.lowerBound ?? session.playhead))
         fields[1].1.stringValue = String(format: "%.3f", session.project.seconds(sel?.upperBound ?? session.playhead + Frame(session.project.sampleRate / 10)))
         fields[2].1.stringValue = "2000"; fields[3].1.stringValue = "8000"; fields[4].1.stringValue = "-20"
-        let action = NSPopUpButton(); action.addItems(withTitles: ["Heal", "Attenuate"]); action.setAccessibilityLabel("Action")
-        let track = NSPopUpButton(); track.addItems(withTitles: session.project.tracks.map(\.name)); track.setAccessibilityLabel("Track")
-        let grid = NSGridView(views: fields.map { [NSTextField(labelWithString: $0.0 + ":"), $0.1] } + [[NSTextField(labelWithString: "Action:"), action], [NSTextField(labelWithString: "Track:"), track]])
+        let action = NSPopUpButton(); action.addItems(withTitles: [L10n.text("spectrum.heal"), L10n.text("attenuate.button")]); action.setAccessibilityLabel(L10n.text("spectrum.action"))
+        let track = NSPopUpButton(); track.addItems(withTitles: session.project.tracks.map(\.name)); track.setAccessibilityLabel(L10n.text("plugins.strip.track"))
+        let grid = NSGridView(views: fields.map { [NSTextField(labelWithString: $0.0 + ":"), $0.1] } + [[NSTextField(labelWithString: L10n.text("spectrum.action") + ":"), action], [NSTextField(labelWithString: L10n.text("plugins.strip.track") + ":"), track]])
         grid.frame = NSRect(x: 0, y: 0, width: 260, height: 200)
         alert.accessoryView = grid
-        alert.addButton(withTitle: "Apply")
-        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: L10n.text("button.apply"))
+        alert.addButton(withTitle: L10n.text("button.cancel"))
         alert.beginSheetModal(for: window) { [session] r in
             guard r == .alertFirstButtonReturn else { return }
             let v = fields.map(\.1.doubleValue)
@@ -357,7 +357,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         guard count == nil || Diarization.engine != nil else { return }
         let byTrack = count == nil && (p.hasOverlappingTracks || Diarization.engine == nil)
         _ = JobRegistry.shared.startDiarization(session, byTrack: byTrack, tracks: tracks, minSpeakers: count, maxSpeakers: count)
-        session.status = byTrack ? "Finding speakers: one per track…" : "Finding speakers… (the first time downloads the model, about 20 MB)"
+        session.status = byTrack ? L10n.text("speakers.working.byTrack") : L10n.text("speakers.working")
     }
 
     @objc func showHistory(_ sender: Any?) { HistoryPanel.show(session) }
@@ -376,7 +376,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
             return
         }
         _ = JobRegistry.shared.startSeparation(session, tracks: nil, model: model)
-        session.status = model == "dialog" ? "Separating speech, music and effects… (this one takes a while)" : "Separating stems…"
+        session.status = model == "dialog" ? L10n.text("stems.working.soundtrack") : L10n.text("stems.working")
     }
 
     @objc func showPlugins(_ sender: Any?) {
@@ -460,17 +460,17 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
     /// Audio › Check Against ACX Requirements…: measures, changes nothing, and says what was measured against what.
     @objc func checkACX(_ sender: Any?) {
         guard let window else { return }
-        session.status = "Measuring against ACX's requirements…"
+        session.status = L10n.text("acx.working")
         Task { [session] in
             let rows = ACX.requirements(await session.acxMeasured())
             session.status = nil
             let failed = rows.filter { $0.pass == false }
             let alert = NSAlert()
-            alert.messageText = failed.isEmpty ? "No measured requirement failed" : "\(failed.count) requirement\(failed.count == 1 ? "" : "s") not met"
+            alert.messageText = failed.isEmpty ? L10n.text("acx.none") : L10n.count("acx.failed", failed.count)
             alert.informativeText = rows.map { r in
-                "\(r.pass == true ? "✓ Met" : r.pass == false ? "✗ Not met" : "– Not judged"): \(r.required).\nMeasured: \(r.measured).\(r.note.map { "\n" + $0 } ?? "")"
+                L10n.text("acx.row", r.pass == true ? L10n.text("acx.met") : r.pass == false ? L10n.text("acx.notMet") : L10n.text("acx.notJudged"), r.required, r.measured) + (r.note.map { "\n" + $0 } ?? "")
             }.joined(separator: "\n\n") + "\n\n\(ACX.wording)\n\(ACX.source)"
-            alert.addButton(withTitle: "OK")
+            alert.addButton(withTitle: L10n.text("button.ok"))
             _ = await alert.beginSheetModal(for: window)
         }
     }
@@ -479,20 +479,20 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
     @objc func limitPeaks(_ sender: Any?) {
         guard let window else { return }
         let alert = NSAlert()
-        alert.messageText = "Limit Peaks"
-        alert.informativeText = "Holds the true peak of \(session.selection == nil ? "the document" : "the selection") at or under the ceiling. All tracks get the same gain, so their balance stays. Where nothing needs limiting the audio is left exactly as it is, and one undo takes it back."
+        alert.messageText = L10n.text("limit.title")
+        alert.informativeText = session.selection == nil ? L10n.text("limit.text.document") : L10n.text("limit.text.selection")
         let field = NSTextField(string: "-1")
         field.alignment = .right
-        field.setAccessibilityLabel("Ceiling in dBTP")
-        let unit = NSTextField(labelWithString: "dBTP (−20 to 0)")
-        let row = NSStackView(views: [NSTextField(labelWithString: "Ceiling"), field, unit])
+        field.setAccessibilityLabel(L10n.text("limit.ceiling.ax"))
+        let unit = NSTextField(labelWithString: L10n.text("limit.ceiling.unit"))
+        let row = NSStackView(views: [NSTextField(labelWithString: L10n.text("limit.ceiling")), field, unit])
         row.orientation = .horizontal
         row.spacing = 8
         field.widthAnchor.constraint(equalToConstant: 60).isActive = true
         row.frame = NSRect(x: 0, y: 0, width: 300, height: 26)
         alert.accessoryView = row
-        alert.addButton(withTitle: "Limit")
-        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: L10n.text("limit.button"))
+        alert.addButton(withTitle: L10n.text("button.cancel"))
         alert.window.initialFirstResponder = field
         alert.beginSheetModal(for: window) { [session] answer in
             MainActor.assumeIsolated {
@@ -500,7 +500,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
                 // A comma is a decimal point to half the world, and a typographic minus is a minus.
                 let typed = field.stringValue.replacingOccurrences(of: ",", with: ".").replacingOccurrences(of: "−", with: "-").trimmingCharacters(in: .whitespaces)
                 guard let ceiling = Double(typed), Limiter.ceilingRange.contains(ceiling) else {
-                    session.status = "The ceiling has to be a number from −20 to 0 dBTP. Nothing was changed."
+                    session.status = L10n.text("limit.badCeiling")
                     NSSound.beep()
                     return
                 }
@@ -514,7 +514,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         let p = session.project
         let sounding = p.tracks.filter { !$0.isMuted && !$0.clips.isEmpty }
         guard sounding.count >= 2 else {
-            session.status = "Ducking needs two tracks with sound: one to lower and one to lower it under."
+            session.status = L10n.text("duck.needsTwo")
             NSSound.beep()
             return
         }
@@ -523,8 +523,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         let density = sounding.map { t in (words[t.id] ?? 0) / max(1, p.seconds(t.clips.reduce(0) { $0 + $1.length })) }
         let most = density.max() ?? 0
         let alert = NSAlert()
-        alert.messageText = "Duck Under Speech"
-        alert.informativeText = "Tick the tracks to lower (music, atmosphere). They go down 12 dB while there is speech on the other tracks and come up in the pauses. Each ticked track gets a new file; Undo brings the old sound back."
+        alert.messageText = L10n.text("duck.title")
+        alert.informativeText = L10n.text("duck.text")
         let boxes = zip(sounding, density).map { t, d -> NSButton in
             let b = NSButton(checkboxWithTitle: t.name, target: nil, action: nil)
             b.state = most > 0 && d < most / 2 ? .on : .off
@@ -536,14 +536,14 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         stack.spacing = 6
         stack.frame = NSRect(x: 0, y: 0, width: 320, height: CGFloat(boxes.count) * 24)
         alert.accessoryView = stack
-        alert.addButton(withTitle: "Duck")
-        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: L10n.text("duck.button"))
+        alert.addButton(withTitle: L10n.text("button.cancel"))
         alert.beginSheetModal(for: window) { [session] answer in
             MainActor.assumeIsolated {
                 guard answer == .alertFirstButtonReturn else { return }
                 let lower = zip(sounding, boxes).filter { $0.1.state == .on }.map(\.0), under = zip(sounding, boxes).filter { $0.1.state == .off }.map(\.0)
                 guard !lower.isEmpty, !under.isEmpty else {
-                    session.status = lower.isEmpty ? "No track was ticked, so nothing was ducked." : "Every track was ticked: at least one has to be left to duck under."
+                    session.status = lower.isEmpty ? L10n.text("duck.noneTicked") : L10n.text("duck.allTicked")
                     NSSound.beep()
                     return
                 }
@@ -554,7 +554,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
 
     @objc func addMarker(_ sender: Any?) {
         let n = session.project.markers.count + 1
-        session.perform("add_marker", ["name": .string("Marker \(n)")])
+        session.perform("add_marker", ["name": .string(L10n.text("marker.default", String(n)))])
     }
 
     /// Asks for tempo and time signature from the start or from the playhead, then runs `set_tempo`.
@@ -562,29 +562,29 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         guard let window else { return }
         let current = session.project.tempo.change(at: session.playhead)
         let alert = NSAlert()
-        alert.messageText = "Set Tempo"
-        alert.informativeText = "Tempo in quarter notes per minute. Tempo changes move with the audio when you delete or insert."
+        alert.messageText = L10n.text("tempo.title")
+        alert.informativeText = L10n.text("tempo.text")
         let bpm = NSTextField(string: current.bpm.formatted(.number.precision(.fractionLength(0...3)).grouping(.never)))
         let beats = NSTextField(string: "\(current.meter.beats)")
         let unit = NSPopUpButton()
         unit.addItems(withTitles: ["1", "2", "4", "8", "16", "32"])
         unit.selectItem(withTitle: "\(current.meter.unit)")
-        let fromPlayhead = NSButton(checkboxWithTitle: "From the playhead (\(session.project.musicalPosition(at: session.playhead)))", target: nil, action: nil)
+        let fromPlayhead = NSButton(checkboxWithTitle: L10n.text("tempo.fromPlayhead", session.project.musicalPosition(at: session.playhead).description), target: nil, action: nil)
         fromPlayhead.state = session.playhead > 0 ? .on : .off
         fromPlayhead.isEnabled = session.playhead > 0
         for f in [bpm, beats] { f.widthAnchor.constraint(equalToConstant: 70).isActive = true }
-        bpm.setAccessibilityLabel("Beats per minute")
-        beats.setAccessibilityLabel("Beats per bar")
-        unit.setAccessibilityLabel("Beat unit")
+        bpm.setAccessibilityLabel(L10n.text("tempo.bpm.ax"))
+        beats.setAccessibilityLabel(L10n.text("tempo.beats.ax"))
+        unit.setAccessibilityLabel(L10n.text("tempo.unit.ax"))
         let grid = NSGridView(views: [
-            [NSTextField(labelWithString: "BPM:"), bpm],
-            [NSTextField(labelWithString: "Time signature:"), NSStackView(views: [beats, NSTextField(labelWithString: "/"), unit])],
+            [NSTextField(labelWithString: L10n.text("tempo.bpm")), bpm],
+            [NSTextField(labelWithString: L10n.text("tempo.signature")), NSStackView(views: [beats, NSTextField(labelWithString: "/"), unit])],
             [NSGridCell.emptyContentView, fromPlayhead],
         ])
         grid.frame = NSRect(x: 0, y: 0, width: 300, height: 84)
         alert.accessoryView = grid
-        alert.addButton(withTitle: "Set")
-        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: L10n.text("tempo.set"))
+        alert.addButton(withTitle: L10n.text("button.cancel"))
         alert.window.initialFirstResponder = bpm
         alert.beginSheetModal(for: window) { [session] response in
             guard response == .alertFirstButtonReturn else { return }
@@ -597,10 +597,10 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
 
     @objc func analyzeLoudness(_ sender: Any?) {
         Task {
-            session.status = "Measuring…"
+            session.status = L10n.text("measure.working")
             let r = await session.analyze(session.selection)
             func f(_ v: Double?, _ unit: String) -> String { v.map { String(format: "%.1f %@", $0, unit) } ?? "—" }
-            session.status = "\(session.selection == nil ? "All" : "Selection"): \(f(r.integrated, "LUFS")), range \(f(r.range, "LU")), true peak \(f(r.truePeak, "dBTP"))"
+            session.status = session.selection == nil ? L10n.text("measure.done.all", f(r.integrated, "LUFS"), f(r.range, "LU"), f(r.truePeak, "dBTP")) : L10n.text("measure.done.selection", f(r.integrated, "LUFS"), f(r.range, "LU"), f(r.truePeak, "dBTP"))
         }
     }
 
@@ -629,22 +629,23 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
             options.loudness = self.session.deliveryTarget
             let session = self.session
             Task {
-                session.status = "Exporting…"
+                session.status = L10n.text("export.working")
                 do {
                     let delivery = try await session.export(to: url, options: options) { p in
-                        Task { @MainActor in session.status = "Exporting… \(Int(p * 100)) %" }
+                        Task { @MainActor in session.status = L10n.text("export.working.percent", String(Int(p * 100))) }
                     }
                     if let d = delivery, let l = d.loudness {
-                        let how = d.limitedByPeak ? "the peaks held it back" : (d.compensatedDB == 0 ? "as encoded" : String(format: "%+.2f dB to make up for the encoder", d.compensatedDB))
-                        session.status = String(format: "Exported %@ at %.1f LUFS (%@)", url.lastPathComponent, l, how)
+                        let name = url.lastPathComponent, loud = String(format: "%.1f", l)
+                        session.status = d.limitedByPeak ? L10n.text("export.done.loudness.peaks", name, loud)
+                            : d.compensatedDB == 0 ? L10n.text("export.done.loudness.asEncoded", name, loud)
+                            : L10n.text("export.done.loudness.compensated", name, loud, String(format: "%+.2f", d.compensatedDB))
                     } else if let l = session.lastExportLimiter {
-                        session.status = String(format: "Exported %@; the master's limiter held it at %.2f dBTP (ceiling %.1f)", url.lastPathComponent, l.truePeakDB, l.ceilingDB)
-                            .replacingOccurrences(of: "-", with: "−")
+                        session.status = L10n.text("export.done.limiter", url.lastPathComponent, String(format: "%.2f", l.truePeakDB).replacingOccurrences(of: "-", with: "−"), String(format: "%.1f", l.ceilingDB).replacingOccurrences(of: "-", with: "−"))
                     } else {
-                        session.status = "Exported \(url.lastPathComponent)"
+                        session.status = L10n.text("export.done", url.lastPathComponent)
                     }
                 } catch {
-                    session.status = "Export failed: \(error.localizedDescription)"
+                    session.status = L10n.text("export.failed", error.localizedDescription)
                 }
             }
         }
@@ -652,7 +653,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
 
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         if item.action == #selector(togglePlayback(_:)) {
-            item.title = session.isPlaying ? "Stop" : "Play"
+            item.title = session.isPlaying ? L10n.text("transport.stop") : L10n.text("transport.play")
             return session.project.length > 0
         }
         if item.action == #selector(zoomToSelection(_:)) { return session.selection != nil }
@@ -669,24 +670,24 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
             return timeline.shownAutomation != nil
         }
         if item.action == #selector(toggleSpectrogram(_:)) {
-            item.title = timeline.showsSpectrogram ? "Show Waveform" : "Show Spectrogram"
+            item.title = timeline.showsSpectrogram ? L10n.text("view.showWaveform") : L10n.text("view.showSpectrogram")
             return true
         }
         if item.action == #selector(toggleAssistant(_:)) {
             let hidden = ((window?.contentView as? NSSplitView)?.arrangedSubviews.last?.isHidden) ?? true
-            item.title = hidden ? "Show Assistant" : assistant.fieldFocused ? "Hide Assistant" : "Ask the Assistant"
+            item.title = hidden ? L10n.text("view.showAssistant") : assistant.fieldFocused ? L10n.text("view.hideAssistant") : L10n.text("view.askAssistant")
             return true
         }
         if item.action == #selector(toggleTranscript(_:)) {
-            item.title = transcript.isHidden ? "Show Transcript" : "Hide Transcript"
+            item.title = transcript.isHidden ? L10n.text("view.showTranscript") : L10n.text("view.hideTranscript")
             return true
         }
         if item.action == #selector(saveOrSaveBack(_:)) {
-            item.title = (session.linkedFile?.fileName ?? session.lostLink?.name).map { "Save Back to \($0)" } ?? "Save…"
+            item.title = (session.linkedFile?.fileName ?? session.lostLink?.name).map { L10n.text("file.saveBack", $0) } ?? L10n.text("file.save")
             return true
         }
         if item.action == #selector(duplicateOrCopy(_:)) {
-            item.title = session.wasLinked ? "Save a Jämmer Copy…" : "Duplicate"
+            item.title = session.wasLinked ? L10n.text("link.lost.saveCopy") : L10n.text("file.duplicate")
             return true
         }
         if item.action == #selector(sendToFlimmer(_:)) { return session.project.imported?.app == "flimmer" }
@@ -710,19 +711,19 @@ struct TransportBar: View {
     var body: some View {
         HStack(spacing: 14) {
             Button { session.togglePlay() } label: {
-                Label(session.isPlaying ? "Stop" : "Play", systemImage: session.isPlaying ? "stop.fill" : "play.fill")
+                Label(session.isPlaying ? L10n.text("transport.stop") : L10n.text("transport.play"), systemImage: session.isPlaying ? "stop.fill" : "play.fill")
                     .labelStyle(.iconOnly)
                     .frame(width: 18)
             }
             .buttonStyle(.borderless)
-            .help(session.isPlaying ? "Stop (Space)" : "Play (Space)")
+            .help(session.isPlaying ? L10n.text("transport.stop.help") : L10n.text("transport.play.help"))
             Text(formatTime(session.project.seconds(session.playhead)))
                 .font(.system(.title3, design: .monospaced).weight(.medium))
                 .foregroundStyle(Theme.neonColor)
                 .shadow(color: Theme.neonColor.opacity(0.5), radius: 6)
                 // The time is never the one that gives way when the row is tight (the timecode beside it took its room).
                 .lineLimit(1).fixedSize().layoutPriority(3)
-                .accessibilityLabel("Playhead")
+                .accessibilityLabel(L10n.text("transport.playhead.ax"))
             Text("/ \(formatTime(session.duration))").font(.system(.callout, design: .monospaced)).foregroundStyle(.secondary)
             // The picture's timecode at the playhead, when the document has one.
             if let tc = session.project.timecode {
@@ -737,23 +738,23 @@ struct TransportBar: View {
             Text(session.project.musicalPosition(at: session.playhead).description)
                 .font(.system(.callout, design: .monospaced))
                 .foregroundStyle(.secondary)
-                .help("Bar.beat.tick at the playhead")
-                .accessibilityLabel("Bar, beat and tick")
+                .help(L10n.text("transport.position.help"))
+                .accessibilityLabel(L10n.text("transport.position.ax"))
             Spacer()
             HStack(spacing: 6) {
-                Button { timeline.zoom(by: 0.5) } label: { Label("Zoom Out", systemImage: "minus.magnifyingglass").labelStyle(.iconOnly) }
-                    .help("Zoom Out (⌘−)")
-                Button { timeline.zoomToFit() } label: { Label("Zoom to Fit", systemImage: "arrow.left.and.right").labelStyle(.iconOnly) }
-                    .help("Zoom to Fit (⌘0)")
-                Button { timeline.zoom(by: 2) } label: { Label("Zoom In", systemImage: "plus.magnifyingglass").labelStyle(.iconOnly) }
-                    .help("Zoom In (⌘+)")
+                Button { timeline.zoom(by: 0.5) } label: { Label(L10n.text("view.zoomOut"), systemImage: "minus.magnifyingglass").labelStyle(.iconOnly) }
+                    .help(L10n.text("view.zoomOut.help"))
+                Button { timeline.zoomToFit() } label: { Label(L10n.text("view.zoomToFit"), systemImage: "arrow.left.and.right").labelStyle(.iconOnly) }
+                    .help(L10n.text("view.zoomToFit.help"))
+                Button { timeline.zoom(by: 2) } label: { Label(L10n.text("view.zoomIn"), systemImage: "plus.magnifyingglass").labelStyle(.iconOnly) }
+                    .help(L10n.text("view.zoomIn.help"))
             }
             .buttonStyle(.borderless)
             HStack(spacing: 6) {
                 Image(systemName: "speaker.wave.2").foregroundStyle(.secondary).accessibilityHidden(true)
                 Slider(value: $session.volume, in: 0...1).frame(width: 90)
-                    .accessibilityLabel("Playback volume")
-                    .accessibilityValue("\(Int((session.volume * 100).rounded())) %")
+                    .accessibilityLabel(L10n.text("transport.volume.ax"))
+                    .accessibilityValue(Text(verbatim: "\(Int((session.volume * 100).rounded())) %"))
             }
         }
         .padding(.horizontal, 14)
@@ -769,12 +770,12 @@ struct StatusBar: View {
     var body: some View {
         HStack(spacing: 16) {
             if let sel = session.selection {
-                Text("Selection \(formatTime(session.project.seconds(sel.lowerBound)))–\(formatTime(session.project.seconds(sel.upperBound))) (\(formatTime(session.project.seconds(Frame(sel.count)))))").lineLimit(1)
+                Text(L10n.text("status.selection", formatTime(session.project.seconds(sel.lowerBound)), formatTime(session.project.seconds(sel.upperBound)), formatTime(session.project.seconds(Frame(sel.count))))).lineLimit(1)
             } else {
-                Text("No selection")
+                Text(L10n.text("status.noSelection"))
             }
             if let job = JobRegistry.shared.running.first(where: { $0.documentID == session.agentID }) {
-                Text("\(job.kind == "transcribe" ? "Transcribing" : "Repairing")… \(Int(job.progress * 100)) %")
+                Text(job.kind == "transcribe" ? L10n.text("status.job.transcribing", String(Int(job.progress * 100))) : L10n.text("status.job.repairing", String(Int(job.progress * 100))))
                     .foregroundStyle(Theme.neonColor)
             // What was just done is said whole; the selection's text gives way to it first.
             } else if let status = session.status {
@@ -784,19 +785,19 @@ struct StatusBar: View {
             }
             Spacer()
             if !session.missingSources.isEmpty {
-                StateLine(kind: .warning, text: "\(session.missingSources.count) missing file(s)", font: .system(size: 11, design: .monospaced))
+                StateLine(kind: .warning, text: L10n.count("status.missing", session.missingSources.count), font: .system(size: 11, design: .monospaced))
                     // Which, and, for one that Jämmer itself moved to the Trash, where to look.
-                    .help(session.missingSources.map { s in MediaStorage.trashedHint(for: s.path, media: MediaStore.folder) ?? "\(s.name) can't be found at \(s.path)." }.joined(separator: "\n"))
+                    .help(session.missingSources.map { s in MediaStorage.trashedHint(for: s.path, media: MediaStore.folder) ?? L10n.text("status.missing.where", s.name, s.path) }.joined(separator: "\n"))
             }
             Button {
                 NSApp.sendAction(#selector(EditorWindowController.setTempo(_:)), to: nil, from: nil)
             } label: {
                 let c = session.project.tempo.change(at: session.playhead)
-                Text("\(c.bpm.formatted(.number.precision(.fractionLength(0...2)))) BPM \(c.meter.description)\(session.project.tempo.isConstant ? "" : " (map)")")
+                Text(session.project.tempo.isConstant ? L10n.text("status.tempo", c.bpm.formatted(.number.precision(.fractionLength(0...2))), c.meter.description) : L10n.text("status.tempo.map", c.bpm.formatted(.number.precision(.fractionLength(0...2))), c.meter.description))
             }
             .buttonStyle(.plain)
-            .help("Tempo and time signature at the playhead. Click to change.")
-                        Text("\(Int(session.project.sampleRate)) Hz · \(session.project.channels == 1 ? "mono" : (session.project.channels == 2 ? "stereo" : "\(session.project.channels) ch"))")
+            .help(L10n.text("status.tempo.help"))
+                        Text(verbatim: "\(Int(session.project.sampleRate)) Hz · " + (session.project.channels == 1 ? L10n.text("format.mono") : session.project.channels == 2 ? L10n.text("format.stereo") : L10n.text("format.channels", String(session.project.channels))))
         }
         .font(.system(size: 11, design: .monospaced))
         .foregroundStyle(.secondary)
@@ -857,26 +858,26 @@ struct ExportAccessory: View {
 
     var body: some View {
         Form {
-            Picker("Format", selection: $model.choice) {
+            Picker(L10n.text("batch.format"), selection: $model.choice) {
                 ForEach(ExportChoices.Choice.allCases.filter { ($0 != .mp3 && $0 != .mp3High) || EncodedWriter.mp3Factory != nil }, id: \.self) { Text($0.rawValue).tag($0) }
             }
-            Picker("Sample rate", selection: $model.sampleRate) {
-                Text("Same as the document").tag(0.0)
+            Picker(L10n.text("export.sampleRate"), selection: $model.sampleRate) {
+                Text(L10n.text("export.sampleRate.same")).tag(0.0)
                 ForEach([44_100.0, 48_000, 88_200, 96_000, 22_050, 16_000], id: \.self) { Text(String(format: "%g kHz", $0 / 1_000)).tag($0) }
             }
             .disabled(model.choice == .opus)
-            .help("The file's sample rate. Converting changes every sample; leave it as the document's unless the file has to be at another rate.")
-            Toggle("Dither (TPDF)", isOn: $model.dither).disabled(model.choice != .wav16 && model.choice != .wav24)
+            .help(L10n.text("export.sampleRate.help"))
+            Toggle(L10n.text("export.dither"), isOn: $model.dither).disabled(model.choice != .wav16 && model.choice != .wav24)
                 // Going down to 16 bits is where dither matters, so it is suggested there; it leaves audio
                 // that is already 16 bits exactly as it was, so the suggestion costs nothing.
                 .onChange(of: model.choice) { _, now in model.dither = now == .wav16 }
-                .help("Keeps quiet detail from turning into distortion when the bit depth goes down. Audio that is already at that depth is left exactly as it is.")
+                .help(L10n.text("export.dither.help"))
             if model.choice.encoded != nil {
-                Text("Broadcast Wave metadata and markers are kept in WAV only.").font(.caption).foregroundStyle(.secondary)
+                Text(L10n.text("export.wavOnly")).font(.caption).foregroundStyle(.secondary)
             }
-            Toggle("Selection only", isOn: $model.selectionOnly).disabled(!model.hasSelection)
-            Toggle("Chapters from markers (MP3, M4A, Opus)", isOn: $model.chapters).disabled(!model.takesChapters)
-            Toggle("Also save chapters as JSON (Podcasting 2.0)", isOn: $model.chaptersJSON)
+            Toggle(L10n.text("export.selectionOnly"), isOn: $model.selectionOnly).disabled(!model.hasSelection)
+            Toggle(L10n.text("export.chapters"), isOn: $model.chapters).disabled(!model.takesChapters)
+            Toggle(L10n.text("export.chaptersJSON"), isOn: $model.chaptersJSON)
         }
         .padding(12)
         .frame(width: 320)

@@ -13,7 +13,7 @@ final class RestoreModel {
     /// 0 = find it, else 50 or 60.
     var hum = 0.0
     var sensitivity = 1.0
-    var findings = "Looking…"
+    var findings = L10n.text("restore.looking")
     var previewing = false
     var listeningToRepair = true
     var previewError: String?
@@ -30,9 +30,9 @@ final class RestoreModel {
 
     var range: Range<Frame> { session.selection ?? 0..<session.project.length }
     var rangeText: String {
-        guard let s = session.selection else { return "The whole document" }
+        guard let s = session.selection else { return L10n.text("restore.range.whole") }
         let p = session.project
-        return "Selection \(formatTime(p.seconds(s.lowerBound)))–\(formatTime(p.seconds(s.upperBound)))"
+        return L10n.text("restore.range.selection", formatTime(p.seconds(s.lowerBound)), formatTime(p.seconds(s.upperBound)))
     }
 
     var settings: Restoration.Settings {
@@ -43,13 +43,13 @@ final class RestoreModel {
         let project = session.project, pool = session.pool, range = self.range
         let a = await Task.detached(priority: .userInitiated) { Restoration.analyze(project, range: range, pool: pool) }.value
         var parts: [String] = []
-        parts.append(a.hum.map { String(format: "Hum at %.2f Hz (%.0f dB above its surroundings)", $0.frequency, $0.prominence) } ?? "No mains hum")
-        parts.append(a.clippedRuns > 0 ? "\(a.clippedRuns) clipped stretch\(a.clippedRuns == 1 ? "" : "es")" : "no clipping")
-        parts.append(a.clicks > 0 ? "\(a.clicks) click\(a.clicks == 1 ? "" : "s")" : "no clicks")
-        parts.append(a.rt60.map { String(format: a.reverberant ? "reverb about %.1f s" : "little reverb (%.1f s)", $0) }
-                     ?? (a.reverbUnknown != nil ? "reverb not measurable after noise or hum removal" : "reverb not measurable"))
-        if let n = a.noiseFloor { parts.append("noise floor \(n.level < 0 ? "−" : "")\(Int(abs(n.level).rounded())) dBFS") }
-        findings = parts.joined(separator: " · ") + (a.sampled ? " (sampled)" : "")
+        parts.append(a.hum.map { L10n.text("restore.found.hum", String(format: "%.2f", $0.frequency), String(format: "%.0f", $0.prominence)) } ?? L10n.text("restore.found.noHum"))
+        parts.append(a.clippedRuns > 0 ? L10n.count("restore.found.clipped", a.clippedRuns) : L10n.text("restore.found.noClipping"))
+        parts.append(a.clicks > 0 ? L10n.count("restore.found.clicks", a.clicks) : L10n.text("restore.found.noClicks"))
+        parts.append(a.rt60.map { a.reverberant ? L10n.text("restore.found.reverb", String(format: "%.1f", $0)) : L10n.text("restore.found.littleReverb", String(format: "%.1f", $0)) }
+                     ?? (a.reverbUnknown != nil ? L10n.text("restore.found.reverbUnknown.after") : L10n.text("restore.found.reverbUnknown")))
+        if let n = a.noiseFloor { parts.append(L10n.text("restore.found.noiseFloor", "\(n.level < 0 ? "−" : "")\(Int(abs(n.level).rounded()))")) }
+        findings = a.sampled ? L10n.text("restore.found.sampled", parts.joined(separator: " · ")) : parts.joined(separator: " · ")
     }
 
     /// Renders the repair of up to 30 s (from the selection, else the playhead) and plays it.
@@ -110,8 +110,8 @@ final class RestoreModel {
 
     func apply() {
         stopPreview()
-        let titles: [Restoration.Kind: String] = [.dehum: "Remove Hum", .declip: "Repair Clipping", .declick: "Remove Clicks", .denoise: "Reduce Noise", .dereverb: "Reduce Reverb"]
-        _ = JobRegistry.shared.startRestoration(session, settings: settings, range: session.selection, action: titles[kind] ?? "Restore")
+        let titles: [Restoration.Kind: String] = [.dehum: L10n.text("restore.kind.dehum"), .declip: L10n.text("restore.kind.declip"), .declick: L10n.text("restore.kind.declick"), .denoise: L10n.text("restore.kind.denoise"), .dereverb: L10n.text("restore.kind.dereverb")]
+        _ = JobRegistry.shared.startRestoration(session, settings: settings, range: session.selection, action: titles[kind] ?? L10n.text("restore.title"))
     }
 }
 
@@ -121,13 +121,13 @@ struct RestoreSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Restore").font(.title3.weight(.semibold))
-            Picker("Repair", selection: $model.kind) {
-                Text("Remove Hum").tag(Restoration.Kind.dehum)
-                Text("Repair Clipping").tag(Restoration.Kind.declip)
-                Text("Remove Clicks").tag(Restoration.Kind.declick)
-                if Restoration.denoiser != nil { Text("Reduce Noise").tag(Restoration.Kind.denoise) }
-                if Restoration.dereverber != nil { Text("Reduce Reverb").tag(Restoration.Kind.dereverb) }
+            Text(L10n.text("restore.title")).font(.title3.weight(.semibold))
+            Picker(L10n.text("restore.repair"), selection: $model.kind) {
+                Text(L10n.text("restore.kind.dehum")).tag(Restoration.Kind.dehum)
+                Text(L10n.text("restore.kind.declip")).tag(Restoration.Kind.declip)
+                Text(L10n.text("restore.kind.declick")).tag(Restoration.Kind.declick)
+                if Restoration.denoiser != nil { Text(L10n.text("restore.kind.denoise")).tag(Restoration.Kind.denoise) }
+                if Restoration.dereverber != nil { Text(L10n.text("restore.kind.dereverb")).tag(Restoration.Kind.dereverb) }
             }
             .onChange(of: model.kind) { _, kind in model.amount = Double(kind.defaultAmount) }
             .pickerStyle(.segmented)
@@ -137,19 +137,19 @@ struct RestoreSheet: View {
                 .lineLimit(3).fixedSize(horizontal: false, vertical: true)
             Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 10) {
                 GridRow {
-                    Text("Amount")
+                    Text(L10n.text("restore.amount"))
                     Slider(value: $model.amount, in: 0...1)
-                        .accessibilityLabel("Amount")
-                        .accessibilityValue("\(Int((model.amount * 100).rounded())) percent")
-                    Text("\(Int((model.amount * 100).rounded())) %").monospacedDigit().frame(width: 44, alignment: .trailing)
+                        .accessibilityLabel(L10n.text("restore.amount"))
+                        .accessibilityValue(L10n.text("restore.amount.ax", String(Int((model.amount * 100).rounded()))))
+                    Text(verbatim: "\(Int((model.amount * 100).rounded())) %").monospacedDigit().frame(width: 44, alignment: .trailing)
                 }
                 if model.kind == .dehum {
                     GridRow {
-                        Text("Mains")
-                        Picker("Mains", selection: $model.hum) {
-                            Text("Find it").tag(0.0)
-                            Text("50 Hz").tag(50.0)
-                            Text("60 Hz").tag(60.0)
+                        Text(L10n.text("restore.mains"))
+                        Picker(L10n.text("restore.mains"), selection: $model.hum) {
+                            Text(L10n.text("restore.mains.find")).tag(0.0)
+                            Text(verbatim: "50 Hz").tag(50.0)
+                            Text(verbatim: "60 Hz").tag(60.0)
                         }
                         .labelsHidden()
                         .pickerStyle(.segmented)
@@ -158,31 +158,31 @@ struct RestoreSheet: View {
                 }
                 if model.kind == .declick {
                     GridRow {
-                        Text("Sensitivity")
+                        Text(L10n.text("restore.sensitivity"))
                         Slider(value: $model.sensitivity, in: 0.25...4)
-                            .accessibilityLabel("Sensitivity")
-                            .accessibilityValue(String(format: "%.1f times", model.sensitivity))
+                            .accessibilityLabel(L10n.text("restore.sensitivity"))
+                            .accessibilityValue(L10n.text("restore.sensitivity.ax", String(format: "%.1f", model.sensitivity)))
                         Text(String(format: "%.1f×", model.sensitivity)).monospacedDigit().frame(width: 44, alignment: .trailing)
                     }
                 }
             }
             if let e = model.previewError { StateLine(kind: .error, text: e, font: .callout) }
             HStack {
-                Button(model.previewing ? "Stop" : "Preview") {
+                Button(model.previewing ? L10n.text("transport.stop") : L10n.text("restore.preview")) {
                     if model.previewing { model.stopPreview() } else { Task { await model.preview() } }
                 }
-                .help("Plays up to 30 seconds from the selection (or the playhead) with the repair.")
-                Picker("Listen to", selection: Binding(get: { model.listeningToRepair }, set: { model.listen(repaired: $0) })) {
-                    Text("Original").tag(false)
-                    Text("Repaired").tag(true)
+                .help(L10n.text("restore.preview.help"))
+                Picker(L10n.text("restore.listen"), selection: Binding(get: { model.listeningToRepair }, set: { model.listen(repaired: $0) })) {
+                    Text(L10n.text("restore.listen.original")).tag(false)
+                    Text(L10n.text("restore.listen.repaired")).tag(true)
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
                 .frame(width: 180)
                 .disabled(!model.previewing)
                 Spacer()
-                Button("Cancel") { model.stopPreview(); close() }.keyboardShortcut(.cancelAction)
-                Button("Apply") { model.apply(); close() }.keyboardShortcut(.defaultAction)
+                Button(L10n.text("button.cancel")) { model.stopPreview(); close() }.keyboardShortcut(.cancelAction)
+                Button(L10n.text("button.apply")) { model.apply(); close() }.keyboardShortcut(.defaultAction)
             }
         }
         .padding(20)

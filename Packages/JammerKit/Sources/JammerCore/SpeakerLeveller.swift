@@ -17,6 +17,13 @@ public enum LevelError: Error, LocalizedError, Equatable {
         case .silent: "The speakers' turns are too quiet or short to measure."
         }
     }
+    /// The same message by its key in the app's string catalogue (see `KeyedMessage`).
+    public var keyed: KeyedMessage? {
+        switch self {
+        case .noSpeakers: KeyedMessage("error.level.noSpeakers")
+        case .silent: KeyedMessage("error.level.silent")
+        }
+    }
 }
 
 public struct SpeakerLevelReport: Sendable, Equatable {
@@ -270,3 +277,5 @@ extension Project {
                                       spreadBefore: spread(stBefore), spreadAfter: spread(stAfter)))
     }
 }
+
+extension LevelError: KeyedFailure {}

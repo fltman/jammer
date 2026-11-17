@@ -13,21 +13,21 @@ import JammerSpeech
 
 /// Operations with preset parameters, for menus and the palette.
 enum MenuPresets {
-    static let all: [(String, String, [String: JSONValue])] = [
-        ("Fade In", "fade_in", [:]),
-        ("Fade Out", "fade_out", [:]),
-        ("Silence", "silence", [:]),
-        ("Crop to Selection", "crop", [:]),
-        ("Insert 1 Second of Silence", "insert_silence", ["duration": .number(1)]),
-        ("Gain +1 dB", "gain", ["db": .number(1)]),
-        ("Gain −1 dB", "gain", ["db": .number(-1)]),
-        ("Gain +6 dB", "gain", ["db": .number(6)]),
-        ("Gain −6 dB", "gain", ["db": .number(-6)]),
-        ("Normalize to −16 LUFS (podcast)", "normalize", ["target": .string("loudness"), "level": .number(-16)]),
-        ("Normalize to −23 LUFS (EBU R 128)", "normalize", ["target": .string("loudness"), "level": .number(-23)]),
-        ("Normalize Peak to −1 dBFS", "normalize", ["target": .string("peak"), "level": .number(-1)]),
-        ("Normalize True Peak to −1 dBTP", "normalize", ["target": .string("true_peak"), "level": .number(-1)]),
-    ]
+    static var all: [(String, String, [String: JSONValue])] { [
+        (L10n.text("audio.fadeIn"), "fade_in", [:]),
+        (L10n.text("audio.fadeOut"), "fade_out", [:]),
+        (L10n.text("audio.silence"), "silence", [:]),
+        (L10n.text("audio.crop"), "crop", [:]),
+        (L10n.text("audio.insertSilence"), "insert_silence", ["duration": .number(1)]),
+        (L10n.text("audio.gainUp1"), "gain", ["db": .number(1)]),
+        (L10n.text("audio.gainDown1"), "gain", ["db": .number(-1)]),
+        (L10n.text("audio.gainUp6"), "gain", ["db": .number(6)]),
+        (L10n.text("audio.gainDown6"), "gain", ["db": .number(-6)]),
+        (L10n.text("audio.normalize16"), "normalize", ["target": .string("loudness"), "level": .number(-16)]),
+        (L10n.text("audio.normalize23"), "normalize", ["target": .string("loudness"), "level": .number(-23)]),
+        (L10n.text("audio.normalizePeak"), "normalize", ["target": .string("peak"), "level": .number(-1)]),
+        (L10n.text("audio.normalizeTruePeak"), "normalize", ["target": .string("true_peak"), "level": .number(-1)]),
+    ] }
 }
 
 @main
@@ -165,7 +165,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// it moves into every build (and the guide and manual) when it has been tried against Flimmer.
     private var sendToFlimmerItems: [NSMenuItem] {
         #if DEBUG
-        let i = NSMenuItem(title: "Send to Flimmer…", action: #selector(EditorWindowController.sendToFlimmer(_:)), keyEquivalent: "")
+        let i = NSMenuItem(title: L10n.text("file.sendToFlimmer"), action: #selector(EditorWindowController.sendToFlimmer(_:)), keyEquivalent: "")
         return [i]
         #else
         return []
@@ -201,106 +201,106 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         main.addItem(submenu("Jämmer", [
-            item("About Jämmer", #selector(NSApplication.orderFrontStandardAboutPanel(_:)), ""),
+            item(L10n.text("app.about"), #selector(NSApplication.orderFrontStandardAboutPanel(_:)), ""),
             .separator(),
-            item("Settings…", #selector(AppDelegate.showSettings(_:)), ","),
+            item(L10n.text("app.settings"), #selector(AppDelegate.showSettings(_:)), ","),
             .separator(),
-            item("Hide Jämmer", #selector(NSApplication.hide(_:)), "h"),
-            item("Hide Others", #selector(NSApplication.hideOtherApplications(_:)), "h", [.command, .option]),
-            item("Show All", #selector(NSApplication.unhideAllApplications(_:)), ""),
+            item(L10n.text("app.hide"), #selector(NSApplication.hide(_:)), "h"),
+            item(L10n.text("app.hideOthers"), #selector(NSApplication.hideOtherApplications(_:)), "h", [.command, .option]),
+            item(L10n.text("app.showAll"), #selector(NSApplication.unhideAllApplications(_:)), ""),
             .separator(),
-            item("Quit Jämmer", #selector(NSApplication.terminate(_:)), "q"),
+            item(L10n.text("app.quit"), #selector(NSApplication.terminate(_:)), "q"),
         ]))
-        main.addItem(submenu("File", [
-            item("New", #selector(NSDocumentController.newDocument(_:)), "n"),
-            item("Open…", #selector(NSDocumentController.openDocument(_:)), "o"),
+        main.addItem(submenu(L10n.text("menu.file"), [
+            item(L10n.text("file.new"), #selector(NSDocumentController.newDocument(_:)), "n"),
+            item(L10n.text("file.open"), #selector(NSDocumentController.openDocument(_:)), "o"),
             .separator(),
-            item("Close", #selector(NSWindow.performClose(_:)), "w"),
-            item("Save…", #selector(NSDocument.save(_:)), "s"),
-            item("Duplicate", #selector(NSDocument.duplicate(_:)), "s", [.command, .shift]),
-            item("Revert to Saved", #selector(NSDocument.revertToSaved(_:)), ""),
-            item("Collect Audio and Save", #selector(JammerDocument.collectAudio(_:)), ""),
+            item(L10n.text("file.close"), #selector(NSWindow.performClose(_:)), "w"),
+            item(L10n.text("file.save"), #selector(NSDocument.save(_:)), "s"),
+            item(L10n.text("file.duplicate"), #selector(NSDocument.duplicate(_:)), "s", [.command, .shift]),
+            item(L10n.text("file.revert"), #selector(NSDocument.revertToSaved(_:)), ""),
+            item(L10n.text("file.collect"), #selector(JammerDocument.collectAudio(_:)), ""),
             .separator(),
-            item("Import Tracks…", #selector(EditorWindowController.importTracks(_:)), "i", [.command, .shift]),
-            item("Import Final Cut Pro XML…", #selector(AppDelegate.importTimeline(_:)), ""),
-            item("Export Audio…", #selector(EditorWindowController.exportAudio(_:)), "e", [.command, .shift]),
-            item("Batch…", #selector(AppDelegate.showBatch(_:)), "b", [.command, .option]),
-            item("Storage…", #selector(AppDelegate.showStorage(_:)), ""),
+            item(L10n.text("file.importTracks"), #selector(EditorWindowController.importTracks(_:)), "i", [.command, .shift]),
+            item(L10n.text("file.importFCPXML"), #selector(AppDelegate.importTimeline(_:)), ""),
+            item(L10n.text("file.export"), #selector(EditorWindowController.exportAudio(_:)), "e", [.command, .shift]),
+            item(L10n.text("file.batch"), #selector(AppDelegate.showBatch(_:)), "b", [.command, .option]),
+            item(L10n.text("file.storage"), #selector(AppDelegate.showStorage(_:)), ""),
             item(L10n.text("menu.file.linkedWaiting"), #selector(AppDelegate.showLinkedWaiting(_:)), ""),
         ] + sendToFlimmerItems))
-        main.addItem(submenu("Edit", [
-            item("Undo", Selector(("undo:")), "z"),
-            item("Redo", Selector(("redo:")), "z", [.command, .shift]),
+        main.addItem(submenu(L10n.text("menu.edit"), [
+            item(L10n.text("edit.undo"), Selector(("undo:")), "z"),
+            item(L10n.text("edit.redo"), Selector(("redo:")), "z", [.command, .shift]),
             .separator(),
-            item("Cut", #selector(TimelineOverlay.cut(_:)), "x"),
-            item("Copy", #selector(TimelineOverlay.copy(_:)), "c"),
-            item("Paste", #selector(TimelineOverlay.paste(_:)), "v"),
-            item("Delete", #selector(TimelineOverlay.delete(_:)), ""),
-            item("Select All", #selector(TimelineOverlay.selectAll(_:)), "a"),
+            item(L10n.text("edit.cut"), #selector(TimelineOverlay.cut(_:)), "x"),
+            item(L10n.text("edit.copy"), #selector(TimelineOverlay.copy(_:)), "c"),
+            item(L10n.text("edit.paste"), #selector(TimelineOverlay.paste(_:)), "v"),
+            item(L10n.text("edit.delete"), #selector(TimelineOverlay.delete(_:)), ""),
+            item(L10n.text("edit.selectAll"), #selector(TimelineOverlay.selectAll(_:)), "a"),
             .separator(),
-            item("Command Palette…", #selector(EditorWindowController.showCommandPalette(_:)), "k"),
+            item(L10n.text("edit.palette"), #selector(EditorWindowController.showCommandPalette(_:)), "k"),
         ]))
-        main.addItem(submenu("Audio", [
-            op("Fade In", "fade_in", [:], "i", [.command, .option]),
-            op("Fade Out", "fade_out", [:], "o", [.command, .option]),
-            op("Silence", "silence", [:], "l", [.command, .shift]),
-            op("Crop to Selection", "crop", [:], "t"),
-            op("Insert 1 Second of Silence", "insert_silence", ["duration": .number(1)]),
+        main.addItem(submenu(L10n.text("menu.audio"), [
+            op(L10n.text("audio.fadeIn"), "fade_in", [:], "i", [.command, .option]),
+            op(L10n.text("audio.fadeOut"), "fade_out", [:], "o", [.command, .option]),
+            op(L10n.text("audio.silence"), "silence", [:], "l", [.command, .shift]),
+            op(L10n.text("audio.crop"), "crop", [:], "t"),
+            op(L10n.text("audio.insertSilence"), "insert_silence", ["duration": .number(1)]),
             .separator(),
-            op("Gain +1 dB", "gain", ["db": .number(1)], "]", [.command]),
-            op("Gain −1 dB", "gain", ["db": .number(-1)], "[", [.command]),
+            op(L10n.text("audio.gainUp1"), "gain", ["db": .number(1)], "]", [.command]),
+            op(L10n.text("audio.gainDown1"), "gain", ["db": .number(-1)], "[", [.command]),
             .separator(),
-            op("Normalize to −16 LUFS (podcast)", "normalize", ["target": .string("loudness"), "level": .number(-16)]),
-            op("Normalize to −23 LUFS (EBU R 128)", "normalize", ["target": .string("loudness"), "level": .number(-23)]),
-            op("Normalize Peak to −1 dBFS", "normalize", ["target": .string("peak"), "level": .number(-1)]),
-            op("Normalize True Peak to −1 dBTP", "normalize", ["target": .string("true_peak"), "level": .number(-1)]),
-            submenu("Loudness Preset", LoudnessPreset.allCases.map { op($0.title, "loudness_preset", ["preset": .string($0.rawValue)]) }),
+            op(L10n.text("audio.normalize16"), "normalize", ["target": .string("loudness"), "level": .number(-16)]),
+            op(L10n.text("audio.normalize23"), "normalize", ["target": .string("loudness"), "level": .number(-23)]),
+            op(L10n.text("audio.normalizePeak"), "normalize", ["target": .string("peak"), "level": .number(-1)]),
+            op(L10n.text("audio.normalizeTruePeak"), "normalize", ["target": .string("true_peak"), "level": .number(-1)]),
+            submenu(L10n.text("audio.loudnessPreset"), LoudnessPreset.allCases.map { op($0.title, "loudness_preset", ["preset": .string($0.rawValue)]) }),
             // The same targets, reached also when the peaks are in the way: the limiter holds them at the preset's ceiling.
-            submenu("Loudness Preset With Limiter", LoudnessPreset.allCases.map { op($0.title, "loudness_preset", ["preset": .string($0.rawValue), "limit": .bool(true)]) }),
-            submenu("Level Speakers", [op("One Gain per Speaker", "level_speakers"),
-                                       op("Ride Each Speaker's Level", "level_speakers", ["mode": .string("dynamic")])]),
-            submenu("Remove Bleed", [op("Gate Each Track Outside Its Speaker", "debleed", ["method": .string("gate")]),
-                                     op("Cancel the Other Tracks' Leak", "debleed", ["method": .string("cancel")])]),
-            item("Duck Under Speech…", #selector(EditorWindowController.duckUnderSpeech(_:))),
-            item("Limit Peaks…", #selector(EditorWindowController.limitPeaks(_:))),
-            item("Check Against ACX Requirements…", #selector(EditorWindowController.checkACX(_:))),
+            submenu(L10n.text("audio.loudnessPresetLimiter"), LoudnessPreset.allCases.map { op($0.title, "loudness_preset", ["preset": .string($0.rawValue), "limit": .bool(true)]) }),
+            submenu(L10n.text("audio.levelSpeakers"), [op(L10n.text("audio.levelSpeakers.static"), "level_speakers"),
+                                       op(L10n.text("audio.levelSpeakers.dynamic"), "level_speakers", ["mode": .string("dynamic")])]),
+            submenu(L10n.text("audio.debleed"), [op(L10n.text("audio.debleed.gate"), "debleed", ["method": .string("gate")]),
+                                     op(L10n.text("audio.debleed.cancel"), "debleed", ["method": .string("cancel")])]),
+            item(L10n.text("audio.duck"), #selector(EditorWindowController.duckUnderSpeech(_:))),
+            item(L10n.text("audio.limit"), #selector(EditorWindowController.limitPeaks(_:))),
+            item(L10n.text("audio.acx"), #selector(EditorWindowController.checkACX(_:))),
             .separator(),
-            item("Measure Loudness", #selector(EditorWindowController.analyzeLoudness(_:)), "l", [.command, .option]),
-            item("Add Marker", #selector(EditorWindowController.addMarker(_:)), "m", [.command, .option]),
-            item("Set Tempo…", #selector(EditorWindowController.setTempo(_:)), ""),
-            op("Detect Tempo", "detect_tempo"),
+            item(L10n.text("audio.measureLoudness"), #selector(EditorWindowController.analyzeLoudness(_:)), "l", [.command, .option]),
+            item(L10n.text("audio.addMarker"), #selector(EditorWindowController.addMarker(_:)), "m", [.command, .option]),
+            item(L10n.text("audio.setTempo"), #selector(EditorWindowController.setTempo(_:)), ""),
+            op(L10n.text("audio.detectTempo"), "detect_tempo"),
             .separator(),
-            restoreItem("Remove Hum…", "dehum"),
-            restoreItem("Repair Clipping…", "declip"),
-            restoreItem("Remove Clicks…", "declick"),
-            restoreItem("Reduce Noise…", "denoise"),
-            restoreItem("Reduce Reverb…", "dereverb"),
-            item("Attenuate Frequencies…", #selector(EditorWindowController.attenuateFrequencies(_:)), ""),
-            item("Attenuate Area…", #selector(EditorWindowController.attenuateArea(_:)), ""),
-            item("Heal Area", #selector(EditorWindowController.healArea(_:)), ""),
-            item("Edit Spectrum Numerically…", #selector(EditorWindowController.editSpectrumNumerically(_:)), ""),
+            restoreItem(L10n.text("audio.dehum"), "dehum"),
+            restoreItem(L10n.text("audio.declip"), "declip"),
+            restoreItem(L10n.text("audio.declick"), "declick"),
+            restoreItem(L10n.text("audio.denoise"), "denoise"),
+            restoreItem(L10n.text("audio.dereverb"), "dereverb"),
+            item(L10n.text("audio.attenuateFrequencies"), #selector(EditorWindowController.attenuateFrequencies(_:)), ""),
+            item(L10n.text("audio.attenuateArea"), #selector(EditorWindowController.attenuateArea(_:)), ""),
+            item(L10n.text("audio.healArea"), #selector(EditorWindowController.healArea(_:)), ""),
+            item(L10n.text("audio.editSpectrum"), #selector(EditorWindowController.editSpectrumNumerically(_:)), ""),
             .separator(),
-            submenu("Find Speakers", [
-                item("Automatically", #selector(EditorWindowController.findSpeakers(_:)), ""),
+            submenu(L10n.text("audio.findSpeakers"), [
+                item(L10n.text("audio.findSpeakers.auto"), #selector(EditorWindowController.findSpeakers(_:)), ""),
                 .separator(),
             ] + (2...4).map { n in
-                let i = item("\(n) Speakers", #selector(EditorWindowController.findSpeakers(_:)), "")
+                let i = item(L10n.count("audio.findSpeakers.count", n), #selector(EditorWindowController.findSpeakers(_:)), "")
                 i.representedObject = n
                 return i
             }),
-            submenu("Separate Stems", ["music4": "Vocals, Drums, Bass, Other (music)", "dialog": "Speech, Music, Effects (soundtrack)"].sorted { $0.key > $1.key }.map { model, title in
+            submenu(L10n.text("audio.stems"), ["music4": L10n.text("audio.stems.music"), "dialog": L10n.text("audio.stems.soundtrack")].sorted { $0.key > $1.key }.map { model, title in
                 let i = item(title, #selector(EditorWindowController.separateStems(_:)), "")
                 i.representedObject = model
                 return i
             }),
-            item("Mixer…", #selector(EditorWindowController.showMixer(_:)), "x", [.command, .option]),
-            item("Plugins…", #selector(EditorWindowController.showPlugins(_:)), "p", [.command, .option, .shift]),
+            item(L10n.text("audio.mixer"), #selector(EditorWindowController.showMixer(_:)), "x", [.command, .option]),
+            item(L10n.text("audio.plugins"), #selector(EditorWindowController.showPlugins(_:)), "p", [.command, .option, .shift]),
             item(L10n.text("menu.picture"), #selector(EditorWindowController.showPicture(_:)), ""),
         ]))
-        main.addItem(submenu("Transport", [
+        main.addItem(submenu(L10n.text("menu.transport"), [
             // Space and Return are handled by the timeline, so text fields keep them.
-            item("Play", #selector(EditorWindowController.togglePlayback(_:)), "p", [.command, .option]),
-            item("Go to Start", #selector(EditorWindowController.goToStart(_:)), ""),
+            item(L10n.text("transport.play"), #selector(EditorWindowController.togglePlayback(_:)), "p", [.command, .option]),
+            item(L10n.text("transport.goToStart"), #selector(EditorWindowController.goToStart(_:)), ""),
         ]))
         // Which lanes the timeline draws. Hidden where automation is (debug builds, until lanes can be drawn by hand too).
         let kinds: [(String?, String)] = [(nil, L10n.text("menu.view.automation.none")), ("gain", L10n.text("menu.view.automation.gain")),
@@ -314,32 +314,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         automationMenu.submenu?.addItem(.separator())
         automationMenu.submenu?.addItem(item(L10n.text("menu.view.automation.strips"), #selector(EditorWindowController.toggleStripLanes(_:))))
         automationMenu.isHidden = !Operations.automation
-        main.addItem(submenu("View", [
-            item("Show History", #selector(EditorWindowController.showHistory(_:)), "y", [.command, .option]),
-            item("Zoom In", #selector(EditorWindowController.zoomIn(_:)), "+"),
-            item("Zoom Out", #selector(EditorWindowController.zoomOut(_:)), "-"),
-            item("Zoom to Fit", #selector(EditorWindowController.zoomToFit(_:)), "0"),
-            item("Zoom to Selection", #selector(EditorWindowController.zoomToSelection(_:)), "e"),
+        main.addItem(submenu(L10n.text("menu.view"), [
+            item(L10n.text("view.history"), #selector(EditorWindowController.showHistory(_:)), "y", [.command, .option]),
+            item(L10n.text("view.zoomIn"), #selector(EditorWindowController.zoomIn(_:)), "+"),
+            item(L10n.text("view.zoomOut"), #selector(EditorWindowController.zoomOut(_:)), "-"),
+            item(L10n.text("view.zoomToFit"), #selector(EditorWindowController.zoomToFit(_:)), "0"),
+            item(L10n.text("view.zoomToSelection"), #selector(EditorWindowController.zoomToSelection(_:)), "e"),
             .separator(),
-            item("Show Spectrogram", #selector(EditorWindowController.toggleSpectrogram(_:)), "s", [.command, .option]),
+            item(L10n.text("view.showSpectrogram"), #selector(EditorWindowController.toggleSpectrogram(_:)), "s", [.command, .option]),
             automationMenu,
-            item("Show Transcript", #selector(EditorWindowController.toggleTranscript(_:)), "t", [.command, .option]),
-            item("Show Assistant", #selector(EditorWindowController.toggleAssistant(_:)), "a", [.command, .option]),
+            item(L10n.text("view.showTranscript"), #selector(EditorWindowController.toggleTranscript(_:)), "t", [.command, .option]),
+            item(L10n.text("view.showAssistant"), #selector(EditorWindowController.toggleAssistant(_:)), "a", [.command, .option]),
             .separator(),
-            item("Enter Full Screen", #selector(NSWindow.toggleFullScreen(_:)), "f", [.command, .control]),
+            item(L10n.text("view.fullScreen"), #selector(NSWindow.toggleFullScreen(_:)), "f", [.command, .control]),
         ]))
-        let window = submenu("Window", [
-            item("Minimize", #selector(NSWindow.performMiniaturize(_:)), "m"),
-            item("Zoom", #selector(NSWindow.performZoom(_:)), ""),
+        let window = submenu(L10n.text("menu.window"), [
+            item(L10n.text("window.minimize"), #selector(NSWindow.performMiniaturize(_:)), "m"),
+            item(L10n.text("window.zoom"), #selector(NSWindow.performZoom(_:)), ""),
             .separator(),
-            item("Bring All to Front", #selector(NSApplication.arrangeInFront(_:)), ""),
+            item(L10n.text("window.bringAllToFront"), #selector(NSApplication.arrangeInFront(_:)), ""),
         ])
         main.addItem(window)
         NSApp.windowsMenu = window.submenu
-        let help = submenu("Help", [
-            item("Agent Access…", #selector(showAgentAccess(_:)), "", target: self),
-            item("Open the Agent Guide", #selector(openAgentGuide(_:)), "", target: self),
-            item("Jämmer Website", #selector(openHomepage(_:)), "", target: self),
+        let help = submenu(L10n.text("menu.help"), [
+            item(L10n.text("help.agentAccess"), #selector(showAgentAccess(_:)), "", target: self),
+            item(L10n.text("help.agentGuide"), #selector(openAgentGuide(_:)), "", target: self),
+            item(L10n.text("help.website"), #selector(openHomepage(_:)), "", target: self),
         ])
         main.addItem(help)
         NSApp.helpMenu = help.submenu

@@ -260,4 +260,17 @@ struct AutomationStepTests {
         #expect(Self.run(&s, "remove_video_reference", [:]).status == .done && s.project.video == nil && FileManager.default.fileExists(atPath: film.path))
         #expect(Self.run(&s, "remove_video_reference", [:]).reason == "not_found")
     }
+
+    @Test("A step that fails on an error with a key carries the key and its values beside the English words, which are as they were; a failure whose words were made in the step has none")
+    func keyedFailure() {
+        Operations.$automationForThisTask.withValue(true) {
+            var s = Self.state()
+            let bus = UUID()
+            let r = Self.run(&s, "remove_bus", ["bus": .string(bus.uuidString)])
+            #expect(r.status == .failed && r.reason == "not_found" && r.keyed == KeyedMessage("error.mixer.noBus", [bus.uuidString]), "\(String(describing: r.keyed))")
+            #expect(r.error == "remove_bus: there is no bus with id \(bus.uuidString).")
+            let own = Self.run(&s, "set_timecode", ["rate": .string("none"), "start": .string("00:00:00:00")])
+            #expect(own.status == .failed && own.keyed == nil)
+        }
+    }
 }

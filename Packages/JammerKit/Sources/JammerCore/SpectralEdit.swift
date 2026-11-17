@@ -98,6 +98,14 @@ public enum SpectralEditError: Error, LocalizedError, Equatable {
         case .noContext: "Heal needs sound on both sides of the area to rebuild it from; this one touches the start or the end."
         }
     }
+    /// The same message by its key in the app's string catalogue (see `KeyedMessage`).
+    public var keyed: KeyedMessage? {
+        switch self {
+        case .badShape: nil
+        case .tooLong: nil
+        case .noContext: KeyedMessage("error.spectralEdit.noContext")
+        }
+    }
 }
 
 extension Spectral {
@@ -274,3 +282,5 @@ extension Project {
         return p
     }
 }
+
+extension SpectralEditError: KeyedFailure {}

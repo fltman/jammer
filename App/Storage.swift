@@ -85,7 +85,7 @@ enum StorageWindow {
     static func show() {
         if let window { window.makeKeyAndOrderFront(nil); return }
         let w = NSWindow(contentRect: .zero, styleMask: [.titled, .closable], backing: .buffered, defer: false)
-        w.title = "Storage"
+        w.title = L10n.text("storage.title")
         w.isReleasedWhenClosed = false
         w.contentView = NSHostingView(rootView: StorageView())
         w.setContentSize(w.contentView!.fittingSize)
@@ -106,28 +106,28 @@ struct StorageView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Storage").font(.title2.bold())
-            Text("Effects, repairs and frozen tracks are made as new audio files in Jämmer's media folder; your own files are never changed. This shows what is there. Nothing is removed unless you choose it here, and what you choose goes to the Trash.")
+            Text(L10n.text("storage.title")).font(.title2.bold())
+            Text(L10n.text("storage.intro"))
                 .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             if report.register == "broken" {
-                StateLine(kind: .error, text: "Jämmer's record of the files it has made can't be read, so nothing here can be chosen.", font: .body)
+                StateLine(kind: .error, text: L10n.text("storage.noRecord"), font: .body)
             }
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
-                    group("Can be freed", .canBeFreed, "Made by Jämmer, and no project that has used them uses them any more, now or anywhere in its history.", choosable: true)
-                    group("In use", .inUse, "Used by a project, as it is now or at a step in its history.", choosable: false)
-                    group("Can't tell", .unknown, "Made by Jämmer and last used by a project that can't be read just now (on another disk, or moved). They can be chosen once that project has been opened again.", choosable: false)
-                    group("Not Jämmer's to remove", .unregistered, "Your own audio, and files made before Jämmer kept a record of what it makes. Never touched.", choosable: false)
+                    group(L10n.text("storage.group.free"), .canBeFreed, L10n.text("storage.group.free.what"), choosable: true)
+                    group(L10n.text("storage.group.inUse"), .inUse, L10n.text("storage.group.inUse.what"), choosable: false)
+                    group(L10n.text("storage.group.unknown"), .unknown, L10n.text("storage.group.unknown.what"), choosable: false)
+                    group(L10n.text("storage.group.notOurs"), .unregistered, L10n.text("storage.group.notOurs.what"), choosable: false)
                 }
                 .padding(.trailing, 6)
             }
             .frame(minHeight: 260, maxHeight: 420)
             if let said { Text(said).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true).accessibilityIdentifier("storage.said") }
             HStack {
-                Button("Show the Folder") { NSWorkspace.shared.open(MediaStore.folder) }
+                Button(L10n.text("storage.showFolder")) { NSWorkspace.shared.open(MediaStore.folder) }
                 Spacer()
                 let bytes = report.files.filter { chosen.contains($0.name) }.reduce(Int64(0)) { $0 + $1.bytes }
-                Button(chosen.isEmpty ? "Move to Trash…" : "Move \(chosen.count) File\(chosen.count == 1 ? "" : "s") to Trash… (\(Self.size(bytes)))") { asking = true }
+                Button(chosen.isEmpty ? L10n.text("storage.move") : L10n.text("storage.move.chosen", L10n.count("storage.files.title", chosen.count), Self.size(bytes))) { asking = true }
                     .disabled(chosen.isEmpty)
                     .accessibilityIdentifier("storage.move")
             }
@@ -136,26 +136,26 @@ struct StorageView: View {
         .frame(width: 640)
         .onAppear(perform: reload)
         .confirmationDialog(confirmTitle, isPresented: $asking) {
-            Button("Move to Trash", role: .destructive, action: move)
-            Button("Cancel", role: .cancel) {}
+            Button(L10n.text("storage.confirm.move"), role: .destructive, action: move)
+            Button(L10n.text("button.cancel"), role: .cancel) {}
         } message: {
-            Text("They stay in the Trash until you empty it, so they can be put back. Nothing is deleted.")
+            Text(L10n.text("storage.confirm.text"))
         }
     }
 
     private var confirmTitle: String {
         let bytes = report.files.filter { chosen.contains($0.name) }.reduce(Int64(0)) { $0 + $1.bytes }
-        return "Move \(chosen.count) file\(chosen.count == 1 ? "" : "s") to the Trash? That frees \(Self.size(bytes))."
+        return L10n.text("storage.confirm.title", L10n.count("storage.files", chosen.count), Self.size(bytes))
     }
 
     @ViewBuilder private func group(_ title: String, _ g: MediaStorage.Group, _ what: String, choosable: Bool) -> some View {
         let files = report.files.filter { $0.group == g }
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text("\(title): \(files.count) file\(files.count == 1 ? "" : "s"), \(Self.size(report.bytes(g)))").font(.headline)
+                Text(L10n.text("storage.group.line", title, L10n.count("storage.files", files.count), Self.size(report.bytes(g)))).font(.headline)
                 if choosable, !files.isEmpty {
                     Spacer()
-                    Button(chosen.count == files.count ? "Choose None" : "Choose All") { chosen = chosen.count == files.count ? [] : Set(files.map(\.name)) }
+                    Button(chosen.count == files.count ? L10n.text("storage.chooseNone") : L10n.text("storage.chooseAll")) { chosen = chosen.count == files.count ? [] : Set(files.map(\.name)) }
                         .buttonStyle(.link)
                 }
             }
@@ -165,7 +165,7 @@ struct StorageView: View {
                     if choosable {
                         Toggle(isOn: Binding(get: { chosen.contains(f.name) }, set: { if $0 { chosen.insert(f.name) } else { chosen.remove(f.name) } })) { EmptyView() }
                             .toggleStyle(.checkbox).labelsHidden()
-                            .accessibilityLabel("Choose \(f.name)")
+                            .accessibilityLabel(L10n.text("storage.choose.ax", f.name))
                     }
                     Text(f.name).lineLimit(1).truncationMode(.middle)
                     if let kind = f.kind { Text(kind).font(.caption).foregroundStyle(.secondary) }
@@ -174,7 +174,7 @@ struct StorageView: View {
                     Text(Self.size(f.bytes)).monospacedDigit().font(.caption)
                 }
             }
-            if files.count > 200 { Text("…and \(files.count - 200) more.").font(.caption).foregroundStyle(.secondary) }
+            if files.count > 200 { Text(L10n.text("storage.more", String(files.count - 200))).font(.caption).foregroundStyle(.secondary) }
         }
     }
 
@@ -189,7 +189,7 @@ struct StorageView: View {
             let known = StorageScanner.known()
             let dry = try MediaStorage.moveToTrash(Array(chosen), media: MediaStore.folder, known: known, dryRun: true)
             let moved = try MediaStorage.moveToTrash(dry.names, media: MediaStore.folder, known: known, dryRun: false)
-            said = "\(moved.names.count) file\(moved.names.count == 1 ? " is" : "s are") in the Trash (\(Self.size(moved.bytes))). Nothing was deleted: put \(moved.names.count == 1 ? "it" : "them") back from the Trash if a project turns out to need \(moved.names.count == 1 ? "it" : "them")."
+            said = L10n.text("storage.moved", L10n.count("storage.moved.files", moved.names.count), Self.size(moved.bytes))
         } catch {
             said = error.localizedDescription
         }
