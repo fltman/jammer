@@ -144,6 +144,24 @@ struct Curve {
     void apply(const float *in, float *out, int64_t at, int64_t n, int32_t channels) const;
 };
 
+/// The surround panner's view of the document: its loudspeakers by direction (the ear layer and the height
+/// layer, each sorted by azimuth), or its Ambisonics order. The same algorithm as the app's `Panner`.
+struct PanLayout {
+    struct Speaker { int32_t channel; double azimuth; };
+    int32_t order = 0;              // AmbiX order; 0 for loudspeakers
+    std::vector<Speaker> ear, top;  // by azimuth, rising
+    bool empty() const { return order == 0 && ear.empty(); }
+    /// Gains per document channel (`out`, `channels` long, zeroed here) for a mono sound from a direction.
+    void gains(double azimuth, double elevation, float *out, int32_t channels) const JM_NONBLOCKING;
+};
+
+/// A source on a placed track: where it is, over time (degrees; one point for a place that doesn't move),
+/// and, for a stereo source, the angle between its sides.
+struct Placement {
+    Curve azimuth, elevation;
+    double width = 60;
+};
+
 /// Automation of one parameter of one plugin on a strip: the value the parameter has at each place on
 /// the strip's timeline, a straight line between points. Set once a quantum (512 frames), before the
 /// quantum is worked, to the line's value at the quantum's first frame as it enters the strip's plugins.
@@ -290,6 +308,9 @@ struct Plan {
     /// Per source (by index): how its channels go into the document's, as gains [source channel][document
     /// channel]. Empty: the old way (a mono source in every channel, the rest channel for channel).
     std::vector<std::vector<float>> sourceMatrix;
+    /// Per source: placed by the surround panner, its gains worked out as it plays (overrides the matrix).
+    std::vector<std::shared_ptr<const Placement>> sourcePlacement;
+    PanLayout panLayout;
     std::vector<Track> tracks;
     std::vector<Bus> buses;
     /// Buses in the order they are summed: every bus before the one it feeds. Made by finalize.

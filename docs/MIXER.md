@@ -354,6 +354,14 @@ What it is for: riding a level by ear. The user plays, moves a strip's fader, an
 - **Tested with Apple's low-pass:** closed from 20 kHz to 300 Hz over three seconds, white noise falls away second by second; from a seek within −60 dB of the unbroken render; switched off it is kept and not heard; refused for a plugin that isn't on the strip and for a value outside the range. By step: by the plugin's and the parameter's names, the same lane by the identifier, each refusal with its words.
 - **Not built:** parameter lanes in the timeline (seen and drawn); plugins in a helper process; a parameter that steps (a switch, a list) treated as such (it is set to the line's value like any other, and the plugin rounds it); smoothing between the 512-frame steps (the plugin's own, if it has any).
 
+## Automation of a track's place (block E, 2026-11-17), in debug builds
+
+- **Lanes:** `azimuth` (degrees, positive to the left; −360 to 360, so a place can go on round behind: 170° to 190° passes behind, not back across the front) and `elevation` (0 to 90), on tracks in documents wider than stereo; a straight line between points, as level and pan. Refused in mono and stereo and on buses, VCA groups and the master, with the reason (`needs_surround`).
+- **In the engine:** the panner (the same pairwise VBAP at constant power, the same layers by elevation, or AmbiX encoding) is worked out on the timeline's own 512-frame grid from the lanes' values at the grid's points, and the gains go in a straight line between two grid points. A render from any place gives the same samples (tested from the middle against the whole). A track with a place and no lane keeps its fixed matrix; a lane of one point gives the fixed place's sound within 10⁻⁵.
+- **Tolerance against the ideal path** (every sample panned at its own place), as for the other lanes: along a straight stretch of the lane within 2·10⁻⁵ of the level (measured: 9·10⁻⁶ for 80° in 2 s); within the 512 frames (10.7 ms at 48 kHz) around a point that isn't on the grid, where the path turns, the glide cuts the corner: within 2·10⁻³ of the level, −54 dB (measured: 1.7·10⁻³ at the lane's end). A faster move bends more within a grid step; the corner is the larger of the two.
+- **In the window:** the mixer's line says "N points moving the place around" / "moving the height"; the lanes have their words (place: left up, behind at either edge; height: overhead up), their accessibility labels, and what the status line says when one is removed. Not drawn in the timeline yet (the View menu doesn't offer them).
+- **Not built:** a bus's place.
+
 ## Automation (the sketch of 2026-11-16 that the above was built from)
 
 What it is: a level, a pan or a mute that changes over the timeline, on a track, a bus, a VCA group or the master, and the level of a send. Plugin parameters are a later step of their own (they need a way to name a parameter that holds across AU, VST 3 and CLAP and across the helper process).

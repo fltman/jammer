@@ -145,17 +145,17 @@ public enum Operations {
     static let automationSteps: [OperationSpec] = [
         .init("set_automation", "Write Automation", "Writes automation: points on the timeline that a strip's level, pan or mute follows (before the first point the value is the first point's, after the last the last's). `gain`: a straight line in dB from point to point, added to the fader, which stays where it is (0 dB is no change). `pan`: a straight line from point to point, −1 left to 1 right, in the place of the fixed pan while the lane is there (stereo documents). `mute`: 1 muted, 0 heard, each held until the next point; the sound closes and opens over 5 ms beginning at the point, so it never clicks, and sends before the fader are silenced too, as by the mute button. `send` with `to` (a bus id): the level of the strip's send to that bus, in dB, added to the send's own level. `strip` may also be a VCA group's id: its gain and mute lanes are added to those of every track and bus in the group, as its fader is. The master has a gain lane only. `points` replace the whole lane; with `start` and `end` they replace only the points inside that range and nothing outside it is touched. A point lands on its own sample, whatever plugins the strip has. Edits that close up or open the whole timeline (delete, paste, removed pauses) move the points with the sound; lining up or stretching one track doesn't, and the answer then carries a warning. Refused with the name of the field: a point after the document's end or outside `start`…`end`, a value outside what the lane takes (−96 to 24 dB, −1 to 1, 0 or 1), two points at one time. info has `points`, how many the lane now has.",
               params: [.init("strip", .string, "The id of the track, bus or VCA group, or \"master\".", required: true),
-                       .init("param", .string, "What the lane moves. Default gain. plugin: one parameter of a plugin on the strip (`insert` and `parameter` say which), in the parameter's own unit, a straight line between points, set once every 512 frames; for now only where the plugin is an Audio Unit (another kind answers not_available).", options: ["gain", "pan", "mute", "send", "plugin"]),
+                       .init("param", .string, "What the lane moves. Default gain. plugin: one parameter of a plugin on the strip (`insert` and `parameter` say which), in the parameter's own unit, a straight line between points, set once every 512 frames; for now only where the plugin is an Audio Unit (another kind answers not_available).", options: ["gain", "pan", "mute", "send", "plugin", "azimuth", "elevation"]),
                        .init("to", .string, "For param send: the id of the bus the send goes to. The send must be there (set_send)."),
                        .init("insert", .string, "For param plugin: the plugin on the strip, by its id or its name."),
                        .init("parameter", .string, "For param plugin: the parameter, by its identifier or its name (GET …/tracks/{id}/inserts/{insert} lists them with their ranges)."),
-                       .init("points", .pairs, "The points: [[seconds, value], …]; the value is dB for gain (−96 to 24), −1 to 1 for pan, 1 or 0 for mute, and for a plugin's parameter a value in that parameter's own range. An empty list with `start` and `end` takes the points in that range away.", required: true),
+                       .init("points", .pairs, "The points: [[seconds, value], …]; the value is dB for gain (−96 to 24), −1 to 1 for pan, 1 or 0 for mute, and for a plugin's parameter a value in that parameter's own range; for azimuth degrees −360 to 360 (positive to the left, past ±180 on round behind) and for elevation 0 to 90: a track's place in a document wider than stereo, moving in a straight line between points, worked out every 512 frames and glided in between. An empty list with `start` and `end` takes the points in that range away.", required: true),
                        .init("start", .seconds, "Start of the range to replace, in seconds. With `end`."),
                        .init("end", .seconds, "End of the range to replace, in seconds. With `start`."),
                        .init("enabled", .boolean, "False keeps the lane but stops it being heard; true brings it back.")]),
         .init("clear_automation", "Clear Automation", "Takes the points of one lane away: all of them, or with `start` and `end` those inside that range. One strip and one lane at a time; nothing clears a whole project. info has `removed`.",
               params: [.init("strip", .string, "The id of the track, bus or VCA group, or \"master\".", required: true),
-                       .init("param", .string, "Which lane.", required: true, options: ["gain", "pan", "mute", "send", "plugin"]),
+                       .init("param", .string, "Which lane.", required: true, options: ["gain", "pan", "mute", "send", "plugin", "azimuth", "elevation"]),
                        .init("to", .string, "For param send: the id of the bus the send goes to."),
                        .init("insert", .string, "For param plugin: the plugin on the strip, by its id or its name."),
                        .init("parameter", .string, "For param plugin: the parameter, by its identifier or its name."),
@@ -722,7 +722,7 @@ public enum StepRunner {
             guard b <= end + 1e-9 else { throw StepFailure("\(step.op): \"end\" is at \(b.plain) s, after the document's end (\(end.plain) s).") }
         }
         let param = AutomationLane.Param(rawValue: p["param"]?.string ?? "gain") ?? .gain
-        if name == "master", param != .gain, param != .plugin { throw StepFailure("\(step.op): \"param\" is gain or plugin for the master; it has no pan, mute or send to automate.") }
+        if name == "master", param != .gain, param != .plugin, param != .azimuth, param != .elevation { throw StepFailure("\(step.op): \"param\" is gain or plugin for the master; it has no pan, mute or send to automate.") }
         if param == .plugin {
             guard p["insert"]?.string?.isEmpty == false, p["parameter"]?.string?.isEmpty == false else {
                 throw StepFailure("\(step.op): \"insert\" and \"parameter\" are needed with param plugin: the plugin on the strip and which of its parameters.")
@@ -740,7 +740,17 @@ public enum StepRunner {
         } else if p["to"] != nil {
             throw StepFailure("\(step.op): \"to\" goes with param send only.")
         }
-        if param == .pan, project.channels != 2 { throw StepFailure("\(step.op): \"param\" can't be pan in a mono document.", reason: "needs_stereo") }
+        if param == .pan, project.channels != 2 {
+            throw StepFailure("\(step.op): \"param\" can't be pan in a \(project.channels == 1 ? "mono" : project.layout.rawValue) document\(project.channels > 2 ? "; a track's place is azimuth and elevation there" : "").", reason: "needs_stereo")
+        }
+        if param == .azimuth || param == .elevation {
+            guard project.channels > 2 else {
+                throw StepFailure("\(step.op): azimuth and elevation are a track's place in a document wider than stereo; this one is \(project.layout.rawValue). Use pan.", reason: "needs_surround")
+            }
+            guard let id = stripID, project.tracks.contains(where: { $0.id == id }) else {
+                throw StepFailure("\(step.op): azimuth and elevation are a track's place; \(name == "master" ? "the master" : "a bus or a VCA group") has none.", reason: "needs_surround")
+            }
+        }
         let allowed = Automation.range(of: param)
         for (i, pair) in (p["points"]?.pairs ?? []).enumerated() {
             guard allowed.contains(pair.1), param != .mute || pair.1 == 0 || pair.1 == 1 else {

@@ -167,6 +167,8 @@ final class AutomationLanesView: NSView {
             return v < 0 ? L10n.text("automation.value.left", percent) : L10n.text("automation.value.right", percent)
         case .mute: return v >= 0.5 ? L10n.text("automation.value.muted") : L10n.text("automation.value.heard")
         case .plugin: return v.formatted(.number.precision(.fractionLength(0...2)))
+        case .azimuth: return MixerStrip.placeText(SurroundPosition(azimuth: abs(v) > 180 ? v - (v > 0 ? 360 : -360) : v))
+        case .elevation: return L10n.text("mixer.place.elevation", L10n.number(v, 0))
         }
     }
     /// What the lane is, and what comes on top of its line.
@@ -183,6 +185,8 @@ final class AutomationLanesView: NSView {
             else if lane.group != nil { text = L10n.text("automation.caption.level.groupOnly", group, fader) }
             else { text = L10n.text("automation.caption.level", fader) }
         case .pan: text = L10n.text("automation.caption.pan")
+        case .azimuth: text = L10n.text("automation.caption.azimuth")
+        case .elevation: text = L10n.text("automation.caption.elevation")
         case .mute:
             if lane.group != nil, lane.own { text = L10n.text("automation.caption.mute.withGroup", group) }
             else if lane.group != nil { text = L10n.text("automation.caption.mute.groupOnly", group) }
@@ -650,6 +654,8 @@ final class AutomationLanesView: NSView {
             case .gain, .plugin: gone = L10n.text("automation.removed.gain", name)
             case .pan: gone = L10n.text("automation.removed.pan", name)
             case .mute: gone = L10n.text("automation.removed.mute", name)
+            case .azimuth: gone = L10n.text("automation.removed.azimuth", name)
+            case .elevation: gone = L10n.text("automation.removed.elevation", name)
             }
             send(less, saying: less.points.isEmpty ? gone : L10n.text("automation.point.removed", L10n.count("automation.ax.points", less.points.count)))
         case (53, []):                               // Escape: nothing selected; the keys are the timeline's again
@@ -691,6 +697,8 @@ final class AutomationLanesView: NSView {
             case .gain, .plugin: e.setAccessibilityLabel(L10n.text("automation.ax.lane.gain", name))
             case .pan: e.setAccessibilityLabel(L10n.text("automation.ax.lane.pan", name))
             case .mute: e.setAccessibilityLabel(L10n.text("automation.ax.lane.mute", name))
+            case .azimuth: e.setAccessibilityLabel(L10n.text("automation.ax.lane.azimuth", name))
+            case .elevation: e.setAccessibilityLabel(L10n.text("automation.ax.lane.elevation", name))
             }
             e.setAccessibilityValue([caption(lane), L10n.count("automation.ax.points", named.points.count),
                                      L10n.count("automation.ax.inView", inView.count)].joined(separator: L10n.text("mixer.automation.separator")))

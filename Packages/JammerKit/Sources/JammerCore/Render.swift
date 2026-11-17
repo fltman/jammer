@@ -166,6 +166,27 @@ public final class RenderPlan: @unchecked Sendable {
 }
 
 public enum PlanCompiler {
+    /// A source whose place moves: the engine's panner gets the layout once and the azimuth and elevation as
+    /// lines over the timeline (a lane's points, or the track's fixed value as one point).
+    static func placeMoving(_ plan: OpaquePointer, source: Int32, position: SurroundPosition, azimuth: AutomationLane?, elevation: AutomationLane?, layout: ChannelLayout) {
+        setPanLayout(plan, layout)
+        func line(_ lane: AutomationLane?, _ fixed: Double) -> ([Int64], [Float]) {
+            guard let lane else { return ([0], [Float(fixed)]) }
+            return (lane.points.map { Int64($0.frame) }, lane.points.map { Float($0.value) })
+        }
+        var (af, av) = line(azimuth, position.azimuth), (ef, ev) = line(elevation, position.elevation)
+        jm_plan_set_source_placement(plan, source, &af, &av, Int32(af.count), &ef, &ev, Int32(ef.count), position.width)
+    }
+    static func setPanLayout(_ plan: OpaquePointer, _ layout: ChannelLayout) {
+        if let order = layout.ambisonicOrder { jm_plan_set_pan_layout(plan, Int32(order), nil, nil, nil, 0); return }
+        var ch: [Int32] = [], az: [Double] = [], el: [Double] = []
+        for (i, s) in layout.speakers.enumerated() {
+            guard let d = s.direction(in: layout) else { continue }
+            ch.append(Int32(i)); az.append(d.azimuth); el.append(d.elevation)
+        }
+        jm_plan_set_pan_layout(plan, 0, &ch, &az, &el, Int32(ch.count))
+    }
+
     /// Compiles the project into what the engine plays. Clips whose file is missing are left out.
     /// Inserts run only when `inserts` supplies their chains; without it the plan is the
     /// dry mix (what the bounced effects and restoration work from).
@@ -219,8 +240,11 @@ public enum PlanCompiler {
             }
             if let inserts, t.inserts.contains(where: { !$0.bypass }) { inserts.attachChain(for: t, to: plan, index: track) }
             // A track placed by the surround panner has its own copies of its mono and stereo sources in the
-            // plan, each with the panner's matrix (the same source on another track is placed there).
-            let panned = project.channels > 2 ? t.position : nil
+            // plan, each with its place: fixed, or moving by its azimuth and elevation lanes, worked out by the
+            // engine as it plays (the same source on another track is placed there).
+            let azLane = project.lane(strip: t.id, param: .azimuth).flatMap { $0.enabled && !$0.points.isEmpty ? $0 : nil }
+            let elLane = project.lane(strip: t.id, param: .elevation).flatMap { $0.enabled && !$0.points.isEmpty ? $0 : nil }
+            let panned: SurroundPosition? = project.channels > 2 && (t.position != nil || azLane != nil || elLane != nil) ? (t.position ?? SurroundPosition()) : nil
             var ownIndices: [UUID: Int32] = [:]
             for c in t.clips {
                 guard let ref = project.source(c.sourceID) else { continue }
@@ -232,8 +256,12 @@ public enum PlanCompiler {
                         guard let s = pool.source(for: ref) else { continue }
                         index = jm_plan_add_source(plan, s)
                         ownIndices[ref.id] = index
-                        let m = Panner.matrix(position, sourceChannels: ref.info.channels, in: project.layout)
-                        m.withUnsafeBufferPointer { jm_plan_set_source_matrix(plan, index, $0.baseAddress!, Int32(ref.info.channels)) }
+                        if azLane == nil, elLane == nil {
+                            let m = Panner.matrix(position, sourceChannels: ref.info.channels, in: project.layout)
+                            m.withUnsafeBufferPointer { jm_plan_set_source_matrix(plan, index, $0.baseAddress!, Int32(ref.info.channels)) }
+                        } else {
+                            Self.placeMoving(plan, source: index, position: position, azimuth: azLane, elevation: elLane, layout: project.layout)
+                        }
                     }
                 } else if let i = indices[ref.id] {
                     index = i

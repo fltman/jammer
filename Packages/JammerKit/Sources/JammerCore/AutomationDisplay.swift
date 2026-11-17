@@ -59,6 +59,9 @@ extension Automation {
         case .pan: return (1 - min(1, max(-1, value))) / 2
         case .mute: return min(1, max(0, value))
         case .plugin: return 0.5      // a plugin's parameter has its own range: not drawn on this scale
+        // A place: left (positive) at the top as for pan, behind at either edge; up from level to overhead.
+        case .azimuth: return (min(180, max(-180, value)) + 180) / 360
+        case .elevation: return min(90, max(0, value)) / 90
         }
     }
     /// The value at a height: the other way round.
@@ -72,6 +75,8 @@ extension Automation {
         case .pan: return 1 - 2 * h
         case .mute: return h
         case .plugin: return 0
+        case .azimuth: return h * 360 - 180
+        case .elevation: return h * 90
         }
     }
 }
@@ -98,7 +103,7 @@ extension Project {
             case .gain: if let c = gainCurve(of: strip) { return made(c.frames, c.db, plays: true) }
             case .pan: if let c = panCurve(of: strip) { return made(c.frames, c.values, plays: true) }
             case .send: if let to, let c = sendCurve(from: strip, to: to) { return made(c.frames, c.db, plays: true) }
-            case .plugin: break       // shown from its own points, below
+            case .plugin, .azimuth, .elevation: break       // shown from their own points, below
             case .mute:
                 if let c = muteCurve(of: strip) {
                     let lanes = [own, groups].compactMap { $0 }.filter(\.enabled)

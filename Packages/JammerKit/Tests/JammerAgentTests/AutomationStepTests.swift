@@ -297,4 +297,21 @@ struct AutomationStepTests {
         }
         #expect(Self.run(&s, "gain", ["db": .number(-3)]).status == .done)
     }
+
+    @Test("A track's place automated by step: azimuth and elevation lanes in a 5.1 document; refused in stereo and on a bus or the master, with the reason; past ±180 allowed, past ±360 refused")
+    func placeLanes() {
+      Operations.$automationForThisTask.withValue(true) {
+        var s = Self.state()
+        let track = s.project.tracks[0].id
+        let stereo = Self.run(&s, "set_automation", ["strip": .string(track.uuidString), "param": .string("azimuth"), "points": Self.pairs([(0, 30), (5, 110)])])
+        #expect(stereo.status == .failed && stereo.reason == "needs_surround", "\(stereo.error ?? "")")
+        #expect(Self.run(&s, "set_layout", ["layout": .string("5.1")]).status == .done)
+        let az = Self.run(&s, "set_automation", ["strip": .string(track.uuidString), "param": .string("azimuth"), "points": Self.pairs([(0, 170), (5, 190)])])
+        #expect(az.status == .done && s.project.lane(strip: track, param: .azimuth)?.points.count == 2, "\(az.error ?? "")")
+        #expect(Self.run(&s, "set_automation", ["strip": .string(track.uuidString), "param": .string("elevation"), "points": Self.pairs([(0, 0), (5, 30)])]).status == .done)
+        #expect(Self.run(&s, "set_automation", ["strip": .string(track.uuidString), "param": .string("azimuth"), "points": Self.pairs([(0, 400)])]).status == .failed)
+        let master = Self.run(&s, "set_automation", ["strip": .string("master"), "param": .string("azimuth"), "points": Self.pairs([(0, 0)])])
+        #expect(master.status == .failed && master.reason == "needs_surround")
+      }
+    }
 }

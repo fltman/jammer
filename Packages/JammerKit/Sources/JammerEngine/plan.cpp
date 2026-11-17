@@ -37,6 +37,43 @@ void Renderer::mixClip(const Plan &plan, const Clip &c, float trackGain, int64_t
     const int64_t got = src.read(c.sourceStart + (a - c.start), n, scratch_.data());
     const float base = c.gain * trackGain;
     const bool fades = c.fadeIn > 0 || c.fadeOut > 0;
+    if (const Placement *pl = plan.sourcePlacement[size_t(c.source)].get(); pl && sc <= 2) {
+        // Placed by the surround panner: the gains worked out at each place on the timeline's 512-frame grid
+        // and ramped in between, so a moving place glides. (Nothing allocated: a few gains on the stack.)
+        constexpr int32_t kMax = 32;
+        float g0[2][kMax], g1[2][kMax];
+        const int32_t dc = std::min(channels_, kMax);
+        auto at = [&](int64_t t, float out[2][kMax]) {
+            const double az = pl->azimuth.dbAt(t), el = pl->elevation.dbAt(t);
+            if (sc == 1) plan.panLayout.gains(az, el, out[0], dc);
+            else { plan.panLayout.gains(az + pl->width / 2, el, out[0], dc); plan.panLayout.gains(az - pl->width / 2, el, out[1], dc); }
+        };
+        // Between the grid's own points (not the render block's ends), so that where a render starts or
+        // how it is cut never changes a sample.
+        int64_t i = 0;
+        while (i < got) {
+            const int64_t t = a + i;
+            const int64_t g = (t / Chain::kQuantum) * Chain::kQuantum;
+            const int64_t next = std::min(a + got, g + Chain::kQuantum);
+            const int64_t len = next - t;
+            at(g, g0);
+            at(g + Chain::kQuantum, g1);
+            for (int64_t j = 0; j < len; ++j, ++i) {
+                const float gn = fades ? base * fade_gain(c, a - c.start + i) : base;
+                const float u = float(t + j - g) / float(Chain::kQuantum);
+                float *o = out + (a - start + i) * channels_;
+                const float *s = scratch_.data() + i * sc;
+                for (int32_t k = 0; k < sc; ++k) {
+                    const float sk = s[k] * gn;
+                    for (int32_t ch = 0; ch < dc; ++ch) {
+                        const float gg = g0[k][ch] + (g1[k][ch] - g0[k][ch]) * u;
+                        if (gg != 0.0f) o[ch] += sk * gg;
+                    }
+                }
+            }
+        }
+        return;
+    }
     const std::vector<float> &m = plan.sourceMatrix[size_t(c.source)];
     if (!m.empty()) {
         // Through the source's matrix: each source channel into the document's channels by its gains.
@@ -100,7 +137,90 @@ jm_plan *jm_plan_create(int32_t channels, double sample_rate) {
 int32_t jm_plan_add_source(jm_plan *plan, jm_source *source) {
     plan->ptr->sources.push_back(source->ptr);
     plan->ptr->sourceMatrix.emplace_back();
+    plan->ptr->sourcePlacement.emplace_back();
     return int32_t(plan->ptr->sources.size() - 1);
+}
+
+void jm_plan_set_pan_layout(jm_plan *plan, int32_t order, const int32_t *channels, const double *azimuths, const double *elevations, int32_t count) {
+    PanLayout &l = plan->ptr->panLayout;
+    l = PanLayout();
+    l.order = std::clamp(order, 0, 3);
+    for (int32_t i = 0; i < count; ++i) {
+        if (channels[i] < 0 || channels[i] >= plan->ptr->channels) continue;
+        (elevations[i] > 0 ? l.top : l.ear).push_back({channels[i], azimuths[i]});
+    }
+    auto byAzimuth = [](const PanLayout::Speaker &a, const PanLayout::Speaker &b) { return a.azimuth < b.azimuth; };
+    std::sort(l.ear.begin(), l.ear.end(), byAzimuth);
+    std::sort(l.top.begin(), l.top.end(), byAzimuth);
+}
+
+void jm_plan_set_source_placement(jm_plan *plan, int32_t source, const int64_t *az_frames, const float *az_values, int32_t az_count,
+                                  const int64_t *el_frames, const float *el_values, int32_t el_count, double width) {
+    Plan &p = *plan->ptr;
+    if (source < 0 || size_t(source) >= p.sources.size() || az_count < 1 || el_count < 1 || p.sources[size_t(source)]->channels > 2) return;
+    auto pl = std::make_shared<Placement>();
+    pl->azimuth.frames.assign(az_frames, az_frames + az_count);
+    pl->azimuth.db.assign(az_values, az_values + az_count);
+    pl->elevation.frames.assign(el_frames, el_frames + el_count);
+    pl->elevation.db.assign(el_values, el_values + el_count);
+    pl->width = width;
+    p.sourcePlacement[size_t(source)] = pl;
+}
+
+namespace {
+/// Pairwise amplitude panning on one ring (V. Pulkki, JAES 45(6), 1997), constant power; adds `share` of it.
+void pan_ring(const std::vector<PanLayout::Speaker> &ring, double azimuth, double share, float *out) JM_NONBLOCKING {
+    if (ring.empty() || share <= 1e-9) return;
+    if (ring.size() == 1) { out[ring[0].channel] += float(share); return; }
+    auto norm = [](double x) { double y = std::fmod(x, 360.0); return y < 0 ? y + 360.0 : y; };
+    for (size_t k = 0; k < ring.size(); ++k) {
+        const PanLayout::Speaker &s1 = ring[k], &s2 = ring[(k + 1) % ring.size()];
+        const double span = norm(s2.azimuth - s1.azimuth), off = norm(azimuth - s1.azimuth);
+        if (span <= 0 || off > span) continue;
+        if (off == 0) { out[s1.channel] += float(share); return; }
+        if (off == span) { out[s2.channel] += float(share); return; }
+        const double r = 3.14159265358979323846 / 180;
+        const double t = azimuth * r, t1 = s1.azimuth * r, t2 = s2.azimuth * r;
+        const double det = std::cos(t1) * std::sin(t2) - std::sin(t1) * std::cos(t2);
+        double g1 = std::max(0.0, (std::cos(t) * std::sin(t2) - std::sin(t) * std::cos(t2)) / det);
+        double g2 = std::max(0.0, (std::cos(t1) * std::sin(t) - std::sin(t1) * std::cos(t)) / det);
+        const double p = std::sqrt(g1 * g1 + g2 * g2);
+        if (p > 0) { out[s1.channel] += float(share * g1 / p); out[s2.channel] += float(share * g2 / p); }
+        else out[s1.channel] += float(share);
+        return;
+    }
+    out[ring[0].channel] += float(share);
+}
+} // namespace
+
+void PanLayout::gains(double azimuth, double elevation, float *out, int32_t channels) const JM_NONBLOCKING {
+    for (int32_t c = 0; c < channels; ++c) out[c] = 0.0f;
+    if (order > 0) {
+        // AmbiX (ACN, SN3D): the real spherical harmonics, as the app's Ambisonics.encode.
+        const double r = 3.14159265358979323846 / 180, p = azimuth * r, t = elevation * r;
+        const double cp = std::cos(p), sp = std::sin(p), ct = std::cos(t), st = std::sin(t);
+        double y[16] = {1, sp * ct, st, cp * ct};
+        if (order >= 2) {
+            const double r3 = std::sqrt(3.0);
+            y[4] = r3 / 2 * std::sin(2 * p) * ct * ct; y[5] = r3 / 2 * sp * std::sin(2 * t); y[6] = 0.5 * (3 * st * st - 1);
+            y[7] = r3 / 2 * cp * std::sin(2 * t); y[8] = r3 / 2 * std::cos(2 * p) * ct * ct;
+        }
+        if (order >= 3) {
+            const double a = std::sqrt(5.0 / 8), b = std::sqrt(15.0) / 2, c = std::sqrt(3.0 / 8);
+            y[9] = a * std::sin(3 * p) * ct * ct * ct; y[10] = b * std::sin(2 * p) * st * ct * ct; y[11] = c * sp * ct * (5 * st * st - 1);
+            y[12] = 0.5 * st * (5 * st * st - 3); y[13] = c * cp * ct * (5 * st * st - 1); y[14] = b * std::cos(2 * p) * st * ct * ct;
+            y[15] = a * std::cos(3 * p) * ct * ct * ct;
+        }
+        const int32_t n = (order + 1) * (order + 1);
+        for (int32_t c = 0; c < n && c < channels; ++c) out[c] = float(y[c]);
+        return;
+    }
+    // Loudspeakers: the ear layer and the height layer crossfaded by elevation at constant power, 0° to 30°.
+    const double w = top.empty() ? 0.0 : std::min(1.0, std::max(0.0, elevation / 30.0));
+    const double half = 3.14159265358979323846 / 2;
+    const double a = std::fmod(azimuth, 360.0);
+    pan_ring(ear, a, std::cos(w * half), out);
+    pan_ring(top, a, std::sin(w * half), out);
 }
 
 void jm_plan_set_source_matrix(jm_plan *plan, int32_t source, const float *gains, int32_t source_channels) {

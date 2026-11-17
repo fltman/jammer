@@ -79,6 +79,15 @@ int32_t jm_plan_add_source(jm_plan *_Nonnull plan, jm_source *_Nonnull source);
 /// How a source's channels go into the document's: `gains` is source_channels × the plan's channels, row by
 /// source channel. Without it a mono source goes to every channel and the others channel for channel.
 void jm_plan_set_source_matrix(jm_plan *_Nonnull plan, int32_t source, const float *_Nonnull gains, int32_t source_channels);
+/// The surround panner's layout: each loudspeaker's channel and direction (degrees, azimuth positive to the
+/// left; an elevation above 0 puts it in the height layer), or an Ambisonics order (1–3) with no loudspeakers.
+void jm_plan_set_pan_layout(jm_plan *_Nonnull plan, int32_t order, const int32_t *_Nullable channels,
+                            const double *_Nullable azimuths, const double *_Nullable elevations, int32_t count);
+/// A mono or stereo source placed by the surround panner: its azimuth and elevation over the timeline (straight
+/// lines between points, degrees; one point for a fixed place) and a stereo source's width.
+void jm_plan_set_source_placement(jm_plan *_Nonnull plan, int32_t source,
+                                  const int64_t *_Nonnull az_frames, const float *_Nonnull az_values, int32_t az_count,
+                                  const int64_t *_Nonnull el_frames, const float *_Nonnull el_values, int32_t el_count, double width);
 /// Adds a track. Gain is linear. Returns its index.
 int32_t jm_plan_add_track(jm_plan *_Nonnull plan, float gain, bool mute);
 /// Adds a clip: `length` frames of `source` from `source_start`, placed at `timeline_start`.

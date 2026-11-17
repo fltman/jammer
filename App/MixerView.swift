@@ -13,6 +13,11 @@ struct MixerSheet: View {
 
     private var project: Project { session.project }
     private var stereo: Bool { project.channels == 2 }
+    /// The name a running plugin gives a lane's parameter.
+    private func parameterName(_ lane: AutomationLane) -> String? {
+        guard let insert = lane.insert, let id = lane.parameter, let unit = session.inserts.instance(insert) else { return nil }
+        return unit.parameters.first { $0.identifier == id }?.name
+    }
 
     var body: some View {
         // The title and the description wrap to the window; the strips are in a scroll view, so the window can
@@ -42,7 +47,7 @@ struct MixerSheet: View {
                                    group: t.vca.flatMap { project.vca($0) }, groupAutomated: t.vca.map { !project.lanes(of: $0).isEmpty } ?? false,
                                    soloed: session.solo.contains(t.id), solo: { toggleSolo(t.id, $0) },
                                    frozen: t.frozen != nil, freeze: { toggleFreeze(t.id, t.name, $0) },
-                                   automation: MixerStrip.automationText(project.lanes(of: t.id)),
+                                   automation: MixerStrip.automationText(project.lanes(of: t.id), names: parameterName),
                                    panAutomated: project.lane(strip: t.id, param: .pan)?.enabled == true,
                                    destinations: project.buses.map { ($0.id, $0.name) },
                                    sends: t.sends, sendTargets: project.buses.map { ($0.id, $0.name) },
@@ -57,7 +62,7 @@ struct MixerSheet: View {
                                    group: b.vca.flatMap { project.vca($0) }, groupAutomated: b.vca.map { !project.lanes(of: $0).isEmpty } ?? false,
                                    soloed: session.solo.contains(b.id), solo: { toggleSolo(b.id, $0) },
                                    frozen: b.frozen != nil, freeze: { toggleFreeze(b.id, b.name, $0) },
-                                   automation: MixerStrip.automationText(project.lanes(of: b.id)),
+                                   automation: MixerStrip.automationText(project.lanes(of: b.id), names: parameterName),
                                    panAutomated: project.lane(strip: b.id, param: .pan)?.enabled == true,
                                    // A bus can go to any bus that doesn't lead back to it.
                                    destinations: project.buses.filter { $0.id != b.id && !leadsBack(from: $0.id, to: b.id) }.map { ($0.id, $0.name) },
@@ -102,7 +107,7 @@ struct MixerSheet: View {
             }
             // Outside the list that scrolls: the master and what its limiter promises are always in view.
             Text(L10n.text("strip.master")).font(.headline)
-            MasterStrip(master: project.master, automation: MixerStrip.automationText(project.lanes(of: Master.id)), change: { session.perform("set_master", $0) })
+            MasterStrip(master: project.master, automation: MixerStrip.automationText(project.lanes(of: Master.id), names: parameterName), change: { session.perform("set_master", $0) })
             HStack {
                 TextField(L10n.text("mixer.new.name"), text: $newBus)
                     .accessibilityLabel(L10n.text("mixer.new.name"))
@@ -289,7 +294,7 @@ private struct MasterStrip: View {
     }
 }
 
-private struct MixerStrip: View {
+struct MixerStrip: View {
     let id: UUID
     let session: EditorSession
     let name: String
@@ -339,7 +344,7 @@ private struct MixerStrip: View {
 
     static func levelText(_ db: Double) -> String { (L10n.number(db, 1, sign: true) + " dB").replacingOccurrences(of: "-", with: "−") }
     /// What a strip's lanes are, in words: the slider beside it is then not the whole level.
-    static func automationText(_ lanes: [AutomationLane]) -> String? {
+    static func automationText(_ lanes: [AutomationLane], names: (AutomationLane) -> String? = { _ in nil }) -> String? {
         // From the catalogue: the count by its plural forms, each lane a whole phrase with its values as
         // placeholders, joined by the catalogue's own separator.
         let parts = lanes.compactMap { lane -> String? in
@@ -354,7 +359,10 @@ private struct MixerStrip: View {
             case .pan: text = L10n.text("mixer.automation.pan", points)
             case .mute: text = L10n.text("mixer.automation.mute", points)
             case .send: text = L10n.text("mixer.automation.send", points)
-            case .plugin: text = L10n.text("mixer.automation.plugin", points, lane.parameter ?? "")
+            // A plugin's parameter by the name the plugin gives it (its identifier when the plugin isn't running).
+            case .plugin: text = L10n.text("mixer.automation.plugin", points, names(lane) ?? lane.parameter ?? "")
+            case .azimuth: text = L10n.text("mixer.automation.azimuth", points)
+            case .elevation: text = L10n.text("mixer.automation.elevation", points)
             }
             return lane.enabled ? text : L10n.text("mixer.automation.off", text)
         }

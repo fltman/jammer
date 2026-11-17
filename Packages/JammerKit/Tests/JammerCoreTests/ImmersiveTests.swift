@@ -312,4 +312,58 @@ struct ImmersiveTests {
         let stereo = Waveform.columns(s, track: 1, start: 0, framesPerColumn: 960, count: 10, peaks: [:], pool: SourcePool())
         #expect(stereo.count == 2 && stereo.allSatisfy { $0.contains { $0 != .empty } }, "mono in both rows of a stereo document, as before")
     }
+
+    /// A 5.1 document with one mono voice (a steady tone, so every sample's ideal gain is known) on a track.
+    func movingDoc(_ dir: TempDir, seconds: Double = 2) throws -> (Project, [Float]) {
+        let n = Int(48_000 * seconds)
+        let tone = (0..<n).map { Float(0.5 * sin(2 * Double.pi * 440 * Double($0) / 48_000)) }
+        let url = dir.file("tone.wav")
+        try writeWAV(tone, to: url, channels: 1)
+        let ref = SourceRef(name: "tone", path: url.path, info: try AudioFileReader.info(at: url))
+        var p = Project(source: try file(dir, "six.wav", channels: 6, frames: n))
+        p.sources.append(ref)
+        p.tracks = [Track(name: "Voice", clips: [Clip(sourceID: ref.id, start: 0, length: Frame(n))])]
+        return (p, tone)
+    }
+
+    @Test("A place that moves: a fixed place through the engine's panner is the fixed matrix's sound; 30° to 110° over two seconds starts on L alone and ends on Ls alone; a render from the middle is the whole's; against the ideal path (every sample at its own place) the 512-frame grid stays within its tolerance")
+    func movingPlace() throws {
+        let dir = TempDir()
+        var (p, tone) = try movingDoc(dir)
+        let id = p.tracks[0].id, n = tone.count
+        try p.setTrackPosition(id, azimuth: 70)
+        let fixed = PlanCompiler.compile(p, pool: SourcePool()).render(from: 0, frames: n)
+        // The same fixed place as a lane of one point: through the engine's own panner.
+        try p.setAutomation(strip: id, param: .azimuth, points: [AutomationPoint(frame: 0, value: 70)])
+        let oneLane = PlanCompiler.compile(p, pool: SourcePool()).render(from: 0, frames: n)
+        var worst: Float = 0
+        for i in 0..<fixed.count { worst = max(worst, abs(fixed[i] - oneLane[i])) }
+        #expect(worst < 1e-5, "the engine's panner against the app's: \(worst)")
+        // Moving: 30° (L) at the start to 110° (Ls) at the end.
+        try p.setAutomation(strip: id, param: .azimuth, points: [AutomationPoint(frame: 0, value: 30), AutomationPoint(frame: Frame(n), value: 110)])
+        let plan = PlanCompiler.compile(p, pool: SourcePool())
+        let moving = plan.render(from: 0, frames: n)
+        #expect(abs(moving[0 * 6 + 0] - tone[0]) < 1e-6 && moving[4] == 0, "starts on L")
+        let last = n - 1
+        #expect(abs(moving[last * 6 + 4] - tone[last]) < 2e-3 && abs(moving[last * 6 + 0]) < 2e-3, "ends on Ls")
+        // From the middle: the same samples.
+        let at = 48_000 + 300
+        let part = plan.render(from: Frame(at), frames: 20_000)
+        #expect(part == Array(moving[(at * 6)..<((at + 20_000) * 6)]), "a render from the middle is the whole's")
+        // Against the ideal path.
+        // Along the straight stretch (more than one grid step from a point): within 2·10⁻⁵ of the level. In the
+        // 512 frames around a point that isn't on the grid (here the lane's end) the glide cuts the corner:
+        // within 2·10⁻³ of the level (−54 dB).
+        var straight: Float = 0, corner: Float = 0
+        for i in stride(from: 0, to: n, by: 7) {
+            let az = 30 + 80 * Double(i) / Double(n)
+            let g = Panner.gains(azimuth: az, elevation: 0, in: .surround51)
+            for c in 0..<6 {
+                let d = abs(moving[i * 6 + c] - g[c] * tone[i]) / 0.5
+                if i >= 1_024, i < n - 1_024 { straight = max(straight, d) } else { corner = max(corner, d) }
+            }
+        }
+        print("moving place, 80° in 2 s, against the ideal path, relative to the level: \(straight) along the line, \(corner) at its end")
+        #expect(straight < 2e-5 && corner < 2e-3, "\(straight), \(corner)")
+    }
 }

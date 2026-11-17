@@ -22,7 +22,8 @@ public struct AutomationLane: Codable, Hashable, Sendable {
     /// its lanes are added to its members' when the plan is made, as its fader is.
     /// `plugin`: one parameter of one plugin on the strip (`insert` and `parameter` then say which), in the
     /// parameter's own unit, a straight line between points.
-    public enum Param: String, Codable, Sendable, CaseIterable { case gain, pan, mute, send, plugin }
+    /// azimuth and elevation: a track's place in a layout wider than stereo (the surround panner), in degrees.
+    public enum Param: String, Codable, Sendable, CaseIterable { case gain, pan, mute, send, plugin, azimuth, elevation }
     public enum Shape: String, Codable, Sendable { case linear, hold }
 
     /// The track, bus or VCA group, or `Master.id`.
@@ -79,6 +80,9 @@ public enum Automation {
         case .mute: 0...1
         // (A plugin's parameter has its own range, which only the plugin knows; the step that writes the lane asks it.)
         case .plugin: -Double.greatestFiniteMagnitude...Double.greatestFiniteMagnitude
+        // Past ±180 so that a place can move on round behind (170° to 190° goes behind, not back across the front).
+        case .azimuth: -360...360
+        case .elevation: SurroundPosition.elevationRange
         }
     }
     static func unit(of param: AutomationLane.Param) -> String {
@@ -87,6 +91,8 @@ public enum Automation {
         case .pan: "a pan is −1 (left) to 1 (right)"
         case .mute: "a mute is 1 (muted) or 0 (heard)"
         case .plugin: "a plugin's parameter has its own range"
+        case .azimuth: "an azimuth is −360 to 360 degrees, positive to the left (past ±180 it goes on round behind)"
+        case .elevation: "an elevation is 0 to 90 degrees up"
         }
     }
     /// The longest timeline a point may be on: 24 hours at 192 kHz.
@@ -94,6 +100,8 @@ public enum Automation {
 
     public enum Failure: Error, LocalizedError, Equatable {
         case noStrip(String), notBuilt(String), badValue(String), tooMany, mono, noPan, noSend(String), groupHasNoPan, noInsert
+        /// A place (azimuth, elevation) automated on something that has none: in mono or stereo, or on anything but a track.
+        case noPlace(String)
         /// Pan automation in a document wider than stereo. The value is the layout.
         case wide(String)
 
@@ -104,6 +112,7 @@ public enum Automation {
             case .badValue: "bad_request"
             case .tooMany: "too_many"
             case .mono, .wide: "needs_stereo"
+            case .noPlace: "needs_surround"
             case .noPan, .groupHasNoPan: "bad_request"
             case .noSend, .noInsert: "not_found"
             }
@@ -114,6 +123,7 @@ public enum Automation {
             case .notBuilt(let what): "automation of \(what) isn't built yet; gain, pan and mute are."
             case .mono: "a mono document has no pan to automate."
             case .wide(let layout): "a \(layout) document has no stereo pan to automate; its surround panner isn't built yet."
+            case .noPlace(let what): "\(what) has no place to automate: azimuth and elevation are a track's, in documents wider than stereo."
             case .noPan: "the master has a level to automate, not a pan, a mute or a send."
             case .groupHasNoPan: "a VCA group has a level and a mute to automate, not a pan or a send."
             case .noSend(let to): "that strip has no send to \(to); make the send first (set_send)."
@@ -129,6 +139,7 @@ public enum Automation {
             case .notBuilt(let what): KeyedMessage("error.automation.notBuilt", ["\(what)"])
             case .mono: KeyedMessage("error.automation.mono")
             case .wide(let layout): KeyedMessage("error.automation.wide", ["\(layout)"])
+            case .noPlace(let what): KeyedMessage("error.automation.noPlace", ["\(what)"])
             case .noPan: KeyedMessage("error.automation.noPan")
             case .groupHasNoPan: KeyedMessage("error.automation.groupHasNoPan")
             case .noSend(let to): KeyedMessage("error.automation.noSend", ["\(to)"])
@@ -263,6 +274,10 @@ extension Project {
             throw Automation.Failure.badValue("`to` names a send's bus and goes with a send lane only.")
         }
         if param == .pan, channels != 2 { throw channels == 1 ? Automation.Failure.mono : Automation.Failure.wide(layout.rawValue) }
+        if param == .azimuth || param == .elevation {
+            guard channels > 2 else { throw Automation.Failure.noPlace("a \(layout.rawValue) document") }
+            guard tracks.contains(where: { $0.id == strip }) else { throw Automation.Failure.noPlace(strip == Master.id ? "the master" : "that strip") }
+        }
         // A mute holds its value until the next point; a level and a pan go in a straight line.
         if let shape, shape != (param == .mute ? .hold : .linear) {
             throw Automation.Failure.badValue(param == .mute ? "a mute lane holds each value until the next point (shape hold)." : "a \(param.rawValue) lane goes in a straight line between points (shape linear).")

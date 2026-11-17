@@ -2785,6 +2785,42 @@
         }
       }
     },
+    "automation.ax.lane.azimuth": {
+      "comment": "Accessibility label of a track’s azimuth lane. %@ is the track.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Place automation of %@"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Placeringsautomation för %@"
+          }
+        }
+      }
+    },
+    "automation.ax.lane.elevation": {
+      "comment": "Accessibility label of a track’s elevation lane. %@ is the track.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Height automation of %@"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Höjdautomation för %@"
+          }
+        }
+      }
+    },
     "automation.ax.lane.gain": {
       "comment": "VoiceOver: a lane. %@ is the track.",
       "extractionState": "manual",
@@ -2967,6 +3003,42 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "automation.caption.azimuth": {
+      "comment": "Caption of a track’s azimuth lane (its place around the listener) in the timeline.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Place lane, in place of the place slider. Left is up, behind at either edge."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Placeringsbana, i placeringsreglagets ställe. Vänster är upp, bakom vid båda kanterna."
+          }
+        }
+      }
+    },
+    "automation.caption.elevation": {
+      "comment": "Caption of a track’s elevation lane in the timeline.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Height lane. Overhead is up."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Höjdbana. Rakt ovanför är upp."
           }
         }
       }
@@ -3375,6 +3447,42 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "automation.removed.azimuth": {
+      "comment": "Status line. %@ is the track.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Place lane removed from %@"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Placeringsbanan borttagen från %@"
+          }
+        }
+      }
+    },
+    "automation.removed.elevation": {
+      "comment": "Status line. %@ is the track.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Height lane removed from %@"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Höjdbanan borttagen från %@"
           }
         }
       }
@@ -4791,6 +4899,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "mastern har en nivå att automatisera, inte panorering, tystning eller send."
+          }
+        }
+      }
+    },
+    "error.automation.noPlace": {
+      "comment": "An error’s reason, shown in the status line after a step that failed (the agent API says the same in English). %@ is what was named: “a stereo document”, “the master”, “that strip”.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ has no place to automate: azimuth and elevation are a track’s, in documents wider than stereo."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ har ingen placering att automatisera: azimut och elevation hör till ett spår, i dokument bredare än stereo."
           }
         }
       }
@@ -9307,6 +9433,42 @@
         }
       }
     },
+    "mixer.automation.azimuth": {
+      "comment": "Part of a strip’s automation line. %@ is “4 points”: an azimuth lane (the track’s place around the listener).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ moving the place around"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ som flyttar placeringen runt"
+          }
+        }
+      }
+    },
+    "mixer.automation.elevation": {
+      "comment": "Part of a strip’s automation line. %@ is “4 points”: an elevation lane.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ moving the height"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ som flyttar höjden"
+          }
+        }
+      }
+    },
     "mixer.automation.forGroup": {
       "comment": "The line under a VCA group. %@ is the whole automation line.",
       "extractionState": "manual",
@@ -9416,7 +9578,7 @@
       }
     },
     "mixer.automation.plugin": {
-      "comment": "Part of a strip’s automation line. %1$@ is “4 points”, %2$@ the parameter’s identifier in the plugin.",
+      "comment": "Part of a strip’s automation line. %1$@ is “4 points”, %2$@ the parameter’s name in the plugin (its identifier when the plugin isn’t running).",
       "extractionState": "manual",
       "localizations": {
         "en": {
