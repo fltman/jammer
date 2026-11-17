@@ -159,8 +159,8 @@ public final class AudioOutput {
         let rate = try Self.nominalRate(id)
         let slots = Self.slots(projectChannels: channels, streams: streams, stereo: Self.preferredStereo(id))
         guard !slots.isEmpty else { throw OutputError("The output device has no channels.") }
-        var b = slots.map(\.buffer), c = slots.map(\.channel), s = slots.map(\.source)
-        jm_engine_set_output(engine, rate, &b, &c, &s, Int32(slots.count))
+        var b = slots.map(\.buffer), c = slots.map(\.channel), s = slots.map(\.source), g = slots.map(\.gain)
+        jm_engine_set_output(engine, rate, &b, &c, &s, &g, Int32(slots.count))
         var proc: AudioDeviceIOProcID?
         try check(AudioDeviceCreateIOProcID(id, jm_engine_ioproc, UnsafeMutableRawPointer(engine), &proc), "connect to the output device")
         device = id
@@ -199,7 +199,11 @@ public final class AudioOutput {
 
     // MARK: Routing
 
-    nonisolated struct Slot: Equatable, Sendable { var buffer: Int32; var channel: Int32; var source: Int32 }
+    nonisolated struct Slot: Equatable, Sendable {
+        var buffer: Int32; var channel: Int32; var source: Int32
+        /// For a fold-down: several slots feed one device channel, each with its gain.
+        var gain: Float = 1
+    }
 
     /// Which device channel plays which project channel. `streams` is the channel count
     /// of each output buffer; `stereo` the device's preferred pair (1-based, across buffers).
@@ -304,7 +308,7 @@ public final class AudioOutput {
         guard let unit = u else { throw OutputError("No default output device.") }
         // The unit converts rate and layout itself, so the engine runs at the project rate.
         var none: Int32 = 0
-        jm_engine_set_output(engine, sampleRate, &none, &none, &none, 0)
+        jm_engine_set_output(engine, sampleRate, &none, &none, &none, nil, 0)
         // Non-interleaved float at the project rate; the unit converts to the device.
         var format = AudioStreamBasicDescription(
             mSampleRate: sampleRate, mFormatID: kAudioFormatLinearPCM,

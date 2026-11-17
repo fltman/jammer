@@ -15,16 +15,25 @@ struct MixerSheet: View {
     private var stereo: Bool { project.channels == 2 }
 
     var body: some View {
-        // In a scroll view: the window can be made lower and narrower than the mixer, and the mixer then scrolls in it.
-        ScrollView([.horizontal, .vertical]) { content }
-            .frame(minWidth: 560, idealWidth: 1300, maxWidth: .infinity, minHeight: 220, idealHeight: 560, maxHeight: .infinity)
-    }
-
-    private var content: some View {
+        // The title and the description wrap to the window; the strips are in a scroll view, so the window can
+        // be made lower and narrower than the mixer and the strips then scroll in it.
+        VStack(alignment: .leading, spacing: 0) {
         VStack(alignment: .leading, spacing: 12) {
             Text(L10n.text("mixer.title")).font(.title2.bold())
             Text(L10n.text("mixer.intro"))
                 .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: 1220, alignment: .leading)
+        }
+        .padding([.horizontal, .top], 20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(minWidth: 560, idealWidth: 1300, maxWidth: .infinity)
+        ScrollView([.horizontal, .vertical]) { content }
+            .frame(minWidth: 560, idealWidth: 1300, maxWidth: .infinity, minHeight: 160, idealHeight: 480, maxHeight: .infinity)
+        }
+    }
+
+    private var content: some View {
+        VStack(alignment: .leading, spacing: 12) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(L10n.text("mixer.tracks")).font(.headline)
@@ -115,7 +124,8 @@ struct MixerSheet: View {
                 Button(L10n.text("button.done"), action: done).keyboardShortcut(.defaultAction)
             }
         }
-        .padding(20)
+        .padding([.horizontal, .bottom], 20)
+        .padding(.top, 8)
         // Wide enough for a whole strip: a row that doesn't fit pushes the sheet's content out of its left edge.
         .frame(width: 1260)
     }

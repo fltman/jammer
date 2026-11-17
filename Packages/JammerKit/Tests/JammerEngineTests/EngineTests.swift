@@ -198,7 +198,7 @@ struct EngineTests {
         defer { jm_engine_destroy(engine) }
         jm_engine_set_plan(engine, plan)
         var buffers: [Int32] = [0], channels: [Int32] = [0], sources: [Int32] = [0]
-        jm_engine_set_output(engine, deviceRate, &buffers, &channels, &sources, 1)
+        jm_engine_set_output(engine, deviceRate, &buffers, &channels, &sources, nil, 1)
         #expect(jm_engine_output_rate(engine) == deviceRate)
 
         var out: [Float] = [], playheads: [Int64] = []
@@ -258,7 +258,7 @@ struct EngineTests {
         jm_engine_set_plan(engine, plan)
         // A 4-channel interleaved device whose "stereo pair" is channels 3 and 4.
         var buffers: [Int32] = [0, 0], channels: [Int32] = [2, 3], sources: [Int32] = [0, 0]
-        jm_engine_set_output(engine, 48_000, &buffers, &channels, &sources, 2)
+        jm_engine_set_output(engine, 48_000, &buffers, &channels, &sources, nil, 2)
 
         let n = 256
         var data = [Float](repeating: 9, count: n * 4)
@@ -406,5 +406,50 @@ struct RingLengthTests {
         let applied = trimmed.applied
         #expect(applied.first?.0 == 0 && applied.first?.1 == 0 && applied.dropFirst().allSatisfy { $0.1 == -6 })
         #expect(zip(applied, applied.dropFirst()).allSatisfy { $0.0 < $1.0 } && (applied.last?.0 ?? 0) >= Int64(count))
+    }
+}
+
+@Suite("Engine: a document wider than the device, folded down at the output")
+struct FoldDownOutputTests {
+    @Test("L, R and C on a stereo device: the centre is added to both sides by its gain, the sides go through exactly")
+    func centreIntoStereo() {
+        let n = 4_096
+        var lrc = [Float](repeating: 0, count: n * 3)
+        for i in 0..<n { lrc[i * 3] = Float(i % 11) * 0.01; lrc[i * 3 + 1] = -Float(i % 13) * 0.01; lrc[i * 3 + 2] = Float(sin(Double(i) * 0.03)) * 0.3 }
+        let source = lrc.withUnsafeBufferPointer { jm_source_create_memory($0.baseAddress!, Int64(n), 3) }
+        defer { jm_source_release(source) }
+        let plan = jm_plan_create(3, 48_000)
+        defer { jm_plan_release(plan) }
+        let t = jm_plan_add_track(plan, 1, false)
+        jm_plan_add_clip(plan, t, jm_plan_add_source(plan, source), 0, 0, Int64(n), 1, 0, 0, JM_FADE_LINEAR)
+        jm_plan_finalize(plan)
+        let engine = jm_engine_create(3, 48_000, 8_192)
+        defer { jm_engine_destroy(engine) }
+        jm_engine_set_plan(engine, plan)
+        let k = Float(0.5.squareRoot())
+        var buffers: [Int32] = [0, 0, 0, 0], channels: [Int32] = [0, 1, 0, 1], sources: [Int32] = [0, 1, 2, 2]
+        var gains: [Float] = [1, 1, k, k]
+        jm_engine_set_output(engine, 48_000, &buffers, &channels, &sources, &gains, 4)
+        let frames = 256
+        var data = [Float](repeating: 9, count: frames * 2)
+        func callIOProc() {
+            data.withUnsafeMutableBytes { raw in
+                var list = AudioBufferList(mNumberBuffers: 1, mBuffers: AudioBuffer(mNumberChannels: 2, mDataByteSize: UInt32(frames * 8), mData: raw.baseAddress))
+                var ts = AudioTimeStamp()
+                var input = AudioBufferList()
+                _ = jm_engine_ioproc(0, &ts, &input, &ts, &list, &ts, UnsafeMutableRawPointer(engine))
+            }
+        }
+        jm_engine_play(engine, 200)
+        for _ in 0..<2_000 where !jm_engine_seek_settled(engine) { callIOProc(); usleep(500) }
+        #expect(jm_engine_wait_primed(engine, 2_000))
+        callIOProc()
+        var worst: Float = 0
+        for i in 0..<frames {
+            let f = 200 + i
+            let left: Float = lrc[f * 3] + k * lrc[f * 3 + 2], right: Float = lrc[f * 3 + 1] + k * lrc[f * 3 + 2]
+            worst = max(worst, abs(data[i * 2] - left), abs(data[i * 2 + 1] - right))
+        }
+        #expect(worst < 1e-6, "largest difference \(worst)")
     }
 }

@@ -76,6 +76,9 @@ typedef enum jm_fade_shape {
 jm_plan *_Nonnull jm_plan_create(int32_t channels, double sample_rate);
 /// Adds a source the plan's clips can refer to (retained). Returns its index.
 int32_t jm_plan_add_source(jm_plan *_Nonnull plan, jm_source *_Nonnull source);
+/// How a source's channels go into the document's: `gains` is source_channels × the plan's channels, row by
+/// source channel. Without it a mono source goes to every channel and the others channel for channel.
+void jm_plan_set_source_matrix(jm_plan *_Nonnull plan, int32_t source, const float *_Nonnull gains, int32_t source_channels);
 /// Adds a track. Gain is linear. Returns its index.
 int32_t jm_plan_add_track(jm_plan *_Nonnull plan, float gain, bool mute);
 /// Adds a clip: `length` frames of `source` from `source_start`, placed at `timeline_start`.
@@ -283,7 +286,8 @@ void jm_engine_pull(jm_engine *_Nonnull engine, float *_Nonnull const *_Nonnull 
 /// `sources[i]` to interleaved channel `channels[i]` of output buffer `buffers[i]`
 /// (both from 0); up to 64 slots. Channels without a slot are silent.
 void jm_engine_set_output(jm_engine *_Nonnull engine, double device_rate, const int32_t *_Nonnull buffers,
-                          const int32_t *_Nonnull channels, const int32_t *_Nonnull sources, int32_t count);
+                          const int32_t *_Nonnull channels, const int32_t *_Nonnull sources,
+                          const float *_Nullable gains, int32_t count);
 /// The rate the engine is producing for (the project rate until set_output).
 double jm_engine_output_rate(const jm_engine *_Nonnull engine);
 

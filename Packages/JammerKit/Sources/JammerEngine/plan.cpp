@@ -37,6 +37,21 @@ void Renderer::mixClip(const Plan &plan, const Clip &c, float trackGain, int64_t
     const int64_t got = src.read(c.sourceStart + (a - c.start), n, scratch_.data());
     const float base = c.gain * trackGain;
     const bool fades = c.fadeIn > 0 || c.fadeOut > 0;
+    const std::vector<float> &m = plan.sourceMatrix[size_t(c.source)];
+    if (!m.empty()) {
+        // Through the source's matrix: each source channel into the document's channels by its gains.
+        for (int64_t i = 0; i < got; ++i) {
+            const float g = fades ? base * fade_gain(c, a - c.start + i) : base;
+            float *o = out + (a - start + i) * channels_;
+            const float *s = scratch_.data() + i * sc;
+            for (int32_t k = 0; k < sc; ++k) {
+                const float sk = s[k] * g;
+                const float *row = m.data() + size_t(k) * size_t(channels_);
+                for (int32_t ch = 0; ch < channels_; ++ch) if (row[ch] != 0.0f) o[ch] += sk * row[ch];
+            }
+        }
+        return;
+    }
     for (int64_t i = 0; i < got; ++i) {
         const float g = fades ? base * fade_gain(c, a - c.start + i) : base;
         float *o = out + (a - start + i) * channels_;
@@ -84,7 +99,14 @@ jm_plan *jm_plan_create(int32_t channels, double sample_rate) {
 
 int32_t jm_plan_add_source(jm_plan *plan, jm_source *source) {
     plan->ptr->sources.push_back(source->ptr);
+    plan->ptr->sourceMatrix.emplace_back();
     return int32_t(plan->ptr->sources.size() - 1);
+}
+
+void jm_plan_set_source_matrix(jm_plan *plan, int32_t source, const float *gains, int32_t source_channels) {
+    Plan &p = *plan->ptr;
+    if (source < 0 || size_t(source) >= p.sources.size() || source_channels != p.sources[size_t(source)]->channels) return;
+    p.sourceMatrix[size_t(source)].assign(gains, gains + size_t(source_channels) * size_t(p.channels));
 }
 
 int32_t jm_plan_add_track(jm_plan *plan, float gain, bool mute) {

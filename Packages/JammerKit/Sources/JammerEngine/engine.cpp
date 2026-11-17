@@ -35,6 +35,7 @@ struct OutputSlot {
     int32_t buffer = 0;
     int32_t channel = 0;
     int32_t source = 0;
+    float gain = 1.0f; // a fold-down for a device with fewer channels than the document: several slots, one device channel
 };
 
 /// One destination for `pull`: `frames` floats `stride` apart from `base`.
@@ -42,6 +43,8 @@ struct Out {
     float *base;
     int32_t stride;
     int32_t source; // engine channel, or -1 for silence
+    float gain = 1.0f;
+    bool add = false; // added to what is there (the device's buffers, silenced first), so several channels can share one
 };
 
 /// Resamples the plan from the project rate to the device rate in the worker
@@ -333,17 +336,19 @@ void pull(Engine &e, const Out *outs, int32_t count, int32_t frames) JM_NONBLOCK
             const int32_t ch = outs[k].source;
             if (ch >= 0 && ch < ec) {
                 float peak = 0.0f;
+                const float sg = outs[k].gain;
                 for (int64_t i = 0; i < n; ++i) {
                     const float v = e.ringData[((r + uint64_t(i)) & e.mask) * uint64_t(ec) + uint64_t(ch)] * g;
-                    o[i * stride] = silent ? 0.0f : v;
+                    if (outs[k].add) o[i * stride] += silent ? 0.0f : v * sg;
+                    else o[i * stride] = silent ? 0.0f : (sg == 1.0f ? v : v * sg);
                     const float a = v < 0 ? -v : v;
                     if (a > peak) peak = a;
                 }
                 if (peak > peaks[ch]) peaks[ch] = peak;
-            } else {
+            } else if (!outs[k].add) {
                 for (int64_t i = 0; i < n; ++i) o[i * stride] = 0.0f;
             }
-            for (int64_t i = n; i < frames; ++i) o[i * stride] = 0.0f;
+            if (!outs[k].add) for (int64_t i = n; i < frames; ++i) o[i * stride] = 0.0f;
         }
         for (int32_t ch = 0; ch < ec && ch < kMaxChannels; ++ch) raise_peak(e.peaks[ch], peaks[ch]);
         e.readPos.store(r + uint64_t(n), std::memory_order_release);
@@ -479,11 +484,11 @@ bool jm_engine_wait_primed(jm_engine *engine, int32_t timeout_ms) {
 }
 
 void jm_engine_set_output(jm_engine *engine, double device_rate, const int32_t *buffers, const int32_t *channels,
-                          const int32_t *sources, int32_t count) {
+                          const int32_t *sources, const float *gains, int32_t count) {
     Engine &e = engine->e;
     const int32_t n = std::clamp(count, 0, kMaxSlots);
     e.slotCount.store(0, std::memory_order_release);
-    for (int32_t i = 0; i < n; ++i) e.slots[i] = OutputSlot{buffers[i], channels[i], sources[i]};
+    for (int32_t i = 0; i < n; ++i) e.slots[i] = OutputSlot{buffers[i], channels[i], sources[i], gains ? gains[i] : 1.0f};
     e.slotCount.store(n, std::memory_order_release);
     const double rate = device_rate > 0 ? device_rate : e.sampleRate;
     if (e.outRate.exchange(rate, std::memory_order_acq_rel) != rate) {
@@ -533,7 +538,7 @@ OSStatus jm_engine_ioproc(AudioObjectID device, const AudioTimeStamp *now, const
         const AudioBuffer &buf = output_data->mBuffers[s.buffer];
         if (!buf.mData || s.channel < 0 || UInt32(s.channel) >= buf.mNumberChannels) continue;
         if (int32_t(buf.mDataByteSize / (4 * buf.mNumberChannels)) < frames) continue;
-        o[n++] = Out{static_cast<float *>(buf.mData) + s.channel, int32_t(buf.mNumberChannels), s.source};
+        o[n++] = Out{static_cast<float *>(buf.mData) + s.channel, int32_t(buf.mNumberChannels), s.source, s.gain, true};
     }
     pull(e, o, n, frames);
     return noErr;

@@ -463,3 +463,61 @@ struct ParameterCurveTests {
         }
     }
 }
+
+@Suite("Engine: a source's channels into a wider document")
+struct SourceMatrixTests {
+    func plan(channels: Int, source: [Float], sourceChannels: Int, matrix: [Float]?) -> [Float] {
+        let p = jm_plan_create(Int32(channels), 48_000)
+        defer { jm_plan_release(p) }
+        let s = source.withUnsafeBufferPointer { jm_source_create_memory($0.baseAddress!, Int64(source.count / sourceChannels), Int32(sourceChannels)) }
+        defer { jm_source_release(s) }
+        let si = jm_plan_add_source(p, s)
+        if var m = matrix { jm_plan_set_source_matrix(p, si, &m, Int32(sourceChannels)) }
+        let t = jm_plan_add_track(p, 1, false)
+        jm_plan_add_clip(p, t, si, 0, 0, Int64(source.count / sourceChannels), 1, 0, 0, JM_FADE_LINEAR)
+        jm_plan_finalize(p)
+        var out = [Float](repeating: .nan, count: (source.count / sourceChannels) * channels)
+        _ = jm_render(p, 0, Int64(source.count / sourceChannels), &out)
+        return out
+    }
+
+    @Test("A mono voice into 5.1 goes to the centre only, a stereo pair to L and R, each sample exactly; without a matrix the old way stands")
+    func intoSurround() {
+        let mono: [Float] = (0..<512).map { Float(sin(Double($0) * 0.05)) * 0.5 }
+        var toCenter = [Float](repeating: 0, count: 6); toCenter[2] = 1
+        let c = plan(channels: 6, source: mono, sourceChannels: 1, matrix: toCenter)
+        var centreOnly = true
+        for i in 0..<512 { for ch in 0..<6 where c[i * 6 + ch] != (ch == 2 ? mono[i] : 0) { centreOnly = false } }
+        #expect(centreOnly)
+        let stereo: [Float] = (0..<1024).map { Float($0 % 7) * 0.01 - 0.03 }
+        var lr = [Float](repeating: 0, count: 12); lr[0] = 1; lr[6 + 1] = 1
+        let s = plan(channels: 6, source: stereo, sourceChannels: 2, matrix: lr)
+        var frontOnly = true
+        for i in 0..<512 { for ch in 0..<6 where s[i * 6 + ch] != (ch < 2 ? stereo[i * 2 + ch] : 0) { frontOnly = false } }
+        #expect(frontOnly)
+        // No matrix: mono in every channel, as it always was.
+        let old = plan(channels: 6, source: mono, sourceChannels: 1, matrix: nil)
+        var everywhere = true
+        for i in 0..<512 { for ch in 0..<6 where old[i * 6 + ch] != mono[i] { everywhere = false } }
+        #expect(everywhere)
+        // A matrix whose size doesn't fit the source is ignored rather than read past its end.
+        let wrong = plan(channels: 6, source: stereo, sourceChannels: 2, matrix: nil)
+        #expect(wrong.count == 512 * 6)
+    }
+
+    @Test("A fold-down sums by its gains: 5.1 into stereo with the centre at −3 dB")
+    func foldDown() {
+        let base: [Float] = [0.1, 0.2, 0.4, 0.9, 0.05, 0.06]
+        var six: [Float] = []
+        for i in 0..<256 { for v in base { six.append(v * Float(i % 3)) } }
+        let k = Float(0.5.squareRoot())
+        var m = [Float](repeating: 0, count: 12)
+        m[0 * 2 + 0] = 1; m[1 * 2 + 1] = 1; m[2 * 2 + 0] = k; m[2 * 2 + 1] = k; m[4 * 2 + 0] = k; m[5 * 2 + 1] = k   // LFE left out
+        let out = plan(channels: 2, source: six, sourceChannels: 6, matrix: m)
+        for i in 0..<256 {
+            let x = Array(six[(i * 6)..<(i * 6 + 6)])
+            let left: Float = x[0] + k * x[2] + k * x[4], right: Float = x[1] + k * x[2] + k * x[5]
+            #expect(abs(out[i * 2] - left) < 1e-6 && abs(out[i * 2 + 1] - right) < 1e-6)
+        }
+    }
+}

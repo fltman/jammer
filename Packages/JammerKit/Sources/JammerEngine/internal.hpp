@@ -287,6 +287,9 @@ struct Plan {
     int32_t channels;
     double sampleRate;
     std::vector<std::shared_ptr<Source>> sources;
+    /// Per source (by index): how its channels go into the document's, as gains [source channel][document
+    /// channel]. Empty: the old way (a mono source in every channel, the rest channel for channel).
+    std::vector<std::vector<float>> sourceMatrix;
     std::vector<Track> tracks;
     std::vector<Bus> buses;
     /// Buses in the order they are summed: every bus before the one it feeds. Made by finalize.

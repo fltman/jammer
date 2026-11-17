@@ -96,7 +96,7 @@ int main() {
     {
         jm_engine *engine = jm_engine_create(2, 48000, 16384);
         const int32_t buffers[2] = {0, 0}, channels[2] = {2, 3}, sources[2] = {0, 1};
-        jm_engine_set_output(engine, 44100, buffers, channels, sources, 2);
+        jm_engine_set_output(engine, 44100, buffers, channels, sources, nullptr, 2);
         std::vector<float> data(512 * 4);
         AudioBufferList out{};
         out.mNumberBuffers = 1;
