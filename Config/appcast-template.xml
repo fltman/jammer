@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Jämmer's appcast, to be published at https://jammer.brattoo.com/appcast.xml (Info.plist SUFeedURL).
+     Not uploaded: Anders publishes it with a release (docs/RELEASE.md, "Updates"). One <item> per version,
+     newest first. The signature is made by Sparkle's sign_update with the key in Anders's Keychain:
+       Packages/JammerKit/Vendor/Sparkle/bin/sign_update --account jammer Jammer-0.1.0.zip
+     which prints the sparkle:edSignature and length attributes for the enclosure below. -->
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>Jämmer</title>
+    <link>https://jammer.brattoo.com/appcast.xml</link>
+    <description>Updates for Jämmer</description>
+    <language>en</language>
+    <item>
+      <title>Version 0.1.0</title>
+      <sparkle:version>1</sparkle:version>
+      <sparkle:shortVersionString>0.1.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>27.0</sparkle:minimumSystemVersion>
+      <sparkle:releaseNotesLink>https://jammer.brattoo.com/changes.html</sparkle:releaseNotesLink>
+      <pubDate>RELEASE DATE, RFC 822</pubDate>
+      <enclosure url="https://jammer.brattoo.com/releases/Jammer-0.1.0.zip"
+                 sparkle:edSignature="FROM sign_update"
+                 length="FROM sign_update"
+                 type="application/octet-stream"/>
+    </item>
+  </channel>
+</rss>

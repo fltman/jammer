@@ -1,4 +1,5 @@
 Jämmer › About Jämmer	
+Jämmer › Check for Updates…	
 Jämmer › Settings…	⌘,
 Jämmer › Hide Jämmer	⌘H
 Jämmer › Hide Others	⌥⌘H

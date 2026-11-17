@@ -1048,6 +1048,23 @@
         }
       }
     },
+    "app.checkForUpdates": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Check for Updates…"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sök efter uppdateringar…"
+          }
+        }
+      }
+    },
     "app.hide": {
       "comment": "Menu item.",
       "extractionState": "manual",

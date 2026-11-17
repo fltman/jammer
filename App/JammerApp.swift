@@ -120,6 +120,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Updates: release builds only (Updates.enabled).
+        Updates.shared.start()
         // Noise reduction: DeepFilterNet 3 with the model that ships in the app.
         if let model = Bundle.main.url(forResource: "DeepFilterNet3_onnx", withExtension: "tar.gz"), let d = try? Denoiser(modelPath: model) {
             d.register()
@@ -223,6 +225,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         main.addItem(submenu("Jämmer", [
             item(L10n.text("app.about"), #selector(NSApplication.orderFrontStandardAboutPanel(_:)), ""),
+            { let i = item(L10n.text("app.checkForUpdates"), #selector(Updates.checkForUpdates(_:)), ""); i.target = Updates.shared; return i }(),
             .separator(),
             item(L10n.text("app.settings"), #selector(AppDelegate.showSettings(_:)), ","),
             .separator(),

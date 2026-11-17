@@ -65,6 +65,8 @@
 	<string>NSApplication</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Jämmer transcribes your recordings on this Mac so you can edit them as text. The audio never leaves the Mac.</string>
+	<key>SUFeedURL</key>
+	<string>https://jammer.brattoo.com/appcast.xml</string>
 	<key>UTExportedTypeDeclarations</key>
 	<array>
 		<dict>

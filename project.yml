@@ -63,6 +63,10 @@ targets:
         product: JammerDereverb
       - package: JammerKit
         product: JammerPlugins
+      # Sparkle (updates), from scripts/fetch-sparkle.sh; embedded and signed with the app.
+      - framework: Packages/JammerKit/Vendor/Sparkle/Sparkle.framework
+        embed: true
+        codeSign: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.brattoo.jammer
@@ -83,6 +87,13 @@ targets:
         Debug:
           PRODUCT_BUNDLE_IDENTIFIER: com.brattoo.jammer.debug
     postBuildScripts:
+      # Sparkle's licence (MIT, with bsdiff's and SUSignatureVerifier's BSD-2 notices, which ask to be
+      # reproduced with the binary) goes in the app beside the framework; App/Credits.html points to it.
+      - name: Sparkle licence
+        basedOnDependencyAnalysis: false
+        script: |
+          set -eu
+          cp "$SRCROOT/Packages/JammerKit/Vendor/Sparkle/LICENSE" "$BUILT_PRODUCTS_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/Sparkle-LICENSE.txt"
       # The two helper programs that load VST 3 and CLAP plugins (so Jämmer never does) are
       # built from the package and put beside the app's own executable, each with a signature
       # of its own. They get no entitlements here: what a release needs is in docs/RELEASE.md.
@@ -116,6 +127,8 @@ targets:
         NSHumanReadableCopyright: "© 2026 Anders Bjarby. MIT licence."
         NSPrincipalClass: NSApplication
         JammerHomepage: https://jammer.brattoo.com
+        # Sparkle: the appcast (the one server of ours, PROVIDERS.md) and the public half of the update key.
+        SUFeedURL: https://jammer.brattoo.com/appcast.xml
         NSSpeechRecognitionUsageDescription: Jämmer transcribes your recordings on this Mac so you can edit them as text. The audio never leaves the Mac.
         NSMotionUsageDescription: When you choose Follow Head Movements, Jämmer turns what you hear on headphones as your head turns. It reads only your headphones' motion, only while you listen, and keeps nothing.
         CFBundleDocumentTypes:
