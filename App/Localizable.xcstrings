@@ -925,6 +925,18 @@
         }
       }
     },
+    "menu.picture": {
+      "comment": "Menu item: opens the window that shows a film beside the sound.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Picture…"
+          }
+        }
+      }
+    },
     "menu.view.automation": {
       "comment": "View menu: the submenu that chooses which lanes are shown.",
       "extractionState": "manual",
@@ -1413,6 +1425,162 @@
           "stringUnit": {
             "state": "translated",
             "value": "Jämmer doesn’t know the price. Use %@ anyway"
+          }
+        }
+      }
+    },
+    "picture.ax.film": {
+      "comment": "Accessibility label of the film picture.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The film’s picture at the playhead"
+          }
+        }
+      }
+    },
+    "picture.choose": {
+      "comment": "Button: pick the film file.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose Film…"
+          }
+        }
+      }
+    },
+    "picture.choose.message": {
+      "comment": "Message in the open panel for the film.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose a film to look at while you work on the sound. It is only shown: nothing is changed in it and its own sound is not played."
+          }
+        }
+      }
+    },
+    "picture.remove": {
+      "comment": "Button: take the film away from the document.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove"
+          }
+        }
+      }
+    },
+    "picture.startHere": {
+      "comment": "Button: the film’s first picture is put where the playhead is.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start Film at Playhead"
+          }
+        }
+      }
+    },
+    "picture.startHere.help": {
+      "comment": "Help of the button.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Puts the film’s first picture where the playhead is on the timeline."
+          }
+        }
+      }
+    },
+    "picture.state.after": {
+      "comment": "State line: the playhead is after the film’s end. %@ is the file name.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ has ended before this place."
+          }
+        }
+      }
+    },
+    "picture.state.before": {
+      "comment": "State line: the playhead is before the film’s start. %@ is the file name.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ starts later on the timeline."
+          }
+        }
+      }
+    },
+    "picture.state.loading": {
+      "comment": "State line. %@ is the film’s file name.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opening %@…"
+          }
+        }
+      }
+    },
+    "picture.state.missing": {
+      "comment": "State line: the film file is gone. %@ is the file name.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ is not where it was. Choose it again."
+          }
+        }
+      }
+    },
+    "picture.state.none": {
+      "comment": "State line in the picture window.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No film. Choose one to see it follow the playhead."
+          }
+        }
+      }
+    },
+    "picture.state.unreadable": {
+      "comment": "State line. %@ is the file name.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ can’t be shown: it has no picture this Mac can play."
+          }
+        }
+      }
+    },
+    "picture.window.title": {
+      "comment": "The picture window’s title. %@ is the document.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Picture – %@"
           }
         }
       }

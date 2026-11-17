@@ -118,6 +118,10 @@ public enum FCPXMLImport {
         /// From exportVersion 2: the project and story it was exported from (needed for the way back).
         public var flimmerProjectId: String?
         public var flimmerStoryId: String?
+        /// The picture's frame rate, when the sequence's format has one this app counts timecode at
+        /// (drop-frame when the sequence says `tcFormat="DF"`). Times are kept as the file has them, so
+        /// the timeline's zero is timecode 00:00:00:00.
+        public var timecode: TimecodeSettings? = nil
         public var warnings: [Warning]
         public var media: [URL] { Array(Set(tracks.flatMap { $0.clips.map(\.media) })).sorted { $0.path < $1.path } }
     }
@@ -383,9 +387,20 @@ public enum FCPXMLImport {
         if let layout = sequence["audioLayout"], layout != "mono", layout != "stereo" {
             warnings.append(Warning(code: "layout", message: "The timeline is \(layout); it was imported as stereo.", clip: nil))
         }
-        return Timeline(name: project?["name"] ?? fallbackName, sampleRate: sampleRate, channels: channels, tracks: tracks, shots: shots,
-                        flimmerExportVersion: exportVersion, flimmerProjectId: sequence.metadata[flimmer + "projectId"],
-                        flimmerStoryId: sequence.metadata[flimmer + "storyId"], warnings: warnings)
+        // The picture's rate: the sequence's format says how long a frame is.
+        var timecode: TimecodeSettings?
+        if let id = sequence["format"], let format = root.first("resources")?.all("format").first(where: { $0["id"] == id }),
+           let frame = Time(format["frameDuration"]), frame.n > 0 {
+            let drop = sequence["tcFormat"] == "DF"
+            let known: [(Int64, Int64, Timecode.Rate)] = [(1_001, 24_000, .fps23976), (1, 24, .fps24), (1, 25, .fps25), (1_001, 30_000, drop ? .fps2997drop : .fps2997),
+                                                         (1, 30, .fps30), (1, 50, .fps50), (1_001, 60_000, drop ? .fps5994drop : .fps5994), (1, 60, .fps60)]
+            timecode = known.first { $0.0 == frame.n && $0.1 == frame.d }.map { TimecodeSettings(rate: $0.2) }
+        }
+        var timeline = Timeline(name: project?["name"] ?? fallbackName, sampleRate: sampleRate, channels: channels, tracks: tracks, shots: shots,
+                                flimmerExportVersion: exportVersion, flimmerProjectId: sequence.metadata[flimmer + "projectId"],
+                                flimmerStoryId: sequence.metadata[flimmer + "storyId"], warnings: warnings)
+        timeline.timecode = timecode
+        return timeline
     }
 
     // MARK: Building the project
@@ -478,6 +493,7 @@ public enum FCPXMLImport {
             guard at >= 0, at <= Frame(86_400 * rate) else { return nil }
             return Marker(position: at, length: min(max(0, length), Frame(86_400 * rate)), name: String($0.name.prefix(200)), kind: .shot)
         }
+        project.timecode = timeline.timecode
         if let version = timeline.flimmerExportVersion {
             let ids = project.tracks.flatMap { $0.clips.compactMap { $0.origin?.videoAudio == true ? nil : $0.origin?.clipId } }
             project.imported = .init(app: "flimmer", exportVersion: version, clipIds: ids, length: project.length,

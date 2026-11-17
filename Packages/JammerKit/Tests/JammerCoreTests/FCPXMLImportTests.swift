@@ -76,6 +76,8 @@ struct FCPXMLImportTests {
         // Shots: the pictures, not the plain gap.
         #expect(timeline.shots.map(\.name) == ["Opening", "Still"])
         let r = try FCPXMLImport.build(timeline, mediaFolder: dir.appending(path: "decoded"))
+        // The picture's rate comes along: 1001/24000 s a frame is 23.976.
+        #expect(timeline.timecode == TimecodeSettings(rate: .fps23976) && r.project.timecode?.rate == .fps23976)
         let p = r.project
         func f(_ frames1001: Int64) -> Frame { frames1001 * 1001 * 2 } // n frames of 1001/24000 s at 48 kHz
         #expect(p.tracks.map(\.name) == ["dialogue", "music", "effects", "Video"])
@@ -158,6 +160,7 @@ struct FCPXMLImportTests {
         #expect(timeline.flimmerExportVersion == "1")
         #expect(timeline.shots.map(\.name) == ["One", "Two", "Empty crates", "Four"], "a gap that stands for a shot counts; the trailing audio gap doesn't")
         let r = try FCPXMLImport.build(timeline, mediaFolder: dir.appending(path: "decoded"))
+        #expect(r.project.timecode == TimecodeSettings(rate: .fps24))
         let p = r.project
         #expect(p.tracks.map(\.name) == ["Dialog", "Musik", "Video"] && r.warnings.isEmpty, "\(r.warnings)")
         let sr = 48_000.0

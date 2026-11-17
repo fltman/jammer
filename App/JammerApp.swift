@@ -292,6 +292,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }),
             item("Mixer…", #selector(EditorWindowController.showMixer(_:)), "x", [.command, .option]),
             item("Plugins…", #selector(EditorWindowController.showPlugins(_:)), "p", [.command, .option, .shift]),
+            item(L10n.text("menu.picture"), #selector(EditorWindowController.showPicture(_:)), ""),
         ]))
         main.addItem(submenu("Transport", [
             // Space and Return are handled by the timeline, so text fields keep them.

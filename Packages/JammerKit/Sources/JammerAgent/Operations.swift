@@ -202,6 +202,12 @@ public enum Operations {
         .init("deselect", "Deselect", "Clears the selection.", edits: false),
         .init("set_playhead", "Move Playhead", "Moves the playhead (where paste and markers go by default).",
               params: [.init("at", .seconds, "Position in seconds.", required: true)], edits: false),
+        .init("set_video_reference", "Set Film", "Gives the document a film to look at while the sound is worked on: a file on this Mac, shown in the Picture window and following the playhead. The film is only pointed at: it is not read into the project, not changed, and its own sound is not played. info has `at`.",
+              params: [.init("path", .string, "The film's file (a QuickTime or MPEG-4 film: .mov, .mp4, .m4v), as a full path.", required: true),
+                       .init("at", .seconds, "The place on the timeline where the film's first picture is. Default 0.")]),
+        .init("remove_video_reference", "Remove Film", "Takes the film away from the document. The file is left as it is."),
+        .init("go_to_timecode", "Go to Timecode", "Moves the playhead to a timecode of the picture: to the audio frame where that picture frame begins. The document must have a timecode (set_timecode, or an imported film timeline). info has `at`, the place in seconds.",
+              params: [.init("timecode", .string, "The timecode, as hh:mm:ss:ff (hh:mm:ss;ff for drop-frame), at the document's frame rate.", required: true)], edits: false),
         .init("delete", "Delete", "Removes the range and closes the gap (everything after moves left).", params: [start, end]),
         .init("silence", "Silence", "Replaces the range with silence without moving anything.", params: [start, end]),
         .init("cut", "Cut", "Copies the range to Jammer's clipboard and removes it, closing the gap.", params: [start, end]),
@@ -803,6 +809,31 @@ public enum StepRunner {
             s.selection = nil
         case "set_playhead":
             s.playhead = min(max(0, frames("at") ?? 0), project.length)
+        case "set_video_reference":
+            let path = p["path"]?.string ?? ""
+            guard path.hasPrefix("/"), path.utf8.count <= 4_096 else { throw StepFailure("set_video_reference: \"path\" is the film's full path, starting with a slash.") }
+            guard ["mov", "mp4", "m4v"].contains(URL(fileURLWithPath: path).pathExtension.lowercased()) else {
+                throw StepFailure("set_video_reference: \(URL(fileURLWithPath: path).lastPathComponent) is not a film this app shows (.mov, .mp4 or .m4v).", reason: "not_a_film")
+            }
+            var isFolder: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: path, isDirectory: &isFolder), !isFolder.boolValue else {
+                throw StepFailure("set_video_reference: there is no file at \(path).", reason: "not_found")
+            }
+            let at = min(max(0, frames("at") ?? 0), project.length)
+            s.project.video = VideoReference(path: URL(fileURLWithPath: path).standardizedFileURL.path, start: at)
+            return ["at": project.seconds(at)]
+        case "remove_video_reference":
+            guard project.video != nil else { throw StepFailure("remove_video_reference: the document has no film.", reason: "not_found") }
+            s.project.video = nil
+        case "go_to_timecode":
+            guard let settings = project.timecode else { throw StepFailure("go_to_timecode: the document has no timecode. Give it one with set_timecode.", reason: "no_timecode") }
+            let text = p["timecode"]?.string ?? ""
+            guard let wanted = Timecode(text, rate: settings.rate) else { throw StepFailure("go_to_timecode: \(text) is not a timecode at \(settings.rate.rawValue) (hh:mm:ss:ff, each two digits).") }
+            guard let at = settings.frame(of: wanted, sampleRate: project.sampleRate), at <= project.length else {
+                throw StepFailure("go_to_timecode: \(wanted.text) is outside the document, which runs from \(settings.start.text) to \(settings.timecode(at: project.length, sampleRate: project.sampleRate).text).", reason: "outside")
+            }
+            s.playhead = at
+            return ["at": project.seconds(at)]
         case "delete":
             let r = try range(); try checkInside(r)
             try s.project.delete(r)

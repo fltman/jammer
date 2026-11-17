@@ -297,6 +297,8 @@ public struct Project: Codable, Equatable, Sendable {
     /// The picture's timecode, when the document is sound for a picture: its frame rate and the timecode
     /// the timeline starts at. nil: none (a file without it is read by an older Jämmer as it always was).
     public var timecode: TimecodeSettings?
+    /// A film shown beside the sound, following the playhead. nil: none.
+    public var video: VideoReference?
 
     public struct ImportRecord: Codable, Equatable, Sendable {
         public var app: String
@@ -328,7 +330,7 @@ public struct Project: Codable, Equatable, Sendable {
         self.transcripts = transcripts
     }
 
-    private enum CodingKeys: String, CodingKey { case formatVersion, sampleRate, channels, tracks, markers, sources, tempo, transcripts, speakers, speakerTurns, imported, timecode, buses, master, vcas, automation }
+    private enum CodingKeys: String, CodingKey { case formatVersion, sampleRate, channels, tracks, markers, sources, tempo, transcripts, speakers, speakerTurns, imported, timecode, video, buses, master, vcas, automation }
 
     public func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
@@ -344,6 +346,7 @@ public struct Project: Codable, Equatable, Sendable {
         try c.encode(speakerTurns, forKey: .speakerTurns)
         try c.encodeIfPresent(imported, forKey: .imported)
         try c.encodeIfPresent(timecode, forKey: .timecode)
+        try c.encodeIfPresent(video, forKey: .video)
         if !buses.isEmpty { try c.encode(buses, forKey: .buses) }
         if !master.isDefault { try c.encode(master, forKey: .master) }
         if !vcas.isEmpty { try c.encode(vcas, forKey: .vcas) }
@@ -372,6 +375,10 @@ public struct Project: Codable, Equatable, Sendable {
         imported = try c.decodeIfPresent(ImportRecord.self, forKey: .imported)
         // A timecode that can't be read (a rate this app doesn't know, a start that is no time of day) is
         // left out, not a reason to refuse the project: the sound is the same without it.
+        // The same for the film beside the sound: one that can't be read (no path, a start that is no place
+        // on a timeline) is left out.
+        video = (try? c.decodeIfPresent(VideoReference.self, forKey: .video)).flatMap { $0 }
+            .flatMap { !$0.path.isEmpty && $0.path.utf8.count <= 4_096 && (0...Frame(86_400 * 768_000)).contains($0.start) ? $0 : nil }
         timecode = (try? c.decodeIfPresent(TimecodeSettings.self, forKey: .timecode)).flatMap { $0 }
             .flatMap { (0..<(24 * 3_600 * $0.rate.base)).contains($0.startFrames) ? $0 : nil }
         speakerTurns = try c.decodeIfPresent([SourceSpeakers].self, forKey: .speakerTurns) ?? []

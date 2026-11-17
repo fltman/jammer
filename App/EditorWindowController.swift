@@ -423,8 +423,26 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
             w.setFrameTopLeftPoint(NSPoint(x: left, y: top))
         }
     }
-    /// The mixer goes with its document.
-    func closeMixer() { mixerWindow?.close(); mixerWindow = nil }
+    /// The mixer goes with its document, and so does the picture.
+    func closeMixer() { mixerWindow?.close(); mixerWindow = nil; pictureWindow?.close(); pictureWindow = nil }
+
+    private var pictureWindow: PictureWindow?
+    /// The film beside the sound, in a window of its own: it follows the playhead.
+    @objc func showPicture(_ sender: Any?) {
+        if let w = pictureWindow { w.makeKeyAndOrderFront(nil); return }
+        let w = PictureWindow(contentRect: NSRect(x: 0, y: 0, width: 640, height: 400), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
+        w.session = session
+        w.isReleasedWhenClosed = false
+        w.identifier = NSUserInterfaceItemIdentifier("picture")
+        w.title = L10n.text("picture.window.title", session.name)
+        w.contentViewController = NSHostingController(rootView: PictureSheet(session: session, follower: PictureFollower(session: session)))
+        w.setContentSize(NSSize(width: 640, height: 400))
+        w.nextResponder = self
+        pictureWindow = w
+        if !w.setFrameUsingName("JammerPicture") { w.center() }
+        w.setFrameAutosaveName("JammerPicture")
+        w.makeKeyAndOrderFront(nil)
+    }
 
     @objc func performOperation(_ sender: Any?) {
         guard let item = (sender as? NSMenuItem)?.representedObject as? OperationItem else { return }

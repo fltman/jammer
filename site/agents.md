@@ -210,6 +210,29 @@ Moves the playhead (where paste and markers go by default).
 |---|---|---|
 | `at` | seconds | **Required.** Position in seconds. |
 
+### `set_video_reference`
+
+Gives the document a film to look at while the sound is worked on: a file on this Mac, shown in the Picture window and following the playhead. The film is only pointed at: it is not read into the project, not changed, and its own sound is not played. info has `at`.
+
+| Param | Type | Description |
+|---|---|---|
+| `path` | string | **Required.** The film's file (a QuickTime or MPEG-4 film: .mov, .mp4, .m4v), as a full path. |
+| `at` | seconds | The place on the timeline where the film's first picture is. Default 0. |
+
+### `remove_video_reference`
+
+Takes the film away from the document. The file is left as it is.
+
+No params: `{"op": "remove_video_reference"}`
+
+### `go_to_timecode`
+
+Moves the playhead to a timecode of the picture: to the audio frame where that picture frame begins. The document must have a timecode (set_timecode, or an imported film timeline). info has `at`, the place in seconds.
+
+| Param | Type | Description |
+|---|---|---|
+| `timecode` | string | **Required.** The timecode, as hh:mm:ss:ff (hh:mm:ss;ff for drop-frame), at the document's frame rate. |
+
 ### `delete`
 
 Removes the range and closes the gap (everything after moves left).

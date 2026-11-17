@@ -216,4 +216,48 @@ struct AutomationStepTests {
         #expect(Self.run(&s, "set_timecode", ["rate": .string("none")]).status == .done && s.project.timecode == nil)
         #expect(throws: (any Error).self) { try StepRunner.validate(Step(op: "set_timecode", params: ["rate": .string("12")])) }
     }
+
+    @Test("go_to_timecode: to the audio frame where the picture frame begins; refused without a timecode, for a text that isn't one, and outside the document with its span")
+    func goToTimecode() {
+        var s = Self.state()
+        let none = Self.run(&s, "go_to_timecode", ["timecode": .string("01:00:02:00")])
+        #expect(none.status == .failed && none.reason == "no_timecode")
+        _ = Self.run(&s, "set_timecode", ["rate": .string("25"), "start": .string("01:00:00:00")])
+        let there = Self.run(&s, "go_to_timecode", ["timecode": .string("01:00:02:12")])
+        #expect(there.status == .done && s.playhead == Frame(2 * 48_000 + 12 * 1_920) && there.info["at"] == 2.48, "\(there.error ?? "")")
+        #expect(s.project.timecode?.timecode(at: s.playhead, sampleRate: 48_000).text == "01:00:02:12")
+        let before = Self.run(&s, "go_to_timecode", ["timecode": .string("00:59:59:00")]), after = Self.run(&s, "go_to_timecode", ["timecode": .string("01:00:10:01")])
+        #expect(before.status == .failed && before.reason == "outside" && after.status == .failed && (after.error ?? "").contains("from 01:00:00:00 to 01:00:10:00"), "\(after.error ?? "")")
+        #expect(Self.run(&s, "go_to_timecode", ["timecode": .string("01:00:02:25")]).status == .failed && s.playhead == Frame(2 * 48_000 + 12 * 1_920))
+        #expect(Self.run(&s, "go_to_timecode", ["timecode": .string("01:00:10:00")]).status == .done && s.playhead == s.project.length)
+    }
+
+    @Test("A film beside the sound: set by path with where it starts, saved and read back, taken away; refused for a file that isn't there, isn't a film, or a path that isn't whole; one that can't be read in a project file is left out")
+    func videoReference() throws {
+        var s = Self.state()
+        let dir = FileManager.default.temporaryDirectory.appending(path: "jammer-video-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let film = dir.appending(path: "scene.mov"), text = dir.appending(path: "notes.txt")
+        try Data("not really a film; the step only points at it".utf8).write(to: film)
+        try Data().write(to: text)
+        let made = Self.run(&s, "set_video_reference", ["path": .string(film.path), "at": .number(2)])
+        #expect(made.status == .done && made.info["at"] == 2 && s.project.video?.start == 96_000 && s.project.video?.name == "scene.mov", "\(made.error ?? "")")
+        #expect(s.project.video?.filmSeconds(at: 48_000, sampleRate: 48_000) == nil && s.project.video?.filmSeconds(at: 96_000 + 24_000, sampleRate: 48_000) == 0.5)
+        let back = try JSONDecoder().decode(Project.self, from: try JSONEncoder().encode(s.project))
+        #expect(back.video == s.project.video && back == s.project)
+        for (params, reason) in [(["path": JSONValue.string(dir.appending(path: "gone.mov").path)], "not_found"), (["path": .string(text.path)], "not_a_film"), (["path": .string(dir.path + ".mov")], "not_found")] {
+            let r = Self.run(&s, "set_video_reference", params)
+            #expect(r.status == .failed && r.reason == reason && s.project.video?.name == "scene.mov", "\(r.error ?? "")")
+        }
+        #expect(Self.run(&s, "set_video_reference", ["path": .string("scene.mov")]).status == .failed)
+        // In a file: a film without a path, or starting at no place, is left out and the project opens.
+        for hostile in [["path": "", "start": 0] as [String: Any], ["path": "/a.mov", "start": -5], ["start": 3]] {
+            var object = try #require(try JSONSerialization.jsonObject(with: try JSONEncoder().encode(s.project)) as? [String: Any])
+            object["video"] = hostile
+            #expect(try JSONDecoder().decode(Project.self, from: try JSONSerialization.data(withJSONObject: object)).video == nil)
+        }
+        #expect(Self.run(&s, "remove_video_reference", [:]).status == .done && s.project.video == nil && FileManager.default.fileExists(atPath: film.path))
+        #expect(Self.run(&s, "remove_video_reference", [:]).reason == "not_found")
+    }
 }
