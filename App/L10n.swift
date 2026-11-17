@@ -55,6 +55,17 @@ enum L10n {
         v.formatted(.number.precision(.fractionLength(decimals)).grouping(.never)
             .sign(strategy: sign ? .always(includingZero: true) : .automatic).locale(Locale.current))
     }
+    /// A layout's name in the window: Mono, Stereo, 5.1, 7.1, 7.1.4, Ambisonics (1st Order)…
+    static func layoutTitle(_ l: ChannelLayout) -> String {
+        switch l {
+        case .mono: L10n.text("menu.layout.mono")
+        case .stereo: L10n.text("menu.layout.stereo")
+        case .ambix1: L10n.text("menu.layout.ambix1")
+        case .ambix2: L10n.text("menu.layout.ambix2")
+        case .ambix3: L10n.text("menu.layout.ambix3")
+        default: l.rawValue
+        }
+    }
     /// A count, in the plural form the language wants.
     static func count(_ key: String, _ n: Int) -> String {
         String.localizedStringWithFormat(NSLocalizedString(key, comment: ""), n)

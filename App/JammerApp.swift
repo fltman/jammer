@@ -313,7 +313,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             item(L10n.text("menu.listen.binaural"), #selector(EditorWindowController.toggleBinaural(_:)), ""),
             // The document's loudspeakers: a value of the document, undone like any other change.
             submenu(L10n.text("menu.layout"), ChannelLayout.allCases.map { l in
-                op(l == .mono ? L10n.text("menu.layout.mono") : l == .stereo ? L10n.text("menu.layout.stereo") : l.rawValue, "set_layout", ["layout": .string(l.rawValue)])
+                op(L10n.layoutTitle(l), "set_layout", ["layout": .string(l.rawValue)])
             }),
         ]))
         main.addItem(submenu(L10n.text("menu.transport"), [

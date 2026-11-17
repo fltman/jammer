@@ -81,12 +81,21 @@ The document's audio output and its plugin host were made once, for the channel 
 
 In a layout wider than stereo the timeline draws a clip through the same matrix as its sound: a voice in the C row only, a placed voice at its loudspeakers, a wider source folded down into the document's rows (as the envelope of the summed parts). Seen before the change: a voice placed at Ls was drawn in L and R. Tested on the columns; not yet seen in the window.
 
+### D4, first part (2026-11-17): Ambisonics documents
+
+- **AmbiX** (C. Nachbar, F. Zotter, E. Deleflie, A. Sontacchi, "ambiX – A Suggested Ambisonics Format", Ambisonics Symposium 2011, read at the source: ACN order, SN3D, no Condon-Shortley phase), first to third order (4, 9, 16 channels), as layouts in Audio › Layout and `set_layout` (`ambix1`, `ambix2`, `ambix3`).
+- **A file is never taken for a sound field:** nothing in a WAV says its 4, 9 or 16 channels are Ambisonics, so it opens as stereo as before, and the document is set to the order by hand; the file then passes through channel for channel (tested, sample for sample).
+- **Encoding** (`Ambisonics.encode`): the real spherical harmonics up to third order. Tested on SN3D's defining property: W is 1 and each order's squares sum to 1 in every direction (every 15°), and on the first order's directions. Into a sound field a mono source comes from the front, a placed track from its place (the panner's azimuth and elevation, every elevation), a loudspeaker layout from its loudspeakers' directions (the LFE left out); one order goes into another by the components they share.
+- **No decoder:** a sound field in a loudspeaker document is left out (silent there), said in the step's description. Listening to an Ambisonics document always goes through Apple's spatial mixer with Core Audio's `HOA_ACN_SN3D` tag: for headphones when binaural listening is on, otherwise for loudspeakers. Tested offline: a tone encoded at 90° left reaches the left ear more, at 90° right the right ear, at first and third order. In the app: played both ways without underruns (`outputPath` `spatialSpeakers` and `binaural`); not heard.
+- **Loudness isn't measured** in an Ambisonics document: ITU-R BS.1770 has no weighting for a sound field, and no reference has been found. `GET …/analysis`, the dialogue analysis, `normalize` to a loudness, `loudness_preset`, `limit` and an export's `targetLUFS` are refused with that reason (`not_available`). The meter internally takes only W, so nothing breaks, and nothing of it is shown.
+- **APAC** writes a sound field too, with the HOA tag and content source 39 ("Spatial professional AV offline encoded content"): `afinfo` reads "4 ch, 48000 Hz, apac … Channel layout: High-Order Ambisonics, ACN/SN3D". A WAV export of a field is written with a channel mask of 0 (no loudspeaker positions).
+
 ## Not built
 
 - Per-channel meters in the window, and a line that says the document is heard folded down.
 - A seen GUI pass of a 5.1 document (the menu, the status bar, listening).
 - The panner's place automated over time; buses placed; a spread wider than a pair of loudspeakers for a mono source.
 - ADM BWF (D3): writing is simple, but nothing could check the files without the EBU's ADM renderer (`ear-utils`, Python, BSD-3-Clause-Clear) or libadm/libbw64 (Apache-2.0): fetching and installing either is for Anders to say.
-- Ambisonics documents (D4).
+- An Ambisonics decoder to loudspeaker layouts (an Ambisonics source in a loudspeaker document is left out); a rotation of the field; loudness for a field.
 - Head tracking (an entitlement with the app's signing).
 - Overdub with consent (waits for Anders's decision on the voice provider's terms).

@@ -39,7 +39,7 @@ struct ImmersiveTests {
         #expect(ChannelLayout.of(channels: 4, mask: 0x33) == nil && ChannelLayout.of(channels: 6, mask: 0x3F3) == nil && ChannelLayout.of(channels: 2, mask: 0x3) == .stereo)
     }
 
-    @Test("A 5.1 file opens as a 5.1 document and plays channel for channel, exactly; saved as format 4 and read back; a document of 4 channels is refused")
+    @Test("A 5.1 file opens as a 5.1 document and plays channel for channel, exactly; saved as format 4 and read back; a document of 5 channels (no layout) is refused")
     func fivePointOne() throws {
         let dir = TempDir()
         let src = try file(dir, "six.wav", channels: 6, mask: 0x3F)
@@ -53,7 +53,7 @@ struct ImmersiveTests {
         #expect((try JSONSerialization.jsonObject(with: data) as? [String: Any])?["formatVersion"] as? Int == 4)
         #expect(try JSONDecoder().decode(Project.self, from: data) == p)
         var object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
-        object["channels"] = 4
+        object["channels"] = 5
         #expect(throws: (any Error).self) { try JSONDecoder().decode(Project.self, from: try JSONSerialization.data(withJSONObject: object)) }
         // A stereo document is saved as before.
         let stereo = Project(source: try file(dir, "two.wav", channels: 2))

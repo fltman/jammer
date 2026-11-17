@@ -609,7 +609,7 @@ Sets the document's loudspeaker layout. Nothing is converted: every source keeps
 
 | Param | Type | Description |
 |---|---|---|
-| `layout` | string | **Required.** The layout. One of: `mono`, `stereo`, `5.1`, `7.1`, `7.1.4`. |
+| `layout` | string | **Required.** The layout. One of: `mono`, `stereo`, `5.1`, `7.1`, `7.1.4`, `ambix1`, `ambix2`, `ambix3`. |
 
 ### `set_timecode`
 

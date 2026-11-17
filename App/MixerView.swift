@@ -48,7 +48,7 @@ struct MixerSheet: View {
                                    sends: t.sends, sendTargets: project.buses.map { ($0.id, $0.name) },
                                    change: { session.perform("set_track", ["track": .string(t.id.uuidString)].merging($0) { $1 }) },
                                    send: { session.perform("set_send", ["from": .string(t.id.uuidString)].merging($0) { $1 }) }, remove: nil,
-                                   place: t.position, placeable: project.channels > 2, heights: project.layout == .immersive714)
+                                   place: t.position, placeable: project.channels > 2, heights: project.layout == .immersive714 || project.layout.isAmbisonic)
                     }
                     Text(L10n.text("mixer.buses")).font(.headline).padding(.top, 8)
                     if project.buses.isEmpty { Text(L10n.text("mixer.buses.none")).foregroundStyle(.secondary) }

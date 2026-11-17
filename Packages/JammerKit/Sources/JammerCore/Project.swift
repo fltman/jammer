@@ -391,7 +391,7 @@ public struct Project: Codable, Equatable, Sendable {
         channels = try c.decode(Int.self, forKey: .channels)
         // Only the layouts this app knows: a project with another channel count isn't opened as if it were one.
         guard ChannelLayout.standard(channels: channels) != nil else {
-            throw DecodingError.dataCorruptedError(forKey: .channels, in: c, debugDescription: "A project has 1, 2, 6, 8 or 12 channels (mono, stereo, 5.1, 7.1, 7.1.4), not \(channels).")
+            throw DecodingError.dataCorruptedError(forKey: .channels, in: c, debugDescription: "A project has 1, 2, 6, 8 or 12 channels (mono, stereo, 5.1, 7.1, 7.1.4) or 4, 9 or 16 (Ambisonics), not \(channels).")
         }
         tracks = try c.decode([Track].self, forKey: .tracks)
         markers = try c.decode([Marker].self, forKey: .markers)

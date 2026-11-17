@@ -7,8 +7,10 @@ import JammerCore
 /// A bed of `channels` with a 1 kHz tone in one channel, for the spatial mixer to pull.
 private final class Bed {
     let channels: Int, lit: Int
+    /// For a sound field: the tone encoded with these gains into every component (else one channel lit).
+    let gains: [Float]?
     var phase = 0.0
-    init(channels: Int, lit: Int) { self.channels = channels; self.lit = lit }
+    init(channels: Int, lit: Int, gains: [Float]? = nil) { self.channels = channels; self.lit = lit; self.gains = gains }
 }
 
 private func bedRender(_ ref: UnsafeMutableRawPointer, _ flags: UnsafeMutablePointer<AudioUnitRenderActionFlags>, _ ts: UnsafePointer<AudioTimeStamp>,
@@ -18,7 +20,8 @@ private func bedRender(_ ref: UnsafeMutableRawPointer, _ flags: UnsafeMutablePoi
     let list = UnsafeMutableAudioBufferListPointer(data)
     for (c, buffer) in list.enumerated() {
         guard let p = buffer.mData?.assumingMemoryBound(to: Float.self) else { continue }
-        for i in 0..<Int(frames) { p[i] = c == bed.lit ? Float(0.3 * sin(bed.phase + 2 * .pi * 1_000 * Double(i) / 48_000)) : 0 }
+        let g: Float = bed.gains.map { $0[c] } ?? (c == bed.lit ? 1 : 0)
+        for i in 0..<Int(frames) { p[i] = g * Float(0.3 * sin(bed.phase + 2 * .pi * 1_000 * Double(i) / 48_000)) }
     }
     bed.phase += 2 * .pi * 1_000 * Double(frames) / 48_000
     return noErr
@@ -27,8 +30,8 @@ private func bedRender(_ ref: UnsafeMutableRawPointer, _ flags: UnsafeMutablePoi
 @Suite("Binaural listening through the spatial mixer")
 struct BinauralTests {
     /// The energy at the left and the right ear for a tone in one channel of a layout.
-    func ears(_ layout: ChannelLayout, lit: Int) throws -> (left: Double, right: Double) {
-        let bed = Bed(channels: layout.channels, lit: lit)
+    func ears(_ layout: ChannelLayout, lit: Int, gains: [Float]? = nil) throws -> (left: Double, right: Double) {
+        let bed = Bed(channels: layout.channels, lit: lit, gains: gains)
         let ref = Unmanaged.passRetained(bed)
         defer { ref.release() }
         let mixer = try Binaural.makeMixer(layout: layout, rate: 48_000, callback: AURenderCallbackStruct(inputProc: bedRender, inputProcRefCon: ref.toOpaque()))
@@ -64,5 +67,15 @@ struct BinauralTests {
         #expect(abs(db(c)) < 1, "C \(db(c)) dB")
         let tfl = try ears(.immersive714, lit: 8)
         #expect(db(tfl) > 3, "Ltf \(db(tfl)) dB")
+    }
+
+    @Test("An AmbiX field through the spatial mixer: a tone encoded at 90° left reaches the left ear more, at 90° right the right ear, in first and third order")
+    func ambisonicField() throws {
+        func db(_ e: (left: Double, right: Double)) -> Double { 10 * log10(e.left / e.right) }
+        for layout in [ChannelLayout.ambix1, .ambix3] {
+            let left = try ears(layout, lit: -1, gains: Ambisonics.encode(azimuth: 90, elevation: 0, order: layout.ambisonicOrder!))
+            let right = try ears(layout, lit: -1, gains: Ambisonics.encode(azimuth: -90, elevation: 0, order: layout.ambisonicOrder!))
+            #expect(left.left > 0 && db(left) > 3 && db(right) < -3, "\(layout.rawValue): left \(db(left)) dB, right \(db(right)) dB")
+        }
     }
 }

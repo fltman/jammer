@@ -16,7 +16,8 @@ import JammerEngine
 /// back to the default-output audio unit, which converts by itself.
 @MainActor
 public final class AudioOutput {
-    public enum Path: String, Sendable { case hal, audioUnit, binaural }
+    /// `binaural`: through the spatial mixer for headphones; `spatialSpeakers`: through it for loudspeakers (an Ambisonics document).
+    public enum Path: String, Sendable { case hal, audioUnit, binaural, spatialSpeakers }
 
     public let channels: Int
     public let sampleRate: Double
@@ -40,6 +41,7 @@ public final class AudioOutput {
     public var binaural = false {
         didSet {
             guard binaural != oldValue, channels > 2 else { return }
+            // (An Ambisonics document is rebuilt too: headphones or loudspeakers.)
             rebuild()
         }
     }
@@ -126,12 +128,14 @@ public final class AudioOutput {
     private func startDevice() throws {
         if isRunning { return }
         if procID == nil && unit == nil {
-            if binaural, channels > 2, let layout = ChannelLayout.standard(channels: channels) {
+            // An Ambisonics document is always heard through the spatial mixer (nothing else decodes it): for
+            // headphones when binaural listening is on, else for loudspeakers.
+            if channels > 2, let layout = ChannelLayout.standard(channels: channels), binaural || layout.isAmbisonic {
                 do {
-                    try openBinaural(layout)
+                    try openBinaural(layout, headphones: binaural)
                 } catch {
                     tearDown()
-                    binaural = false
+                    if !layout.isAmbisonic { binaural = false }
                     throw error
                 }
             } else {
@@ -200,11 +204,12 @@ public final class AudioOutput {
     private func rebuild() { deviceChanged() }
 
     /// Engine → spatial mixer (the document's channels as a bed, rendered for headphones) → the default output.
-    private func openBinaural(_ layout: ChannelLayout) throws {
+    private func openBinaural(_ layout: ChannelLayout, headphones: Bool = true) throws {
         var none: Int32 = 0
         jm_engine_set_output(engine, sampleRate, &none, &none, &none, nil, 0)
         let mixer = try Binaural.makeMixer(layout: layout, rate: sampleRate,
-                                           callback: AURenderCallbackStruct(inputProc: jm_engine_au_render, inputProcRefCon: UnsafeMutableRawPointer(engine)))
+                                           callback: AURenderCallbackStruct(inputProc: jm_engine_au_render, inputProcRefCon: UnsafeMutableRawPointer(engine)),
+                                           headphones: headphones)
         spatialMixer = mixer
         var desc = AudioComponentDescription(componentType: kAudioUnitType_Output, componentSubType: kAudioUnitSubType_DefaultOutput,
                                              componentManufacturer: kAudioUnitManufacturer_Apple, componentFlags: 0, componentFlagsMask: 0)
@@ -221,7 +226,7 @@ public final class AudioOutput {
                                        UInt32(MemoryLayout<AudioUnitConnection>.size)), "connect the spatial mixer")
         try check(AudioUnitInitialize(mixer), "initialize the spatial mixer")
         try check(AudioUnitInitialize(out), "initialize the output")
-        path = .binaural
+        path = headphones ? .binaural : .spatialSpeakers
         deviceName = Self.defaultDevice().flatMap(Self.name)
     }
 

@@ -286,4 +286,15 @@ struct AutomationStepTests {
         #expect(throws: (any Error).self) { try StepRunner.validate(Step(op: "set_layout", params: ["layout": .string("quad")])) }
         #expect(Self.run(&s, "set_layout", ["layout": .string("stereo")]).status == .done && s.project.channels == 2)
     }
+
+    @Test("In an Ambisonics document the loudness steps are refused with the reason, and other steps run")
+    func ambisonicLoudness() {
+        var s = Self.state()
+        #expect(Self.run(&s, "set_layout", ["layout": .string("ambix1")]).status == .done)
+        for (op, params) in [("normalize", ["level": JSONValue.number(-16)]), ("loudness_preset", ["preset": .string("ebu_r128")]), ("limit", [:])] {
+            let r = Self.run(&s, op, params)
+            #expect(r.status == .failed && r.reason == "not_available" && (r.error ?? "").contains("Ambisonics"), "\(op): \(r.error ?? "")")
+        }
+        #expect(Self.run(&s, "gain", ["db": .number(-3)]).status == .done)
+    }
 }

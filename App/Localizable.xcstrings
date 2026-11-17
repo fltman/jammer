@@ -8887,6 +8887,60 @@
         }
       }
     },
+    "menu.layout.ambix1": {
+      "comment": "Menu item in Audio › Layout, and the layout’s name in the status bar: a sound field in AmbiX (4 channels).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ambisonics (1st Order)"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ambisonics (första ordningen)"
+          }
+        }
+      }
+    },
+    "menu.layout.ambix2": {
+      "comment": "Menu item in Audio › Layout: a sound field in AmbiX (9 channels).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ambisonics (2nd Order)"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ambisonics (andra ordningen)"
+          }
+        }
+      }
+    },
+    "menu.layout.ambix3": {
+      "comment": "Menu item in Audio › Layout: a sound field in AmbiX (16 channels).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ambisonics (3rd Order)"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ambisonics (tredje ordningen)"
+          }
+        }
+      }
+    },
     "menu.layout.mono": {
       "comment": "Menu item in Audio › Layout.",
       "extractionState": "manual",

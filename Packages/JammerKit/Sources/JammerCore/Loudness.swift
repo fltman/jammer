@@ -77,6 +77,9 @@ public struct LoudnessMeter {
     /// 2026-11-17 7.1's rears had 1.41, as ffmpeg's ebur128 still gives them, and 7.1.4's LFE was counted.
     static func channelWeights(_ n: Int) -> [Double] {
         guard let layout = ChannelLayout.standard(channels: n), n > 2 else { return [Double](repeating: 1, count: n) }
+        // Ambisonics: BS.1770 has no weighting for a sound field; only W (the omnidirectional part) is taken,
+        // and no loudness number of an Ambisonics document is shown or acted on (docs/IMMERSIVE.md).
+        if layout.isAmbisonic { return (0..<n).map { $0 == 0 ? 1 : 0 } }
         return layout.speakers.map(\.loudnessWeight)
     }
 

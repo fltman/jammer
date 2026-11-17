@@ -1076,7 +1076,7 @@ final class EditorSession {
         }
         // A document wider than stereo is written with its layout's channel mask (5.1 as the side pair).
         var wav = WAVWriter.Options(encoding: options.encoding, channels: project.channels, sampleRate: project.sampleRate,
-                                    channelMask: project.layout.mask, dither: options.dither)
+                                    channelMask: project.layout.isAmbisonic ? 0 : project.layout.mask, dither: options.dither)
         let first = self.project.sources.first?.info
         if asked.lowerBound == 0 {
             if var bext = first?.bext {

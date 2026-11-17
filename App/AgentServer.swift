@@ -375,6 +375,9 @@ enum AgentRouter {
                 return try await undoRedo(session, redo: p.last == "redo")
             case ["analysis"]:
                 try only("GET")
+                guard !session.project.layout.isAmbisonic else {
+                    throw APIError.notAvailable("Loudness isn't measured in an Ambisonics document: ITU-R BS.1770 has no weighting for a sound field.")
+                }
                 let range = try queryRange(r, session)
                 let only = try namedTracks(session, (r.query["tracks"] ?? r.query["track"])?.split(separator: ",").map(String.init))
                 let result = await session.analyze(range, tracks: only)
@@ -384,6 +387,7 @@ enum AgentRouter {
                 return .json(["analysis": body])
             case ["analysis", "dialogue"]:
                 try only("GET")
+                guard !session.project.layout.isAmbisonic else { throw APIError.notAvailable("Loudness isn't measured in an Ambisonics document.") }
                 guard Operations.dialogueLoudness else { throw APIError.notAvailable("Dialogue-gated loudness isn't in this build yet: its numbers haven't been set beside a reference meter's.") }
                 let range = try queryRange(r, session)
                 var profile: DialogueProfile?
@@ -662,7 +666,8 @@ enum AgentRouter {
         d["selection"] = s.selection.map { ["start": seconds(s, $0.lowerBound), "end": seconds(s, $0.upperBound)] } ?? NSNull()
         d["playhead"] = seconds(s, s.playhead)
         d["layout"] = p.layout.rawValue
-        // How the sound reaches the device: hal, audioUnit, or binaural (through the spatial mixer); null before the first play.
+        // How the sound reaches the device: hal, audioUnit, binaural (the spatial mixer for headphones) or spatialSpeakers
+        // (the spatial mixer for loudspeakers, an Ambisonics document); null before the first play.
         d["outputPath"] = s.output.path?.rawValue ?? NSNull()
         // The picture's timecode, when the document has one: its rate, the timecode the timeline starts at, and where the playhead is in it.
         d["timecode"] = p.timecode.map { ["rate": $0.rate.rawValue, "start": $0.start.text, "playhead": $0.timecode(at: s.playhead, sampleRate: p.sampleRate).text] as [String: Any] } ?? NSNull()
@@ -1254,6 +1259,9 @@ enum AgentRouter {
         }
         // A loudness target for the delivered file: given here, or the preset the document was just brought to.
         var target: LoudnessDelivery.Target?
+        if obj["targetLUFS"] != nil, session.project.layout.isAmbisonic {
+            throw APIError.notAvailable("targetLUFS: loudness isn't measured in an Ambisonics document.")
+        }
         if let t = obj["targetLUFS"] {
             guard let n = t as? NSNumber, CFGetTypeID(n) != CFBooleanGetTypeID(), (-40.0 ... -5.0).contains(n.doubleValue) else {
                 throw APIError.badRequest("targetLUFS must be a number between -40 and -5.")

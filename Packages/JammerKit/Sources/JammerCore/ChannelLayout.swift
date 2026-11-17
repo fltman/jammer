@@ -46,11 +46,23 @@ public enum Speaker: UInt32, Sendable, CaseIterable, Codable {
     }
 }
 
-/// The channels of a document: which loudspeaker each channel feeds, in file order. Channel-based only
-/// (Ambisonics is a sound field, not loudspeakers, and is its own kind; see docs/IMMERSIVE.md).
+/// The channels of a document: which loudspeaker each channel feeds, in file order; or, for Ambisonics, the
+/// sound field's components in AmbiX order (ACN, SN3D), which feed no loudspeaker (see docs/IMMERSIVE.md).
 public enum ChannelLayout: String, Sendable, CaseIterable, Codable {
     case mono, stereo
     case surround51 = "5.1", surround71 = "7.1", immersive714 = "7.1.4"
+    case ambix1, ambix2, ambix3
+
+    /// The Ambisonics order, nil for a loudspeaker layout.
+    public var ambisonicOrder: Int? {
+        switch self {
+        case .ambix1: 1
+        case .ambix2: 2
+        case .ambix3: 3
+        default: nil
+        }
+    }
+    public var isAmbisonic: Bool { ambisonicOrder != nil }
 
     /// The loudspeakers, in the order the channels come in a file and in the document.
     /// 5.1's surrounds are the side pair (mask 0x60F, ITU-R BS.775's placement at about ±110°); a 5.1 file
@@ -63,12 +75,22 @@ public enum ChannelLayout: String, Sendable, CaseIterable, Codable {
         case .surround71: [.frontLeft, .frontRight, .frontCenter, .lowFrequency, .backLeft, .backRight, .sideLeft, .sideRight]
         case .immersive714: [.frontLeft, .frontRight, .frontCenter, .lowFrequency, .backLeft, .backRight, .sideLeft, .sideRight,
                              .topFrontLeft, .topFrontRight, .topBackLeft, .topBackRight]
+        case .ambix1, .ambix2, .ambix3: []
         }
     }
-    public var channels: Int { speakers.count }
+    public var channels: Int { ambisonicOrder.map { ($0 + 1) * ($0 + 1) } ?? speakers.count }
     /// The WAV channel mask. Mono and stereo files are written without one, as they always were.
     public var mask: UInt32? { channels <= 2 ? nil : speakers.reduce(0) { $0 | $1.rawValue } }
-    public var title: String { self == .mono ? "Mono" : self == .stereo ? "Stereo" : rawValue }
+    public var title: String {
+        switch self {
+        case .mono: "Mono"
+        case .stereo: "Stereo"
+        case .ambix1: "Ambisonics, 1st order"
+        case .ambix2: "Ambisonics, 2nd order"
+        case .ambix3: "Ambisonics, 3rd order"
+        default: rawValue
+        }
+    }
 
     /// The layout a document has by default for a channel count (what a file without a mask means).
     public static func standard(channels: Int) -> ChannelLayout? {
@@ -78,18 +100,23 @@ public enum ChannelLayout: String, Sendable, CaseIterable, Codable {
         case 6: .surround51
         case 8: .surround71
         case 12: .immersive714
+        case 4: .ambix1
+        case 9: .ambix2
+        case 16: .ambix3
         default: nil
         }
     }
 
     /// The layout of a file: by its mask when it has one that names a known layout (5.1 with the back pair
-    /// counts as 5.1), else by its channel count. nil: a layout this app doesn't know.
+    /// counts as 5.1), else by its channel count. nil: a layout this app doesn't know. Never Ambisonics: nothing
+    /// in a WAV file says that its 4, 9 or 16 channels are a sound field, so such a file is opened as stereo
+    /// and the document is set to Ambisonics by hand (Audio › Layout).
     public static func of(channels: Int, mask: UInt32?) -> ChannelLayout? {
         if let mask, mask != 0 {
             if mask == 0x3F { return channels == 6 ? .surround51 : nil }
             return allCases.first { $0.mask == mask && $0.channels == channels } ?? (channels <= 2 ? standard(channels: channels) : nil)
         }
-        return standard(channels: channels)
+        return standard(channels: channels).flatMap { $0.isAmbisonic ? nil : $0 }
     }
 }
 
@@ -104,6 +131,8 @@ extension ChannelLayout {
         let source = ChannelLayout.of(channels: sourceChannels, mask: sourceMask)
         if source == self { return nil }
         if channels <= 2, sourceChannels <= 2 { return nil }
+        // A file of 4, 9 or 16 channels in an Ambisonics document of that size: its components as they are.
+        if source == nil, isAmbisonic, sourceChannels == channels { return nil }
         guard let source else {
             // A source in a layout this app doesn't know: its first channels into the first channels, as before.
             return channels <= 2 ? nil : (0..<sourceChannels).flatMap { k in (0..<channels).map { Float(k == $0 ? 1 : 0) } }
@@ -113,6 +142,28 @@ extension ChannelLayout {
 
     /// The gains from one layout to another, [from channel][to channel].
     public static func gains(from s: ChannelLayout, to d: ChannelLayout) -> [Float] {
+        if let order = d.ambisonicOrder {
+            var m = [Float](repeating: 0, count: s.channels * d.channels)
+            if let from = s.ambisonicOrder {
+                // One order into another: the components they share, one for one (a lower order padded, a higher cut).
+                for k in 0..<min(s.channels, d.channels) { m[k * d.channels + k] = 1 }
+                _ = from
+                return m
+            }
+            // Loudspeakers into a sound field: each encoded from its direction (a mono source from the front);
+            // the LFE has no direction and is left out.
+            for (k, speaker) in s.speakers.enumerated() {
+                guard let dir = s == .mono ? (0, 0) : speaker.direction(in: s) else { continue }
+                let y = Ambisonics.encode(azimuth: dir.0, elevation: dir.1, order: order)
+                for c in 0..<d.channels { m[k * d.channels + c] = y[c] }
+            }
+            return m
+        }
+        if s.isAmbisonic {
+            // A sound field into loudspeakers needs a decoder, which isn't built: it is left out (silent there).
+            // Listening to an Ambisonics document goes through Apple's spatial mixer instead.
+            return [Float](repeating: 0, count: s.channels * d.channels)
+        }
         let into = d.speakers
         if s == .mono {
             // A voice to the centre; where there is none (stereo), to both sides, as a mono source always went.
@@ -171,6 +222,8 @@ extension ChannelLayout {
             return step(.mono, [(.frontLeft, .frontCenter, k), (.frontRight, .frontCenter, k)])
         case .mono:
             return (.mono, [1])
+        case .ambix1, .ambix2, .ambix3:
+            return (.mono, [Float](repeating: 0, count: s.channels))
         }
     }
 }

@@ -663,6 +663,11 @@ public enum StepRunner {
                 state.made = [:]
                 state.warnings = []
                 let before = state.project
+                // BS.1770 has no loudness for a sound field: in an Ambisonics document no step acts on a loudness number.
+                if state.project.layout.isAmbisonic, ["loudness_preset", "limit"].contains(step.op)
+                    || (step.op == "normalize" && (step.params["target"]?.string ?? "loudness") == "loudness") {
+                    throw StepFailure("\(step.op): loudness isn't measured in an Ambisonics document (ITU-R BS.1770 has no weighting for a sound field). Export it for loudspeakers or headphones and measure that.", reason: "not_available")
+                }
                 let info = try apply(step, to: &state, measure: measure)
                 // A track moved by itself (lined up, stretched) under automation that stays on the timeline:
                 // done, and said, so that nobody thinks the lane followed.

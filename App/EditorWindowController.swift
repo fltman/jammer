@@ -809,7 +809,7 @@ struct StatusBar: View {
             }
             .buttonStyle(.plain)
             .help(L10n.text("status.tempo.help"))
-                        Text(verbatim: "\(Int(session.project.sampleRate)) Hz · " + (session.project.channels == 1 ? L10n.text("format.mono") : session.project.channels == 2 ? L10n.text("format.stereo") : session.project.layout.rawValue))
+                        Text(verbatim: "\(Int(session.project.sampleRate)) Hz · " + (session.project.channels == 1 ? L10n.text("format.mono") : session.project.channels == 2 ? L10n.text("format.stereo") : L10n.layoutTitle(session.project.layout)))
         }
         .font(.system(size: 11, design: .monospaced))
         .foregroundStyle(.secondary)

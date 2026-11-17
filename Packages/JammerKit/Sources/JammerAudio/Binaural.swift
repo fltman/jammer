@@ -17,6 +17,7 @@ public enum Binaural {
         case .surround51: kAudioChannelLayoutTag_MPEG_5_1_A
         case .surround71: kAudioChannelLayoutTag_WAVE_7_1
         case .immersive714: kAudioChannelLayoutTag_CICP_19
+        case .ambix1, .ambix2, .ambix3: kAudioChannelLayoutTag_HOA_ACN_SN3D | AudioChannelLayoutTag(layout.channels)
         }
     }
 
@@ -29,7 +30,7 @@ public enum Binaural {
 
     /// A spatial mixer set up for a bed in `layout` at `rate`, rendering for headphones, with `callback`
     /// feeding its one input. Not initialized (the caller connects it first).
-    public static func makeMixer(layout: ChannelLayout, rate: Double, callback: AURenderCallbackStruct) throws -> AudioUnit {
+    public static func makeMixer(layout: ChannelLayout, rate: Double, callback: AURenderCallbackStruct, headphones: Bool = true) throws -> AudioUnit {
         var desc = AudioComponentDescription(componentType: kAudioUnitType_Mixer, componentSubType: kAudioUnitSubType_SpatialMixer,
                                              componentManufacturer: kAudioUnitManufacturer_Apple, componentFlags: 0, componentFlagsMask: 0)
         guard let comp = AudioComponentFindNext(nil, &desc) else { throw OutputError("This Mac has no spatial mixer.") }
@@ -49,7 +50,9 @@ public enum Binaural {
                                                UInt32(MemoryLayout<AudioChannelLayout>.size)), "set the bed's loudspeakers")
         try set(kAudioUnitProperty_SpatialMixerSourceMode, kAudioUnitScope_Input, AUSpatialMixerSourceMode.spatialMixerSourceMode_AmbienceBed.rawValue, "make the input a bed")
         try set(kAudioUnitProperty_SpatializationAlgorithm, kAudioUnitScope_Input, AUSpatializationAlgorithm.spatializationAlgorithm_UseOutputType.rawValue, "choose the rendering")
-        try set(kAudioUnitProperty_SpatialMixerOutputType, kAudioUnitScope_Global, AUSpatialMixerOutputType.spatialMixerOutputType_Headphones.rawValue, "render for headphones")
+        try set(kAudioUnitProperty_SpatialMixerOutputType, kAudioUnitScope_Global,
+                headphones ? AUSpatialMixerOutputType.spatialMixerOutputType_Headphones.rawValue : AUSpatialMixerOutputType.spatialMixerOutputType_ExternalSpeakers.rawValue,
+                "choose headphones or loudspeakers")
         try set(kAudioUnitProperty_SetRenderCallback, kAudioUnitScope_Input, callback, "connect the engine")
         return mixer
     }

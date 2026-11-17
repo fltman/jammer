@@ -54,6 +54,8 @@ extension Speaker {
 public enum Panner {
     /// Gains per channel of `layout` for a mono sound from `azimuth`/`elevation`.
     public static func gains(azimuth: Double, elevation: Double, in layout: ChannelLayout) -> [Float] {
+        // In a sound field: encoded from the direction (AmbiX), every elevation as it is.
+        if let order = layout.ambisonicOrder { return Ambisonics.encode(azimuth: azimuth, elevation: elevation, order: order) }
         var out = [Float](repeating: 0, count: layout.channels)
         let speakers = layout.speakers
         let ear = speakers.indices.filter { speakers[$0].direction(in: layout).map { $0.elevation == 0 } ?? false }

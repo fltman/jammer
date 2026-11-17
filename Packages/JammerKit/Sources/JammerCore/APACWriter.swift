@@ -13,6 +13,8 @@ public enum APACWriter {
         case .surround51: kAudioChannelLayoutTag_MPEG_5_1_A
         case .surround71: kAudioChannelLayoutTag_WAVE_7_1
         case .immersive714: kAudioChannelLayoutTag_CICP_19
+        // AmbiX: Core Audio's ACN/SN3D tag, ORed with the channel count (CoreAudioBaseTypes.h).
+        case .ambix1, .ambix2, .ambix3: kAudioChannelLayoutTag_HOA_ACN_SN3D | AudioChannelLayoutTag(layout.channels)
         case .mono, .stereo: nil
         }
     }
@@ -22,7 +24,7 @@ public enum APACWriter {
     /// professional AV offline encoded content such as stereo and multichannel"; DRC configuration Movie.
     public static func export(_ plan: RenderPlan, range: Range<Frame>, to url: URL, progress: (Double) -> Bool = { _ in true }) throws {
         guard let layout = ChannelLayout.standard(channels: plan.channels), let tag = tag(layout) else {
-            throw ExportError.unsupported("APAC is written for 5.1, 7.1 and 7.1.4 documents.")
+            throw ExportError.unsupported("APAC is written for 5.1, 7.1, 7.1.4 and Ambisonics documents.")
         }
         try? FileManager.default.removeItem(at: url)
         let sr = plan.sampleRate, ch = plan.channels
@@ -52,7 +54,8 @@ public enum APACWriter {
         var csize = UInt32(MemoryLayout<AudioConverterRef?>.size)
         status = ExtAudioFileGetProperty(file, kExtAudioFileProperty_AudioConverter, &csize, &converter)
         guard status == noErr, let converter else { throw ExportError.encoder("reach the encoder", status) }
-        var source = Int32(kAudioCodecContentSource_AV_Traditional_Offline)
+        // A sound field is spatial content (39); loudspeaker beds are traditional multichannel (38).
+        var source = Int32(layout.isAmbisonic ? kAudioCodecContentSource_AV_Spatial_Offline : kAudioCodecContentSource_AV_Traditional_Offline)
         var drc = UInt32(kAudioCodecDynamicRangeControlConfiguration_Movie)
         var asp: UInt32 = 75
         status = AudioConverterSetProperty(converter, kAudioCodecPropertyContentSource, 4, &source)
