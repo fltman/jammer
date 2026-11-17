@@ -4,6 +4,10 @@
 # embedded, Accelerate for BLAS. The xcframework is not committed; run this once.
 #   JAMMER_VENDOR_SRC=/some/big/disk scripts/build-whisper.sh
 set -eu
+# Fetching, compiling or installing third-party code is Anders's to allow, in the session's own window,
+# each time it is done (the series' rule). So this script does nothing until it is told he has:
+#   JAMMER_FETCH_ALLOWED=yes scripts/build-whisper.sh
+[ "${JAMMER_FETCH_ALLOWED:-}" = "yes" ] || { echo "$(basename "$0"): this fetches and builds third-party code, which Anders allows each time. After his yes: JAMMER_FETCH_ALLOWED=yes scripts/$(basename "$0")" >&2; exit 77; }
 root="$(cd "$(dirname "$0")/.." && pwd)"
 commit=d1be6fde11ac6e0407606b4e42fe72d34add8037   # v1.9.5
 src_root="${JAMMER_VENDOR_SRC:-$root/build/vendor-src}"

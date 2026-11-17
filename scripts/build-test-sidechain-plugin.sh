@@ -15,6 +15,10 @@
 # Fetching and compiling it was approved by Anders on 2026-11-16 ("Build it from source").
 #   scripts/build-test-sidechain-plugin.sh <folder outside the repository>
 set -eu
+# Fetching, compiling or installing third-party code is Anders's to allow, in the session's own window,
+# each time it is done (the series' rule). So this script does nothing until it is told he has:
+#   JAMMER_FETCH_ALLOWED=yes scripts/build-test-sidechain-plugin.sh
+[ "${JAMMER_FETCH_ALLOWED:-}" = "yes" ] || { echo "$(basename "$0"): this fetches and builds third-party code, which Anders allows each time. After his yes: JAMMER_FETCH_ALLOWED=yes scripts/$(basename "$0")" >&2; exit 77; }
 dir="${1:?give a folder outside the repository, e.g. $JAMMER_TEST_MEDIA/third-party/zlcompressor}"
 root="$(cd "$(dirname "$0")/.." && pwd)"
 mkdir -p "$dir"

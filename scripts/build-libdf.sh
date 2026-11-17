@@ -4,6 +4,10 @@
 # DeepFilterNet3 model next to it. Not committed; run once. Needs cargo.
 #   JAMMER_VENDOR_SRC=/big/disk CARGO_HOME=/big/disk/cargo scripts/build-libdf.sh
 set -eu
+# Fetching, compiling or installing third-party code is Anders's to allow, in the session's own window,
+# each time it is done (the series' rule). So this script does nothing until it is told he has:
+#   JAMMER_FETCH_ALLOWED=yes scripts/build-libdf.sh
+[ "${JAMMER_FETCH_ALLOWED:-}" = "yes" ] || { echo "$(basename "$0"): this fetches and builds third-party code, which Anders allows each time. After his yes: JAMMER_FETCH_ALLOWED=yes scripts/$(basename "$0")" >&2; exit 77; }
 root="$(cd "$(dirname "$0")/.." && pwd)"
 commit=7b14b895fe7fc42cab72b4a4c1e49c982bd6404b
 src_root="${JAMMER_VENDOR_SRC:-$root/build/vendor-src}"
