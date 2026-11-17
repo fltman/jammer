@@ -40,7 +40,7 @@ A bus can hold plugins, like a track: one compressor for all the voices, or a re
 
 **Timing.** A plugin with look-ahead makes its bus late. Jämmer delays every other path by as much wherever sounds meet, sends included, and starts that much earlier, so what you hear and what you export is in time, to the sample. Bypassing the plugin or taking it away takes the delay away too. A plugin that is late without saying so to Jämmer can't be made up for; if a bus sounds late with one plugin and not without it, that is the reason.
 
-What this costs the computer depends on the plugins, not on the buses. It has not been measured well enough yet for the manual to give a number of tracks or plugins.
+What this costs the computer depends on the plugins, not on the buses. On a MacBook with an M5 and 16 GB, measured with the Mac busy with other work, Jämmer played 64 tracks with two of Apple's plugins each, plus 8 buses with two plugins each, without a single dropout. Mixing an audio block took about a tenth of the time it may take, and at most just over a quarter. Plugins from other makers can cost far more than Apple's. With them, keep an eye on playback, and freeze a heavy track (its strip in the Mixer) to render it once.
 
 ## VCA groups
 

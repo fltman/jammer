@@ -136,7 +136,20 @@ So the mixer itself is cheap. What sets the limit is what it carries: plugins (m
 | 64 × 0 | 8 × 2 | 16 | 0.39 / 0.39 ms | 4 % | 5–8 ms |
 | 64 × 2 | none | 128 | 3.09 / 3.39 ms | 29–32 % | 24–174 ms |
 
-What it says: the graph and its delay lines cost next to nothing (the fifth row); the plugins are the cost, about 0.02 ms per light Apple unit per block. A third-party plugin can cost a hundred times that. **Not measured: the worst block on a quiet machine, and playback itself with these loads (drop-outs heard or counted).** Until both are, the manual gives no number of tracks or plugins.
+What it says: the graph and its delay lines cost next to nothing (the fifth row); the plugins are the cost, about 0.02 ms per light Apple unit per block. A third-party plugin can cost a hundred times that.
+
+**Measured 2026-11-17, in a window Anders gave ("ledig"), on a Mac17,2 (Apple M5, 10 cores, 16 GB)**, the graph being the one path. The Mac wasn't quiet after all: Anders paused a backup and closed a browser, but a virtual machine, Spotlight and Dropbox kept the one-minute load at 3.0 when it began and 4.2–6.5 during playback; the figures are under that load, not better than a quiet Mac's. One run each.
+
+| Tracks × plugins, buses × plugins | Units | Block median / 99 % / worst | Over 10.7 ms | First block after a seek |
+|---|---|---|---|---|
+| 8 × 1, 2 × 2 | 12 | 0.123 / 0.220 / 0.301 ms | 0 of 936 | 2.7 ms |
+| 16 × 2, 4 × 2 | 40 | 0.324 / 0.345 / 0.357 ms | 0 | 7.3 ms |
+| 32 × 2, 8 × 2 | 80 | 0.641 / 0.716 / 0.778 ms | 0 | 14.5 ms |
+| 64 × 2, 8 × 2 | 144 | 1.152 / 2.169 / 2.954 ms | 0 | 25.5 ms |
+| 64 × 0, 8 × 2 | 16 | 0.356 / 0.745 / 2.398 ms | 0 | 5.1 ms |
+| 64 × 2, no buses | 128 | 1.055 / 2.698 / 6.561 ms | 0 | 23.6 ms |
+
+**Playback in the app** (the test copy hands the device silence; Apple's low-pass and peak limiter on every track and bus, tracks at −24 dB into the buses): 32 tracks × 2 and 8 buses × 2, and 64 tracks × 2 and 8 buses × 2, each played twice for 20 s: **0 underruns** in all four. The worst block seen, 6.6 ms, is a spike under the load, 61 % of its time; the 99 % figures stay under 2.7 ms (a quarter). The manual (chapter 20) now gives the number, with the Mac it was measured on and that third-party plugins can cost far more.
 
 Where it runs: in the render worker and the offline renderer, like insert chains today, never in the device callback. The worker renders ahead of the playhead, which is also what hides delay compensation from the listener.
 
