@@ -42,6 +42,8 @@ final class AutomationLanesView: NSView {
     private var chosen: Set<Int> { selected.map { others.union([$0]) } ?? [] }
     /// A stretch being dragged out with ⌥⇧ to select the points in it: where it began and where the pointer is.
     private var marquee: (from: CGFloat, to: CGFloat)?
+    /// A point pressed with ⇧ and not yet moved: let go like that, it joins or leaves the selected ones.
+    private var toggleOnUp: Int?
     /// A point being dragged: the lane as it would be, the point's index, and whether it has moved.
     private var drag: (lane: AutomationLane, index: Int, moved: Bool, origin: AutomationLane)?
     /// The lane as just sent, drawn until the document has it (so the line doesn't jump back for a moment).
@@ -426,18 +428,10 @@ final class AutomationLanesView: NSView {
                                                                     < hypot(place(own.points[$1], shown, in: r).x - p.x, place(own.points[$1], shown, in: r).y - p.y) }),
            hypot(place(own.points[k], shown, in: r).x - p.x, place(own.points[k], shown, in: r).y - p.y) <= 8 {
             if event.modifierFlags.contains(.shift) {
-                // ⇧-click: the point joins the selected ones, or leaves them. Nothing is dragged.
-                if chosen.contains(k) {
-                    var rest = chosen
-                    rest.remove(k)
-                    let first = rest.min()
-                    selected = first
-                    others = rest.filter { $0 != first }
-                } else {
-                    if let was = selected { others.insert(was) }
-                    selected = k
-                }
-                if chosen.count > 1 { sayChosen() } else { let one = selected; select(one) }
+                // ⇧ on a point is two things, told apart when the button is let go: moved, it is a drag that
+                // holds the time; not moved, the point joins the selected ones or leaves them.
+                toggleOnUp = k
+                drag = (own, k, false, own)
                 return true
             }
             if chosen.count > 1, chosen.contains(k) {
@@ -493,6 +487,11 @@ final class AutomationLanesView: NSView {
             d.lane = d.origin.moving(d.index, frame: frame, value: value, limit: project.length)
         }
         d.moved = d.moved || d.lane.points[d.index] != old
+        if d.moved, let k = toggleOnUp {
+            // It moved: a drag after all. A point that wasn't among the selected ones is dragged alone.
+            toggleOnUp = nil
+            if !chosen.contains(k) { selected = k; others = []; d.lane = d.origin.moving(d.index, frame: frame, value: value, limit: project.length) }
+        }
         drag = d
         let now = d.lane.points[d.index]
         hover = (place(now, shown, in: r), label(d.lane, frame: now.frame, value: now.value))
@@ -513,6 +512,22 @@ final class AutomationLanesView: NSView {
         guard let shown, let d = drag else { return false }
         drag = nil
         hover = nil
+        if let k = toggleOnUp {
+            // ⇧-click: the point joins the selected ones, or leaves them.
+            toggleOnUp = nil
+            if chosen.contains(k) {
+                var rest = chosen
+                rest.remove(k)
+                let first = rest.min()
+                selected = first
+                others = rest.filter { $0 != first }
+            } else {
+                if let was = selected { others.insert(was) }
+                selected = k
+            }
+            if chosen.count > 1 { sayChosen() } else { let one = selected; select(one) }
+            return true
+        }
         if d.moved {
             send(d.lane, saying: chosen.count > 1 ? L10n.count("automation.points.moved", chosen.count) : describe(d.lane, d.index))
         } else if chosen.count > 1 {
