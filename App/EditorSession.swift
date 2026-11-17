@@ -154,6 +154,22 @@ final class EditorSession {
     var stepsNotSavedBack = 0
     /// The window is closing with its changes kept for later: the journal's entry stays when the document goes.
     var keepsLinkEntry = false
+    /// An ordinary document is autosaved a second after each step, not when macOS's clock next comes
+    /// round: by the clock, a hard stop 6 s after a change lost a document that had never been saved
+    /// (measured 2026-11-17). Steps that follow each other within the second make one write. A linked
+    /// document isn't autosaved at all: Jämmer's journal has it after every step.
+    private var autosaveWaiting: DispatchWorkItem?
+    func autosaveSoon() {
+        guard linkRecord == nil, document != nil else { return }
+        autosaveWaiting?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let document = self?.document, document.hasUnautosavedChanges else { return }
+            document.autosave(withImplicitCancellability: true) { _ in }
+        }
+        autosaveWaiting = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1, execute: work)
+    }
+
     /// The document as it now stands into the journal, once the step that is being made is done with
     /// (so that "has changes" is what it is after the step).
     func noteInLinkJournal() {
@@ -420,6 +436,7 @@ final class EditorSession {
         document?.invalidateRestorableState()
         if linkRecord != nil { stepsNotSavedBack += 1 }
         noteInLinkJournal()
+        autosaveSoon()
         // Keep playing: restart where we are so the change is heard at once.
         if isPlaying { try? output.play(from: output.playhead) }
     }
