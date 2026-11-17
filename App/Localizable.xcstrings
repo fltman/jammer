@@ -1177,6 +1177,18 @@
         }
       }
     },
+    "mixer.window.title": {
+      "comment": "The mixer window’s title. %@ is the document.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mixer – %@"
+          }
+        }
+      }
+    },
     "paid.settings.about": {
       "comment": "Settings › Paid Services.",
       "extractionState": "manual",

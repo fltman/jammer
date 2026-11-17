@@ -107,7 +107,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         window?.makeFirstResponder(timeline.firstResponderView)
     }
 
-    func windowWillClose(_ notification: Notification) { session.stop() }
+    func windowWillClose(_ notification: Notification) { closeMixer(); session.stop() }
 
     // MARK: Actions (reached through the responder chain)
 
@@ -392,18 +392,35 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         }()
     }
 
+    /// Audio › Mixer…: a window of its own beside the document's, so that a level can be set, and ridden,
+    /// while the timeline is in reach and the sound plays (a sheet lay over the timeline). It is the
+    /// document's: its undo is the document's undo, the menus work in it as in the document's window, the
+    /// Space bar plays and stops, and it closes when the document's window does.
+    private var mixerWindow: MixerWindow?
     @objc func showMixer(_ sender: Any?) {
-        guard let window else { return }
-        let host = NSHostingController(rootView: AnyView(EmptyView()))
-        host.rootView = AnyView(MixerSheet(session: session) { [weak host] in
-            guard let sheet = host?.view.window else { return }
-            window.endSheet(sheet)
-        })
-        window.contentViewController?.presentAsSheet(host) ?? {
-            let sheet = NSWindow(contentViewController: host)
-            window.beginSheet(sheet)
-        }()
+        if let w = mixerWindow { w.makeKeyAndOrderFront(nil); return }
+        let w = MixerWindow(contentRect: .zero, styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
+        w.session = session
+        w.isReleasedWhenClosed = false
+        w.identifier = NSUserInterfaceItemIdentifier("mixer")
+        w.title = L10n.text("mixer.window.title", session.name)
+        w.contentViewController = NSHostingController(rootView: MixerSheet(session: session) { [weak w] in w?.close() })
+        // The menus' actions that the document's window answers (Play, Undo, the operations) reach it from here too.
+        w.nextResponder = self
+        mixerWindow = w
+        w.makeKeyAndOrderFront(nil)
+        // Under the document's window where the screen has room for it there, so that it doesn't lie over
+        // the timeline it is opened to be used beside; otherwise at the bottom of the screen.
+        if let main = window, let screen = main.screen?.visibleFrame {
+            w.layoutIfNeeded()
+            let size = w.frame.size
+            let top = main.frame.minY - 8 >= screen.minY + size.height ? main.frame.minY - 8 : screen.minY + size.height
+            let left = min(max(screen.minX, main.frame.minX), max(screen.minX, screen.maxX - size.width))
+            w.setFrameTopLeftPoint(NSPoint(x: left, y: top))
+        }
     }
+    /// The mixer goes with its document.
+    func closeMixer() { mixerWindow?.close(); mixerWindow = nil }
 
     @objc func performOperation(_ sender: Any?) {
         guard let item = (sender as? NSMenuItem)?.representedObject as? OperationItem else { return }
@@ -820,5 +837,18 @@ struct ExportAccessory: View {
         }
         .padding(12)
         .frame(width: 320)
+    }
+}
+
+/// The mixer's window. The document's undo, and Space for play and stop as in the timeline.
+final class MixerWindow: NSWindow, NSWindowDelegate {
+    weak var session: EditorSession? { didSet { delegate = self } }
+    // The document's undo: ⌘Z here takes back what was done here or in the timeline, in the one history.
+    func windowWillReturnUndoManager(_ window: NSWindow) -> UndoManager? { session?.document?.undoManager }
+    override func cancelOperation(_ sender: Any?) { performClose(sender) }
+    override func keyDown(with event: NSEvent) {
+        // (A text field in the window takes its own keys before this is asked.)
+        if event.keyCode == 49, event.modifierFlags.intersection([.command, .option, .control]).isEmpty { session?.togglePlay(); return }
+        super.keyDown(with: event)
     }
 }

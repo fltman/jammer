@@ -1,8 +1,8 @@
 # Mixer
 
-![The Mixer sheet: two tracks, each with a mute box, a level slider, a pan slider, where it goes and its sends; a VCA group at −6 dB with its Members menu open and both tracks ticked; under them the master with its level and its limiter box](../screens/mixer.webp)
+![The Mixer window: two tracks, each with a mute box, a level slider, a pan slider, where it goes and its sends; a VCA group at −6 dB with its Members menu open and both tracks ticked; under them the master with its level and its limiter box](../screens/mixer.webp)
 
-**Audio › Mixer…** (⌥⌘X) shows every track as a strip: mute, level, pan, and where it goes. Use it to set the balance between tracks, to place a track to the left or the right, and to gather tracks on a bus.
+**Audio › Mixer…** (⌥⌘X) shows every track as a strip: mute, level, pan, and where it goes. It is a window of its own beside the document, so the timeline stays in reach while it is open; Space plays and stops from it, ⌘Z undoes in it as in the document, and it closes with the document. Use it to set the balance between tracks, to place a track to the left or the right, and to gather tracks on a bus.
 
 ## Level, pan and mute
 
@@ -14,7 +14,7 @@
 
 A bus gathers several tracks under one level, one pan and one mute: all the music under one fader, all the guests under another.
 
-1. Type a name at the bottom of the sheet and click **Add Bus**.
+1. Type a name at the bottom of the window and click **Add Bus**.
 2. On each track that should go through it, choose the bus under the track's output (where it says **Output**).
 3. Set the bus's own level, pan and mute on its strip.
 
