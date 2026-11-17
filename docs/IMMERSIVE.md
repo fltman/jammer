@@ -74,12 +74,12 @@ The document's audio output and its plugin host were made once, for the channel 
 - **APAC in MP4** for documents in 5.1, 7.1 and 7.1.4 (`APACWriter`; File › Export's format list offers "APAC (MP4)" for those documents, and no MP3 or Opus; the API's `format: "apac"`). Written through AudioToolbox with the encoder of macOS 26 and later, the channels as a bed in the layout tag whose order is the document's; the settings Apple's APAC paper (June 2025) asks for: content source 38 ("Traditional professional AV offline encoded content such as stereo and multichannel"), the loudness/DRC configuration Movie (the paper: "None should not be utilized"), a sync packet every 75 packets. The encoder chooses the bit rate.
   - AVAssetWriter was tried first and refuses every content source but Apple's own (1–10: "content source must be between AVAudioContentSource_AppleCapture_Traditional and AVAudioContentSource_ApplePassthrough"), which would label this as Apple's content; AudioToolbox takes the third-party values, as the paper's own `afconvert -u csrc 36` example does.
   - A loudness delivery target is not measured through APAC (it carries its own loudness metadata, which a decoder applies).
-- **Tested:** a 5.1 and a 7.1.4 document written, decoded again by Apple's decoder: the channel count, the format, and every channel's tone loudest in its own channel. **In the app:** a 5.1 document exported through the API; `afinfo` reads "6 ch, 48000 Hz, apac … Channel layout: 5.1 (L R C LFE Ls Rs)"; a stereo document is refused in words. **Not seen:** the export panel's format list (a script couldn't read it).
+- **Tested:** a 5.1 and a 7.1.4 document written, decoded again by Apple's decoder: the channel count, the format, and every channel's tone loudest in its own channel. **In the app:** a 5.1 document exported through the API; `afinfo` reads "6 ch, 48000 Hz, apac … Channel layout: 5.1 (L R C LFE Ls Rs)"; a stereo document is refused in words. **Seen:** the export panel's Format menu, read while open: for a 5.1 document WAV, AIFF, FLAC, ALAC, AAC and APAC (MP4), no MP3 or Opus; for a stereo document MP3 and Opus and no APAC.
 - **Not built:** Ambisonics and objects in APAC (no Ambisonics documents yet; Jämmer has no objects); ASAF (Apple publishes no authoring interface for it).
 
 ### The waveform where the sound is heard (2026-11-17)
 
-In a layout wider than stereo the timeline draws a clip through the same matrix as its sound: a voice in the C row only, a placed voice at its loudspeakers, a wider source folded down into the document's rows (as the envelope of the summed parts). Seen before the change: a voice placed at Ls was drawn in L and R. Tested on the columns; not yet seen in the window.
+In a layout wider than stereo the timeline draws a clip through the same matrix as its sound: a voice in the C row only, a placed voice at its loudspeakers, a wider source folded down into the document's rows (as the envelope of the summed parts). Seen before the change: a voice placed at Ls was drawn in L and R. Tested on the columns, and seen after it: a voice placed at 110° is drawn in the Ls row, a little in Rs.
 
 ### D4, first part (2026-11-17): Ambisonics documents
 
@@ -89,6 +89,10 @@ In a layout wider than stereo the timeline draws a clip through the same matrix 
 - **No decoder:** a sound field in a loudspeaker document is left out (silent there), said in the step's description. Listening to an Ambisonics document always goes through Apple's spatial mixer with Core Audio's `HOA_ACN_SN3D` tag: for headphones when binaural listening is on, otherwise for loudspeakers. Tested offline: a tone encoded at 90° left reaches the left ear more, at 90° right the right ear, at first and third order. In the app: played both ways without underruns (`outputPath` `spatialSpeakers` and `binaural`); not heard.
 - **Loudness isn't measured** in an Ambisonics document: ITU-R BS.1770 has no weighting for a sound field, and no reference has been found. `GET …/analysis`, the dialogue analysis, `normalize` to a loudness, `loudness_preset`, `limit` and an export's `targetLUFS` are refused with that reason (`not_available`). The meter internally takes only W, so nothing breaks, and nothing of it is shown.
 - **APAC** writes a sound field too, with the HOA tag and content source 39 ("Spatial professional AV offline encoded content"): `afinfo` reads "4 ch, 48000 Hz, apac … Channel layout: High-Order Ambisonics, ACN/SN3D". A WAV export of a field is written with a channel mask of 0 (no loudspeaker positions).
+
+## The manual
+
+`site/manual/22-surround.md` (2026-11-17): the layout, where each file is heard, placing a track, listening, loudness, exporting, for agents; only what has been tried, and what isn't heard or measured said so.
 
 ## Not built
 
