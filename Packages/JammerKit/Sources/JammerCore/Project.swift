@@ -429,6 +429,11 @@ public struct Project: Codable, Equatable, Sendable {
         /// Flimmer, exportVersion 2 and later: the project and story the export was made from.
         public var projectId: String?
         public var storyId: String?
+        /// What each clip became in Flimmer at the last Send to Flimmer: by the Flimmer clip it was a take of (or
+        /// "clip:<Jämmer clip id>" for a clip that was new), the new clip's id there; and the project they are in.
+        /// Content of the document, saved with it and sent nowhere; used to send transcripts again to those clips.
+        public var sentClips: [String: String]?
+        public var sentProjectId: String?
         public init(app: String, exportVersion: String?, clipIds: [String], length: Frame, projectId: String? = nil, storyId: String? = nil) {
             self.app = app
             self.exportVersion = exportVersion

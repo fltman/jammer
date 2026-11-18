@@ -45,6 +45,9 @@ public enum FlimmerSend {
     /// One file that goes to Flimmer and its line in the plan.
     public struct Item: Sendable, Equatable {
         public enum Kind: String, Sendable { case take, new, mix }
+        /// The key it is remembered by after a send (`ImportRecord.sentClips`): the Flimmer clip it is a take of,
+        /// or "clip:<Jämmer clip id>" for a new clip; nil for the mix.
+        public var sentKey: String? { kind == .take ? clipId : (kind == .new ? localClip.map { "clip:\($0.uuidString)" } : nil) }
         public var kind: Kind
         /// What the user sees: the clip's source name.
         public var name: String
@@ -56,6 +59,8 @@ public enum FlimmerSend {
         public var fields: [String: J]
         /// The original clip's file is mono: the take goes back mono unless the work here made it stereo.
         public var monoSource = false
+        /// The Jämmer clip a new item is (nil for takes and the mix).
+        public var localClip: UUID? = nil
     }
 
     // MARK: From the document to the plan
@@ -94,7 +99,7 @@ public enum FlimmerSend {
             var fields: [String: J] = ["name": .string(name(clip)), "position": .object(["timelineOffset": .number(r6(project.seconds(n.range.lowerBound)))])]
             if let id = n.trackId { fields["trackId"] = .string(id) }
             out.append(Item(kind: .new, name: name(clip), clipId: nil, range: n.range, render: FlimmerReturn.soloProject(project, clip: n.clip), fields: fields,
-                            monoSource: clip.flatMap { project.source($0.sourceID) }?.info.channels == 1))
+                            monoSource: clip.flatMap { project.source($0.sourceID) }?.info.channels == 1, localClip: n.clip))
         }
         return out
     }
@@ -471,13 +476,21 @@ public enum FlimmerSend {
     /// For real, and then the transcripts, each in a PUT of its own: only when the plan succeeded (a failed plan
     /// throws before any is sent), and each answered for itself.
     public static func sendAll(_ prepared: Prepared, client: Client, transcripts: Bool, replaceEdited: Bool) async throws
-        -> (lines: [String], warnings: Int, transcripts: [TranscriptOutcome]) {
+        -> (lines: [String], warnings: Int, transcripts: [TranscriptOutcome], created: [Int: String]) {
         let answer = try await client.plan(prepared.body, items: prepared.items)
+        let created = createdClips(answer)
         var outcomes: [TranscriptOutcome] = []
         if transcripts, !prepared.transcripts.isEmpty {
-            outcomes = await sendTranscripts(prepared.transcripts, created: createdClips(answer), items: prepared.items, replaceEdited: replaceEdited, client: client)
+            outcomes = await sendTranscripts(prepared.transcripts, created: created, items: prepared.items, replaceEdited: replaceEdited, client: client)
         }
-        return (lines(answer: answer, items: prepared.items), warnings(answer: answer), outcomes)
+        return (lines(answer: answer, items: prepared.items), warnings(answer: answer), outcomes, created)
+    }
+
+    /// The id of the project Flimmer has open, when its status says it (`project.id`, or `projectId`).
+    public static func openProject(_ client: Client) async -> String? {
+        guard let (_, status) = try? await client.call("GET", "/api/v1/status") else { return nil }
+        if let p = status["project"] as? [String: Any], let id = (p["id"] ?? p["projectId"]) as? String { return id }
+        return status["projectId"] as? String
     }
     /// The warnings in Flimmer's answer: its overlaps, which `lines(answer:items:)` puts first.
     public static func warnings(answer: [String: Any]) -> Int { ((answer["overlaps"] as? [[String: Any]]) ?? []).count }
@@ -665,7 +678,74 @@ extension FlimmerSend {
         else if good.isEmpty { out.append("No transcript went to Flimmer (\(bad.count) refused); the sound did.") }
         else { out.append("\(good.count) of \(outcomes.count) transcripts went to Flimmer; \(bad.count) didn't.") }
         for o in good { out.append("Transcript sent: \(o.name)" + (o.replacedEdited ? " (it replaced one corrected by hand in Flimmer)" : "")) }
-        for o in bad { out.append("Transcript not sent: \(o.name). Flimmer said: \(o.message ?? "") [\(o.reason ?? "")]") }
+        for o in bad {
+            out.append("Transcript not sent: \(o.name). Flimmer said: \(o.message ?? "") [\(o.reason ?? "")]"
+                       + (clipGone(o) ? " Flimmer no longer has that clip: send the sound again to make a new take." : ""))
+        }
         return out
+    }
+}
+
+
+// MARK: Transcripts only, to the clips a send made (the coordinator's conditions, 2026-11-18)
+
+extension FlimmerSend {
+    /// After a send that succeeded: the document remembers what each item became in Flimmer, and in which project.
+    public static func remembering(_ project: Project, items: [Item], created: [Int: String], projectId: String?) -> Project {
+        guard var record = project.imported else { return project }
+        var map = record.sentClips ?? [:]
+        for (i, id) in created { if items.indices.contains(i), let key = items[i].sentKey { map[key] = id } }
+        guard !map.isEmpty else { return project }
+        var p = project
+        record.sentClips = map
+        record.sentProjectId = projectId ?? record.projectId
+        p.imported = record
+        return p
+    }
+
+    /// The clips whose transcripts can go again: one item per remembered clip that is still in the document, with
+    /// the Flimmer clip it became, in the order of the timeline.
+    public static func sentItems(_ project: Project) -> [(item: Item, flimmerClip: String)] {
+        guard let map = project.imported?.sentClips, !map.isEmpty else { return [] }
+        var out: [(Item, String, Frame)] = []
+        let clips = project.tracks.flatMap(\.clips)
+        for (key, flimmer) in map {
+            if key.hasPrefix("clip:"), let id = UUID(uuidString: String(key.dropFirst(5))), let c = clips.first(where: { $0.id == id }) {
+                let name = project.source(c.sourceID)?.name ?? "Clip"
+                out.append((Item(kind: .new, name: name, clipId: nil, range: c.start..<c.end, render: FlimmerReturn.soloProject(project, clip: id), fields: [:], localClip: id), flimmer, c.start))
+            } else {
+                let mine = clips.filter { $0.origin?.clipId == key }
+                guard let first = mine.min(by: { $0.start < $1.start }), let end = mine.map(\.end).max() else { continue }
+                let original = (first.origin?.snapshot?.sourceID).flatMap { project.source($0) } ?? project.source(first.sourceID)
+                out.append((Item(kind: .take, name: original?.name ?? "Clip", clipId: key, range: first.start..<end, render: FlimmerReturn.soloProject(project, clipId: key), fields: [:]), flimmer, first.start))
+            }
+        }
+        return out.sorted { $0.2 < $1.2 }.map { ($0.0, $0.1) }
+    }
+
+    /// Why transcripts can't go on their own now; nil when they can: the document remembers clips from a send, and
+    /// Flimmer has that project open (`openProject`: the id Flimmer's status names, when it does). The window says it in a sentence.
+    public enum TranscriptsOnlyRefusal: Equatable { case noneSent, noTranscript, otherProject }
+    public static func transcriptsOnlyRefusal(_ project: Project, openProject: String?) -> TranscriptsOnlyRefusal? {
+        let items = sentItems(project)
+        if items.isEmpty { return .noneSent }
+        if transcriptBodies(project, items: items.map(\.item)).isEmpty { return .noTranscript }
+        if let open = openProject, let mine = project.imported?.sentProjectId, open != mine { return .otherProject }
+        return nil
+    }
+
+    /// The transcripts of the remembered clips, each in a PUT of its own to the clip it became; a clip Flimmer no
+    /// longer has is said by itself, in Flimmer's words, and nothing goes to another clip in its place.
+    public static func sendTranscriptsOnly(_ project: Project, replaceEdited: Bool, client: Client) async -> [TranscriptOutcome] {
+        let sent = sentItems(project)
+        let items = sent.map(\.item)
+        let bodies = transcriptBodies(project, items: items)
+        let created = Dictionary(uniqueKeysWithValues: sent.enumerated().map { ($0.offset, $0.element.flimmerClip) })
+        return await sendTranscripts(bodies, created: created, items: items, replaceEdited: replaceEdited, client: client)
+    }
+
+    /// Whether a refusal means the clip is gone in Flimmer (send the sound again to make a new one).
+    public static func clipGone(_ o: TranscriptOutcome) -> Bool {
+        !o.ok && ["unknown_clip", "clip_deleted", "not_found", "HTTP 404"].contains(o.reason ?? "")
     }
 }

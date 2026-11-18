@@ -31,6 +31,9 @@ final class FlimmerSendModel {
     var transcriptLines: [String] = []
     var transcriptFailures = 0
     var hasTranscripts: Bool { !(prepared?.transcripts.isEmpty ?? true) }
+    /// Transcripts on their own, to the clips this document sent before: ready, or why not (one sentence).
+    var transcriptsOnlyReady = false
+    var transcriptsOnlyWhy: String?
     @ObservationIgnored private var prepared: FlimmerSend.Prepared?
     @ObservationIgnored private var client: FlimmerSend.Client?
     @ObservationIgnored private var task: Task<Void, Never>?
@@ -39,6 +42,66 @@ final class FlimmerSendModel {
         self.session = session
         // What can be said without Flimmer: whether the document can go back at all.
         if let no = FlimmerSend.refusal(session.project) { stage = .failed(L10n.error(no)) }
+        lookForTranscriptsOnly()
+    }
+
+    /// Whether transcripts can go on their own now: the document remembers clips from a send, and Flimmer has
+    /// that project open. Otherwise the sheet says why, in a sentence (only when the document has a transcript).
+    func lookForTranscriptsOnly() {
+        let project = session.project
+        guard !project.transcripts.isEmpty else { return }
+        if let no = FlimmerSend.transcriptsOnlyRefusal(project, openProject: nil) { transcriptsOnlyWhy = Self.said(no); return }
+        Task {
+            let debug = AgentAPI.isDebugBundle(Bundle.main.bundleIdentifier ?? "")
+            guard let base = await FlimmerSend.find(transport: Self.transport, debug: debug) else {
+                transcriptsOnlyWhy = L10n.text("flimmer.transcriptsOnly.why.notRunning"); return
+            }
+            let client = FlimmerSend.Client(base: base, transport: Self.transport)
+            let open = await FlimmerSend.openProject(client)
+            if let no = FlimmerSend.transcriptsOnlyRefusal(project, openProject: open) { transcriptsOnlyWhy = Self.said(no); return }
+            self.client = client
+            transcriptsOnlyReady = true
+        }
+    }
+
+    static func said(_ r: FlimmerSend.TranscriptsOnlyRefusal) -> String {
+        switch r {
+        case .noneSent: L10n.text("flimmer.transcriptsOnly.why.noneSent")
+        case .noTranscript: L10n.text("flimmer.transcriptsOnly.why.noTranscript")
+        case .otherProject: L10n.text("flimmer.transcriptsOnly.why.otherProject")
+        }
+    }
+
+    /// Clip by clip, in the window's language: which transcripts went and which didn't, with Flimmer's own words.
+    static func lines(_ outcomes: [FlimmerSend.TranscriptOutcome], soundWent: Bool) -> [String] {
+        guard !outcomes.isEmpty else { return [] }
+        let good = outcomes.filter(\.ok), bad = outcomes.filter { !$0.ok }
+        var out: [String] = []
+        if bad.isEmpty { out.append(L10n.text("flimmer.transcripts.all", String(good.count))) }
+        else if good.isEmpty { out.append(soundWent ? L10n.text("flimmer.transcripts.none", String(bad.count)) : L10n.text("flimmer.transcripts.noneOnly", String(bad.count))) }
+        else { out.append(L10n.text("flimmer.transcripts.some", String(good.count), String(outcomes.count), String(bad.count))) }
+        for o in good { out.append(o.replacedEdited ? L10n.text("flimmer.transcripts.sentReplaced", o.name) : L10n.text("flimmer.transcripts.sent", o.name)) }
+        for o in bad {
+            out.append(L10n.text("flimmer.transcripts.notSent", o.name, o.message ?? "", o.reason ?? "")
+                       + (FlimmerSend.clipGone(o) ? " " + L10n.text("flimmer.transcripts.gone") : ""))
+        }
+        return out
+    }
+
+    /// Only the transcripts, again, to the clips the last send made; each said by itself.
+    func sendTranscriptsOnly() {
+        guard let client else { return }
+        let project = session.project, replace = replaceEdited
+        stage = .sending
+        task = Task {
+            let outcomes = await FlimmerSend.sendTranscriptsOnly(project, replaceEdited: replace, client: client)
+            transcriptLines = Self.lines(outcomes, soundWent: false)
+            transcriptFailures = outcomes.filter { !$0.ok }.count
+            stage = .done
+            sheetLog.notice("Send to Flimmer: transcripts only, \(outcomes.count - self.transcriptFailures) of \(outcomes.count) went")
+            session.status = transcriptFailures == 0 ? L10n.text("flimmer.transcriptsOnly.sent", String(outcomes.count))
+                : L10n.text("flimmer.sent.transcriptsMissing", String(outcomes.count - transcriptFailures), String(outcomes.count))
+        }
     }
 
     static let transport: FlimmerSend.Transport = { request in
@@ -84,8 +147,11 @@ final class FlimmerSendModel {
         task = Task {
             do {
                 let r = try await FlimmerSend.sendAll(prepared, client: client, transcripts: sendTranscripts, replaceEdited: replaceEdited)
+                // The document remembers what each clip became there, so its transcripts can go again on their own.
+                let remembered = FlimmerSend.remembering(session.project, items: prepared.items, created: r.created, projectId: session.project.imported?.projectId)
+                if remembered.imported != session.project.imported { session.commit(remembered, action: L10n.text("flimmer.remember.undo")) }
                 (flimmerLines, flimmerWarnings) = (r.lines, r.warnings)
-                transcriptLines = FlimmerSend.transcriptLines(r.transcripts)
+                transcriptLines = Self.lines(r.transcripts, soundWent: true)
                 transcriptFailures = r.transcripts.filter { !$0.ok }.count
                 self.prepared = nil
                 stage = .done
@@ -133,6 +199,10 @@ struct FlimmerSendSheet: View {
                 .accessibilityIdentifier("flimmer.replaceEdited")
             Text(L10n.text("flimmer.promise"))
                 .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            if model.stage == .choose, !model.transcriptsOnlyReady, let why = model.transcriptsOnlyWhy {
+                StateLine(kind: .info, text: why, font: .callout).fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("flimmer.transcriptsOnly.why")
+            }
             switch model.stage {
             case .choose: EmptyView()
             case .working(let what), .failed(let what):
@@ -164,7 +234,11 @@ struct FlimmerSendSheet: View {
                 Button(model.stage == .done ? L10n.text("button.close") : L10n.text("button.cancel")) { model.close(); close() }.keyboardShortcut(.cancelAction)
                     .accessibilityIdentifier(model.stage == .done ? "flimmer.close" : "flimmer.cancel")
                 switch model.stage {
-                case .choose: Button(L10n.text("flimmer.check")) { model.check() }.keyboardShortcut(.defaultAction).accessibilityIdentifier("flimmer.check")
+                case .choose:
+                    if model.transcriptsOnlyReady {
+                        Button(L10n.text("flimmer.transcriptsOnly")) { model.sendTranscriptsOnly() }.accessibilityIdentifier("flimmer.transcriptsOnly")
+                    }
+                    Button(L10n.text("flimmer.check")) { model.check() }.keyboardShortcut(.defaultAction).accessibilityIdentifier("flimmer.check")
                 case .ready: Button(L10n.text("button.send")) { model.send() }.keyboardShortcut(.defaultAction).accessibilityIdentifier("flimmer.send")
                 case .sending: ProgressView().controlSize(.small)
                 default: EmptyView()

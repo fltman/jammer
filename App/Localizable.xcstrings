@@ -11790,6 +11790,23 @@
         }
       }
     },
+    "flimmer.remember.undo": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remember What Went to Flimmer"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Minns vad som gick till Flimmer"
+          }
+        }
+      }
+    },
     "flimmer.replaceEdited": {
       "extractionState": "manual",
       "localizations": {
@@ -11873,6 +11890,244 @@
           "stringUnit": {
             "state": "translated",
             "value": "Skicka också varje klipps transkript"
+          }
+        }
+      }
+    },
+    "flimmer.transcripts.all": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Every transcript went to Flimmer (%@)."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alla transkript gick till Flimmer (%@)."
+          }
+        }
+      }
+    },
+    "flimmer.transcripts.gone": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flimmer no longer has that clip: send the sound again to make a new take."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flimmer har inte längre det klippet: skicka ljudet igen för att göra en ny tagning."
+          }
+        }
+      }
+    },
+    "flimmer.transcripts.none": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No transcript went to Flimmer (%@ refused); the sound did."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inget transkript gick till Flimmer (%@ nekades); ljudet gjorde det."
+          }
+        }
+      }
+    },
+    "flimmer.transcripts.noneOnly": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No transcript went to Flimmer (%@ refused)."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inget transkript gick till Flimmer (%@ nekades)."
+          }
+        }
+      }
+    },
+    "flimmer.transcripts.notSent": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transcript not sent: %1$@. Flimmer said: %2$@ [%3$@]"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkript inte skickat: %1$@. Flimmer sa: %2$@ [%3$@]"
+          }
+        }
+      }
+    },
+    "flimmer.transcripts.sent": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transcript sent: %@"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkript skickat: %@"
+          }
+        }
+      }
+    },
+    "flimmer.transcripts.sentReplaced": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transcript sent: %@ (it replaced one corrected by hand in Flimmer)"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkript skickat: %@ (det ersatte ett som rättats för hand i Flimmer)"
+          }
+        }
+      }
+    },
+    "flimmer.transcripts.some": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ of %2$@ transcripts went to Flimmer; %3$@ didn’t."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ av %2$@ transkript gick till Flimmer; %3$@ gjorde det inte."
+          }
+        }
+      }
+    },
+    "flimmer.transcriptsOnly": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send Transcripts Only"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skicka bara transkripten"
+          }
+        }
+      }
+    },
+    "flimmer.transcriptsOnly.sent": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ transcripts went to Flimmer, to the clips sent before."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ transkript gick till Flimmer, till klippen som skickades förut."
+          }
+        }
+      }
+    },
+    "flimmer.transcriptsOnly.why.noTranscript": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "None of the clips sent to Flimmer has a transcript here."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inget av klippen som skickats till Flimmer har ett transkript här."
+          }
+        }
+      }
+    },
+    "flimmer.transcriptsOnly.why.noneSent": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transcripts go on their own only to clips this document has sent to Flimmer before: send the sound first."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkript går för sig bara till klipp som det här dokumentet har skickat till Flimmer förut: skicka ljudet först."
+          }
+        }
+      }
+    },
+    "flimmer.transcriptsOnly.why.notRunning": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flimmer is not running, so transcripts can’t go to it now."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flimmer är inte igång, så transkript kan inte gå dit nu."
+          }
+        }
+      }
+    },
+    "flimmer.transcriptsOnly.why.otherProject": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flimmer has another project open than the one these clips were sent to: open that project in Flimmer."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flimmer har ett annat projekt öppet än det klippen skickades till: öppna det projektet i Flimmer."
           }
         }
       }

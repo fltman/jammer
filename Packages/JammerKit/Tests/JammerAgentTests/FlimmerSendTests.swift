@@ -34,6 +34,10 @@ final class PretendFlimmer: @unchecked Sendable {
     var transcriptBodies: [[String: Any]] = []
     /// Clip ids whose transcript PUT the pretend Flimmer refuses (as unknown_clip), to test a partial outcome.
     var refuseTranscript: Set<String> = []
+    /// Clip ids it answers 404 for (a take whose id changed after an undo and redo).
+    var notFoundTranscript: Set<String> = []
+    /// The clip id of each transcript PUT, in order.
+    var transcriptTargets: [String] = []
 
     var transport: FlimmerSend.Transport { { [self] r in lock.withLock { self.handle(r) } } }
 
@@ -134,6 +138,8 @@ final class PretendFlimmer: @unchecked Sendable {
         guard r.value(forHTTPHeaderField: "X-Flimmer-Agent") == "1" else { return fail(403, "forbidden", r) }
         let b = (try? JSONSerialization.jsonObject(with: r.httpBody ?? Data()) as? [String: Any]) ?? [:]
         transcriptBodies.append(b)
+        transcriptTargets.append(clip)
+        if notFoundTranscript.contains(clip) { return answer(404, ["error": ["code": "not_found", "message": "No audio clip \(clip)."]], r) }
         let known: Set<String> = ["projectId", "timeBase", "language", "words", "speakers", "text", "source", "media", "edited", "replaceEdited", "rationale"]
         if let odd = b.keys.first(where: { !known.contains($0) }) { return answer(400, ["error": ["code": "bad_request", "message": "Unknown field \(odd)."]], r) }
         func no(_ reason: String, _ message: String) -> (Data, HTTPURLResponse) { answer(422, ["error": ["code": "unprocessable", "reason": reason, "message": message]], r) }
@@ -631,7 +637,7 @@ extension FlimmerSendTests {
         #expect(FlimmerSend.transcriptLines(partial.transcripts) == [
             "1 of 2 transcripts went to Flimmer; 1 didn't.",
             "Transcript sent: berattare (it replaced one corrected by hand in Flimmer)",
-            "Transcript not sent: musik. Flimmer said: No audio clip take-\(f.clips.count - 1) in the open project. [unknown_clip]"])
+            "Transcript not sent: musik. Flimmer said: No audio clip take-\(f.clips.count - 1) in the open project. [unknown_clip] Flimmer no longer has that clip: send the sound again to make a new take."])
         #expect(f.undoSteps.last == "Jämmer ersatte ett rättat transkript.")
         // A failed plan: nothing of the transcripts is sent.
         let sentBefore = f.transcriptBodies.count
@@ -647,5 +653,43 @@ extension FlimmerSendTests {
         #expect(FlimmerSend.transcriptSource(engine: "parakeet-tdt-0.6b-v3") == ["app": .string("jammer"), "engine": .string("parakeet"), "model": .string("tdt-0.6b-v3"), "local": .bool(true)])
         #expect(FlimmerSend.transcriptSource(engine: "openai gpt-4o-transcribe")["provider"] == .string("openai"))
         #expect(FlimmerSend.transcriptSource(engine: "overdub")["provider"] == .string("elevenlabs") && FlimmerSend.transcriptSource(engine: "overdub")["local"] == .bool(false))
+    }
+
+    @Test("Transcripts only: after a send the document remembers what each clip became (by the clip it is a take of, and the project); the sheet's reasons; again to those clips only: refused when corrected by hand, replaced with replaceEdited, a clip Flimmer no longer has (422 or 404) said by itself in Flimmer's words and never sent to another")
+    func transcriptsOnly() async throws {
+        var (p, pool) = filmWithWords()
+        let f = flimmer(), c = client(f)
+        #expect(FlimmerSend.transcriptsOnlyRefusal(p, openProject: "P1") == .noneSent)
+        try p.changeGain(Frame(5.5 * sr)..<Frame(6.5 * sr), by: -6)
+        p.tracks[1].clips[0].start += Frame(0.5 * sr)
+        let prepared = try await FlimmerSend.prepare(p, mode: .takes, client: c, render: render(pool))
+        let r = try await FlimmerSend.sendAll(prepared, client: c, transcripts: false, replaceEdited: false)
+        #expect(r.created.count == 2)
+        let q = FlimmerSend.remembering(p, items: prepared.items, created: r.created, projectId: "P1")
+        #expect(q.imported?.sentClips == ["C1": r.created[0]!, "C3": r.created[1]!] && q.imported?.sentProjectId == "P1")
+        // Saved with the document and read back.
+        #expect(try JSONDecoder().decode(Project.self, from: JSONEncoder().encode(q)).imported?.sentClips == q.imported?.sentClips)
+        #expect(FlimmerSend.sentItems(q).map(\.flimmerClip) == [r.created[0]!, r.created[1]!])
+        #expect(FlimmerSend.transcriptsOnlyRefusal(q, openProject: "P1") == nil && FlimmerSend.transcriptsOnlyRefusal(q, openProject: "P2") == .otherProject)
+        var bare = q; bare.transcripts = []
+        #expect(FlimmerSend.transcriptsOnlyRefusal(bare, openProject: "P1") == .noTranscript)
+        // Again, to those clips: both go.
+        let first = await FlimmerSend.sendTranscriptsOnly(q, replaceEdited: false, client: c)
+        #expect(first.allSatisfy(\.ok) && f.transcriptTargets == [r.created[0]!, r.created[1]!])
+        // Corrected by hand in Flimmer: refused without replaceEdited, nothing else changes; replaced with it.
+        f.edited = [r.created[1]!]
+        let refused = await FlimmerSend.sendTranscriptsOnly(q, replaceEdited: false, client: c)
+        #expect(refused.map(\.ok) == [true, false] && refused[1].reason == "edited_exists" && !FlimmerSend.clipGone(refused[1]))
+        let replaced = await FlimmerSend.sendTranscriptsOnly(q, replaceEdited: true, client: c)
+        #expect(replaced.map(\.ok) == [true, true] && replaced[1].replacedEdited && f.transcriptBodies.last?["replaceEdited"] as? Bool == true)
+        // Gone in Flimmer (what an undo and redo with new ids would leave): 422 unknown_clip and 404, each said,
+        // and the PUTs went only to the remembered ids.
+        let before = f.transcriptTargets.count
+        f.refuseTranscript = [r.created[0]!]
+        f.notFoundTranscript = [r.created[1]!]
+        let gone = await FlimmerSend.sendTranscriptsOnly(q, replaceEdited: false, client: c)
+        #expect(gone.allSatisfy { FlimmerSend.clipGone($0) } && gone[1].reason == "not_found" && gone[1].message == "No audio clip \(r.created[1]!).")
+        #expect(Array(f.transcriptTargets[before...]) == [r.created[0]!, r.created[1]!], "nothing sent to another clip in their place")
+        #expect(FlimmerSend.transcriptLines(gone).last?.hasSuffix("Flimmer no longer has that clip: send the sound again to make a new take.") == true)
     }
 }
