@@ -146,7 +146,9 @@ struct FlimmerSendSheet: View {
                     .font(.callout)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .frame(maxHeight: 220)
+                // A sheet sizes itself by what it holds, and a scroll view asks for almost nothing: without a
+                // height of its own it showed one line of the list (found in the live test, 2026-11-18).
+                .frame(height: min(260, CGFloat(model.lines.count + model.flimmerLines.count + model.transcriptLines.count) * 22 + 24))
             }
             HStack {
                 Spacer()
