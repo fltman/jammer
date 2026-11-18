@@ -1,9 +1,13 @@
 import AppKit
 import JammerAssistant
 import JammerAgent
-import JammerAssistant
 import JammerCore
+import OSLog
 import SwiftUI
+
+/// When and why the sheet closed, kept in the system log (notice), so that a sheet that went away in a test can be
+/// looked into afterwards (the coordinator, 2026-11-18, after a click in a live test both closed it and started playback).
+let sheetLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "com.brattoo.jammer", category: "sheets")
 
 /// File › Send to Flimmer…: the sound of a film that came from Flimmer goes back as new
 /// takes or as one mix. The sheet first shows what would happen (Jämmer's list and
@@ -94,8 +98,13 @@ final class FlimmerSendModel {
         }
     }
 
+    /// Set when the sheet is closed by its own button (Cancel or Close, by click, Return or Escape).
+    var closedByButton = false
+
     /// Closing without sending takes the uploaded files away from Flimmer again.
     func close() {
+        closedByButton = true
+        sheetLog.notice("Send to Flimmer closed by its \(self.stage == .done ? "Close" : "Cancel", privacy: .public) button (click, or Escape/Return) at stage \(String(describing: self.stage), privacy: .public)")
         task?.cancel()
         if let prepared, let client { Task { await FlimmerSend.cancel(prepared, client: client) } }
         prepared = nil
@@ -164,5 +173,8 @@ struct FlimmerSendSheet: View {
         }
         .padding(20)
         .frame(width: 560)
+        .onAppear { sheetLog.notice("Send to Flimmer opened") }
+        // Gone without its own button: closed some other way (the window closed, the sheet was ended from outside).
+        .onDisappear { if !model.closedByButton { sheetLog.notice("Send to Flimmer went away without its own button, at stage \(String(describing: model.stage), privacy: .public)") } }
     }
 }

@@ -369,7 +369,11 @@ struct RingLengthTests {
                 }
             }
             jm_engine_play(engine, 0)
-            for _ in 0..<2_000 where !jm_engine_seek_settled(engine) { pull(); usleep(500) }
+            // The reading below assumes one continuous play from frame 0. Under a heavy load (21) the engine had not
+            // settled after the 1 s this loop used to give it, and what was put on was read across a restart (frame 0
+            // twice: STRESS.md, "Known cases"). It waits up to 10 s now, and says so if it never settles.
+            for _ in 0..<20_000 where !jm_engine_seek_settled(engine) { pull(); usleep(500) }
+            try #require(jm_engine_seek_settled(engine), "the engine never settled after play")
             var got: [Float] = []
             while got.count < count * 2 {
                 for _ in 0..<20_000 where jm_engine_buffered(engine) < 256 { usleep(100) }
