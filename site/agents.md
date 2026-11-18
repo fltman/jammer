@@ -717,6 +717,36 @@ Removes the tempo change at exactly `at` (see `tempo.changes` in the document). 
 |---|---|---|
 | `at` | seconds | **Required.** Position of the change in seconds. |
 
+### `set_automation`
+
+Writes automation: points on the timeline that a strip's level, pan or mute follows (before the first point the value is the first point's, after the last the last's). `gain`: a straight line in dB from point to point, added to the fader, which stays where it is (0 dB is no change). `pan`: a straight line from point to point, −1 left to 1 right, in the place of the fixed pan while the lane is there (stereo documents). `mute`: 1 muted, 0 heard, each held until the next point; the sound closes and opens over 5 ms beginning at the point, so it never clicks, and sends before the fader are silenced too, as by the mute button. `send` with `to` (a bus id): the level of the strip's send to that bus, in dB, added to the send's own level. `strip` may also be a VCA group's id: its gain and mute lanes are added to those of every track and bus in the group, as its fader is. The master has a gain lane only. `points` replace the whole lane; with `start` and `end` they replace only the points inside that range and nothing outside it is touched. A point lands on its own sample, whatever plugins the strip has. Edits that close up or open the whole timeline (delete, paste, removed pauses) move the points with the sound; lining up or stretching one track doesn't, and the answer then carries a warning. Refused with the name of the field: a point after the document's end or outside `start`…`end`, a value outside what the lane takes (−96 to 24 dB, −1 to 1, 0 or 1), two points at one time. info has `points`, how many the lane now has.
+
+| Param | Type | Description |
+|---|---|---|
+| `strip` | string | **Required.** The id of the track, bus or VCA group, or "master". |
+| `param` | string | What the lane moves. Default gain. plugin: one parameter of a plugin on the strip (`insert` and `parameter` say which), in the parameter's own unit, a straight line between points, set once every 512 frames; for now only where the plugin is an Audio Unit (another kind answers not_available). One of: `gain`, `pan`, `mute`, `send`, `plugin`, `azimuth`, `elevation`, `yaw`, `pitch`, `roll`. |
+| `to` | string | For param send: the id of the bus the send goes to. The send must be there (set_send). |
+| `insert` | string | For param plugin: the plugin on the strip, by its id or its name. |
+| `parameter` | string | For param plugin: the parameter, by its identifier or its name (GET …/tracks/{id}/inserts/{insert} lists them with their ranges). |
+| `points` | pairs | **Required.** The points: [[seconds, value], …]; the value is dB for gain (−96 to 24), −1 to 1 for pan, 1 or 0 for mute, and for a plugin's parameter a value in that parameter's own range; for azimuth degrees −360 to 360 (positive to the left, past ±180 on round behind) and for elevation 0 to 90: a track's place in a document wider than stereo, moving in a straight line between points, worked out every 512 frames and glided in between; for yaw (−360 to 360), pitch (−90 to 90) and roll (−180 to 180) degrees: a track's sound field turned (set_track field), worked out every 512 frames and glided in between along a curve through the next two. An empty list with `start` and `end` takes the points in that range away. |
+| `start` | seconds | Start of the range to replace, in seconds. With `end`. |
+| `end` | seconds | End of the range to replace, in seconds. With `start`. |
+| `enabled` | boolean | False keeps the lane but stops it being heard; true brings it back. |
+
+### `clear_automation`
+
+Takes the points of one lane away: all of them, or with `start` and `end` those inside that range. One strip and one lane at a time; nothing clears a whole project. info has `removed`.
+
+| Param | Type | Description |
+|---|---|---|
+| `strip` | string | **Required.** The id of the track, bus or VCA group, or "master". |
+| `param` | string | **Required.** Which lane. One of: `gain`, `pan`, `mute`, `send`, `plugin`, `azimuth`, `elevation`, `yaw`, `pitch`, `roll`. |
+| `to` | string | For param send: the id of the bus the send goes to. |
+| `insert` | string | For param plugin: the plugin on the strip, by its id or its name. |
+| `parameter` | string | For param plugin: the parameter, by its identifier or its name. |
+| `start` | seconds | Start of the range to clear, in seconds. With `end`. |
+| `end` | seconds | End of the range to clear, in seconds. With `start`. |
+
 ## Good to know
 
 - Nothing is destructive: clips play from the original files, so you can always undo. `GET /api/v1/documents/{id}` shows the clips.

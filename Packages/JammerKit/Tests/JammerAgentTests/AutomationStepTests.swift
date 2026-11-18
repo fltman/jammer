@@ -18,10 +18,13 @@ struct AutomationStepTests {
         StepRunner.run([Step(op: op, params: params)], on: &s, measure: measure)[0]
     }
 
-    @Test("A build without automation doesn't know the steps; a build with it lists them, closed, with rationale")
+    @Test("Every build has the steps (since 2026-11-18); one with automation switched off doesn't know them; with it they are listed, closed, with rationale")
     func gated() {
-        #expect(Operations.named("set_automation") == nil && Operations.named("clear_automation") == nil)
-        #expect(throws: (any Error).self) { try StepRunner.validate(Step(op: "set_automation", params: ["strip": .string("master"), "points": Self.pairs([(0, 0)])])) }
+        #expect(Operations.automation && Operations.named("set_automation") != nil, "on in every build")
+        Operations.$automationForThisTask.withValue(false) {
+            #expect(Operations.named("set_automation") == nil && Operations.named("clear_automation") == nil)
+            #expect(throws: (any Error).self) { try StepRunner.validate(Step(op: "set_automation", params: ["strip": .string("master"), "points": Self.pairs([(0, 0)])])) }
+        }
         Operations.$automationForThisTask.withValue(true) {
             for name in ["set_automation", "clear_automation"] {
                 let spec = Operations.named(name)

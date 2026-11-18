@@ -132,10 +132,10 @@ public enum Operations {
     static var sidechainOn: Bool { sidechainForThisTask ?? sidechain }
     static let keyParam = OperationSpec.Param("key", .string, "A sidechain key: the id of the track or bus the plugin listens to (its signal after the fader, in step with the audio), or \"none\" to take the key away. Only for a plugin with a sidechain input (reason no_key_input otherwise); a key that would be fed by what it controls is refused (routing_loop).")
 
-    /// Automation (`set_automation`, `clear_automation`). Off in a release until lanes are shown and drawn in
-    /// the window (docs/MIXER.md): what changes how a project sounds without being seen isn't shipped. A
-    /// build with it off doesn't know the steps; a project that has lanes is still played as it was saved.
-    nonisolated(unsafe) public static var automation = false
+    /// Automation (`set_automation`, `clear_automation`). On in every build since 2026-11-18: lanes are shown and
+    /// drawn in the window, and Anders tried drawing them ("funkar"). A build with it switched off (a test, through
+    /// `automationForThisTask`) doesn't know the steps; a project that has lanes is still played as it was saved.
+    nonisolated(unsafe) public static var automation = true
     /// Dialogue-gated loudness is in debug builds only until its numbers have been set beside a reference
     /// meter's on the test files (docs/MASTERING.md): a number isn't shown before it has a known-good
     /// reference. A build with it off answers not_available.

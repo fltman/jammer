@@ -2,6 +2,12 @@
 
 Not a list of commits: what behaves differently from before, for a user, an agent, or a file. Newest first.
 
+## 2026-11-18
+
+- **Automation in every build**: lanes for level, pan, mute, sends, place, a field's turn and a plugin's parameters, drawn by hand in the timeline (⌥-click, drag, the keys) or written from the Mixer's faders (Read, Touch, Latch). Anders tried it in the debug build. Manual chapter 24.
+- **Plugin settings from elsewhere load only out of process**: "Load in Separate Processes" runs such an Audio Unit in a process of its own.
+- **Transcripts to Flimmer**, with Send to Flimmer and on their own to the clips sent before; a canceled send cancels Flimmer's job too. Tried live against Flimmer's guest copy.
+
 ## 2026-11-17
 
 - **Overdub** (Anders's leave, with his own reading of ElevenLabs' clauses): Audio › Clone Voice… and Overdub… say new words in a speaker's own voice, cloned at ElevenLabs with the user's own key (Settings › Paid Services). Consent first: whose voice it is, an adult, and the consent sentence said in the recording and heard in its transcript before anything is sent; the record stays in the document. Made speech is marked in the document and in an exported WAV; ElevenLabs' file is kept as it came, watermark and all. Projects with a cloned voice are saved as format 7. Built from the documentation; not yet tried with a real request.

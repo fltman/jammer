@@ -64,6 +64,8 @@
 | ⌃⌘F | Full Screen |
 | ⌘M | Minimize |
 
+The keys for drawing automation lanes (⌥-click, ⌥→, ⌥Return and the rest) are in chapter 24, Automation.
+
 ## Mouse and trackpad
 
 | Gesture | Action |

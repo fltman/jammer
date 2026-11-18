@@ -307,7 +307,7 @@ None of them uses ⌃ with ⌥ (VoiceOver's own keys). ↑, ↓, Delete and Esca
 
 **Snapping to the tempo grid is not built, and has nothing to snap to yet:** the timeline draws its ruler in time and shows no beats or bars, so there is no grid on the screen for a point to land on. It belongs with a beat grid in the timeline, if one is made; with that left aside, step 4 is whole. Not seen: the label under the point in a thin row (moved there after the last picture, where it covered the row's caption). **Not tried:** VoiceOver itself reading the announcements (the tree and the announcement call were checked, not the speech; on Anders's list for his own half-minute try). ⌃ against snapping was tried with safepointer's new `--ctrl` (dropped 4 points from a marker, it stays where the pointer was).
 
-**Release.** Automation stays out of Release until both halves have been seen as pictures by the coordinator and in the app by Anders.
+**Release.** Automation stays out of Release until both halves have been seen as pictures by the coordinator and in the app by Anders. **Done 2026-11-18:** Anders drew a level lane in the debug build (⌥-click, drag, play, the keys) and said "funkar"; automation is on in every build (`Operations.automation`), in the guide, and in the manual (chapter 24).
 
 ## Automation, step 5: a lane written from the fader while the sound plays (decided 2026-11-17; the pass itself is built, the rest is not)
 

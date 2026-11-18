@@ -39,7 +39,7 @@ def excused(path):
     return False
 
 # In a debug build's menus but not in a release (Config/Features.xcconfig, and debug-only work): the manual mustn't name them.
-DEBUG_ONLY = ("View › Automation",)
+DEBUG_ONLY = ()   # automation moved into every build on 2026-11-18
 
 # Keys that aren't letters or digits sit in different places on different keyboards, and macOS reports them as this
 # Mac's layout has them: they are not compared.
@@ -66,7 +66,9 @@ for page in pages:
             parts = [norm(p) for p in m.group(1).split("›")]
             if parts[0] not in tops: continue
             # "Audio › Remove Hum…, Repair Clipping…" names several items in one menu.
-            last = [x.strip() for x in parts[-1].split(", ")] if ", " in parts[-1] else [parts[-1]]
+            # An item whose own title has a comma ("Buses, Groups and Master") is one item, not a list.
+            whole = " › ".join(parts)
+            last = [x.strip() for x in parts[-1].split(", ")] if ", " in parts[-1] and whole not in menus else [parts[-1]]
             for leaf in last:
                 item = " › ".join(parts[:-1] + [leaf])
                 if excused(item): continue

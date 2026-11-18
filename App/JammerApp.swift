@@ -83,9 +83,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // `-asRelease YES`: what a release has, and no more, for the manual's pictures (scripts/site-shots.sh). It
         // leaves off what follows here and the CLAP/VST 3 helpers (HostedPluginsController.available).
         let asRelease = UserDefaults.standard.bool(forKey: "asRelease")
-        // Automation is in debug builds only until lanes are shown and drawn in the window (docs/MIXER.md):
-        // what changes how a project sounds without being seen isn't shipped.
-        Operations.automation = !asRelease
+        // Automation is in every build (Anders tried drawing lanes on 2026-11-18: "funkar").
+        Operations.automation = true
         // Dialogue-gated loudness: in debug builds only until Anders has measured the test files in a
         // reference meter and the difference is written in the manual.
         Operations.dialogueLoudness = !asRelease
@@ -344,7 +343,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             item(L10n.text("transport.play"), #selector(EditorWindowController.togglePlayback(_:)), "p", [.command, .option]),
             item(L10n.text("transport.goToStart"), #selector(EditorWindowController.goToStart(_:)), ""),
         ]))
-        // Which lanes the timeline draws. Hidden where automation is (debug builds, until lanes can be drawn by hand too).
+        // Which lanes the timeline draws (automation is in every build since 2026-11-18).
         let kinds: [(String?, String)] = [(nil, L10n.text("menu.view.automation.none")), ("gain", L10n.text("menu.view.automation.gain")),
                                           ("pan", L10n.text("menu.view.automation.pan")), ("mute", L10n.text("menu.view.automation.mute")),
                                           ("send", L10n.text("menu.view.automation.send")),
