@@ -153,9 +153,10 @@ struct FlimmerSendSheet: View {
             HStack {
                 Spacer()
                 Button(model.stage == .done ? L10n.text("button.close") : L10n.text("button.cancel")) { model.close(); close() }.keyboardShortcut(.cancelAction)
+                    .accessibilityIdentifier(model.stage == .done ? "flimmer.close" : "flimmer.cancel")
                 switch model.stage {
-                case .choose: Button(L10n.text("flimmer.check")) { model.check() }.keyboardShortcut(.defaultAction)
-                case .ready: Button(L10n.text("button.send")) { model.send() }.keyboardShortcut(.defaultAction)
+                case .choose: Button(L10n.text("flimmer.check")) { model.check() }.keyboardShortcut(.defaultAction).accessibilityIdentifier("flimmer.check")
+                case .ready: Button(L10n.text("button.send")) { model.send() }.keyboardShortcut(.defaultAction).accessibilityIdentifier("flimmer.send")
                 case .sending: ProgressView().controlSize(.small)
                 default: EmptyView()
                 }
