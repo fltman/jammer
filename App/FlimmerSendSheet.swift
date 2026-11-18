@@ -156,7 +156,9 @@ final class FlimmerSendModel {
                 self.prepared = nil
                 stage = .done
                 // The status line says the sound went, and, when some transcripts didn't, that not all of them did.
-                session.status = transcriptFailures == 0 ? L10n.text("flimmer.sent")
+                // Canceled too late: Flimmer had already made the clips, and that is said (they are remembered above).
+                session.status = r.canceledLate ? L10n.text("flimmer.sent.canceledLate", String(r.created.count))
+                    : transcriptFailures == 0 ? L10n.text("flimmer.sent")
                     : L10n.text("flimmer.sent.transcriptsMissing", String(r.transcripts.count - transcriptFailures), String(r.transcripts.count))
             } catch {
                 stage = .failed(L10n.error(error))

@@ -11842,6 +11842,24 @@
         }
       }
     },
+    "flimmer.sent.canceledLate": {
+      "comment": "Status line after Send to Flimmer was canceled when Flimmer had already made the change. %@ is the number of new clips.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Canceled too late: Flimmer had already made the change (new clips: %@). Undo it in Flimmer with ⌘Z if you don't want it."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avbrottet kom för sent: Flimmer hade redan gjort ändringen (nya klipp: %@). Ångra den i Flimmer med ⌘Z om du inte vill ha den."
+          }
+        }
+      }
+    },
     "flimmer.sent.transcriptsMissing": {
       "extractionState": "manual",
       "localizations": {

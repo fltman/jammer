@@ -259,7 +259,10 @@ public enum FlimmerSend {
             self.pollInterval = pollInterval
         }
 
-        func call(_ method: String, _ path: String, body: Data? = nil, contentType: String? = nil, items: [Item] = []) async throws -> (Int, [String: Any]) {
+        /// `uncut`: the request runs in a task of its own, so a cancel can't cut it off halfway (the plan and
+        /// its polls: a cut request would leave Flimmer's job running with nobody to cancel it, as the live
+        /// test J2 found on 2026-11-19). The caller looks at `Task.isCancelled` once the answer is in.
+        func call(_ method: String, _ path: String, body: Data? = nil, contentType: String? = nil, items: [Item] = [], uncut: Bool = false) async throws -> (Int, [String: Any]) {
             var r = URLRequest(url: URL(string: base.absoluteString + path)!)
             r.httpMethod = method
             r.httpBody = body
@@ -269,7 +272,10 @@ public enum FlimmerSend {
             }
             if let contentType { r.setValue(contentType, forHTTPHeaderField: "Content-Type") }
             let (data, response): (Data, HTTPURLResponse)
-            do { (data, response) = try await transport(r) } catch { throw Failure("unreachable", Said("error.flimmer.flimmer_stopped_answering", "Flimmer stopped answering.")) }
+            do {
+                let send = transport, request = r
+                (data, response) = uncut ? try await Task.detached { try await send(request) }.value : try await transport(r)
+            } catch { throw Failure("unreachable", Said("error.flimmer.flimmer_stopped_answering", "Flimmer stopped answering.")) }
             let object = ((try? JSONSerialization.jsonObject(with: data)) as? [String: Any]) ?? [:]
             guard (200..<300).contains(response.statusCode) else {
                 throw FlimmerSend.explain(status: response.statusCode, error: object["error"] as? [String: Any] ?? [:], items: items)
@@ -333,10 +339,15 @@ public enum FlimmerSend {
             let strange = FlimmerSend.strangers(in: body)
             guard strange.isEmpty else { throw Failure("bad_request", Said("error.flimmer.j_mmer_s_plan", "Jämmer's plan has names Flimmer doesn't take (%@); nothing was sent.", "\(strange.joined(separator: ", "))")) }
             let data = try JSONSerialization.data(withJSONObject: J.object(body).any, options: [.sortedKeys])
-            let (status, answer) = try await call("POST", "/api/v1/audio/sibling-plan", body: data, contentType: "application/json", items: items)
+            // A cancel can come at any moment, also while the plan or a poll is on its way. Those requests are
+            // never cut off: once Flimmer has a job, a cancel reaches it (DELETE), and a job that was already
+            // done is taken as done, so that what Flimmer made is said and remembered rather than lost (J2,
+            // 2026-11-19: the plan was done 0.35 s after Send, before the DELETE came, and Flimmer said 409).
+            let (status, answer) = try await call("POST", "/api/v1/audio/sibling-plan", body: data, contentType: "application/json", items: items, uncut: true)
             guard status == 202, let id = (answer["job"] as? [String: Any])?["id"] as? String else { return answer }
             while true {
-                let (_, j) = try await call("GET", "/api/v1/jobs/\(id)", items: items)
+                if Task.isCancelled { return try await canceled(job: id, items: items) }
+                let (_, j) = try await call("GET", "/api/v1/jobs/\(id)", items: items, uncut: true)
                 let job = j["job"] as? [String: Any] ?? [:]
                 switch FlimmerSend.jobState(job["status"] as? String) {
                 case .done: return job["result"] as? [String: Any] ?? [:]
@@ -347,14 +358,25 @@ public enum FlimmerSend {
                 case .waiting:
                     // Canceled here (the sheet closed while sending): Flimmer's job is canceled too, as its API asks
                     // (DELETE /api/v1/jobs/{id}); it then removes what it had made and mutes nothing.
-                    do { try await Task.sleep(for: .seconds(pollInterval)) } catch {
-                        // From a task of its own: a request made inside the canceled one would end before it left.
-                        let client = self
-                        await Task.detached { _ = try? await client.call("DELETE", "/api/v1/jobs/\(id)") }.value
-                        throw error
-                    }
+                    do { try await Task.sleep(for: .seconds(pollInterval)) } catch { return try await canceled(job: id, items: items) }
                 }
             }
+        }
+
+        /// Cancels Flimmer's job (DELETE, from a task of its own: a request made inside the canceled one would end
+        /// before it left) and throws CancellationError. When Flimmer refuses because the job had already finished
+        /// (409), the job is read once more, and a done job's result is returned: the change is made there, and
+        /// Jämmer says so and remembers its clips instead of acting as if nothing had happened.
+        func canceled(job id: String, items: [Item]) async throws -> [String: Any] {
+            let client = self
+            let accepted = await Task.detached { (try? await client.call("DELETE", "/api/v1/jobs/\(id)")) != nil }.value
+            if !accepted {
+                let polled = try? await call("GET", "/api/v1/jobs/\(id)", items: items, uncut: true)
+                if let job = polled?.1["job"] as? [String: Any], FlimmerSend.jobState(job["status"] as? String) == .done {
+                    return job["result"] as? [String: Any] ?? [:]
+                }
+            }
+            throw CancellationError()
         }
     }
 
@@ -483,15 +505,18 @@ public enum FlimmerSend {
     }
     /// For real, and then the transcripts, each in a PUT of its own: only when the plan succeeded (a failed plan
     /// throws before any is sent), and each answered for itself.
+    /// `canceledLate`: canceled after Flimmer had already done the plan. What it made is returned (to be said
+    /// and remembered), and no transcript is sent after the cancel.
     public static func sendAll(_ prepared: Prepared, client: Client, transcripts: Bool, replaceEdited: Bool) async throws
-        -> (lines: [String], warnings: Int, transcripts: [TranscriptOutcome], created: [Int: String]) {
+        -> (lines: [String], warnings: Int, transcripts: [TranscriptOutcome], created: [Int: String], canceledLate: Bool) {
         let answer = try await client.plan(prepared.body, items: prepared.items)
         let created = createdClips(answer)
+        let canceledLate = Task.isCancelled
         var outcomes: [TranscriptOutcome] = []
-        if transcripts, !prepared.transcripts.isEmpty {
+        if transcripts, !canceledLate, !prepared.transcripts.isEmpty {
             outcomes = await sendTranscripts(prepared.transcripts, created: created, items: prepared.items, replaceEdited: replaceEdited, client: client)
         }
-        return (lines(answer: answer, items: prepared.items), warnings(answer: answer), outcomes, created)
+        return (lines(answer: answer, items: prepared.items), warnings(answer: answer), outcomes, created, canceledLate)
     }
 
     /// The id of the project Flimmer has open, when its status says it (`project.id`, or `projectId`).

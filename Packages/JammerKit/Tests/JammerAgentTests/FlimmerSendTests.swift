@@ -41,8 +41,24 @@ final class PretendFlimmer: @unchecked Sendable {
     /// Jobs canceled with DELETE, and whether new jobs stay running (for the test that cancels in the middle).
     var canceledJobs: [String] = []
     var jobsStayRunning = false
+    /// A job that the first poll finds running and that is done right after it (to cancel while it finishes).
+    var finishesAfterFirstPoll = false
+    var pendingResults: [String: [String: Any]] = [:]
+    /// Seconds before the answer to the plan's POST or to a job poll arrives, after Flimmer has acted on it.
+    /// The wait ends early on a cancel, as URLSession's does: the request was made, its answer is lost.
+    var planAnswerDelay = 0.0
+    var pollAnswerDelay = 0.0
 
-    var transport: FlimmerSend.Transport { { [self] r in lock.withLock { self.handle(r) } } }
+    var transport: FlimmerSend.Transport {
+        { [self] r in
+            let answer = lock.withLock { self.handle(r) }
+            let path = r.url?.path ?? ""
+            let delay = r.httpMethod == "POST" && path == "/api/v1/audio/sibling-plan" ? planAnswerDelay
+                : r.httpMethod == "GET" && path.hasPrefix("/api/v1/jobs/") ? pollAnswerDelay : 0
+            if delay > 0 { try await Task.sleep(for: .seconds(delay)) }
+            return answer
+        }
+    }
 
     func answer(_ status: Int, _ object: [String: Any], _ r: URLRequest) -> (Data, HTTPURLResponse) {
         (try! JSONSerialization.data(withJSONObject: object), HTTPURLResponse(url: r.url!, statusCode: status, httpVersion: nil, headerFields: nil)!)
@@ -123,11 +139,15 @@ final class PretendFlimmer: @unchecked Sendable {
         case ("DELETE", let p) where p.hasPrefix("/api/v1/jobs/"):
             let id = String(p.dropFirst("/api/v1/jobs/".count))
             canceledJobs.append(id)
+            // As Flimmer: a finished job can't be canceled (409 not_available), and its change stays made.
+            if jobs[id]?["status"] as? String == "done" { return fail(409, "not_available", r) }
             jobs[id]?["status"] = "canceled"
             return answer(200, ["job": ["id": id, "status": "canceled"]], r)
         case ("GET", let p) where p.hasPrefix("/api/v1/jobs/"):
             polls += 1
-            guard let job = jobs[String(p.dropFirst("/api/v1/jobs/".count))] else { return fail(404, "not_found", r) }
+            let id = String(p.dropFirst("/api/v1/jobs/".count))
+            guard let job = jobs[id] else { return fail(404, "not_found", r) }
+            if let result = pendingResults.removeValue(forKey: id) { jobs[id] = ["id": id, "status": "done", "result": result] }
             return answer(200, ["job": job], r)
         case ("PUT", let p) where p.hasPrefix("/api/v1/audio/") && p.hasSuffix("/transcript"):
             return transcript(String(p.dropFirst("/api/v1/audio/".count).dropLast("/transcript".count)), r)
@@ -239,8 +259,9 @@ final class PretendFlimmer: @unchecked Sendable {
         n += 1
         let id = "job_\(n)"
         // The first poll finds it running, the next done.
-        jobs[id] = jobsStayRunning ? ["id": id, "status": "running"]
-            : ["id": id, "status": "done", "result": ["created": create, "muted": mute, "setTracks": settings, "overlaps": overlaps, "listed": listed, "warnings": []]]
+        let result: [String: Any] = ["created": create, "muted": mute, "setTracks": settings, "overlaps": overlaps, "listed": listed, "warnings": []]
+        if finishesAfterFirstPoll { pendingResults[id] = result }
+        jobs[id] = jobsStayRunning || finishesAfterFirstPoll ? ["id": id, "status": "running"] : ["id": id, "status": "done", "result": result]
         return answer(202, ["job": ["id": id, "status": "running"]], r)
     }
 }
@@ -718,5 +739,46 @@ extension FlimmerSendTests {
         if case .success = outcome { Issue.record("the send finished although it was canceled") }
         #expect(f.canceledJobs == Array(f.jobs.keys) && f.jobs.values.allSatisfy { $0["status"] as? String == "canceled" })
         #expect(f.transcriptBodies.isEmpty, "no transcript after a canceled plan")
+    }
+
+    /// A send with a gain change and transcripts, ready to go to `f`.
+    private func preparedSend(_ f: PretendFlimmer, poll: Double) async throws -> (FlimmerSend.Prepared, FlimmerSend.Client) {
+        var (p, pool) = filmWithWords()
+        let c = FlimmerSend.Client(base: URL(string: "http://127.0.0.1:9002")!, transport: f.transport, pollInterval: poll)
+        try p.changeGain(Frame(5.5 * sr)..<Frame(6.5 * sr), by: -6)
+        return (try await FlimmerSend.prepare(p, mode: .takes, client: c, render: render(pool)), c)
+    }
+
+    @Test("Canceled while the plan's POST or a poll is on its way (its answer not yet in): Flimmer's job is still canceled with DELETE")
+    func cancelWhileAsking() async throws {
+        for poll in [false, true] {
+            let f = flimmer()
+            let (prepared, c) = try await preparedSend(f, poll: 0.02)
+            f.jobsStayRunning = true
+            if poll { f.pollAnswerDelay = 0.4 } else { f.planAnswerDelay = 0.4 }
+            let task = Task { try await FlimmerSend.sendAll(prepared, client: c, transcripts: true, replaceEdited: false) }
+            for _ in 0..<100 where f.jobs.isEmpty { try await Task.sleep(for: .milliseconds(10)) }
+            try await Task.sleep(for: .milliseconds(poll ? 150 : 100))
+            task.cancel()
+            let outcome = await task.result
+            if case .success = outcome { Issue.record("the send finished although it was canceled (poll: \(poll))") }
+            #expect(!f.jobs.isEmpty && f.canceledJobs == Array(f.jobs.keys), "poll: \(poll)")
+            #expect(f.jobs.values.allSatisfy { $0["status"] as? String == "canceled" } && f.transcriptBodies.isEmpty, "poll: \(poll)")
+        }
+    }
+
+    @Test("Canceled after Flimmer had finished (it answers the DELETE with 409): what it made is returned to be said and remembered, and no transcript goes")
+    func canceledTooLate() async throws {
+        let f = flimmer()
+        let (prepared, c) = try await preparedSend(f, poll: 0.5)
+        f.finishesAfterFirstPoll = true
+        let task = Task { try await FlimmerSend.sendAll(prepared, client: c, transcripts: true, replaceEdited: false) }
+        for _ in 0..<100 where f.polls == 0 { try await Task.sleep(for: .milliseconds(10)) }
+        try await Task.sleep(for: .milliseconds(100))
+        task.cancel()
+        let r = try await task.value
+        #expect(r.canceledLate && f.canceledJobs.count == 1, "the DELETE was tried, and refused")
+        #expect(!r.created.isEmpty && r.created.count == (f.jobs.values.first?["result"] as? [String: Any])?["created"].map { ($0 as? [Any])?.count ?? -1 })
+        #expect(f.transcriptBodies.isEmpty, "no transcript after the cancel")
     }
 }
