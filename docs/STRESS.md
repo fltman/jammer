@@ -114,3 +114,13 @@ Now: the link (bookmark, path, format, who asked) is saved with the window's sta
 The window state is only written when Jämmer stops being the front app (AppKit's doing), so a kill while it has been in front all along, straight after the hand-over, restores nothing. In use the user has gone back to the other app, which is when it is written.
 
 Two faults in the test equipment came out of this and are fixed: `scripts/with-app.sh` had lost its `$pid` in an edit, so its clean-up stopped nothing and waited for ever (a stray test app, and once a held GUI lock); and GUI scripts now run under the series' `run-supervised.sh`, with a time limit.
+
+## Known cases in the test suite (failures under load)
+
+Written down so a failure can be compared word for word before it is called known; nothing in the suite retries or skips them.
+
+| Test | When it failed | The failure, as printed | On its own |
+|---|---|---|---|
+| `EngineTests.swift`, "A level under a hand: with none the output is the source bit for bit, also on a track marked for it; a trim for another plan does nothing; a trim of −6 dB is −6 dB once its first block has ramped to it, and what was put on comes back frame by frame" (line 408) | 2026-11-18, in the pre-commit check, one-minute load 13.17 (another session's builds and a live test with Flimmer) | `zip(applied, applied.dropFirst()).allSatisfy { $0.0 < $1.0 } && (applied.last?.0 ?? 0) >= Int64(count) → false` (the first half false: the frames at which the trim was applied, read back, were not strictly rising) | Passed 3 of 3 right after, at the same load; the next pre-commit run green |
+
+What it may mean, not yet looked into: the test reads back, from the engine, at which frames a hand trim was applied; under load the reading thread can see two applications at one frame, or out of order. Whether that is the test's reading or the engine's applying is open. If it fails again with other words, it is not this case.
