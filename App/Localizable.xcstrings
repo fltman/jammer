@@ -5666,13 +5666,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Command Palette…"
+            "value": "Omnibar"
           }
         },
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Kommandopalett…"
+            "value": "Omnibar"
           }
         }
       }
@@ -18239,6 +18239,132 @@
         }
       }
     },
+    "omnibar.ask": {
+      "comment": "The omnibar row that sends the typed text to the assistant. %@ is the text.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ask the assistant: “%@”"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fråga assistenten: ”%@”"
+          }
+        }
+      }
+    },
+    "omnibar.ask.detail": {
+      "comment": "Under the omnibar row that asks the assistant.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "With the source chosen in the assistant’s settings"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Med källan som är vald i assistentens inställningar"
+          }
+        }
+      }
+    },
+    "omnibar.deciding": {
+      "comment": "VoiceOver label while Apple’s on-device model decides whether the text is a command.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deciding on this Mac whether it is a command"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avgör på den här Macen om det är ett kommando"
+          }
+        }
+      }
+    },
+    "omnibar.field.ax": {
+      "comment": "VoiceOver label of the omnibar field.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Command or request"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kommando eller begäran"
+          }
+        }
+      }
+    },
+    "omnibar.field.hint": {
+      "comment": "VoiceOver hint of the omnibar field.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Return runs the highlighted command, Command-Return asks the assistant, and Escape goes back to the timeline."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Return kör det markerade kommandot, Kommando-Return frågar assistenten och Escape går tillbaka till tidslinjen."
+          }
+        }
+      }
+    },
+    "omnibar.keys": {
+      "comment": "Key hint beside the focused omnibar field.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "↩ run · ⌘↩ ask · esc back"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "↩ kör · ⌘↩ fråga · esc tillbaka"
+          }
+        }
+      }
+    },
+    "omnibar.placeholder": {
+      "comment": "The omnibar field at the bottom of the window, empty.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Type a command, or ask the assistant"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skriv ett kommando, eller fråga assistenten"
+          }
+        }
+      }
+    },
     "op.add_bus.title": {
       "comment": "The title of the operation add_bus: in the menus, the command palette, the assistant’s plan and as the undo name (“Undo …”). The agent API keeps the English title.",
       "extractionState": "manual",
@@ -21100,24 +21226,6 @@
         }
       }
     },
-    "palette.field.ax": {
-      "comment": "Spoken label of the command palette’s field.",
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Command"
-          }
-        },
-        "sv": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Kommando"
-          }
-        }
-      }
-    },
     "palette.group.analysis": {
       "comment": "A command’s group in the palette.",
       "extractionState": "manual",
@@ -21168,24 +21276,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ljud: nivåer, panorering och bussar"
-          }
-        }
-      }
-    },
-    "palette.placeholder": {
-      "comment": "Placeholder of the command palette’s field.",
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Type a command"
-          }
-        },
-        "sv": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Skriv ett kommando"
           }
         }
       }

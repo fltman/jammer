@@ -149,7 +149,8 @@ if [[ -f "$speech" && -f "$music" ]]; then
   audit "Duck Under Speech sheet" duck.text
   key 'key code 53'
   key 'keystroke "k" using {command down}'; sleep 1
-  audit "command palette" assistant.ask
+  key 'keystroke "fade"'; sleep 1
+  audit "omnibar with matches" omnibar.ask
   key 'key code 53'
 else
   echo "skipped  the document states: $speech or $music is missing"

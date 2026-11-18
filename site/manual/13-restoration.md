@@ -2,7 +2,7 @@
 
 ![The Restore sheet on a recording with mains hum: it has found hum at 50 Hz and offers Preview, Original and Repaired](../screens/restore.webp)
 
-**Audio › Remove Hum…, Repair Clipping…, Remove Clicks…, Reduce Noise…, Reduce Reverb…** (also in the command palette) open the Restore sheet. It works on the selection, or on the whole document when nothing is selected.
+**Audio › Remove Hum…, Repair Clipping…, Remove Clicks…, Reduce Noise…, Reduce Reverb…** (also in the omnibar, ⌘K) open the Restore sheet. It works on the selection, or on the whole document when nothing is selected.
 
 ## The repairs
 

@@ -26,7 +26,7 @@ The selection must lie inside one clip per track. If it crosses a clip edge, Jä
 
 ## Gain
 
-**Audio › Gain +1 dB** (⌘]) and **Audio › Gain −1 dB** (⌘[) change the level of the selection, or of everything when nothing is selected. The command palette also has ±6 dB.
+**Audio › Gain +1 dB** (⌘]) and **Audio › Gain −1 dB** (⌘[) change the level of the selection, or of everything when nothing is selected. The omnibar (⌘K) also has ±6 dB.
 
 Gain at exactly 0 dB leaves the samples bit-exact.
 

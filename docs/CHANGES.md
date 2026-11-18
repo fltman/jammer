@@ -2,6 +2,11 @@
 
 Not a list of commits: what behaves differently from before, for a user, an agent, or a file. Newest first.
 
+## 2026-11-19
+
+- **Omnibar**, as in Glimmer: a glass field at the bottom of the window, where ⌘K puts the keyboard. It searches the commands as the palette did, with the ones you use first, and sends a request to the assistant (⌘Return always does). A text that could be either is decided by Apple's model on this Mac. The palette sheet is gone; **Edit › Omnibar** takes its place. Manual chapter 8.
+- **Send to Flimmer**: a cancel reaches Flimmer's job whenever it comes, and a cancel that came after Flimmer had finished says so (the clips are remembered, and the change is undone in Flimmer with ⌘Z).
+
 ## 2026-11-18
 
 - **Automation in every build**: lanes for level, pan, mute, sends, place, a field's turn and a plugin's parameters, drawn by hand in the timeline (⌥-click, drag, the keys) or written from the Mixer's faders (Read, Touch, Latch). Anders tried it in the debug build. Manual chapter 24.

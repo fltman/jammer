@@ -22,6 +22,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
     let transcript: TranscriptPanel
     let assistant: AssistantModel
     private var assistantView: NSView!
+    /// The omnibar at the bottom of the window (⌘K), over the timeline's lower edge while it lists commands.
+    private(set) var omnibar: OmnibarModel!
 
     init(session: EditorSession) {
         self.session = session
@@ -42,7 +44,12 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
 
         let transport = NSHostingView(rootView: TransportBar(session: session, timeline: timeline))
         let statusBar = NSHostingView(rootView: StatusBar(session: session))
-        let stack = NSStackView(views: [transport, timeline, transcript, statusBar])
+        // Room for the omnibar's field above the status bar, so that it covers nothing while it is empty; its
+        // list grows upwards over the timeline only while it is in use.
+        let omnibarRoom = NSView()
+        omnibarRoom.heightAnchor.constraint(equalToConstant: 52).isActive = true
+        omnibarRoom.setContentHuggingPriority(.required, for: .vertical)
+        let stack = NSStackView(views: [transport, timeline, transcript, omnibarRoom, statusBar])
         transcript.isHidden = !UserDefaults.standard.bool(forKey: "transcript.visible")
         transcript.heightAnchor.constraint(equalTo: timeline.heightAnchor, multiplier: 0.45).isActive = true
         transcript.setContentHuggingPriority(.defaultLow, for: .vertical)
@@ -68,14 +75,36 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         // priority then kept (seen 2026-11-17). Both start at a size of ours: the panel 320 pt.
         stack.frame = NSRect(x: 0, y: 0, width: 800, height: 600)
         assistantHost.frame = NSRect(x: 0, y: 0, width: 320, height: 600)
+        let left = NSView(frame: stack.frame)
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        left.addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: left.leadingAnchor), stack.trailingAnchor.constraint(equalTo: left.trailingAnchor),
+            stack.topAnchor.constraint(equalTo: left.topAnchor), stack.bottomAnchor.constraint(equalTo: left.bottomAnchor),
+        ])
         let split = NSSplitView()
         split.isVertical = true
         split.dividerStyle = .thin
-        split.addArrangedSubview(stack)
+        split.addArrangedSubview(left)
         split.addArrangedSubview(assistantHost)
         split.setHoldingPriority(.defaultLow, forSubviewAt: 0)
         split.setHoldingPriority(.defaultHigh, forSubviewAt: 1)
         window.contentView = split
+        omnibar = OmnibarModel(
+            commands: { [unowned self] in CommandPalette.commands(session: self.session, timeline: self.timeline) },
+            ask: { [unowned self] text in self.askFromOmnibar(text) },
+            leave: { [unowned self] in self.window?.makeFirstResponder(self.timeline) })
+        let omnibarHost = NSHostingView(rootView: OmnibarView(model: omnibar))
+        omnibarHost.sizingOptions = [.intrinsicContentSize]
+        omnibarHost.translatesAutoresizingMaskIntoConstraints = false
+        left.addSubview(omnibarHost)
+        let wide = omnibarHost.widthAnchor.constraint(equalTo: left.widthAnchor, constant: -32)
+        wide.priority = .defaultHigh
+        NSLayoutConstraint.activate([
+            omnibarHost.bottomAnchor.constraint(equalTo: omnibarRoom.bottomAnchor, constant: -6),
+            omnibarHost.centerXAnchor.constraint(equalTo: left.centerXAnchor),
+            omnibarHost.widthAnchor.constraint(lessThanOrEqualToConstant: 720), wide,
+        ])
         window.center()
         window.setFrameAutosaveName("JammerEditor")
         window.makeFirstResponder(timeline.firstResponderView)
@@ -645,9 +674,24 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         }
     }
 
+    /// ⌘K: the keyboard to the omnibar.
     @objc func showCommandPalette(_ sender: Any?) {
-        guard let window else { return }
-        CommandPalette.show(over: window, session: session, timeline: timeline)
+        window?.makeKeyAndOrderFront(nil)
+        omnibar.focusRequest += 1
+    }
+
+    /// A request typed in the omnibar: to the assistant, as from its own field (the same source, price question
+    /// and checks), with the panel shown so that its answer is seen.
+    func askFromOmnibar(_ text: String) {
+        guard let split = window?.contentView as? NSSplitView, split.arrangedSubviews.count > 1 else { return }
+        let view = split.arrangedSubviews[1]
+        if view.isHidden {
+            view.isHidden = false
+            split.setPosition(split.frame.width - 320, ofDividerAt: 0)
+            UserDefaults.standard.set(true, forKey: "assistant.visible")
+        }
+        assistant.input = text
+        assistant.send()
     }
 
     @objc func exportAudio(_ sender: Any?) {

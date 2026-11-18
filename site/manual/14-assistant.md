@@ -6,7 +6,7 @@ Ask Jämmer in Swedish or English and it does the editing: "ta bort alla ehm och
 
 ## Open it
 
-**View › Show Assistant** (⌥⌘A), or **Ask the Assistant…** in the command palette (⌘K). The chat opens beside the timeline with the cursor in its field; type a request and press Return. With the chat open, ⌥⌘A takes you to the field from anywhere in the window (the menu item reads **Ask the Assistant**), and from the field it hides the chat (**Hide Assistant**).
+**View › Show Assistant** (⌥⌘A) opens the chat beside the timeline with the cursor in its field; type a request and press Return. You can also type a request in the omnibar at the bottom of the window (⌘K) and press ⌘Return (chapter 8). With the chat open, ⌥⌘A takes you to the field from anywhere in the window (the menu item reads **Ask the Assistant**), and from the field it hides the chat (**Hide Assistant**).
 
 ## What happens
 

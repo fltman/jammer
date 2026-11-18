@@ -28,7 +28,7 @@ Edit › Copy	⌘C
 Edit › Paste	⌘V
 Edit › Delete	
 Edit › Select All	⌘A
-Edit › Command Palette…	⌘K
+Edit › Omnibar	⌘K
 Audio › Fade In	⌥⌘I
 Audio › Fade Out	⌥⌘O
 Audio › Silence	⇧⌘L

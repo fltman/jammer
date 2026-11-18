@@ -24,7 +24,7 @@
 | Delete | Delete the selection |
 | ⌘A | Select All |
 | Esc | Clear the selection (in the spectrogram: the drawn area first) |
-| ⌘K | Command Palette |
+| ⌘K | Omnibar: the keyboard to the field at the bottom of the window |
 
 ## Audio
 
