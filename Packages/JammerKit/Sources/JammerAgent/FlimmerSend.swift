@@ -344,7 +344,15 @@ public enum FlimmerSend {
                 case .canceled: throw Failure("canceled", Said("error.flimmer.job_was_canceled_flimmer", "The job was canceled in Flimmer; nothing was changed there."))
                 case .unknown(let word):
                     throw Failure("unknown_status", Said("error.flimmer.flimmer_s_job_has", "Flimmer's job has the status \"%@\", which Jämmer doesn't know, so it has stopped waiting for it. Look in Flimmer for whether the change was made.", "\(word)"))
-                case .waiting: try await Task.sleep(for: .seconds(pollInterval))
+                case .waiting:
+                    // Canceled here (the sheet closed while sending): Flimmer's job is canceled too, as its API asks
+                    // (DELETE /api/v1/jobs/{id}); it then removes what it had made and mutes nothing.
+                    do { try await Task.sleep(for: .seconds(pollInterval)) } catch {
+                        // From a task of its own: a request made inside the canceled one would end before it left.
+                        let client = self
+                        await Task.detached { _ = try? await client.call("DELETE", "/api/v1/jobs/\(id)") }.value
+                        throw error
+                    }
                 }
             }
         }

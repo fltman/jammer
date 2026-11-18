@@ -38,6 +38,9 @@ final class PretendFlimmer: @unchecked Sendable {
     var notFoundTranscript: Set<String> = []
     /// The clip id of each transcript PUT, in order.
     var transcriptTargets: [String] = []
+    /// Jobs canceled with DELETE, and whether new jobs stay running (for the test that cancels in the middle).
+    var canceledJobs: [String] = []
+    var jobsStayRunning = false
 
     var transport: FlimmerSend.Transport { { [self] r in lock.withLock { self.handle(r) } } }
 
@@ -117,6 +120,11 @@ final class PretendFlimmer: @unchecked Sendable {
         case ("DELETE", let p) where p.hasPrefix("/api/v1/uploads/"):
             uploads[String(p.dropFirst("/api/v1/uploads/".count))] = nil
             return answer(200, [:], r)
+        case ("DELETE", let p) where p.hasPrefix("/api/v1/jobs/"):
+            let id = String(p.dropFirst("/api/v1/jobs/".count))
+            canceledJobs.append(id)
+            jobs[id]?["status"] = "canceled"
+            return answer(200, ["job": ["id": id, "status": "canceled"]], r)
         case ("GET", let p) where p.hasPrefix("/api/v1/jobs/"):
             polls += 1
             guard let job = jobs[String(p.dropFirst("/api/v1/jobs/".count))] else { return fail(404, "not_found", r) }
@@ -231,7 +239,8 @@ final class PretendFlimmer: @unchecked Sendable {
         n += 1
         let id = "job_\(n)"
         // The first poll finds it running, the next done.
-        jobs[id] = ["id": id, "status": "done", "result": ["created": create, "muted": mute, "setTracks": settings, "overlaps": overlaps, "listed": listed, "warnings": []]]
+        jobs[id] = jobsStayRunning ? ["id": id, "status": "running"]
+            : ["id": id, "status": "done", "result": ["created": create, "muted": mute, "setTracks": settings, "overlaps": overlaps, "listed": listed, "warnings": []]]
         return answer(202, ["job": ["id": id, "status": "running"]], r)
     }
 }
@@ -691,5 +700,23 @@ extension FlimmerSendTests {
         #expect(gone.allSatisfy { FlimmerSend.clipGone($0) } && gone[1].reason == "not_found" && gone[1].message == "No audio clip \(r.created[1]!).")
         #expect(Array(f.transcriptTargets[before...]) == [r.created[0]!, r.created[1]!], "nothing sent to another clip in their place")
         #expect(FlimmerSend.transcriptLines(gone).last?.hasSuffix("Flimmer no longer has that clip: send the sound again to make a new take.") == true)
+    }
+
+    @Test("Canceled while Flimmer's job runs (the sheet closed during the send): Jämmer cancels the job there with DELETE /api/v1/jobs/{id}, and no transcript goes")
+    func cancelInTheMiddle() async throws {
+        var (p, pool) = filmWithWords()
+        let f = flimmer()
+        let c = FlimmerSend.Client(base: URL(string: "http://127.0.0.1:9002")!, transport: f.transport, pollInterval: 0.05)
+        try p.changeGain(Frame(5.5 * sr)..<Frame(6.5 * sr), by: -6)
+        let prepared = try await FlimmerSend.prepare(p, mode: .takes, client: c, render: render(pool))
+        f.jobsStayRunning = true
+        let task = Task { try await FlimmerSend.sendAll(prepared, client: c, transcripts: true, replaceEdited: false) }
+        for _ in 0..<100 where f.jobs.isEmpty { try await Task.sleep(for: .milliseconds(10)) }
+        try await Task.sleep(for: .milliseconds(120))
+        task.cancel()
+        let outcome = await task.result
+        if case .success = outcome { Issue.record("the send finished although it was canceled") }
+        #expect(f.canceledJobs == Array(f.jobs.keys) && f.jobs.values.allSatisfy { $0["status"] as? String == "canceled" })
+        #expect(f.transcriptBodies.isEmpty, "no transcript after a canceled plan")
     }
 }
