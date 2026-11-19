@@ -67,5 +67,6 @@
       "title": "Non-destructive and bit-exact",
       "text": "Edits play from your original files, and audio you haven't changed comes out exactly as it went in; Jämmer's tests check it sample by sample. Broadcast Wave data, iXML and markers survive."
     }
-  ]
+  ],
+  "video": "https://youtu.be/V4qpPohdF7c"
 }
