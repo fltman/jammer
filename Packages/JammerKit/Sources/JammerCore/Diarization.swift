@@ -19,6 +19,34 @@ public protocol SpeakerDiarizer: Sendable {
     var engineName: String { get }
     func diarize(mono16k: [Float], minSpeakers: Int?, maxSpeakers: Int?,
                  progress: @escaping @Sendable (Double) -> Void) async throws -> [DiarizedSegment]
+    /// A voiceprint for each speaker from their known spans (seconds) of `mono16k`: the speaker model's embeddings
+    /// of the spans, each made unit length, averaged and made unit length again. For voice profiles
+    /// (docs/DIARISATION.md); nil from an engine that can't make one.
+    func voiceprints(mono16k: [Float], spans: [String: [Range<Double>]]) async throws -> [String: [Float]]?
+}
+
+public extension SpeakerDiarizer {
+    func voiceprints(mono16k: [Float], spans: [String: [Range<Double>]]) async throws -> [String: [Float]]? { nil }
+}
+
+/// Voiceprints and how alike two are (cosine of unit vectors: 1 the same direction, 0 unrelated).
+public enum VoicePrint {
+    public static func unit(_ v: [Float]) -> [Float] {
+        let n = sqrt(v.reduce(0) { $0 + $1 * $1 })
+        return n > 0 ? v.map { $0 / n } : v
+    }
+    /// The unit-length mean of unit-length vectors (each span counts once, whatever its length).
+    public static func mean(_ vs: [[Float]]) -> [Float]? {
+        guard let first = vs.first, !first.isEmpty, vs.allSatisfy({ $0.count == first.count }) else { return nil }
+        var sum = [Float](repeating: 0, count: first.count)
+        for v in vs.map(unit) { for i in sum.indices { sum[i] += v[i] } }
+        return unit(sum)
+    }
+    public static func similarity(_ a: [Float], _ b: [Float]) -> Double {
+        guard a.count == b.count, !a.isEmpty else { return 0 }
+        let ua = unit(a), ub = unit(b)
+        return Double(zip(ua, ub).reduce(0) { $0 + $1.0 * $1.1 })
+    }
 }
 
 public enum DiarizationError: Error, LocalizedError, Equatable {

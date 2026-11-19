@@ -40,6 +40,29 @@ public final class FluidDiarizer: SpeakerDiarizer, @unchecked Sendable {
         try? FileManager.default.removeItem(at: folder.appending(path: "speaker-diarization"))
     }
 
+    /// The Community-1 embedding model (WeSpeaker) on each speaker's spans, without segmenting or clustering
+    /// again (FluidAudio's `embedSpans`). Spans shorter than 0.5 s are left out: too little voice to say much.
+    public func voiceprints(mono16k: [Float], spans: [String: [Range<Double>]]) async throws -> [String: [Float]]? {
+        let manager: OfflineDiarizerManager = lock.withLock {
+            if let m = managers["voiceprints"] { return m }
+            let m = OfflineDiarizerManager(config: .default)
+            managers["voiceprints"] = m
+            return m
+        }
+        ModelRegistry.baseURL = source.absoluteString.hasSuffix("/") ? String(source.absoluteString.dropLast()) : source.absoluteString
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try await manager.prepareModels(directory: folder)
+        let length = Double(mono16k.count) / 16_000
+        var out: [String: [Float]] = [:]
+        for (speaker, ranges) in spans {
+            let usable = ranges.map { max(0, $0.lowerBound)..<min(length, $0.upperBound) }.filter { $0.upperBound - $0.lowerBound >= 0.5 }
+            guard !usable.isEmpty else { continue }
+            let embeddings = try await manager.embedSpans(audioSource: ArrayAudioSampleSource(samples: mono16k), spans: usable)
+            if let v = VoicePrint.mean(embeddings) { out[speaker] = v }
+        }
+        return out
+    }
+
     public func diarize(mono16k: [Float], minSpeakers: Int?, maxSpeakers: Int?,
                         progress: @escaping @Sendable (Double) -> Void) async throws -> [DiarizedSegment] {
         let key = "\(minSpeakers ?? 0)-\(maxSpeakers ?? 0)"

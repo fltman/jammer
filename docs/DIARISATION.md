@@ -23,3 +23,21 @@ Synthetic speech only (macOS voices, no real people), made by `Tests/JammerDiari
 | Hard, the same | ml, `speakers: 2` | 46.2 % | 28.7 % | Mostly confusion on the short turns |
 
 Honestly: the model separates different-sounding voices with long turns almost perfectly, and struggles with similar voices in rapid back-and-forth, as diarisation models generally do. What helps, in order: record each person on their own track and use `by_track`; tell `ml` how many speakers there are; check and fix names in the transcript. Synthetic voices are cleaner than real ones in some ways (no room, no mic changes) and less varied in others, so treat these as a sanity check, not a benchmark.
+
+## Voice profiles: the threshold, measured before the feature is shown (2026-11-19)
+
+A voiceprint is the Community-1 model's own speaker embedding (WeSpeaker, 256 values) of a speaker's spans, through FluidAudio's `embedSpans` (no new model): each span's embedding made unit length, averaged, made unit length again (`VoicePrint`, `FluidDiarizer.voiceprints`). Two prints are compared by their cosine. `VoiceprintEval` (`JAMMER_BENCH=1`, the corpus in `JAMMER_CORPUS`) makes a profile from up to four utterances of one chapter of a reader and tries it against up to three utterances of another chapter by the same reader (should match) and by every other reader (should not): clean, with white noise at 15 dB SNR, as a phone line (300–3400 Hz and noise at 25 dB) and in a room (a decaying tail, RT60 0.5 s, half wet). The profile is always made from clean speech.
+
+**LibriSpeech test-clean** (40 real, consenting readers, CC BY 4.0, downloaded with Anders's yes; MD5 matched to the source's list; never in the repository): 120 same-reader pairs and 4 680 other-reader pairs per condition.
+
+| Threshold | False matches (clean / noise / phone / room) | Misses (clean / noise / phone / room) |
+|---|---|---|
+| 0.50 | 0.04 % / 0.04 % / 0.06 % / 0.02 % | 2.5 % / 3.3 % / 3.3 % / 2.5 % |
+| 0.55 | 0 / 0 / 0 / 0 | 2.5 % / 5.8 % / 6.7 % / 3.3 % |
+| **0.60** | **0 / 0 / 0 / 0** | **4.2 % / 13.3 % / 19.2 % / 5.8 %** |
+| 0.65 | 0 / 0 / 0 / 0 | 5.8 % / 31.7 % / 25.0 % / 14.2 % |
+
+**macOS voices** (8 synthetic voices: Samantha, Daniel, Karen, Moira, Tessa, Rishi, Flo, Alva; 24 same-voice and 168 other-voice pairs per condition): at 0.55, 2.4 % / 0.6 % / 0.6 % / 0 false matches; at **0.60, 0.6 % / 0.6 % / 0.6 % / 0** (one pair each, voices from the same speech engine) and no misses; at 0.65 no false matches clean and 8.3 % misses with noise.
+
+**Chosen: 0.60.** No false match among real readers in any condition, one in 168 among the most alike synthetic voices; a miss only leaves a speaker's ordinary name, while a false match would suggest the wrong person (and a suggestion is shown with its likeness and undone in one step). "0 of 4 680" means under about 0.06 % with the usual three-in-n bound, not none. Misses grow with noise and a phone line: a profile made from a clean studio recording recognises its owner on the phone about four times in five. Synthetic voices are evener than real ones, which is why the real readers decide.
+
