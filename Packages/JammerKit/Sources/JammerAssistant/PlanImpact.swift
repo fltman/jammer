@@ -54,7 +54,15 @@ public struct PlanImpact: Sendable, Equatable {
             default:
                 // Steps and macros: run them on the copy and compare.
                 let concrete: [Step]
-                do { concrete = try MacroExpander.expand([s], state: scratch) } catch { lines.append("\(s.op): \(error.localizedDescription)"); continue }
+                do {
+                    var named = s
+                    named.params = try StepRunner.resolveStrips(Step(op: s.op, params: s.params), in: scratch.project).params
+                    concrete = try MacroExpander.expand([named], state: scratch)
+                } catch {
+                    // Most failures already begin with the step's name ("duck: …"); it isn't said twice.
+                    let said = error.localizedDescription
+                    lines.append(said.hasPrefix("\(s.op):") ? said : "\(s.op): \(said)"); continue
+                }
                 for c in concrete { _ = StepRunner.run([c], on: &scratch, measure: measure) }
                 let after = scratch.project
                 let removed = len - after.length

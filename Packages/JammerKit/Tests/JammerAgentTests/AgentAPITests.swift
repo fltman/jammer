@@ -556,6 +556,19 @@ struct SiblingTests {
         #expect(run(["tracks": .array([])], on: project).0.status == .failed && run([:], on: project).0.status == .failed)
         #expect(run(["tracks": .array([.string(musicTrack.id.uuidString)]), "amount": .number(3)], on: project).0.status == .failed)
         #expect(Operations.named("duck")?.tier == "core")
+
+        // A track by its name (what the Mac's model wrote, 2026-11-19): "music" is the track called Music, ignoring case,
+        // and does exactly what its id does. A name nobody has, or one two tracks share, isn't guessed at.
+        let (byName, q2) = run(["tracks": .array([.string("music")]), "amount": .number(-10)], on: project)
+        #expect(byName.status == .done && byName.info == r.info && q2.tracks[1].id == musicTrack.id && q2.tracks[0] == project.tracks[0], "\(byName.error ?? "")")
+        let unknown = run(["tracks": .array([.string("Musik")])], on: project).0
+        #expect(unknown.reason == "not_found" && (unknown.error ?? "").contains("\(musicTrack.id.uuidString) (Music)"), "\(unknown.error ?? "")")
+        #expect(!(unknown.error ?? "").hasPrefix("duck: duck:"))
+        var twins = project
+        _ = twins.addTrack(source: b, name: "music")
+        let both2 = run(["tracks": .array([.string("Music")])], on: twins).0
+        #expect(both2.reason == "not_found" && (both2.error ?? "").contains("more than one"), "\(both2.error ?? "")")
+        #expect(run(["tracks": .array([.string(musicTrack.id.uuidString)])], on: twins).0.status == .done, "an id still names exactly one")
     }
 
     @Test("detect_tempo through steps: sets the tempo map from what the analyser found, refuses in words, takes a known tempo")

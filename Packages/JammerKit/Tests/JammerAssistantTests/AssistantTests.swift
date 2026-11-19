@@ -76,6 +76,19 @@ struct AssistantTests {
         #expect(AssistantPlan(reply: "", steps: [PlannedStep(op: "remove_fillers")]).isDestructive(actions))
     }
 
+    @Test("A plan's step that names no track fails once, by the step's name, with the tracks listed (not \"duck: duck: …\", seen 2026-11-19)")
+    func failureSaidOnce() {
+        let (p, pool) = project()
+        let state = EditState(project: p, pool: pool)
+        do {
+            _ = try MacroExpander.expand([PlannedStep(op: "duck", params: ["tracks": .array([.string("nobody")])])], state: state)
+            Issue.record("a duck under a track nobody has went through")
+        } catch {
+            let said = error.localizedDescription
+            #expect(said.hasPrefix("duck: ") && !said.hasPrefix("duck: duck:") && said.contains(p.tracks[0].id.uuidString), "\(said)")
+        }
+    }
+
     @Test("Macros become concrete steps against the document as it will be")
     func macros() throws {
         let (p, pool) = project()

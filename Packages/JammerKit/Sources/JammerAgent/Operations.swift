@@ -697,6 +697,38 @@ public enum StepRunner {
     /// Measures loudness of a project range (the session renders; tests can fake it).
     public typealias Measure = @Sendable (Project, Range<Frame>) -> LoudnessResult
 
+    /// The parameters that name a track, bus or VCA group (alone or in a list).
+    static let stripParams: Set<String> = ["track", "tracks", "under", "strip", "from", "to", "members", "add", "remove", "reference", "against", "output"]
+
+    /// A strip given by its name instead of its id: the one strip whose name it is, ignoring case, takes its id.
+    /// A value that names no strip, or several, isn't guessed at: the step fails with the strips' ids and names,
+    /// so that whoever wrote it (often a model, which said "music" for the track called Music, 2026-11-19) can
+    /// try again. Ids, "master" and anything that isn't a strip parameter pass as they are.
+    public static func resolveStrips(_ step: Step, in project: Project) throws -> Step {
+        let strips: [(id: UUID, name: String)] = project.tracks.map { ($0.id, $0.name) } + project.buses.map { ($0.id, $0.name) } + project.vcas.map { ($0.id, $0.name) }
+        let known = Set(strips.map(\.id))
+        func one(_ value: String, _ param: String) throws -> String {
+            if let u = UUID(uuidString: value), known.contains(u) { return value }
+            if value.lowercased() == "master" || UUID(uuidString: value) != nil { return value }
+            let hits = strips.filter { $0.name.compare(value, options: [.caseInsensitive]) == .orderedSame }
+            if hits.count == 1 { return hits[0].id.uuidString }
+            let list = strips.map { "\($0.id.uuidString) (\($0.name))" }.joined(separator: ", ")
+            if hits.isEmpty {
+                throw StepFailure(Said("step.any.strip_unknown", "%1$@: %2$@ \"%3$@\" is neither the id nor the name of a track, bus or group. They are: %4$@.", step.op, param, value, list), reason: "not_found")
+            }
+            throw StepFailure(Said("step.any.strip_ambiguous", "%1$@: %2$@ \"%3$@\" is the name of more than one track, bus or group; give its id. They are: %4$@.", step.op, param, value, list), reason: "not_found")
+        }
+        var out = step
+        for (key, value) in step.params where stripParams.contains(key) {
+            switch value {
+            case .string(let s): out.params[key] = .string(try one(s, key))
+            case .array(let items): out.params[key] = .array(try items.map { if case .string(let s) = $0 { return .string(try one(s, key)) }; return $0 })
+            default: break
+            }
+        }
+        return out
+    }
+
     /// Runs steps in order on a copy of `state`; stops at the first failure and
     /// marks the rest skipped. The caller commits `state` (one undo step) only if
     /// something changed.
@@ -717,7 +749,7 @@ public enum StepRunner {
                     || (step.op == "normalize" && (step.params["target"]?.string ?? "loudness") == "loudness") {
                     throw StepFailure(Said("step.any.loudness_isn_t_measured", "%@: loudness isn't measured in an Ambisonics document (ITU-R BS.1770 has no weighting for a sound field). Export it for loudspeakers or headphones and measure that.", "\(step.op)"), reason: "not_available")
                 }
-                let info = try apply(step, to: &state, measure: measure)
+                let info = try apply(try resolveStrips(step, in: state.project), to: &state, measure: measure)
                 // A track moved by itself (lined up, stretched) under automation that stays on the timeline:
                 // done, and said, so that nobody thinks the lane followed.
                 if movesOneTrack.contains(step.op) {

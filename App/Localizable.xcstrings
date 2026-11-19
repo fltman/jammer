@@ -26039,6 +26039,23 @@
         }
       }
     },
+    "step.any.strip_ambiguous": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@: %2$@ \"%3$@\" is the name of more than one track, bus or group; give its id. They are: %4$@."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@: %2$@ ”%3$@” är namnet på flera spår, bussar eller grupper; ange dess id. De som finns: %4$@."
+          }
+        }
+      }
+    },
     "step.any.strip_has_send_2": {
       "extractionState": "manual",
       "localizations": {
@@ -26069,6 +26086,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "%1$@: \"strip\" är id:t för ett spår, en buss eller en VCA-grupp, eller \"master\"; det finns ingen med id %2$@."
+          }
+        }
+      }
+    },
+    "step.any.strip_unknown": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@: %2$@ \"%3$@\" is neither the id nor the name of a track, bus or group. They are: %4$@."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@: %2$@ ”%3$@” är varken id eller namn på ett spår, en buss eller en grupp. De som finns: %4$@."
           }
         }
       }

@@ -824,6 +824,8 @@ public enum MacroExpander {
             for c in concrete {
                 let r = StepRunner.run([c], on: &scratch, measure: measure)
                 if let f = r.first, f.status == .failed {
+                    // Most failures already begin with the step's name ("duck: …"); it isn't said twice (seen 2026-11-19).
+                    if let e = f.error, e.hasPrefix("\(c.op):") { throw StepFailure(e, reason: f.reason, keyed: f.keyed) }
                     let said = Said("step.any.wrapped", "%1$@: %2$@", c.op, f.error ?? "failed")
                     throw StepFailure(said.text, reason: f.reason, keyed: f.keyed ?? said.keyed)
                 }
