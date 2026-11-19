@@ -4766,6 +4766,60 @@
         }
       }
     },
+    "batch.paid.job": {
+      "comment": "A paid job in the batch question. %1$@ engine, %2$@ language.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "• transcribe with %1$@ (%2$@)"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "• skriv ut med %1$@ (%2$@)"
+          }
+        }
+      }
+    },
+    "batch.paid.notSent": {
+      "comment": "Batch status when the paid question was declined.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not started: nothing was sent to OpenAI."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inte startad: inget skickades till OpenAI."
+          }
+        }
+      }
+    },
+    "batch.paid.text": {
+      "comment": "The question before a batch with paid jobs. %1$@ recipe name, %2$@ the paid jobs, one per line, %3$@ the number of files.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The recipe “%1$@” transcribes at OpenAI:\n%2$@\n\nFor each of %3$@, the whole file will be uploaded to OpenAI and transcribed there.\n\nOpenAI charges your account for it by its own price list; Jämmer can’t read that price list and doesn’t guess the cost.\n\nJämmer hasn’t been able to read OpenAI’s terms for what it does with uploaded audio. Read them at OpenAI before sending anything that isn’t yours to share."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Receptet ”%1$@” skriver ut hos OpenAI:\n%2$@\n\nFör var och en av %3$@ laddas hela filen upp till OpenAI och skrivs ut där.\n\nOpenAI debiterar ditt konto enligt sin egen prislista; Jämmer kan inte läsa den prislistan och gissar inte kostnaden.\n\nJämmer har inte kunnat läsa OpenAI:s villkor för vad de gör med uppladdat ljud. Läs dem hos OpenAI innan du skickar något som inte är ditt att dela."
+          }
+        }
+      }
+    },
     "batch.panel.files": {
       "comment": "Message in the open panel.",
       "extractionState": "manual",
@@ -6835,6 +6889,24 @@
         }
       }
     },
+    "error.batch.paidNotAllowed": {
+      "comment": "Batch error: a paid job without allowPaid. %@ engine.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The job transcribe with engine %@ uploads the audio to its provider, which charges the user's account. Pass \"allowPaid\": true to run it."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jobbet transcribe med motorn %@ laddar upp ljudet till sin leverantör, som debiterar användarens konto. Skicka \"allowPaid\": true för att köra det."
+          }
+        }
+      }
+    },
     "error.batch.rate_edl_only_other": {
       "extractionState": "manual",
       "localizations": {
@@ -6967,6 +7039,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tidslinjen använder %@, som inte ligger i en mapp som agenter får använda. Användaren tillåter mappar i Jämmer › Inställningar… › Agenter."
+          }
+        }
+      }
+    },
+    "error.batch.unknownPrice": {
+      "comment": "Batch error: a paid job without allowUnknownPrice. %@ engine.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jämmer doesn't know what engine %@ costs (its provider charges by its own price list). Pass \"allowUnknownPrice\": true as well to run it."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jämmer vet inte vad motorn %@ kostar (leverantören debiterar enligt sin egen prislista). Skicka också \"allowUnknownPrice\": true för att köra det."
           }
         }
       }

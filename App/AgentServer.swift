@@ -292,6 +292,7 @@ enum AgentRouter {
                 return .json(["job": JobRegistry.shared.startBatch(request).json, "files": request.inputs.count], status: 202)
             } catch let e as BatchError {
                 if e.reason == "bad_request" { throw APIError.badRequest(e.message) }
+                if e.reason == "paid_not_allowed" { throw APIError.paidNotAllowed(e.message) }
                 throw APIError.unprocessable(e.reason, e.message)
             }
         case ["api", "v1", "import", "fcpxml"], ["api", "v1", "import", "timeline"]:

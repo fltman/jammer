@@ -4,7 +4,7 @@
   "tagline": "Edit speech by its words. Repair, level and publish it.",
   "summary": "Jämmer is a native Mac audio editor for podcasts and other speech. Cut by deleting words in the transcript, repair hum, clicks and noise, find and level the speakers, and export at the right loudness with chapters. Everything runs on your Mac, it's free and open source, and AI agents can drive it too.",
   "kind": "audio",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "requires": "macOS 27 or later, Apple silicon",
   "hero": "screens/hero.webp",
   "features": [
@@ -69,5 +69,5 @@
     }
   ],
   "video": "https://youtu.be/V4qpPohdF7c",
-  "download": "https://jammer.brattoo.com/releases/Jammer-0.1.0.zip"
+  "download": "https://jammer.brattoo.com/releases/Jammer-0.1.1.zip"
 }
