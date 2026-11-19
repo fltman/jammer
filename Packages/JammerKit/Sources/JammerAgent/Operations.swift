@@ -336,6 +336,9 @@ public enum Operations {
                        .init("target", .number, "LUFS per speaker. Default -18.", range: -40 ... -10),
                        .init("maxGain", .number, "Largest change in dB, up or down. Default 12.", range: 0...30),
                        .init("speakers", .list, "Speaker ids as strings (\"0\", \"1\"). Default: everyone.")]),
+        .init("split_speakers", "Split Speakers onto Tracks", "One track per speaker found on a track (diarize first), named after them. Together they play exactly what the track did (overlaps go to the longer turn, pauses to the nearer speaker); the original is muted and kept unless keepOriginal is false.",
+              params: [.init("track", .string, "The track's id or name.", required: true),
+                       .init("keepOriginal", .boolean, "Keep the original track, muted. Default true.")]),
         .init("rename_speaker", "Rename Speaker", "Gives a speaker a name, e.g. after diarize. Use it to pair up speakers found on different tracks.",
               params: [.init("speaker", .string, "The speaker's id as a string (\"0\", \"1\", …) or current name.", required: true),
                        .init("name", .string, "The new name.", required: true)]),
@@ -1363,6 +1366,15 @@ public enum StepRunner {
                         "limitedByMaxGain": report.limited ? 1 : 0]
             } catch let e as LevelError {
                 throw StepFailure("level_speakers: \(e.localizedDescription)", reason: e.reason, keyed: e.keyed)
+            }
+        case "split_speakers":
+            guard let t = p["track"]?.string, let id = UUID(uuidString: t) else { throw StepFailure(Said("step.split_speakers.track", "split_speakers: give the track's id or name.")) }
+            do {
+                let made = try s.project.splitSpeakers(track: id, keepOriginal: p["keepOriginal"].map { $0 == .bool(true) } ?? true)
+                for (i, m) in made.enumerated() { s.made["track\(i + 1)"] = m.uuidString }
+                return ["tracks": Double(made.count)]
+            } catch let e as SplitSpeakersError {
+                throw StepFailure(step.op, wrapping: e, reason: e.reason)
             }
         case "rename_speaker":
             do {

@@ -410,6 +410,9 @@ public struct Project: Codable, Equatable, Sendable {
     public var transcripts: [SourceTranscript]
     /// Speaker names; `SpeakerTurn.speaker` and `Word.speaker` index into this.
     public var speakers: [String] = []
+    /// Speakers whose name came from a voice profile on this Mac: only that it did, and how alike the voices were.
+    /// Never the voiceprint itself (SIBLINGS, "Röstprofiler").
+    public var speakerSuggestions: [SpeakerSuggestion] = []
     /// Who speaks when, per source, anchored in source frames like the words.
     public var speakerTurns: [SourceSpeakers] = []
     /// Set when the document was imported from another program's timeline: what came in,
@@ -456,7 +459,7 @@ public struct Project: Codable, Equatable, Sendable {
         self.transcripts = transcripts
     }
 
-    private enum CodingKeys: String, CodingKey { case formatVersion, sampleRate, channels, tracks, markers, sources, tempo, transcripts, speakers, speakerTurns, imported, timecode, video, buses, master, vcas, automation, voices }
+    private enum CodingKeys: String, CodingKey { case formatVersion, sampleRate, channels, tracks, markers, sources, tempo, transcripts, speakers, speakerTurns, imported, timecode, video, buses, master, vcas, automation, voices, speakerSuggestions }
 
     public func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
@@ -479,6 +482,7 @@ public struct Project: Codable, Equatable, Sendable {
         if !vcas.isEmpty { try c.encode(vcas, forKey: .vcas) }
         if usesAutomation { try c.encode(liveLanes, forKey: .automation) }
         if !voices.isEmpty { try c.encode(voices, forKey: .voices) }
+        if !speakerSuggestions.isEmpty { try c.encode(speakerSuggestions, forKey: .speakerSuggestions) }
     }
 
     public init(from decoder: Decoder) throws {
@@ -515,6 +519,7 @@ public struct Project: Codable, Equatable, Sendable {
             .flatMap { (0..<(24 * 3_600 * $0.rate.base)).contains($0.startFrames) ? $0 : nil }
         speakerTurns = try c.decodeIfPresent([SourceSpeakers].self, forKey: .speakerTurns) ?? []
         voices = try c.decodeIfPresent([ClonedVoice].self, forKey: .voices) ?? []
+        speakerSuggestions = (try? c.decodeIfPresent([SpeakerSuggestion].self, forKey: .speakerSuggestions)).flatMap { $0 } ?? []
     }
 
     /// A project with one track playing the whole file.

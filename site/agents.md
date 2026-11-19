@@ -548,6 +548,15 @@ Brings every speaker to the same loudness with one gain each, measured over thei
 | `maxGain` | number | Largest change in dB, up or down. Default 12. |
 | `speakers` | list | Speaker ids as strings ("0", "1"). Default: everyone. |
 
+### `split_speakers`
+
+One track per speaker found on a track (diarize first), named after them. Together they play exactly what the track did (overlaps go to the longer turn, pauses to the nearer speaker); the original is muted and kept unless keepOriginal is false.
+
+| Param | Type | Description |
+|---|---|---|
+| `track` | string | **Required.** The track's id or name. |
+| `keepOriginal` | boolean | Keep the original track, muted. Default true. |
+
 ### `rename_speaker`
 
 Gives a speaker a name, e.g. after diarize. Use it to pair up speakers found on different tracks.

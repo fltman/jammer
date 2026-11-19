@@ -386,3 +386,5 @@ The coordinator's second proposal, Anders's yes: the evaluation also runs every 
 
 Still not runnable with the retry: "make Erik 4 dB quieter" (a `gain` whose end is its start), "sänk musiken med 12 dB när någon pratar" and "duck Music under Dialog by 10 dB" (`under` 1 and 10 again after the retry: the model reads the amount as a track), and "vad är tempot i låten?" (tempo detection isn't compiled into the test build, so that one says nothing about the model).
 
+`split_speakers` (2026-11-19) joined the actions: for the on-device model only when the request names it (`onDeviceWhenNamed`: split, dela upp, own track, eget spår, …), so its list stays the 28 it was measured at; the full catalogue for other models grew to about 6 110 characters (the check is now under 6 200). The evaluation run again with it: 17/18, 21/24, 18/23, 21/29, 7/9, 12/15 and 5/10 plans right; no request planned `split_speakers`. Set 6 was 5/10 instead of 6/10 because the Swedish duck request got a question back ("Vilket spår ska jag sänka…?") instead of a wrong track: the run-to-run variation noted above, not the new action.
+

@@ -148,6 +148,7 @@ public enum AssistantCatalog {
         "level_speakers": ["speakers", "talarna", "lika högt", "equally loud", "same level", "samma nivå", "even out", "jämna"],
         "loudness_preset": ["podcast", "podd", "spotify", "youtube", "apple", "broadcast", "ebu", "r128", "preset", "streaming", "sändning"],
         "rename_speaker": ["rename", "döp", "byt namn", "kalla", "call speaker", "name speaker"],
+        "split_speakers": ["split", "dela upp", "own track", "eget spår", "egna spår", "track per", "spår per", "separate tracks", "separata spår"],
         "spectral_attenuate": ["frequenc", "frekvens", " hz", "khz", "band", "spectral", "spektral"],
         "limit": ["limit", "ceiling", "begräns", "tak ", "taket", "true peak", "dbtp", "peaks under", "toppar under", "topparna under"],
         // The mixer's later parts (2026-11-16): each only when the request has its word.

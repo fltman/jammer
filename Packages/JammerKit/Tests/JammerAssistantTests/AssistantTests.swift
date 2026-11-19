@@ -61,7 +61,8 @@ struct AssistantTests {
         let text = AssistantCatalog.catalogue(actions)
         #expect(text.contains("- gain(db*, start, end):"))
         #expect(text.contains("kind*=dehum|declip|declick|denoise"))
-        #expect(text.count < 6_000)
+        // 6 000 until split_speakers (2026-11-19) took it to about 6 110; the evaluation was run again with it.
+        #expect(text.count < 6_200)
     }
 
     @Test("Values are typed by the registry; invalid steps are dropped, not run")

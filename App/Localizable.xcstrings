@@ -19763,6 +19763,23 @@
         }
       }
     },
+    "op.split_speakers.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Split Speakers onto Tracks"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dela upp talare i spår"
+          }
+        }
+      }
+    },
     "op.transcribe.title": {
       "comment": "The title of the operation transcribe: in the menus, the command palette, the assistant’s plan and as the undo name (“Undo …”). The agent API keeps the English title.",
       "extractionState": "manual",
@@ -26202,6 +26219,57 @@
         }
       }
     },
+    "split.noSpeakers": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ has no speakers yet: find the speakers first (Audio › Find Speakers)."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ har inga talare än: hitta talarna först (Ljud › Hitta talare)."
+          }
+        }
+      }
+    },
+    "split.noTrack": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "There is no track %@."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Det finns inget spår %@."
+          }
+        }
+      }
+    },
+    "split.oneSpeaker": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Only one speaker was found on %@, so there is nothing to split."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bara en talare hittades på %@, så det finns inget att dela upp."
+          }
+        }
+      }
+    },
     "state.spoken.error": {
       "extractionState": "manual",
       "localizations": {
@@ -28888,6 +28956,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "spectral_edit: points måste vara par av tid och frekvens."
+          }
+        }
+      }
+    },
+    "step.split_speakers.track": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "split_speakers: give the track's id or name."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "split_speakers: ange spårets id eller namn."
           }
         }
       }
