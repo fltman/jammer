@@ -1,4 +1,5 @@
 import AppKit
+import JammerAgent
 import JammerCore
 import JammerDiarize
 import JammerParakeet
@@ -12,7 +13,13 @@ import SwiftUI
 enum SettingsWindow {
     private static var window: NSWindow?
 
-    static func show() {
+    /// The tab shown: "models", "agents", "paid" or "voiceProfiles".
+    @MainActor @Observable final class Pane { var selected = "models" }
+    static let pane = Pane()
+
+    /// `pane`: the tab to bring forward (the agent API's settings.open asks for "models").
+    static func show(pane: String? = nil) {
+        if let pane { self.pane.selected = pane }
         if let window { window.makeKeyAndOrderFront(nil); return }
         let w = EscClosingWindow(contentRect: .zero, styleMask: [.titled, .closable], backing: .buffered, defer: false)
         w.title = L10n.text("settings.title")
@@ -64,7 +71,7 @@ final class ModelsModel {
                              remove: { try parakeet.remove() }))
         if let d = Diarization.engine as? FluidDiarizer {
             rows.append(ModelRow(id: "diarisation", title: L10n.text("settings.models.diarisation.title"), use: L10n.text("settings.models.diarisation.use"),
-                                 bytes: 21_000_000, licence: "CC-BY-4.0 (pyannote, WeSpeaker, BUT Speech@FIT; Core ML by Fluid Inference)",
+                                 bytes: Requirements.all.first { $0.id == "diarisation" }?.sizeBytes ?? 21_599_417, licence: "CC-BY-4.0 (pyannote, WeSpeaker, BUT Speech@FIT; Core ML by Fluid Inference)",
                                  installed: { d.isInstalled },
                                  install: { p in try await d.install(progress: p) },
                                  remove: { try d.remove() }))
@@ -137,7 +144,10 @@ struct ModelsSettings: View {
                     } else if row.installed() {
                         Button(L10n.text("button.remove")) { model.remove(row) }.accessibilityLabel(L10n.text("button.remove.ax", row.title))
                     } else {
-                        Button(L10n.text("settings.models.download")) { model.install(row) }.accessibilityLabel(L10n.text("settings.models.download.ax", row.title))
+                        Button(L10n.text("settings.models.download")) {
+                            // Size, publisher, source and license first; nothing is fetched before the sheet's Download.
+                            ModelDownloadSheet.ask(ModelDownloadSheet.requirementID(forRow: row.id), on: NSApp.keyWindow) { model.install(row) }
+                        }.accessibilityLabel(L10n.text("settings.models.download.ax", row.title))
                     }
                 }
                 .id("\(row.id)-\(model.tick)")
@@ -183,12 +193,14 @@ struct AgentSettings: View {
 }
 
 struct SettingsTabs: View {
+    @Bindable private var pane = SettingsWindow.pane
+
     var body: some View {
-        TabView {
-            ModelsSettings().tabItem { Label(L10n.text("settings.models"), systemImage: "square.and.arrow.down") }
-            AgentSettings().tabItem { Label(L10n.text("settings.agents"), systemImage: "terminal") }
-            PaidSettings().tabItem { Label(L10n.text("paid.settings.tab"), systemImage: "creditcard") }
-            VoiceProfileSettings().tabItem { Label(L10n.text("voiceProfiles.settings.tab"), systemImage: "person.wave.2") }
+        TabView(selection: $pane.selected) {
+            ModelsSettings().tabItem { Label(L10n.text("settings.models"), systemImage: "square.and.arrow.down") }.tag("models")
+            AgentSettings().tabItem { Label(L10n.text("settings.agents"), systemImage: "terminal") }.tag("agents")
+            PaidSettings().tabItem { Label(L10n.text("paid.settings.tab"), systemImage: "creditcard") }.tag("paid")
+            VoiceProfileSettings().tabItem { Label(L10n.text("voiceProfiles.settings.tab"), systemImage: "person.wave.2") }.tag("voiceProfiles")
         }
     }
 }

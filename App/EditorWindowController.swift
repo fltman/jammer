@@ -1,6 +1,7 @@
 import AppKit
 import JammerAgent
 import JammerCore
+import JammerDiarize
 import JammerStems
 import SwiftUI
 import UniformTypeIdentifiers
@@ -435,6 +436,22 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         let count = (sender as? NSMenuItem)?.representedObject as? Int
         guard count == nil || Diarization.engine != nil else { return }
         let byTrack = count == nil && (p.hasOverlappingTracks || Diarization.engine == nil)
+        // The first time: what the model is and where it comes from, before anything is fetched (the register).
+        if !byTrack, let d = Diarization.engine as? FluidDiarizer, !d.isInstalled {
+            ModelDownloadSheet.ask("diarisation", on: window) { [weak self] in
+                guard let self else { return }
+                self.session.status = L10n.text("modelDownload.downloading", L10n.text("settings.models.diarisation.title"))
+                Task { @MainActor in
+                    do {
+                        try await d.install()
+                        self.findSpeakers(sender)
+                    } catch {
+                        self.session.status = L10n.text("settings.models.failed", L10n.error(error))
+                    }
+                }
+            }
+            return
+        }
         _ = JobRegistry.shared.startDiarization(session, byTrack: byTrack, tracks: tracks, minSpeakers: count, maxSpeakers: count)
         session.status = byTrack ? L10n.text("speakers.working.byTrack") : L10n.text("speakers.working")
     }

@@ -89,7 +89,7 @@ public struct StemModel: Sendable {
         public static let licence = "MIT (MERL)"
         public static let downloadBytes: Int64 = 122_317_463
         public static let sha256 = "9cecc071c9e58afda34d1a98609a1540f61320e718bafecc4c9c1c5e3ed20a0c"
-        public static let defaultURL = URL(string: "https://media.githubusercontent.com/media/merlresearch/cocktail-fork-separation/main/checkpoints/default_mrx_pre_trained_weights.pth")!
+        public static let defaultURL = URL(string: "https://media.githubusercontent.com/media/merlresearch/cocktail-fork-separation/19b3de827ebc4bfb014570cf92dd32b4ee3b6921/checkpoints/default_mrx_pre_trained_weights.pth")!
         public var file: URL
         public var url: URL
         public init(modelsFolder: URL, url: URL = Soundtrack.defaultURL) {

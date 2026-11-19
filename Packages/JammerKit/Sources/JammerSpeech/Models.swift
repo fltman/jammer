@@ -13,16 +13,20 @@ public struct ModelSpec: Sendable, Equatable, Identifiable {
     /// SHA-256 of the file, lower-case hex (the LFS object id on Hugging Face).
     public var sha256: String
     public var licence: String
+    /// The source's commit the file is fetched at (the published LFS sha256 was read there, 2026-11-19).
+    public var revision = "main"
 
     /// The catalogue. Sizes and hashes read from the Hugging Face tree API, 2026-11-15.
     public static let kbWhisperSmallQ5 = ModelSpec(
         id: "kb-whisper-small-q5", title: "KB-Whisper small (Swedish, 175 MB)", repo: "KBLab/kb-whisper-small",
         file: "ggml-model-q5_0.bin", size: 175_209_680,
-        sha256: "6768836a51abc902e420c613153e6d418c90ea2774e913274d02ab23170225b7", licence: "Apache-2.0")
+        sha256: "6768836a51abc902e420c613153e6d418c90ea2774e913274d02ab23170225b7", licence: "Apache-2.0",
+        revision: "3564d61a42fc210ceaa55a22a96dd64478959c78")
     public static let kbWhisperMediumQ5 = ModelSpec(
         id: "kb-whisper-medium-q5", title: "KB-Whisper medium (Swedish, 539 MB)", repo: "KBLab/kb-whisper-medium",
         file: "ggml-model-q5_0.bin", size: 539_212_484,
-        sha256: "7f8762e0ade9e0073674c0d5acae942a0b1ea98add9baa008ee89c94eaba43d0", licence: "Apache-2.0")
+        sha256: "7f8762e0ade9e0073674c0d5acae942a0b1ea98add9baa008ee89c94eaba43d0", licence: "Apache-2.0",
+        revision: "0abe10b9d7f75d0902656e5c06c5c4d549604dc5")
     public static let catalogue = [kbWhisperSmallQ5, kbWhisperMediumQ5]
 }
 
@@ -72,9 +76,9 @@ public struct ModelStore: Sendable {
         return ModelStore(source: source, folder: folder)
     }
 
-    /// `<source>/<repo>/resolve/main/<file>`, the Hugging Face layout (mirrors use the same).
+    /// `<source>/<repo>/resolve/<commit>/<file>`, the Hugging Face layout (mirrors use the same).
     public func url(for spec: ModelSpec) -> URL {
-        source.appending(path: spec.repo).appending(path: "resolve/main").appending(path: spec.file)
+        source.appending(path: spec.repo).appending(path: "resolve").appending(path: spec.revision).appending(path: spec.file)
     }
 
     public func path(for spec: ModelSpec) -> URL { folder.appending(path: spec.id).appending(path: spec.file) }

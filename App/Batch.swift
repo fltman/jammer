@@ -1,6 +1,7 @@
 import AppKit
 import JammerAgent
 import JammerCore
+import JammerDiarize
 import JammerSpeech
 import JammerStems
 import SwiftUI
@@ -68,6 +69,10 @@ enum BatchJobs {
                 p.applyDiarization(Diarization.byTrack(p, pool: pool, tracks: tracks), engine: "by-track")
             } else {
                 guard Diarization.engine != nil else { throw BatchError("model_unavailable", Said("error.batch.speaker_model_isn_t", "The speaker model isn't available.")) }
+                // An agent's batch never fetches a model (SIBLINGS): the user downloads it in Settings › Models.
+                if let d = Diarization.engine as? FluidDiarizer, !d.isInstalled {
+                    throw BatchError("model_missing", Said("error.batch.diarisationMissing", "The diarisation model (requirement \"diarisation\") isn't on this Mac; the user downloads it in Settings › Models."))
+                }
                 let n = step.params["speakers"]?.double.map { Int($0) }
                 p.applyDiarization(try await Diarization.model(p, pool: pool, tracks: tracks, minSpeakers: n, maxSpeakers: n), engine: Diarization.engine?.engineName ?? "model")
             }

@@ -7,7 +7,7 @@
 ## Two ways
 
 - **One person per track** (a double-ender, where each person recorded themselves): Jämmer treats each track as its speaker and names them after the tracks. It counts speech only where a track is clearly louder than the other voices bleeding into its microphone, so a laugh from the other side doesn't count, and real overlaps count for both. This is what Find Speakers does whenever several tracks play at the same time.
-- **Everyone on one track**: a speaker-recognition model listens to each track and tells the voices apart. The first time, it downloads the model (about 20 MB) from Hugging Face; after that it works offline.
+- **Everyone on one track**: a speaker-recognition model listens to each track and tells the voices apart. The first time, Jämmer shows what the model is (about 22 MB from Hugging Face, its publisher and license) and downloads it only when you click Download; after that it works offline.
 
 **Which to use:** for a double-ender, one track per person is the better way by far: it's exact and needs no model. The model is for a mixed recording, where everyone is on the same track.
 

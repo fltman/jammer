@@ -13,8 +13,10 @@ struct RequirementsTests {
         for r in Requirements.all { #expect(Requirements.faults(r).isEmpty, "\(Requirements.faults(r))") }
         // A planted fault is caught: a model without a checksum, one without a licence, a GPL one.
         var bad = Requirements.all[0]
-        bad.source.sha256 = nil
-        #expect(Requirements.faults(bad).contains { $0.contains("checksum") })
+        bad.source.sha256 = nil; bad.source.commit = nil
+        #expect(Requirements.faults(bad).contains { $0.contains("checksum or commit") })
+        bad = Requirements.all[0]; bad.source.checkedAt = nil
+        #expect(Requirements.faults(bad).contains { $0.contains("where the checksum was read") })
         bad = Requirements.all[0]; bad.license = nil
         #expect(Requirements.faults(bad).contains { $0.contains("license") })
         bad = Requirements.all[0]; bad.license = .init(spdx: "GPL-3.0-only", url: "x")
@@ -40,6 +42,10 @@ struct RequirementsTests {
             #expect(j[k] != nil, "\(k)")
         }
         #expect((Requirements.json(Requirements.all.first { $0.id == "audio-units" }!, installed: nil)["verify"] as? [String: Any])?["command"] != nil)
+        #expect((j["install"] as? [String: Any])?["check"] != nil && (j["source"] as? [String: Any])?["checkedAt"] != nil)
+        // No published sum: null with the note, never a sum of our own in its place.
+        let sp = Requirements.json(Requirements.all.first { $0.id == "spleeter-4stems" }!, installed: nil)["source"] as? [String: Any]
+        #expect(sp?["sha256"] is NSNull && (sp?["sha256Note"] as? String)?.hasPrefix("not published by the source") == true)
         #expect(Requirements.guideSection(clap: false).contains("## What Jämmer may need installed") && !Requirements.guideSection(clap: false).contains("clap-plugins"))
     }
 }

@@ -6460,6 +6460,24 @@
         }
       }
     },
+    "error.batch.diarisationMissing": {
+      "comment": "Batch failure when the diarisation model is not installed.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The diarisation model (requirement \"diarisation\") isn't on this Mac; the user downloads it in Settings › Models."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diariseringsmodellen (kravet \"diarisation\") finns inte på den här Macen; användaren laddar ner den under Inställningar › Modeller."
+          }
+        }
+      }
+    },
     "error.batch.document_controller_isn_t": {
       "extractionState": "manual",
       "localizations": {
@@ -17663,6 +17681,168 @@
         }
       }
     },
+    "modelDownload.downloading": {
+      "comment": "Status line while a model downloads before a task. %@ the model.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Downloading %@…"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Laddar ner %@ …"
+          }
+        }
+      }
+    },
+    "modelDownload.license": {
+      "comment": "Row label in the download sheet.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "License"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Licens"
+          }
+        }
+      }
+    },
+    "modelDownload.publisher": {
+      "comment": "Row label in the download sheet.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Publisher"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Utgivare"
+          }
+        }
+      }
+    },
+    "modelDownload.size": {
+      "comment": "Row label in the download sheet.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Size"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Storlek"
+          }
+        }
+      }
+    },
+    "modelDownload.source": {
+      "comment": "Row label in the download sheet.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Source"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Källa"
+          }
+        }
+      }
+    },
+    "modelDownload.text": {
+      "comment": "The sheet before a model is downloaded.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nothing is downloaded until you click Download. Jämmer checks the download against the checksum or commit in its list, and you can remove it in Settings › Models."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inget laddas ner förrän du klickar på Ladda ner. Jämmer kontrollerar nedladdningen mot kontrollsumman eller commiten i sin lista, och du kan ta bort den under Inställningar › Modeller."
+          }
+        }
+      }
+    },
+    "modelDownload.title": {
+      "comment": "The sheet before a model is downloaded. %@ the model.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Download %@?"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ladda ner %@?"
+          }
+        }
+      }
+    },
+    "modelDownload.version": {
+      "comment": "Row label in the download sheet.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Version"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Version"
+          }
+        }
+      }
+    },
+    "modelDownload.where": {
+      "comment": "Row label in the download sheet: where it ends up on disk.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Where"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hamnar i"
+          }
+        }
+      }
+    },
     "note.dawproject.1_clip_has_gain.one": {
       "extractionState": "manual",
       "localizations": {
@@ -25362,13 +25542,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Find Speakers on a mixed recording. Also fetched by itself the first time it’s used."
+            "value": "Find Speakers on a mixed recording. The first time, Find Speakers asks before it downloads it."
           }
         },
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Hitta talare i en mixad inspelning. Hämtas också av sig själv första gången den används."
+            "value": "Hitta talare i en blandad inspelning. Första gången frågar Hitta talare innan den laddas ner."
           }
         }
       }

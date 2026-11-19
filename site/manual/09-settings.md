@@ -20,12 +20,12 @@ Window size and position are remembered too.
 
 ![Settings, Models: KB-Whisper small and medium, Parakeet, the speaker model and the two separation models, each with size, license and a Download or Remove button](../screens/models.webp)
 
-**Jämmer › Settings… › Models** (⌘,) lists the speech models Jämmer can use. Each shows what it's for, its download size and its license before you download it, and each can be removed again:
+**Jämmer › Settings… › Models** (⌘,) lists the speech models Jämmer can use. Each shows what it's for, its download size and its license, and each can be removed again. **Download** first shows a sheet with the size, the publisher, the exact source and version, the license and where it will be kept; nothing is fetched until you click Download there. Jämmer checks the file against the checksum or commit in its list:
 
 - **KB-Whisper** small or medium: the most accurate Swedish transcription (Apache-2.0).
 - **Parakeet TDT 0.6B v3**: transcription in 25 European languages, Swedish and English among them, very fast (CC-BY-4.0; about 630 MB).
 - **Stem separation** (Spleeter 4stems): vocals, drums, bass and other from a music track (MIT; 146 MB; from Deezer's own release).
 - **Soundtrack separation** (MRX): speech, music and effects from film or video sound (MIT; 122 MB; from MERL's own repository).
-- **Speaker diarisation**: for Find Speakers on a mixed recording (CC-BY-4.0; about 20 MB; also fetched by itself the first time).
+- **Speaker diarisation**: for Find Speakers on a mixed recording (CC-BY-4.0; about 22 MB). Find Speakers offers to download it the first time.
 
 When you transcribe, Jämmer picks KB-Whisper for Swedish if it's installed, otherwise Parakeet if it's installed and knows the language, otherwise the Mac's own recognizer, which needs no download. Agents can ask for a particular engine but can't download models; that's up to you.

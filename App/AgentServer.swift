@@ -263,7 +263,8 @@ enum AgentRouter {
             try only("POST")
             let obj = (try? JSONSerialization.jsonObject(with: r.body)) as? [String: Any] ?? [:]
             guard (obj["pane"] as? String) == "models" else { throw APIError.badRequest("pane must be \"models\".") }
-            NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+            // Opens it without bringing Jämmer forward over what the user is doing (as the voice-profile sheet).
+            SettingsWindow.show(pane: "models")
             return .json(["opened": "models"])
         case ["api", "v1", "voice-profiles"]:
             // The profiles saved on this Mac: id, name and when, never the voiceprint; made and deleted only in the window.

@@ -478,6 +478,8 @@ public enum AgentAPI {
 
         `POST …/diarize` labels the document with speakers as a job. For a double-ender (several tracks playing at once, one person per track) the default is `"mode": "by_track"`: each track is its speaker, named after the track, and bleed from the other tracks doesn't count. Otherwise it's `"ml"`, a diarisation model run on each track; tell it `speakers` when you know how many, especially for similar voices and short back-and-forth, where it's much weaker (docs/DIARISATION.md has the numbers). If `ml` finds only one speaker, the job's result has a `hint`: when the recording is a conversation, run it again with `speakers`, since the model often merges voices that sound alike. The first `ml` run downloads the model (about 20 MB); if that fails the job fails with `error.code` `model_unavailable`. Afterwards `GET …/speakers` lists who talks when, `GET …/transcript` gives each word a `speaker` id and lists `speakers`, and `rename_speaker` names them ("0" → "Anna"). Turns are anchored in the audio, so they stay right through edits.
 
+        `"mode": "ml"` needs the diarisation model on this Mac. The API never downloads it: without it `diarize` answers `422 model_missing` with `"requirement": "diarisation"` (a batch's file fails with `model_missing`). Ask the user, and `POST /api/v1/settings/open {"pane": "models"}` opens the pane where they download it.
+
         ## Batch
 
         Everything else in this API works on documents the user has open; `POST /api/v1/batch` is the one call that reads and writes files by path. So it only works inside folders the user has allowed under Jämmer › Settings… › Agents ("Folders agents may use"; the list starts empty, and `agentFolders` in `GET /api/v1/status` is how many there are). A path outside them, also through a symlink or `..`, answers 422 with reason `folder_not_allowed`: ask the user to add the folder. Each file is processed without a window: `steps` as in `…/steps`, then `jobs` (`restore`, `transcribe`, `diarize`, `separate`, with the same parameters as their endpoints), then exported into `output` as “name (Jämmer).mp3” (or your `suffix` and format). The input files are never changed, not even with `overwrite` (reason `would_overwrite_source`); a result that already exists is skipped unless `overwrite` is true; a file that fails is listed under `failed` and the rest carry on.
@@ -495,6 +497,11 @@ public enum AgentAPI {
         ## Sibling apps
 
         Glimmer and Flimmer call Jämmer the same way you do (see their own guides). They add `X-Sibling: <slug>`; Jämmer logs it and shows "Requested by …" in the window, and it gives no extra rights. `GET /api/v1/operations` lists every op with `params` as a JSON Schema, plus `paid`, `undoable` and `startsJob`, so an assistant can turn them into tools named `jammer.<op>`. `tier` is `"core"` for the 15 most useful ones and `"advanced"` for the rest: start from core when tools are scarce.
+
+        ## Changes
+
+        - 2026-11-19: `diarize` with `"mode": "ml"` (an API call or a batch) no longer downloads the diarisation model the first time. It answers `422 model_missing` with `"requirement": "diarisation"` instead; the user downloads the model in Settings › Models, where a sheet shows its size, publisher, source and license first. `"mode": "by_track"` needs no model. New: `GET /api/v1/requirements` and `POST /api/v1/settings/open`.
+        - 2026-11-19: clips whose audio is speech made with a cloned voice carry `"clonedVoice"` in the track JSON; it can't be removed through the API.
 
         ## Operations
 

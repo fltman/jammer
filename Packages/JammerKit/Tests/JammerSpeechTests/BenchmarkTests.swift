@@ -55,9 +55,9 @@ struct ModelStoreTests {
     @Test("URLs follow the Hugging Face layout under a configurable source")
     func urls() {
         let store = ModelStore(folder: URL(fileURLWithPath: "/tmp/m"))
-        #expect(store.url(for: .kbWhisperSmallQ5).absoluteString == "https://huggingface.co/KBLab/kb-whisper-small/resolve/main/ggml-model-q5_0.bin")
+        #expect(store.url(for: .kbWhisperSmallQ5).absoluteString == "https://huggingface.co/KBLab/kb-whisper-small/resolve/3564d61a42fc210ceaa55a22a96dd64478959c78/ggml-model-q5_0.bin")
         let mirror = ModelStore(source: URL(string: "https://mirror.example/hf")!, folder: URL(fileURLWithPath: "/tmp/m"))
-        #expect(mirror.url(for: .kbWhisperSmallQ5).absoluteString == "https://mirror.example/hf/KBLab/kb-whisper-small/resolve/main/ggml-model-q5_0.bin")
+        #expect(mirror.url(for: .kbWhisperSmallQ5).absoluteString == "https://mirror.example/hf/KBLab/kb-whisper-small/resolve/3564d61a42fc210ceaa55a22a96dd64478959c78/ggml-model-q5_0.bin")
         // Defaults that live only in this object: a test leaves nothing in ~/Library/Preferences.
         let defaults = UserDefaults()
         defaults.setVolatileDomain(["models.source": "https://mirror.example"], forName: UserDefaults.argumentDomain)
