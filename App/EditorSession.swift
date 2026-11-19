@@ -329,6 +329,10 @@ final class EditorSession {
     /// Replaces the project as one undo step named `action`.
     func commit(_ newProject: Project, action: String) {
         let old = project
+        // Every change passes here: a file it rendered (a repair, stems, a freeze, a step) keeps the mark of speech
+        // made with a cloned voice that its track played there before.
+        var newProject = newProject
+        newProject.inheritSyntheticMarks(from: old)
         guard newProject != old else { return }
         // A frozen strip is a file of what it was: a change to what it was made from is not taken.
         if let name = old.frozenViolation(in: newProject) {

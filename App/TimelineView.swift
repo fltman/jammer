@@ -442,13 +442,16 @@ final class TimelineOverlay: NSView {
                 if c.fadeIn > 0 { drawFade(from: c.start, to: c.start + c.fadeIn, rising: true, y: y, height: laneHeight) }
                 if c.fadeOut > 0 { drawFade(from: c.end - c.fadeOut, to: c.end, rising: false, y: y, height: laneHeight) }
             }
-            // On a plate: the name lies over the waveform and must be read whatever is under it.
+            // On a plate: the name lies over the waveform and must be read whatever is under it. A track that plays
+            // speech made with a cloned voice says so on its plate (the mark is the file's; SEND-TO-FLIMMER-API.md).
             let nameAttrs: [NSAttributedString.Key: Any] = [.font: AutomationLanesView.nameFont, .foregroundColor: NSColor.white]
-            let nameSize = (track.name as NSString).size(withAttributes: nameAttrs)
+            let cloned = track.clips.contains { project.source($0.sourceID)?.synthetic != nil }
+            let plate = cloned ? track.name + "  ·  " + L10n.text("clonedVoice.badge") : track.name
+            let nameSize = (plate as NSString).size(withAttributes: nameAttrs)
             NSColor(white: 0, alpha: 0.6).setFill()
             NSBezierPath(roundedRect: NSRect(x: 3, y: y + 20, width: nameSize.width + 10, height: nameSize.height + 4), xRadius: 4, yRadius: 4).fill()
             // Below the row where marker flags sit, so a marker near the start doesn't cover it.
-            (track.name as NSString).draw(at: NSPoint(x: 8, y: y + 22), withAttributes: nameAttrs)
+            (plate as NSString).draw(at: NSPoint(x: 8, y: y + 22), withAttributes: nameAttrs)
             if session.peaks.isEmpty, !session.peakProgress.isEmpty, session.project.length > Frame(project.sampleRate * 600) {
                 let p = session.peakProgress.values.first ?? 0
                 (L10n.text("timeline.reading", String(Int(p * 100))) as NSString).draw(at: NSPoint(x: 8, y: y + 24), withAttributes: nameAttrs)

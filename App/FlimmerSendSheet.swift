@@ -135,7 +135,8 @@ final class FlimmerSendModel {
                 let p = try await FlimmerSend.prepare(project, mode: mode, client: client, render: { item, depth, rate in
                     // Plugins included, as the track sounds here.
                     try FlimmerSend.wavFile(PlanCompiler.mixBlocking(item.render, pool: pool, outOfProcess: safe), range: item.range,
-                                            bitDepth: depth, sampleRate: rate, monoIfSame: item.monoSource, scratch: MediaStore.folder)
+                                            bitDepth: depth, sampleRate: rate, monoIfSame: item.monoSource,
+                                            comment: item.render.syntheticNote(in: item.range), scratch: MediaStore.folder)
                 }, progress: { p in Task { @MainActor in if case .working = self.stage { self.stage = .working(L10n.text("flimmer.preparing.percent", String(Int(p * 100)))) } } })
                 prepared = p
                 // In the window's language (the package keeps the English for the API).

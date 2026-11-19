@@ -55,6 +55,8 @@ public struct SourceRef: Codable, Hashable, Sendable, Identifiable {
         self.bookmark = bookmark
         self.info = info
         self.originalPath = originalPath
+        // A file that says it contains speech made with a cloned voice is marked so from the start.
+        if let c = info.comment, let s = SyntheticSpeech.fromComment(c) { synthetic = s }
     }
 
     /// A user's own file, opened as it is: when it doesn't say its loudspeakers' order, heard in BS.2051's

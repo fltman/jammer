@@ -70,6 +70,37 @@ public struct SyntheticSpeech: Codable, Hashable, Sendable {
     public var made: Date
     /// Always true for Overdub: the voice is a clone of a person's.
     public var cloned: Bool
+    /// For a mark read from a file (another app made the speech): the words after the prefix, as the file had them
+    /// ("Anna (ElevenLabs, eleven_v4)"), said again verbatim in what Jämmer writes. nil: Jämmer's Overdub made it.
+    public var label: String?
+
+    public static let prefix = "Contains speech made with a cloned voice: "
+
+    /// The mark a file's comment (LIST/INFO ICMT) carries, if it begins with the prefix.
+    public static func fromComment(_ comment: String) -> SyntheticSpeech? {
+        guard comment.hasPrefix(prefix) else { return nil }
+        var rest = String(comment.dropFirst(prefix.count))
+        // Jämmer's own line goes on with a sentence about Overdub; only the voices are the label.
+        if let r = rest.range(of: ". ") { rest = String(rest[..<r.lowerBound]) }
+        if rest.hasSuffix(".") { rest.removeLast() }
+        let label = rest.trimmingCharacters(in: .whitespaces)
+        guard !label.isEmpty, label.count <= 1_000 else { return nil }
+        let first = label.split(separator: ";").first.map(String.init) ?? label
+        let name = first.components(separatedBy: " (").first?.trimmingCharacters(in: .whitespaces) ?? first
+        var provider = "", model = ""
+        if let open = first.firstIndex(of: "("), let close = first.lastIndex(of: ")"), open < close {
+            let parts = first[first.index(after: open)..<close].split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+            provider = parts.first ?? ""; model = parts.count > 1 ? parts[1] : ""
+        }
+        // The same label is the same voice (so a voice is named once): an id made from the label.
+        var h1: UInt64 = 0xcbf29ce484222325, h2: UInt64 = 0x84222325cbf29ce4
+        for b in label.utf8 { h1 = (h1 ^ UInt64(b)) &* 0x100000001b3; h2 = (h2 ^ UInt64(b)) &* 0x100000001b3 &+ 7 }
+        let bytes = withUnsafeBytes(of: h1.bigEndian) { Array($0) } + withUnsafeBytes(of: h2.bigEndian) { Array($0) }
+        let id = UUID(uuid: (bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7], bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]))
+        var s = SyntheticSpeech(voice: id, voiceName: name, provider: provider, model: model, text: "", made: Date(timeIntervalSince1970: 0))
+        s.label = label
+        return s
+    }
 
     public init(voice: UUID, voiceName: String, provider: String, model: String, text: String, made: Date, cloned: Bool = true) {
         self.voice = voice; self.voiceName = voiceName; self.provider = provider; self.model = model; self.text = text; self.made = made; self.cloned = cloned
@@ -217,6 +248,23 @@ extension Project {
         transcripts.append(SourceTranscript(sourceID: source.id, language: language, engine: "overdub", words: words, textOnly: true))
     }
 
+    /// After an edit: a source that wasn't there before (a repair, a duck, a bounce rendered from the track) takes
+    /// the marks of the made speech its track played there before, so the mark follows the audio through every
+    /// render. A mark is never taken away (SEND-TO-FLIMMER-API.md, "Cloned voice").
+    public mutating func inheritSyntheticMarks(from before: Project) {
+        let old = Set(before.sources.map(\.id))
+        for si in sources.indices where !old.contains(sources[si].id) && sources[si].synthetic == nil {
+            let id = sources[si].id
+            for (ti, t) in tracks.enumerated() {
+                for c in t.clips where c.sourceID == id {
+                    let was = before.tracks.first { $0.id == t.id } ?? (before.tracks.indices.contains(ti) ? before.tracks[ti] : nil)
+                    let marks = was?.clips.filter { $0.range.overlaps(c.range) }.compactMap { before.source($0.sourceID)?.synthetic } ?? []
+                    if let m = marks.first { sources[si].synthetic = m }
+                }
+            }
+        }
+    }
+
     /// Made speech in `range`: the voices and providers to name in an export's metadata.
     public func syntheticSpeech(in range: Range<Frame>) -> [SyntheticSpeech] {
         var out: [SyntheticSpeech] = []
@@ -232,7 +280,8 @@ extension Project {
     public func syntheticNote(in range: Range<Frame>) -> String? {
         let made = syntheticSpeech(in: range)
         guard !made.isEmpty else { return nil }
-        let names = made.map { "\($0.voiceName) (\($0.provider), \($0.model))" }.joined(separator: "; ")
-        return "Contains speech made with a cloned voice: \(names). Made by Jammer's Overdub with the voice owner's consent recorded in the project."
+        let names = made.map { $0.label ?? "\($0.voiceName) (\($0.provider), \($0.model))" }.joined(separator: "; ")
+        // The sentence about Overdub only when Jämmer's Overdub made all of it; a mark from another app is said as it came.
+        return SyntheticSpeech.prefix + names + (made.allSatisfy { $0.label == nil } ? ". Made by Jammer's Overdub with the voice owner's consent recorded in the project." : ".")
     }
 }

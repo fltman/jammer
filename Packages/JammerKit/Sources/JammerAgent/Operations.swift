@@ -771,6 +771,8 @@ public enum StepRunner {
                     throw StepFailure(Said("step.any.loudness_isn_t_measured", "%@: loudness isn't measured in an Ambisonics document (ITU-R BS.1770 has no weighting for a sound field). Export it for loudspeakers or headphones and measure that.", "\(step.op)"), reason: "not_available")
                 }
                 let info = try apply(try resolveStrips(step, in: state.project), to: &state, measure: measure)
+                // A mark of speech made with a cloned voice follows the audio into what a step rendered.
+                state.project.inheritSyntheticMarks(from: before)
                 // A track moved by itself (lined up, stretched) under automation that stays on the timeline:
                 // done, and said, so that nobody thinks the lane followed.
                 if movesOneTrack.contains(step.op) {

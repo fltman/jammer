@@ -834,9 +834,15 @@ enum AgentRouter {
                     return d
                 },
                 "clips": t.clips.map { c -> [String: Any] in
-                    ["start": seconds(s, c.start), "end": seconds(s, c.end), "startFrame": c.start, "endFrame": c.end,
+                    var d: [String: Any] = ["start": seconds(s, c.start), "end": seconds(s, c.end), "startFrame": c.start, "endFrame": c.end,
                      "source": p.source(c.sourceID)?.name ?? "?", "sourceStart": seconds(s, c.sourceStart),
                      "gainDB": (c.gainDB * 100).rounded() / 100, "fadeIn": seconds(s, c.fadeIn), "fadeOut": seconds(s, c.fadeOut)]
+                    // Speech made with a cloned voice: readable here, never removable through the API (no step clears it).
+                    if let m = p.source(c.sourceID)?.synthetic {
+                        d["clonedVoice"] = ["voiceName": m.voiceName, "provider": m.provider, "model": m.model.isEmpty ? NSNull() : m.model,
+                                            "madeBy": m.label == nil ? "overdub" : "file"] as [String: Any]
+                    }
+                    return d
                 }]
     }
 

@@ -73,6 +73,8 @@ public struct AudioFileInfo: Sendable, Equatable, Codable {
     public var chunks: [Chunk]
     public var bext: BroadcastExtension?
     public var ixml: String?
+    /// LIST/INFO's comment (ICMT), as written: where a cloned voice is said (SEND-TO-FLIMMER-API.md, "Cloned voice").
+    public var comment: String?
     public var markers: [FileMarker]
     /// The loudspeaker of each channel as an ADM BWF file's `chna` names it (5.1, 7.1, 7.1.4), when it does:
     /// it decides over the mask and the channel count (a file without a mask in BS.2051's order).
@@ -261,6 +263,20 @@ public enum AudioFileReader {
         if let x = chunks.first(where: { $0.id == "iXML" }), x.size > 0, x.size < 16 << 20 {
             info.ixml = String(decoding: try r.bytes(at: x.offset, count: Int(x.size)), as: UTF8.self)
                 .trimmingCharacters(in: CharacterSet(charactersIn: "\0"))
+        }
+        // LIST/INFO's comment, not only LIST/adtl: a file that contains speech made with a cloned voice says so there.
+        for list in chunks where list.id == "LIST" && list.size >= 12 && list.size < 1 << 20 {
+            guard try r.fourCC(at: list.offset) == "INFO" else { continue }
+            var p = list.offset + 4
+            let end = list.offset + list.size
+            while p + 8 <= end {
+                let id = try r.fourCC(at: p), size = Int64(try r.u32le(at: p + 4)), body = p + 8
+                guard body + size <= end else { break }
+                if id == "ICMT", size > 0 {
+                    info.comment = String(decoding: try r.bytes(at: body, count: Int(size)).prefix { $0 != 0 }, as: UTF8.self)
+                }
+                p = body + size + (size & 1)
+            }
         }
         info.markers = try parseCues(&r, chunks)
         return info

@@ -5269,6 +5269,24 @@
         }
       }
     },
+    "clonedVoice.badge": {
+      "comment": "On a track's name plate in the timeline: it plays speech made with a cloned voice.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cloned voice"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Klonad röst"
+          }
+        }
+      }
+    },
     "collect.done": {
       "comment": "Status line.",
       "extractionState": "manual",
@@ -24361,6 +24379,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Flimmer kunde inte ångra sändningen: någon har ändrat en av dess takegrupper sedan dess."
+          }
+        }
+      }
+    },
+    "send.line.cloned": {
+      "comment": "Send to Flimmer sheet. %1$@ clip name, %2$@ the voices as the file says them.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ contains speech made with a cloned voice; the file says so (%2$@)."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ innehåller tal gjort med klonad röst; filen säger det (%2$@)."
           }
         }
       }

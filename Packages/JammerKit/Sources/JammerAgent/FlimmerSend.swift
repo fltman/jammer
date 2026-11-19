@@ -220,6 +220,12 @@ public enum FlimmerSend {
                 ? Said("send.line.shorter", "The document is %@ s shorter than the film it came from: sound after a cut no longer sits under its picture.", values: [by])
                 : Said("send.line.longer", "The document is %@ s longer than the film it came from: sound after a cut no longer sits under its picture.", values: [by]))
         }
+        // Speech made with a cloned voice goes with its mark in the file, and the sheet says so.
+        for item in items {
+            if let note = item.render.syntheticNote(in: item.range) {
+                out.append(Said("send.line.cloned", "%1$@ contains speech made with a cloned voice; the file says so (%2$@).", item.name, String(note.dropFirst(SyntheticSpeech.prefix.count))))
+            }
+        }
         if let r = resampledTo {
             out.append(Said("send.line.resampled", "The document is %1$@ Hz; the files are converted to %2$@ Hz, which is what Flimmer takes.", values: [Said.n(project.sampleRate, 0), Said.n(r, 0)]))
         }
@@ -667,7 +673,10 @@ public enum FlimmerSend {
     /// `range` of a compiled plan as a WAV file: 24 bits, or 16 with dither; converted to
     /// `sampleRate` when the document is at another rate. With `monoIfSame`, a stereo render
     /// whose two sides are the same sample for sample is written as mono.
-    public static func wavFile(_ plan: RenderPlan, range: Range<Frame>, bitDepth: Int, sampleRate: Double, monoIfSame: Bool = false, scratch: URL) throws -> Rendered {
+    /// `comment`: LIST/INFO's comment for the file (the line saying it contains speech made with a cloned voice,
+    /// `Project.syntheticNote`), so the mark goes to Flimmer with the audio.
+    public static func wavFile(_ plan: RenderPlan, range: Range<Frame>, bitDepth: Int, sampleRate: Double, monoIfSame: Bool = false,
+                               comment: String? = nil, scratch: URL) throws -> Rendered {
         let dir = scratch.appending(path: "flimmer-send-\(UUID().uuidString.prefix(8))")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         var mono = plan.channels == 1
@@ -681,8 +690,9 @@ public enum FlimmerSend {
         }
         let channels = mono ? 1 : plan.channels
         func write(_ plan: RenderPlan, _ range: Range<Frame>, to url: URL, float: Bool, left: Bool) throws {
+            let note = url.lastPathComponent == "out.wav" ? comment.map { [("LIST", WAVWriter.infoList(comment: $0))] } ?? [] : []
             let w = try WAVWriter(url: url, options: .init(encoding: float ? .float32 : (bitDepth == 24 ? .int24 : .int16), channels: left ? 1 : plan.channels,
-                                                          sampleRate: plan.sampleRate, dither: !float && bitDepth == 16))
+                                                          sampleRate: plan.sampleRate, foreignChunks: note, dither: !float && bitDepth == 16))
             var one: [Float] = []
             try plan.render(range) { b in
                 guard left else { try w.write(b); return }

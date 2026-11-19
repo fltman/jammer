@@ -24,7 +24,7 @@ Jämmer listens for the sentence in the transcript where you selected. If the se
 
 Select the words to replace, then choose **Audio › Overdub…**. Pick the voice, write what it should say (the selected words are filled in to start from), and send. The new speech takes the selection's place, and what follows moves with its length, as a cut does. It is one undo step.
 
-The new clip is marked as made with a cloned voice. The mark stays in the document, and an exported WAV says so in its metadata. ElevenLabs puts an inaudible watermark in what it makes. Jämmer keeps ElevenLabs' file exactly as it came, watermark included, and plays a decoded copy.
+The new clip is marked as made with a cloned voice, and its track shows **Cloned voice**. The mark stays in the document, follows the sound through cuts, mixes and repairs, and an exported WAV (or one sent to Flimmer) says so in its metadata. A file from another app that says it contains speech made with a cloned voice is marked the same way when it comes in. ElevenLabs puts an inaudible watermark in what it makes. Jämmer keeps ElevenLabs' file exactly as it came, watermark included, and plays a decoded copy.
 
 Once sent, a clone or an Overdub can't be stopped: it runs to its end, and ElevenLabs charges for it. (A paid job that can be canceled, such as transcribing at OpenAI, says after a cancel that the service may have charged, and Jämmer doesn't fetch anything it still sends back.)
 
