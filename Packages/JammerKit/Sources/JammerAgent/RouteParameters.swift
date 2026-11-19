@@ -38,6 +38,7 @@ extension AgentAPI {
     static var writtenRoutes: [RouteParameters] { [
         .init("GET", "/"), .init("GET", "/api"), .init("GET", "/api/v1"), .init("GET", "/jammer"), .init("GET", "/jammer.md"),
         .init("GET", "/api/v1/status"), .init("GET", "/api/v1/operations"), .init("GET", "/api/v1/storage"),
+        .init("GET", "/api/v1/requirements"), .init("POST", "/api/v1/settings/open", body: ["pane"]),
         .init("GET", "/api/v1/plugins", query: ["q", "format"]),
         .init("POST", "/api/v1/plugins/scan", body: ["force"]),
         .init("POST", "/api/v1/batch", body: BatchRequest.fields),

@@ -142,6 +142,7 @@ public enum AgentAPI {
             var body: [String: Any] = ["code": error.code, "message": error.message]
             if let step = error.step { body["step"] = step }
             if let reason = error.reason { body["reason"] = reason }
+            if let requirement = error.requirement { body["requirement"] = requirement }
             return .json(["error": body], status: error.status)
         }
 
@@ -167,6 +168,8 @@ public enum AgentAPI {
         public var step: Int?
         /// Why, for agents (e.g. "no_hum", "nothing_in_range").
         public var reason: String?
+        /// What is missing (`Requirements`), on model_missing and model_unavailable.
+        public var requirement: String?
 
         public init(_ status: Int, _ code: String, _ message: String, step: Int? = nil, reason: String? = nil) {
             self.status = status
@@ -178,6 +181,10 @@ public enum AgentAPI {
 
         /// The request is fine but the document doesn't allow it (checked before any job starts).
         public static func unprocessable(_ reason: String, _ m: String) -> APIError { APIError(422, "unprocessable", m, reason: reason) }
+        /// Something the call needs isn't installed (SIBLINGS): 422, with the requirement's id. The API never installs it.
+        public static func modelMissing(_ requirement: String, _ m: String) -> APIError {
+            var e = APIError(422, "model_missing", m, reason: "model_missing"); e.requirement = requirement; return e
+        }
 
         public static func badRequest(_ m: String) -> APIError { APIError(400, "bad_request", m) }
         public static func notFound(_ m: String) -> APIError { APIError(404, "not_found", m) }
@@ -386,6 +393,8 @@ public enum AgentAPI {
         \(pluginRows)
         | POST | `/api/v1/documents/{id}/diarize` | Finds who speaks when (a job). Body: `{"mode": "by_track"\\|"ml", "tracks": [id], "speakers", "minSpeakers", "maxSpeakers"}`; all optional. The result has `speakers` (names) and `seconds` (each one's speaking time) in order of id. |
         | GET | `/api/v1/documents/{id}/speakers` | `{"speakers": [{"id", "name", "seconds"}], "turns": [{"speaker", "track", "start", "end"}]}`, as it plays now, optionally over `?start=&end=`. |
+        | GET | `/api/v1/requirements` | What Jämmer may need installed (see the section above): `{"items": [{"id", "name", "kind", "neededBy", "required", "installed", "sizeBytes", "license": {"spdx", "url"}, "source": {"publisher", "url", "version", "sha256"\\|"commit"}, "install": {"how", "where"\\|"steps"}, "where", "remove", "modes", "debugOnly", "verify"?}]}`. Never starts a download. |
+        | POST | `/api/v1/settings/open` | `{"pane": "models"}` opens Settings at its Models pane, so the user can download what a call needs. Changes nothing. |
         | GET | `/api/v1/voice-profiles` | The voice profiles saved on this Mac: `{"profiles": [{"id", "name", "createdAt"}], "recognize", "threshold"}`. Never a voiceprint. Profiles are made and deleted only in the window, by the user, with consent. A speaker `diarize` (mode ml) names after a profile is *like* it (`matchedProfile`, `matchScore` and `threshold` in the job's result, in the order of `speakers`): say "is like Anna", never "is Anna". |
         | POST | `/api/v1/documents/{id}/voice-profile/request` | Shows the sheet that saves a speaker as a voice profile, if the window is visible and in front (body `{"speaker": "2"}` or a name, optional). `202 {"shown": true}`, not what the user chose: list the profiles afterwards. `409 sheet_open` when a sheet is shown, `422 not_visible`, or `no_speakers` before `diarize` (mode ml). Never brings the app forward, never saves or deletes a profile. |
         | GET | `/api/v1/documents/{id}/chapters` | The markers as Podcasting 2.0 chapters: `{"version": "1.2.0", "chapters": [{"startTime", "endTime", "title"}]}` (Content-Type `application/json+chapters`), optionally over `?start=&end=`. |
@@ -431,6 +440,7 @@ public enum AgentAPI {
 
         Ranges: most operations take `start` and `end` in seconds. Without them they act on the selection (`select`, `select_all`); `gain` and `normalize` act on everything when there's no range and no selection. Edits work on all tracks at once, like a waveform editor.
 
+        \(Requirements.guideSection(clap: features.clap))
         ## Errors
 
         A name Jämmer doesn't know is refused, never skipped: a parameter of a step, a field beside `op` and `params`, a field in a JSON body, a query parameter. The answer is 400 `bad_request` with the name and what the call does take, and nothing is done (in `/steps`, no step runs). So a 2xx answer means every value you sent was used. The schemas in `/api/v1/operations` are closed (`"additionalProperties": false`). One name is accepted everywhere and used for nothing: `rationale`, a string saying why you make the call.

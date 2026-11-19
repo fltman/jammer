@@ -1,6 +1,7 @@
 import AppKit
 import JammerAgent
 import JammerCore
+import JammerDiarize
 import JammerPlugins
 import JammerSpeech
 import JammerStems
@@ -253,6 +254,17 @@ enum AgentRouter {
         case ["jammer"], ["jammer.md"]:
             try only("GET")
             return .text(AgentAPI.guide(port: port, appVersion: appVersion))
+        case ["api", "v1", "requirements"]:
+            // What Jämmer may need installed, and whether it is (SIBLINGS): never a download.
+            try only("GET")
+            return .json(["items": Requirements.listed(clap: AgentAPI.Features.current.clap).map { Requirements.json($0, installed: RequirementState.installed($0.id)) }])
+        case ["api", "v1", "settings", "open"]:
+            // Opens Settings at a pane; changes nothing (SIBLINGS: an agent may ask for it).
+            try only("POST")
+            let obj = (try? JSONSerialization.jsonObject(with: r.body)) as? [String: Any] ?? [:]
+            guard (obj["pane"] as? String) == "models" else { throw APIError.badRequest("pane must be \"models\".") }
+            NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+            return .json(["opened": "models"])
         case ["api", "v1", "voice-profiles"]:
             // The profiles saved on this Mac: id, name and when, never the voiceprint; made and deleted only in the window.
             try only("GET")
@@ -502,7 +514,7 @@ enum AgentRouter {
                         return id
                     }
                 }
-                guard Stems.isInstalled(model) else { throw APIError.unprocessable("model_missing", StemError.modelMissing.localizedDescription) }
+                guard Stems.isInstalled(model) else { throw APIError.modelMissing(model == "dialog" ? "mrx" : "spleeter-4stems", StemError.modelMissing.localizedDescription) }
                 if let t = session.project.tracks.first(where: { (ids?.contains($0.id) ?? true) && !$0.inserts.isEmpty && !$0.clips.isEmpty }) {
                     throw APIError.unprocessable("has_inserts", StemError.hasInserts(t.name).localizedDescription)
                 }
@@ -1134,7 +1146,13 @@ enum AgentRouter {
             throw APIError.badRequest("Speaker counts are for mode \"ml\"; by_track gives each track one speaker.")
         }
         if !byTrack, Diarization.engine == nil {
-            throw APIError.unprocessable("model_unavailable", "This copy of Jämmer has no diarisation model; mode \"by_track\" works without one.")
+            var e = APIError(503, "model_unavailable", "This copy of Jämmer has no diarisation model; mode \"by_track\" works without one.", reason: "model_unavailable")
+            e.requirement = "diarisation"
+            throw e
+        }
+        // The API never starts a download (SIBLINGS): a model that isn't on this Mac is the user's to fetch in Settings.
+        if !byTrack, let d = Diarization.engine as? FluidDiarizer, !d.isInstalled {
+            throw APIError.modelMissing("diarisation", "The diarisation model isn't on this Mac. The user downloads it in Settings › Models (POST /api/v1/settings/open {\"pane\": \"models\"} opens it); mode \"by_track\" works without it.")
         }
         let job = JobRegistry.shared.startDiarization(session, byTrack: byTrack, tracks: tracks, minSpeakers: lo, maxSpeakers: hi)
         return .json(["job": job.json], status: 202)
