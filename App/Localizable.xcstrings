@@ -24426,13 +24426,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Warning: %2$@ would overlap the next clip on its track by %1$@ s."
+            "value": "%2$@ would overlap the next clip on its track by %1$@ s."
           }
         },
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Varning: %2$@ skulle överlappa nästa klipp på sitt spår med %1$@ s."
+            "value": "%2$@ skulle överlappa nästa klipp på sitt spår med %1$@ s."
           }
         }
       }

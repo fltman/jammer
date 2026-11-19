@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-import JammerCore
+@testable import JammerCore
 @testable import JammerAgent
 
 /// A pretend Flimmer that follows SEND-TO-FLIMMER-API.md (v1) to the letter: uploads checked
@@ -326,6 +326,39 @@ struct FlimmerSendTests {
         return (p, pool)
     }
 
+    @Test("A clip a step rendered in place of part of a Flimmer clip (a band cut) goes back as a take of that clip, not as a new one")
+    func renderedInPlaceIsATake() throws {
+        let (p, pool) = film()
+        let sr = p.sampleRate
+        // As spectral_attenuate does: C2 (9–12 s) split around 10–11 s, a new file for the middle.
+        let n = Int(sr)
+        let info = AudioFileInfo(container: .wav, sampleFormat: .float32, bigEndian: false, channels: 1, sampleRate: sr,
+                                 channelMask: nil, dataOffset: 0, frames: Int64(n), chunks: [], bext: nil, ixml: nil, markers: [])
+        let made = SourceRef(name: "Dialog (attenuated)", path: "/dev/null", info: info)
+        pool.register(made.id, memory: [Float](repeating: 0.05, count: n), channels: 1)
+        var after = p
+        after.sources.append(made)
+        let c2 = after.tracks[0].clips[1]
+        let (left, rest) = c2.split(at: Frame(10 * sr))
+        let (_, right) = rest!.split(at: Frame(11 * sr))
+        after.tracks[0].clips = [after.tracks[0].clips[0], left!, Clip(sourceID: made.id, start: Frame(10 * sr), length: Frame(n)), right!]
+        func kinds(_ q: Project) throws -> [(FlimmerSend.Item.Kind, String?)] {
+            FlimmerSend.items(q, plan: try FlimmerReturn.plan(q), mode: .takes).map { ($0.kind, $0.clipId) }
+        }
+        // Without the inheritance the middle is a new clip (round D's finding, 2026-11-19).
+        #expect(try kinds(after).contains { $0.0 == .new })
+        after.inheritOrigins(from: p)
+        #expect(after.tracks[0].clips[2].origin?.clipId == "C2")
+        let k = try kinds(after)
+        #expect(k.contains { $0.0 == .take && $0.1 == "C2" } && !k.contains { $0.0 == .new }, "\(k)")
+        // A clip that is still there keeps its own; a new track's clips take nothing.
+        #expect(after.tracks[0].clips[0].origin?.clipId == "C1")
+        var added = p
+        added.tracks.append(Track(name: "Ny", clips: [Clip(sourceID: made.id, start: Frame(9 * sr), length: Frame(n))]))
+        added.inheritOrigins(from: p)
+        #expect(added.tracks.last!.clips[0].origin == nil)
+    }
+
     func flimmer() -> PretendFlimmer {
         let f = PretendFlimmer()
         f.tracks = [.init(id: "T1", name: "Dialog"), .init(id: "T2", name: "Musik")]
@@ -408,7 +441,7 @@ struct FlimmerSendTests {
         let prepared = try await FlimmerSend.prepare(p, mode: .takes, client: client(f), render: render(pool))
         let items = prepared.body["items"]!.any as! [[String: Any]]
         #expect((items[0]["position"] as? [String: Double]) == ["clipRelativeOffset": 0.75])
-        #expect(prepared.flimmerLines.first == "Warning: berattare would overlap the next clip on its track by 0.75 s.", "\(prepared.flimmerLines)")
+        #expect(prepared.flimmerLines.first == "berattare would overlap the next clip on its track by 0.75 s.", "\(prepared.flimmerLines)")
         #expect(prepared.flimmerWarnings == 1)
     }
 

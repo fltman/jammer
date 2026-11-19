@@ -265,6 +265,29 @@ extension Project {
         }
     }
 
+    /// A clip a change rendered in place of a clip that came from another app (a band cut, a repair, a de-bleed:
+    /// a new file on the same track, over the same stretch) is still that clip there: it takes the origin of the
+    /// one it replaced, with the snapshot of how it came in, so Send to Flimmer sends it as a take of that clip and
+    /// not as a new one (round D, 2026-11-19). Only a new clip that plays a file the change made, on a track that
+    /// was there before, over a stretch where that track played such a clip.
+    public mutating func inheritOrigins(from before: Project) {
+        let oldClips = Set(before.tracks.flatMap(\.clips).map(\.id))
+        let oldSources = Set(before.sources.map(\.id))
+        for ti in tracks.indices {
+            guard let was = before.tracks.first(where: { $0.id == tracks[ti].id }) else { continue }
+            let from = was.clips.filter { $0.origin?.clipId != nil }
+            guard !from.isEmpty else { continue }
+            for ci in tracks[ti].clips.indices where tracks[ti].clips[ci].origin == nil && !oldClips.contains(tracks[ti].clips[ci].id)
+                && !oldSources.contains(tracks[ti].clips[ci].sourceID) {
+                let c = tracks[ti].clips[ci]
+                let best = from.max { a, b in
+                    a.range.clamped(to: c.range).count < b.range.clamped(to: c.range).count
+                }
+                if let best, best.range.overlaps(c.range) { tracks[ti].clips[ci].origin = best.origin }
+            }
+        }
+    }
+
     /// Made speech in `range`: the voices and providers to name in an export's metadata.
     public func syntheticSpeech(in range: Range<Frame>) -> [SyntheticSpeech] {
         var out: [SyntheticSpeech] = []

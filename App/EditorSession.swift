@@ -333,6 +333,7 @@ final class EditorSession {
         // made with a cloned voice that its track played there before.
         var newProject = newProject
         newProject.inheritSyntheticMarks(from: old)
+        newProject.inheritOrigins(from: old)
         guard newProject != old else { return }
         // A frozen strip is a file of what it was: a change to what it was made from is not taken.
         if let name = old.frozenViolation(in: newProject) {

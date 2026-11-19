@@ -773,6 +773,7 @@ public enum StepRunner {
                 let info = try apply(try resolveStrips(step, in: state.project), to: &state, measure: measure)
                 // A mark of speech made with a cloned voice follows the audio into what a step rendered.
                 state.project.inheritSyntheticMarks(from: before)
+        state.project.inheritOrigins(from: before)
                 // A track moved by itself (lined up, stretched) under automation that stays on the timeline:
                 // done, and said, so that nobody thinks the lane followed.
                 if movesOneTrack.contains(step.op) {

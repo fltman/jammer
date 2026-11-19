@@ -259,7 +259,7 @@ public enum FlimmerSend {
             if o["sameTakeGroup"] as? Bool == true {
                 notes.append(Said("send.flimmer.sameGroup", "Note: an older take of %2$@ stays on its track, muted; the new one overlaps it by %1$@ s.", values: [seconds], inner: [clip]))
             } else {
-                out.append(Said("send.flimmer.overlap", "Warning: %2$@ would overlap the next clip on its track by %1$@ s.", values: [seconds], inner: [clip]))
+                out.append(Said("send.flimmer.overlap", "%2$@ would overlap the next clip on its track by %1$@ s.", values: [seconds], inner: [clip]))
             }
         }
         let createdList = ((answer["wouldCreate"] ?? answer["created"]) as? [[String: Any]]) ?? []
