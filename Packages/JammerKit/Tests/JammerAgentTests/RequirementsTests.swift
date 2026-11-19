@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import JammerAgent
+import JammerCore
 
 /// The install register (SIBLINGS, "Det som kan behöva installeras").
 @Suite("What Jämmer may need installed")
@@ -15,6 +16,11 @@ struct RequirementsTests {
         var bad = Requirements.all[0]
         bad.source.sha256 = nil; bad.source.commit = nil
         #expect(Requirements.faults(bad).contains { $0.contains("checksum or commit") })
+        // A repository pinned by commit needs each file's sum.
+        bad = Requirements.all.first { $0.id == "diarisation" }!; bad.manifest = nil
+        #expect(Requirements.faults(bad).contains { $0.contains("a sum for each file") })
+        let files = Requirements.json(Requirements.all.first { $0.id == "parakeet-tdt-0.6b-v3" }!, installed: nil)["source"] as? [String: Any]
+        #expect((files?["files"] as? [[String: Any]])?.count == ModelManifest.parakeetV3.entries.count)
         bad = Requirements.all[0]; bad.source.checkedAt = nil
         #expect(Requirements.faults(bad).contains { $0.contains("where the checksum was read") })
         bad = Requirements.all[0]; bad.license = nil

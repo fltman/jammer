@@ -20,7 +20,7 @@ Window size and position are remembered too.
 
 ![Settings, Models: KB-Whisper small and medium, Parakeet, the speaker model and the two separation models, each with size, license and a Download or Remove button](../screens/models.webp)
 
-**Jämmer › Settings… › Models** (⌘,) lists the speech models Jämmer can use. Each shows what it's for, its download size and its license, and each can be removed again. **Download** first shows a sheet with the size, the publisher, the exact source and version, the license and where it will be kept; nothing is fetched until you click Download there. Jämmer checks the file against the checksum or commit in its list:
+**Jämmer › Settings… › Models** (⌘,) lists the speech models Jämmer can use. Each shows what it's for, its download size and its license, and each can be removed again. **Download** first shows a sheet with the size, the publisher, the exact source and version, the license and where it will be kept; nothing is fetched until you click Download there. Jämmer checks every file it downloads against the checksum its source publishes, and if a single file doesn't match, nothing is installed and the error is shown:
 
 - **KB-Whisper** small or medium: the most accurate Swedish transcription (Apache-2.0).
 - **Parakeet TDT 0.6B v3**: transcription in 25 European languages, Swedish and English among them, very fast (CC-BY-4.0; about 630 MB).

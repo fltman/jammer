@@ -1,4 +1,5 @@
 import Foundation
+import JammerCore
 
 /// What Jämmer may need installed (SIBLINGS, "Det som kan behöva installeras", 2026-11-19): every third-party model
 /// and plugin kind a feature needs that doesn't come with the app. The same list as Settings › Models and
@@ -43,6 +44,8 @@ public struct Requirement: Sendable, Equatable {
     public var verify: Verify?
     /// The command or call that shows the installation went right, and what it answers then.
     public var check: String
+    /// A repository of many files: each file's published sum at the commit, checked before installing.
+    public var manifest: ModelManifest? = nil
     public var modes: [String] = ["local"]
     /// Only in debug builds (a release doesn't list it).
     public var debugOnly = false
@@ -74,14 +77,14 @@ public enum Requirements {
                     sizeBytes: 632_169_729, license: .init(spdx: "CC-BY-4.0", url: "https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3"),
                     source: .init(publisher: "NVIDIA (Core ML conversion by Fluid Inference)", url: "https://huggingface.co/FluidInference/parakeet-tdt-0.6b-v3-coreml",
                                   version: "Core ML int8 v2", commit: "7dd20fe6b1797d35f5e3307e8b1732d9a178edfe",
-                                  checkedAt: "https://huggingface.co/api/models/FluidInference/parakeet-tdt-0.6b-v3-coreml/tree/7dd20fe6b1797d35f5e3307e8b1732d9a178edfe?recursive=true (per-file lfs.oid)", checkedOn: read),
-                    install: .inApp(where: models), location: folder, remove: "Remove in \(models)", check: installedCheck),
+                                  checkedAt: "https://huggingface.co/api/models/FluidInference/parakeet-tdt-0.6b-v3-coreml/tree/7dd20fe6b1797d35f5e3307e8b1732d9a178edfe?recursive=true (lfs.oid per LFS file, oid as git blob id for the rest)", checkedOn: read),
+                    install: .inApp(where: models), location: folder, remove: "Remove in \(models)", check: installedCheck, manifest: .parakeetV3),
         Requirement(id: "diarisation", name: "Speaker diarisation (pyannote Community-1)", kind: .model, neededBy: ["diarize", "request_voice_profile", "split_speakers"], required: false,
                     sizeBytes: 21_599_417, license: .init(spdx: "CC-BY-4.0", url: "https://huggingface.co/pyannote/speaker-diarization-community-1"),
                     source: .init(publisher: "pyannote (Core ML conversion by Fluid Inference)", url: "https://huggingface.co/FluidInference/speaker-diarization-coreml",
                                   version: "Community-1", commit: "df2625ac79a7ac6b65ad868fee6d80f320da4232",
-                                  checkedAt: "https://huggingface.co/api/models/FluidInference/speaker-diarization-coreml/tree/df2625ac79a7ac6b65ad868fee6d80f320da4232?recursive=true (per-file lfs.oid)", checkedOn: read),
-                    install: .inApp(where: models), location: folder, remove: "Remove in \(models)", check: installedCheck),
+                                  checkedAt: "https://huggingface.co/api/models/FluidInference/speaker-diarization-coreml/tree/df2625ac79a7ac6b65ad868fee6d80f320da4232?recursive=true (lfs.oid per LFS file, oid as git blob id for the rest)", checkedOn: read),
+                    install: .inApp(where: models), location: folder, remove: "Remove in \(models)", check: installedCheck, manifest: .diarisation),
         Requirement(id: "spleeter-4stems", name: "Stem separation (Spleeter 4stems)", kind: .model, neededBy: ["separate"], required: false,
                     sizeBytes: 146_308_147, license: .init(spdx: "MIT", url: "https://github.com/deezer/spleeter/blob/master/LICENSE"),
                     source: .init(publisher: "Deezer", url: "https://github.com/deezer/spleeter/releases/download/v1.4.0/4stems.tar.gz",
@@ -127,6 +130,8 @@ public enum Requirements {
             if r.source.sha256 == nil && r.source.commit == nil && r.source.sha256Note == nil { out.append("\(r.id): no checksum or commit") }
             if r.license == nil { out.append("\(r.id): no license") }
             if r.source.checkedAt == nil || r.source.checkedOn == nil { out.append("\(r.id): no address and date for where the checksum was read") }
+            if r.source.sha256 == nil && r.source.sha256Note == nil && r.manifest == nil { out.append("\(r.id): a commit without a sum for each file") }
+            if let m = r.manifest, m.commit != r.source.commit { out.append("\(r.id): the file sums are from another commit") }
             if r.source.sha256 != nil && r.source.sha256Note != nil { out.append("\(r.id): a sha256 and a note that none is published") }
             if let spdx = r.license?.spdx, spdx.uppercased().contains("GPL") || spdx.uppercased().contains("NC") { out.append("\(r.id): the app fetches nothing GPL or non-commercial") }
         case .byUser(let steps):
@@ -149,6 +154,15 @@ public enum Requirements {
         if let n = r.source.sha256Note { source["sha256"] = NSNull(); source["sha256Note"] = n }
         if let a = r.source.checkedAt { source["checkedAt"] = a }
         if let d = r.source.checkedOn { source["checkedOn"] = d }
+        if let m = r.manifest {
+            source["files"] = m.entries.keys.sorted().map { k -> [String: Any] in
+                let e = m.entries[k]!
+                var f: [String: Any] = ["path": k, "size": e.size]
+                if let s = e.sha256 { f["sha256"] = s }
+                if let b = e.gitBlob { f["gitBlob"] = b }
+                return f
+            }
+        }
         var d: [String: Any] = ["id": r.id, "name": r.name, "kind": r.kind.rawValue, "neededBy": r.neededBy, "required": r.required,
                                 "installed": installed.map { $0 as Any } ?? NSNull(), "sizeBytes": r.sizeBytes.map { $0 as Any } ?? NSNull(),
                                 "license": r.license.map { ["spdx": $0.spdx, "url": $0.url] as Any } ?? NSNull(), "source": source,
@@ -166,7 +180,7 @@ public enum Requirements {
         var s = "## What Jämmer may need installed\n\nNothing here comes with the app. The API never starts a download or an installation: ask the user, and `POST /api/v1/settings/open` with `{\"pane\": \"models\"}` opens the pane (it changes nothing). A call that needs one of these and finds it missing answers `422 model_missing` with `\"requirement\": \"<id>\"`. `GET /api/v1/requirements` lists them with `installed`.\n\n"
         s += "| id | What | Needed by | License | Source and version | Install |\n|---|---|---|---|---|---|\n"
         for r in listed(clap: clap) {
-            let ver = [r.source.version, r.source.sha256.map { "sha256 \($0)" }, r.source.commit.map { "commit \($0)" }, r.source.sha256Note.map { "sha256: \($0)" }].compactMap { $0 }.joined(separator: ", ")
+            let ver = [r.source.version, r.source.sha256.map { "sha256 \($0)" }, r.source.commit.map { "commit \($0)" }, r.manifest.map { "sha256 or git blob id of each of its \($0.entries.count) files" }, r.source.sha256Note.map { "sha256: \($0)" }].compactMap { $0 }.joined(separator: ", ")
             let how: String
             switch r.install {
             case .inApp(let w): how = "In the app: \(w)"

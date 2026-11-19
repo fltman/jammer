@@ -7127,6 +7127,24 @@
         }
       }
     },
+    "error.diarization.notInstalled": {
+      "comment": "The diarisation model is missing when a task needs it.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The diarisation model isn't installed. Download it in Settings › Models; Jämmer checks every file before it is installed."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diariseringsmodellen är inte installerad. Ladda ner den under Inställningar › Modeller; Jämmer kontrollerar varje fil innan den installeras."
+          }
+        }
+      }
+    },
     "error.diarization.nothingToDo": {
       "comment": "An error’s reason, shown in the status line after a step that failed (the agent API says the same in English). Placeholders are names, ids or numbers.",
       "extractionState": "manual",
@@ -9246,6 +9264,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Modellkällan svarade %@."
+          }
+        }
+      }
+    },
+    "error.model.mismatch": {
+      "comment": "A downloaded model file did not match its published checksum. %1$@ file path, %2$@ what differed.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ didn't match the checksum its source publishes (%2$@), so nothing was installed."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ stämde inte med kontrollsumman som källan publicerar (%2$@), så ingenting installerades."
           }
         }
       }
@@ -17778,13 +17814,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Nothing is downloaded until you click Download. Jämmer checks the download against the checksum or commit in its list, and you can remove it in Settings › Models."
+            "value": "Nothing is downloaded until you click Download. Jämmer checks every file against the checksum its source publishes and installs nothing if one doesn't match. You can remove it in Settings › Models."
           }
         },
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Inget laddas ner förrän du klickar på Ladda ner. Jämmer kontrollerar nedladdningen mot kontrollsumman eller commiten i sin lista, och du kan ta bort den under Inställningar › Modeller."
+            "value": "Inget laddas ner förrän du klickar på Ladda ner. Jämmer kontrollerar varje fil mot kontrollsumman som källan publicerar och installerar ingenting om en fil inte stämmer. Du kan ta bort den under Inställningar › Modeller."
           }
         }
       }

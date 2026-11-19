@@ -48,10 +48,14 @@ public final class ParakeetEngine: TranscriptionEngine, @unchecked Sendable {
     /// Downloads the model from the user's model source (Settings › Models).
     public func install(progress: @escaping @Sendable (Double) -> Void = { _ in }) async throws {
         configureSource()
-        try FileManager.default.createDirectory(at: directory.deletingLastPathComponent(), withIntermediateDirectories: true)
-        _ = try await AsrModels.download(to: directory, version: .v3, encoderPrecision: Self.precision) { p in
-            progress(p.fractionCompleted)
+        // Into a staging folder, every file checked against the sums published at the pinned commit, and only then
+        // in place: a file that doesn't match installs nothing (ModelManifest).
+        try await ModelManifest.parakeetV3.installVerified(target: directory) { staging in
+            _ = try await AsrModels.download(to: staging, version: .v3, encoderPrecision: Self.precision) { p in
+                progress(p.fractionCompleted * 0.95)
+            }
         }
+        progress(1)
     }
 
     public func remove() throws {
