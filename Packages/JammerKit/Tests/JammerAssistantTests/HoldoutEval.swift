@@ -42,6 +42,8 @@ struct HoldoutEval {
         // Set 5 is about the mixer's later parts: a VCA group to name as well.
         if which == "5" { tracks.append(try p.addVCA(name: "Voices").id.uuidString) }
         let names = p.tracks.map(\.name) + p.buses.map(\.name) + p.vcas.map(\.name)
+        let (runP, runPool) = EvalRun.runnable(p)
+        var runnable = 0
         let context = AssistantContext(project: p, selection: nil, playhead: 0)
         let actions = AssistantCatalog.actions
         var right = 0, rightForUser = 0, valuesRight = 0, valuesTotal = 0, invented = 0, wrongLanguage = 0, unaskedRuns = 0
@@ -77,16 +79,21 @@ struct HoldoutEval {
             // app's behaviour; the plan as the model made it says how much the checks carry.
             let shownPlan = ReplyGuard.checked(plan, goal: c.goal, context: context)
             let forUser = failure == nil && shownPlan.steps.map(\.op) == c.ops
-            if forUser { rightForUser += 1 }
+            var runNote = ""
+            if forUser {
+                rightForUser += 1
+                // Asked for nothing, and planned nothing: carried out as asked.
+                if let why = shownPlan.steps.isEmpty ? nil : EvalRun.failure(shownPlan, project: runP, pool: runPool) { runNote = " (doesn't run: \(why.prefix(90)))"; print("NOT RUNNABLE: \(c.goal) → \(why)") } else { runnable += 1 }
+            }
             let k = byKind[c.kind] ?? (0, 0)
             byKind[c.kind] = (k.0 + (ok ? 1 : 0), k.1 + 1)
             let shown = plan.steps.map { s in s.op + (s.params.isEmpty ? "" : "(" + s.params.sorted { $0.key < $1.key }.map { "\($0.key)=\(AssistantEval.text($0.value))" }.joined(separator: ", ") + ")") }.joined(separator: "; ")
             let planned = (failure.map { "error: \($0)" } ?? (shown.isEmpty ? "(no steps) “\(plan.reply.prefix(70))”" : shown))
-                + (plan.dropped.isEmpty ? "" : " [left out: \(plan.dropped.joined(separator: "; "))]")
+                + (plan.dropped.isEmpty ? "" : " [left out: \(plan.dropped.joined(separator: "; "))]") + runNote
             rows.append("| \(c.kind) | \(c.goal) | \(c.ops.isEmpty ? "(no steps)" : c.ops.joined(separator: ", ")) | \(planned) | \(forUser && !ok ? "for the user ✓; " : "")\(ok ? (notes.isEmpty ? "✓" : "ops ✓, " + notes.joined(separator: " ")) : "✗") |")
         }
         let kinds = ["task", "multi", "clarify", "refuse", "answer"].compactMap { k in byKind[k].map { "\(k) \($0.0)/\($0.1)" } }.joined(separator: ", ")
-        let summary = "As the user gets it: \(rightForUser)/\(set.count). The model's own plan, right actions: \(right)/\(set.count) (\(kinds)). Right values: \(valuesRight)/\(valuesTotal). Replies with a figure of the model's own (struck before showing): \(invented). Replies in another language than the request (replaced): \(wrongLanguage). Plans with none of the expected actions that would have changed the document without a yes: \(unaskedRuns)."
+        let summary = "As the user gets it: \(rightForUser)/\(set.count). Runnable as planned: \(runnable)/\(set.count). The model's own plan, right actions: \(right)/\(set.count) (\(kinds)). Right values: \(valuesRight)/\(valuesTotal). Replies with a figure of the model's own (struck before showing): \(invented). Replies in another language than the request (replaced): \(wrongLanguage). Plans with none of the expected actions that would have changed the document without a yes: \(unaskedRuns)."
         let table = "| Kind | Request | Expected | Planned | Result |\n|---|---|---|---|---|\n" + rows.joined(separator: "\n") + "\n\n" + summary + "\n"
         print(table)
         if let path = ProcessInfo.processInfo.environment["JAMMER_EVAL_REPORT"] { try table.write(toFile: path, atomically: true, encoding: .utf8) }

@@ -369,3 +369,20 @@ Hold-out set 6 (`HoldoutCases6.swift`, 10 requests written before any answer was
 
 What it changed is not in the score, because the evaluation doesn't run the steps: "duck the music under the speech" was planned with `"under": 1` (a step that would fail) and, after the retry, without it (a step that runs). It didn't help the other two duck requests: "sänk musiken med 12 dB när någon pratar" gets `"under": "music"`, a real track (so no retry) but the one being ducked, which `duck` refuses in its own words; "duck Music under Dialog by 10 dB" still gets `"under": -10` after the retry. The set's other misses are not about names: "mute the Music track" and "tysta musikspåret" get a question back, "pan the dialog a little to the left" a click repair, and "set the Music track's level to -8 dB" a gain instead of the track's level.
 
+### Plans that can be carried out (2026-11-19)
+
+The coordinator's second proposal, Anders's yes: the evaluation also runs every plan that names the right actions on a fixed copy of its document, with sound and a transcript and no window (`EvalRun`: macros expanded, strips resolved, each step run; a step the app runs as a job, such as `restore` or `transcribe`, checked as the API checks it). "Runnable as planned" counts a request only when its plan is right for the user and every step can be carried out. The plans themselves are made from the same context as before, so the first column compares with the earlier runs. Ducking a track under itself now also gets the one retry. On-device model, the same day:
+
+| Set | Plan right | Runnable, without the retry | Runnable, with it |
+|---|---|---|---|
+| Standard | 17/18 | 17/18 | 17/18 |
+| Hold-out 1 | 21/24 | 21/24 | 21/24 |
+| Hold-out 2 | 18/23 | 18/23 | 18/23 |
+| Hold-out 3 | 21/29 | 18/29 | 19/29 |
+| Hold-out 4 | 7/9 | 7/9 | 7/9 |
+| Hold-out 5 | 12/15 | 12/15 | 12/15 |
+| Hold-out 6 (tracks) | 6/10 | 3/10 | 4/10 |
+| All | 102/128 | 96/128 | 98/128 |
+
+Still not runnable with the retry: "make Erik 4 dB quieter" (a `gain` whose end is its start), "sänk musiken med 12 dB när någon pratar" and "duck Music under Dialog by 10 dB" (`under` 1 and 10 again after the retry: the model reads the amount as a track), and "vad är tempot i låten?" (tempo detection isn't compiled into the test build, so that one says nothing about the model).
+

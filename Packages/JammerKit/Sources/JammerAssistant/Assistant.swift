@@ -353,7 +353,17 @@ public enum StripRetry {
     public static func problem(_ plan: AssistantPlan, in context: AssistantContext) -> String? {
         let strips = context.tracks + context.buses + context.vcas
         for s in plan.steps {
-            do { _ = try StepRunner.resolveStrips(Step(op: s.op, params: s.params), strips: strips) } catch { return error.localizedDescription }
+            let step: Step
+            do { step = try StepRunner.resolveStrips(Step(op: s.op, params: s.params), strips: strips) } catch { return error.localizedDescription }
+            // Ducking a track under itself (the Swedish request in the product film: "under": "music" for the music
+            // it lowers). Said to the model only; when it runs anyway, `duck` refuses it in its own words.
+            if step.op == "duck" {
+                func ids(_ k: String) -> Set<String> { let v = step.params[k]; return Set((v?.strings ?? v?.string.map { [$0] } ?? []).map { $0.uppercased() }) }
+                if !ids("tracks").intersection(ids("under")).isEmpty {
+                    let list = strips.map { "\($0.id) (\($0.name))" }.joined(separator: ", ")
+                    return "duck: under must be a different track than the one ducked. They are: \(list)."
+                }
+            }
         }
         return nil
     }

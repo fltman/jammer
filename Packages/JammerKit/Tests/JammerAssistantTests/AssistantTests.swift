@@ -124,6 +124,14 @@ struct AssistantTests {
         let numeric = try await SayingPlanner(reply: "", steps: [PlannedStep(op: "duck", params: ["tracks": .array([.string(id)]), "under": .number(10)])])
             .planChecked(goal: "duck it by 10 dB", context: context, history: [], actions: AssistantCatalog.actions)
         #expect(StripRetry.problem(numeric, in: context)?.contains("\"10\" is neither") == true)
+        // Ducking a track under itself (the film's Swedish request) is a problem too, said with the list.
+        let t1 = p.tracks[0].id.uuidString
+        let selfDuck = AssistantPlan(reply: "", steps: [PlannedStep(op: "duck", params: ["tracks": .array([.string(t1)]), "under": .array([.string(p.tracks[0].name)])])])
+        #expect(StripRetry.problem(selfDuck, in: context)?.contains("under must be a different track") == true)
+        // The evaluation's runnability: a plan that names the right action but can't run is told apart from one that can.
+        let (runP, runPool) = EvalRun.runnable(p)
+        #expect(EvalRun.failure(AssistantPlan(reply: "", steps: [PlannedStep(op: "gain", params: ["db": .number(-3)])]), project: runP, pool: runPool) == nil)
+        #expect(EvalRun.failure(selfDuck, project: runP, pool: runPool) != nil)
         // Right at once, or a name that fits: no second request.
         let fine = LearningPlanner(right: id, wrong: p.tracks[0].name)
         _ = try await fine.planChecked(goal: "duck it", context: context, history: [], actions: AssistantCatalog.actions)

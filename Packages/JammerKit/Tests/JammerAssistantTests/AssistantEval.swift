@@ -66,6 +66,9 @@ struct AssistantEval {
         p.sources.append(b)
         p.tracks.append(Track(name: "Erik", clips: [Clip(sourceID: b.id, start: 0, length: 48_000 * 60)]))
         let context = AssistantContext(project: p, selection: nil, playhead: 0)
+        // The same document with sound and a transcript, for whether a plan can be carried out (EvalRun).
+        let (runP, runPool) = EvalRun.runnable(p)
+        var runnable = 0
         let planner = Self.planner
         let actions = AssistantCatalog.actions
         var opsRight = 0, opsRightForUser = 0, paramsRight = 0, paramsTotal = 0, invented = 0, wrongLanguage = 0, unaskedRuns = 0
@@ -85,7 +88,11 @@ struct AssistantEval {
             let ok = got == c.ops
             if ok { opsRight += 1 }
             // As the user gets it: after the checks the app makes on every plan (ReplyGuard).
-            if ReplyGuard.checked(plan, goal: c.goal, context: context).steps.map(\.op) == c.ops { opsRightForUser += 1 }
+            let checkedPlan = ReplyGuard.checked(plan, goal: c.goal, context: context)
+            if checkedPlan.steps.map(\.op) == c.ops {
+                opsRightForUser += 1
+                if let why = checkedPlan.steps.isEmpty ? nil : EvalRun.failure(checkedPlan, project: runP, pool: runPool) { print("NOT RUNNABLE: \(c.goal) → \(why)") } else { runnable += 1 }
+            }
             // The reply as the model wrote it (the app shows it only after ReplyGuard).
             let faults = ReplyGuard.faults(plan, goal: c.goal, context: context)
             let guarded = ReplyGuard.checked(plan, goal: c.goal, context: context)
@@ -110,7 +117,7 @@ struct AssistantEval {
             rows.append("| \(c.goal) | \(c.ops.joined(separator: ", ")) | \(shown.isEmpty ? "(none) " + plan.reply.prefix(60) : shown)\(plan.dropped.isEmpty ? "" : " [dropped: \(plan.dropped.joined(separator: ", "))]") | \(ok ? (paramNotes.isEmpty ? "✓" : "ops ✓, " + paramNotes.joined(separator: " ")) : "✗") |")
         }
         let n = Self.cases(track2: "").count
-        let summary = "As the user gets it: \(opsRightForUser)/\(n). The model's own plan, right actions in the right order: \(opsRight)/\(n). Right key values: \(paramsRight)/\(paramsTotal). Average \(String(format: "%.1f", seconds / Double(n))) s per request. Replies with a figure of the model's own (struck before showing): \(invented). Replies in another language than the request (replaced): \(wrongLanguage). Plans with none of the expected actions that would have changed the document without a yes: \(unaskedRuns)."
+        let summary = "As the user gets it: \(opsRightForUser)/\(n). Runnable as planned: \(runnable)/\(n). The model's own plan, right actions in the right order: \(opsRight)/\(n). Right key values: \(paramsRight)/\(paramsTotal). Average \(String(format: "%.1f", seconds / Double(n))) s per request. Replies with a figure of the model's own (struck before showing): \(invented). Replies in another language than the request (replaced): \(wrongLanguage). Plans with none of the expected actions that would have changed the document without a yes: \(unaskedRuns)."
         let table = "| Request | Expected | Planned | Result |\n|---|---|---|---|\n" + rows.joined(separator: "\n") + "\n\n" + summary + "\n"
         print(table)
         if let path = ProcessInfo.processInfo.environment["JAMMER_EVAL_REPORT"] { try table.write(toFile: path, atomically: true, encoding: .utf8) }
