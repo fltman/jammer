@@ -167,3 +167,42 @@ extension Project {
         return made.map(\.id)
     }
 }
+
+/// Files that hold biometric data (voice profiles), in an app that isn't sandboxed: the folder only the user can
+/// open (0700), each file only the user can read (0600), written atomically (a temporary file in the same folder,
+/// renamed over the old one), and rights that have become wider tightened again (SIBLINGS, "Röstprofiler").
+public enum PrivateFiles {
+    public static let folderMode: mode_t = 0o700
+    public static let fileMode: mode_t = 0o600
+
+    public static func write(_ data: Data, named name: String, in folder: URL) throws {
+        let fm = FileManager.default
+        try fm.createDirectory(at: folder, withIntermediateDirectories: true, attributes: [.posixPermissions: Int(folderMode)])
+        try fm.setAttributes([.posixPermissions: Int(folderMode)], ofItemAtPath: folder.path)
+        let temp = folder.appending(path: ".\(UUID().uuidString).tmp")
+        guard fm.createFile(atPath: temp.path, contents: data, attributes: [.posixPermissions: Int(fileMode)]) else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+        // rename(2): the old file is replaced in one step, never left half written.
+        if Foundation.rename(temp.path, folder.appending(path: name).path) != 0 {
+            try? fm.removeItem(at: temp)
+            throw CocoaError(.fileWriteUnknown)
+        }
+    }
+
+    /// Tightens the folder and its files to 0700 and 0600 where they are wider; the names of what was changed
+    /// (for a line in the log: never the contents).
+    @discardableResult
+    public static func tighten(_ folder: URL) -> [String] {
+        let fm = FileManager.default
+        var changed: [String] = []
+        func mode(_ path: String) -> mode_t? { (try? fm.attributesOfItem(atPath: path)[.posixPermissions] as? NSNumber).map { mode_t($0.uint16Value) } }
+        guard let m = mode(folder.path) else { return [] }
+        if m & 0o077 != 0 { try? fm.setAttributes([.posixPermissions: Int(folderMode)], ofItemAtPath: folder.path); changed.append(folder.lastPathComponent) }
+        for f in (try? fm.contentsOfDirectory(atPath: folder.path)) ?? [] {
+            let path = folder.appending(path: f).path
+            if let fm2 = mode(path), fm2 & 0o077 != 0 { try? fm.setAttributes([.posixPermissions: Int(fileMode)], ofItemAtPath: path); changed.append(f) }
+        }
+        return changed
+    }
+}

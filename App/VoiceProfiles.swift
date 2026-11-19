@@ -1,6 +1,9 @@
 import AppKit
 import JammerCore
+import OSLog
 import SwiftUI
+
+let voiceProfileLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "com.brattoo.jammer", category: "voiceProfiles")
 
 /// Voice profiles: a named voiceprint saved on this Mac, to name speakers in other recordings (Anders, 2026-11-19;
 /// SIBLINGS, "Röstprofiler och andra biometriska avtryck"). Only in the app's own folder (inside its sandbox),
@@ -34,6 +37,10 @@ final class VoiceProfileStore {
     func all() -> [Profile] {
         if !loaded {
             loaded = true
+            // Biometric data in an app that isn't sandboxed: rights that have become wider are tightened, said in
+            // the log by file name only.
+            let changed = PrivateFiles.tighten(folder)
+            if !changed.isEmpty { voiceProfileLog.notice("Voice profiles: tightened the rights of \(changed.count) item(s) to 0700/0600: \(changed.joined(separator: ", "), privacy: .public)") }
             let files = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
             profiles = files.filter { $0.pathExtension == "json" }.compactMap { try? JSONDecoder().decode(Profile.self, from: Data(contentsOf: $0)) }
                 .sorted { $0.createdAt < $1.createdAt }
@@ -45,10 +52,9 @@ final class VoiceProfileStore {
     func save(name: String, consent: String, print: [Float]) throws -> Profile {
         _ = all()
         let p = Profile(id: UUID(), name: name, createdAt: Date(), consent: consent, print: print)
-        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let enc = JSONEncoder()
         enc.dateEncodingStrategy = .iso8601
-        try enc.encode(p).write(to: folder.appending(path: "\(p.id.uuidString).json"), options: .atomic)
+        try PrivateFiles.write(try enc.encode(p), named: "\(p.id.uuidString).json", in: folder)
         profiles.append(p)
         NotificationCenter.default.post(name: Self.changed, object: nil)
         return p

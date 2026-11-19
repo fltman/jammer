@@ -87,3 +87,26 @@ struct VoiceProfileTests {
         #expect(!String(decoding: try JSONEncoder().encode(p), as: UTF8.self).contains("speakerSuggestions"))
     }
 }
+
+@Suite("Private files for voice profiles")
+struct PrivateFilesTests {
+    func mode(_ url: URL) -> Int { (try! FileManager.default.attributesOfItem(atPath: url.path)[.posixPermissions] as! NSNumber).intValue & 0o777 }
+
+    @Test("Written atomically, folder 0700 and file 0600; wider rights are tightened and only the names are told")
+    func rights() throws {
+        let folder = FileManager.default.temporaryDirectory.appending(path: "jammer-private-\(UUID().uuidString)/VoiceProfiles")
+        defer { try? FileManager.default.removeItem(at: folder.deletingLastPathComponent()) }
+        try PrivateFiles.write(Data("one".utf8), named: "a.json", in: folder)
+        #expect(mode(folder) == 0o700 && mode(folder.appending(path: "a.json")) == 0o600)
+        // Replaced in one step: the new contents, still 0600, and no temporary file left behind.
+        try PrivateFiles.write(Data("two".utf8), named: "a.json", in: folder)
+        #expect(try String(contentsOf: folder.appending(path: "a.json"), encoding: .utf8) == "two" && mode(folder.appending(path: "a.json")) == 0o600)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: folder.path) == ["a.json"])
+        // Someone widened them: tightened again, and what is told is the names.
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: folder.path)
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: folder.appending(path: "a.json").path)
+        let changed = PrivateFiles.tighten(folder)
+        #expect(Set(changed) == ["VoiceProfiles", "a.json"] && mode(folder) == 0o700 && mode(folder.appending(path: "a.json")) == 0o600)
+        #expect(PrivateFiles.tighten(folder).isEmpty, "nothing to tighten the second time")
+    }
+}
