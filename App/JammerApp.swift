@@ -306,7 +306,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 let i = item(L10n.count("audio.findSpeakers.count", n), #selector(EditorWindowController.findSpeakers(_:)), "")
                 i.representedObject = n
                 return i
-            }),
+            } + [.separator(), item(L10n.text("voiceProfiles.menu.save"), #selector(EditorWindowController.saveVoiceProfile(_:)), "")]),
+            item(L10n.text("op.split_speakers.title"), #selector(EditorWindowController.splitSpeakers(_:)), ""),
             submenu(L10n.text("audio.stems"), ["music4": L10n.text("audio.stems.music"), "dialog": L10n.text("audio.stems.soundtrack")].sorted { $0.key > $1.key }.map { model, title in
                 let i = item(title, #selector(EditorWindowController.separateStems(_:)), "")
                 i.representedObject = model

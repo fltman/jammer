@@ -398,6 +398,36 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
 
     /// Audio › Find Speakers: each track as its speaker for a double-ender, the model
     /// otherwise; with a count ("2 Speakers") always the model, told how many.
+    /// Audio › Find Speakers › Save Speaker as Voice Profile…: the consent sheet (VoiceProfiles.swift). Also what
+    /// an agent's request opens (POST …/voice-profile/request); the user decides.
+    @objc func saveVoiceProfile(_ sender: Any?) { showVoiceProfileSheet(speaker: (sender as? NSMenuItem)?.representedObject as? Int) }
+
+    /// Shows the sheet unless one is already shown; false then.
+    @discardableResult
+    func showVoiceProfileSheet(speaker: Int?) -> Bool {
+        guard let window, window.attachedSheet == nil else { return false }
+        let host = NSHostingController(rootView: AnyView(EmptyView()))
+        host.rootView = AnyView(VoiceProfileSheet(session: session, speaker: speaker) { [weak host] in
+            guard let sheet = host?.view.window else { return }
+            window.endSheet(sheet)
+        })
+        window.contentViewController?.presentAsSheet(host) ?? {
+            window.beginSheet(NSWindow(contentViewController: host))
+        }()
+        return true
+    }
+
+    /// Audio › Split Speakers onto Tracks: the first track with two or more speakers (the selected one first).
+    @objc func splitSpeakers(_ sender: Any?) {
+        guard let t = splittableTrack else { return }
+        session.perform("split_speakers", ["track": .string(t.uuidString)])
+    }
+    var splittableTrack: UUID? {
+        let turns = session.project.placedTurns()
+        let tracks = session.project.tracks.indices.filter { i in Set(turns.filter { $0.track == i }.map(\.speaker)).count > 1 }
+        return tracks.first.map { session.project.tracks[$0].id }
+    }
+
     @objc func findSpeakers(_ sender: Any?) {
         let p = session.project
         let tracks = p.tracks.filter { !$0.clips.isEmpty }.map(\.id)
@@ -814,6 +844,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
             return true
         }
         if item.action == #selector(sendToFlimmer(_:)) { return session.project.imported?.app == "flimmer" }
+        if item.action == #selector(saveVoiceProfile(_:)) { return !session.speakerPrints.isEmpty }
+        if item.action == #selector(splitSpeakers(_:)) { return splittableTrack != nil }
         if item.action == #selector(showRestore(_:)) {
             return session.project.length > 0 && !(JobRegistry.shared.latest("restore", document: session.agentID).map { !$0.isFinished } ?? false)
         }

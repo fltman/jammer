@@ -202,6 +202,7 @@ public enum Diarization {
     /// Runs the registered model on each track (dry, mono, 16 kHz). Speakers are per
     /// track; names continue from the speakers the rest of the document keeps.
     public static func model(_ project: Project, pool: SourcePool, tracks wanted: [UUID], minSpeakers: Int?, maxSpeakers: Int?,
+                             voiceprints: Bool = false,
                              progress: @escaping @Sendable (Double) -> Void = { _ in }) async throws -> [TrackDiarization] {
         guard let engine else { throw DiarizationError.noEngine }
         let targets = wanted.compactMap { id in project.tracks.firstIndex { $0.id == id } }.filter { !project.tracks[$0].clips.isEmpty }
@@ -230,7 +231,14 @@ public enum Diarization {
                 }()
                 turns.append(.init(speaker: id, range: lo..<hi))
             }
-            results.append(TrackDiarization(track: project.tracks[t].id, names: names, turns: turns))
+            var r = TrackDiarization(track: project.tracks[t].id, names: names, turns: turns)
+            if voiceprints {
+                // From the same audio and the model's own spans: one print per speaker, for voice profiles.
+                var spans: [String: [Range<Double>]] = [:]
+                for s in segments where s.end > s.start { if let id = local[s.speaker] { spans[names[id], default: []].append(s.start..<s.end) } }
+                r.prints = (try? await engine.voiceprints(mono16k: audio, spans: spans)).flatMap { $0 } ?? [:]
+            }
+            results.append(r)
         }
         progress(1)
         return results

@@ -19135,6 +19135,23 @@
         }
       }
     },
+    "op.list_voice_profiles.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "List Voice Profiles"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lista röstprofiler"
+          }
+        }
+      }
+    },
     "op.list_voices.title": {
       "extractionState": "manual",
       "localizations": {
@@ -19363,6 +19380,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Byt namn på talare"
+          }
+        }
+      }
+    },
+    "op.request_voice_profile.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ask to Save a Voice Profile"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Be om att spara en röstprofil"
           }
         }
       }
@@ -30934,6 +30968,384 @@
           "stringUnit": {
             "state": "translated",
             "value": "Zooma till markeringen"
+          }
+        }
+      }
+    },
+    "voiceProfiles.delete.text": {
+      "comment": "Confirmation text.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The voiceprint is removed from this Mac for good. Documents that already have the name keep it: it is their content."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Röstavtrycket tas bort från den här Macen för gott. Dokument som redan har namnet behåller det: det är deras innehåll."
+          }
+        }
+      }
+    },
+    "voiceProfiles.delete.title": {
+      "comment": "Confirmation title.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete the voice profile “%@”?"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Radera röstprofilen ”%@”?"
+          }
+        }
+      }
+    },
+    "voiceProfiles.menu.save": {
+      "comment": "Audio › Find Speakers menu item.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save Speaker as Voice Profile…"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spara talare som röstprofil…"
+          }
+        }
+      }
+    },
+    "voiceProfiles.nameAfter.undo": {
+      "comment": "Undo step name.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Name After Voice Profiles"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Namnge efter röstprofiler"
+          }
+        }
+      }
+    },
+    "voiceProfiles.named.one": {
+      "comment": "Status line. %1$@ profile name, %2$@ likeness 0–1.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A speaker is like the voice profile %1$@ (%2$@) and was given its name; undo takes it back."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En talare liknar röstprofilen %1$@ (%2$@) och fick dess namn; ångra tar tillbaka det."
+          }
+        }
+      }
+    },
+    "voiceProfiles.named.other": {
+      "comment": "Status line.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ speakers are like saved voice profiles and were given their names; undo takes them back."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ talare liknar sparade röstprofiler och fick deras namn; ångra tar tillbaka det."
+          }
+        }
+      }
+    },
+    "voiceProfiles.saved": {
+      "comment": "Status line.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Voice profile %@ saved on this Mac."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Röstprofilen %@ sparades på den här Macen."
+          }
+        }
+      }
+    },
+    "voiceProfiles.settings.delete": {
+      "comment": "Button.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Radera"
+          }
+        }
+      }
+    },
+    "voiceProfiles.settings.delete.ax": {
+      "comment": "VoiceOver label.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete the voice profile %@"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Radera röstprofilen %@"
+          }
+        }
+      }
+    },
+    "voiceProfiles.settings.none": {
+      "comment": "Settings, empty list.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No voice profiles saved. Find the speakers in a recording, then choose Audio › Find Speakers › Save Speaker as Voice Profile…."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inga röstprofiler sparade. Hitta talarna i en inspelning och välj sedan Ljud › Hitta talare › Spara talare som röstprofil…."
+          }
+        }
+      }
+    },
+    "voiceProfiles.settings.recognize": {
+      "comment": "Toggle.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recognize saved voices when finding speakers"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Känn igen sparade röster när talare hittas"
+          }
+        }
+      }
+    },
+    "voiceProfiles.settings.tab": {
+      "comment": "Settings tab.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Voice Profiles"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Röstprofiler"
+          }
+        }
+      }
+    },
+    "voiceProfiles.settings.text": {
+      "comment": "Settings text. %@ is the folder.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A voice profile is a voiceprint of a speaker you saved, kept only in %@ on this Mac (Time Machine may have copies). A speaker whose voice is like one is named after it, as a suggestion you can undo."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En röstprofil är ett röstavtryck av en talare du har sparat, och den finns bara i %@ på den här Macen (Time Machine kan ha kopior). En talare vars röst liknar en profil får dess namn, som ett förslag du kan ångra."
+          }
+        }
+      }
+    },
+    "voiceProfiles.sheet.consented": {
+      "comment": "Consent choice.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Someone who knows about this and has agreed that their voice is saved for recognition"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Någon som vet om det och har gått med på att rösten sparas för igenkänning"
+          }
+        }
+      }
+    },
+    "voiceProfiles.sheet.name": {
+      "comment": "Field placeholder.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Name"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Namn"
+          }
+        }
+      }
+    },
+    "voiceProfiles.sheet.own": {
+      "comment": "Consent choice.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "My own"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Min egen"
+          }
+        }
+      }
+    },
+    "voiceProfiles.sheet.save": {
+      "comment": "Button.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save Profile"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spara profil"
+          }
+        }
+      }
+    },
+    "voiceProfiles.sheet.speaker": {
+      "comment": "Picker label.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speaker"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Talare"
+          }
+        }
+      }
+    },
+    "voiceProfiles.sheet.text": {
+      "comment": "Sheet text.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jämmer saves a voiceprint of this speaker on this Mac, so that the voice can be recognized in other recordings. It is biometric data: it stays in Jämmer's folder on this Mac, never goes into a document, an export or another app, and you can delete it in Settings."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jämmer sparar ett röstavtryck av den här talaren på den här Macen, så att rösten kan kännas igen i andra inspelningar. Det är biometriska uppgifter: det stannar i Jämmers mapp på Macen, hamnar aldrig i ett dokument, en export eller en annan app, och du kan radera det under Inställningar."
+          }
+        }
+      }
+    },
+    "voiceProfiles.sheet.title": {
+      "comment": "Sheet title.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save a Voice Profile"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spara en röstprofil"
+          }
+        }
+      }
+    },
+    "voiceProfiles.sheet.whose": {
+      "comment": "Consent question.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Whose voice is it?"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vems röst är det?"
           }
         }
       }

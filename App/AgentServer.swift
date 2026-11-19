@@ -253,6 +253,10 @@ enum AgentRouter {
         case ["jammer"], ["jammer.md"]:
             try only("GET")
             return .text(AgentAPI.guide(port: port, appVersion: appVersion))
+        case ["api", "v1", "voice-profiles"]:
+            // The profiles saved on this Mac: id, name and when, never the voiceprint; made and deleted only in the window.
+            try only("GET")
+            return .json(["profiles": VoiceProfileStore.shared.listed, "recognize": VoiceProfileStore.shared.recognize, "threshold": VoiceMatch.threshold])
         case ["api", "v1", "status"]:
             try only("GET")
             return .json(["app": AgentAPI.appInfo(version: appVersion, bundleID: Bundle.main.bundleIdentifier),
@@ -606,6 +610,25 @@ enum AgentRouter {
                     if e.reason == "bad_request" { throw APIError.badRequest(e.message) }
                     throw APIError.unprocessable(e.reason, e.message)
                 }
+            case ["voice-profile", "request"]:
+                // Asks for the sheet only: the user decides, with consent first, and the API never makes or deletes a
+                // profile (SIBLINGS, "Röstprofiler"). Never brings the app forward: a window that can't be seen is a 422.
+                try only("POST")
+                guard let w = session.window, w.isVisible, !w.isMiniaturized, w.occlusionState.contains(.visible), NSApp.isActive else {
+                    throw APIError.unprocessable("not_visible", "The document's window isn't visible and in front, so Jämmer won't show the sheet. Ask the user to bring it forward.")
+                }
+                guard !session.speakerPrints.isEmpty else {
+                    throw APIError.unprocessable("no_speakers", "This document has no speakers with a voiceprint: run diarize (mode ml) first.")
+                }
+                guard w.attachedSheet == nil, let controller = w.windowController as? EditorWindowController else {
+                    throw APIError(409, "sheet_open", "A sheet is already shown in that window.")
+                }
+                let obj = (try? json(r)) ?? [:]
+                let speaker = (obj["speaker"] as? String).flatMap { s in Int(s).map { $0 - 1 } ?? session.project.speakers.firstIndex { $0.caseInsensitiveCompare(s) == .orderedSame } }
+                guard controller.showVoiceProfileSheet(speaker: speaker.flatMap { session.speakerPrints[$0] == nil ? nil : $0 }) else {
+                    throw APIError(409, "sheet_open", "A sheet is already shown in that window.")
+                }
+                return .json(["shown": true], status: 202)
             case ["play"]:
                 try only("POST")
                 guard let w = session.window, w.isVisible, !w.isMiniaturized, w.occlusionState.contains(.visible) else {

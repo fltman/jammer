@@ -79,6 +79,8 @@ Audio › Find Speakers › Automatically
 Audio › Find Speakers › 2 Speakers	
 Audio › Find Speakers › 3 Speakers	
 Audio › Find Speakers › 4 Speakers	
+Audio › Find Speakers › Save Speaker as Voice Profile…	
+Audio › Split Speakers onto Tracks	
 Audio › Separate Stems	
 Audio › Separate Stems › Vocals, Drums, Bass, Other (music)	
 Audio › Separate Stems › Speech, Music, Effects (soundtrack)	

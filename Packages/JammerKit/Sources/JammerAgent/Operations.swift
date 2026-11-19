@@ -443,6 +443,11 @@ public enum Operations {
     }
     public static var endpoints: [OperationSpec] { fixedEndpoints + (InsertUnits.external != nil ? [scanEndpoint] : []) }
     static var fixedEndpoints: [OperationSpec] { [
+        .init("list_voice_profiles", "List Voice Profiles", "The voice profiles saved on this Mac: id, name and createdAt, never the voiceprint; with recognize (on or off) and the threshold. Profiles are made and deleted only in the window, by the user. diarize (mode ml) names a speaker after a profile it is like (matchedProfile, matchScore, threshold in its result): that is a suggestion, so say \"is like Anna\", never \"is Anna\".",
+              params: [], call: ("GET", "/api/v1/voice-profiles")),
+        .init("request_voice_profile", "Ask to Save a Voice Profile", "Shows the sheet that saves a speaker as a voice profile in the document's window, if it is visible and in front; the user decides, consent first, and nothing is saved by this call. Answers 202 {shown: true}, not what the user chose: list the profiles afterwards. 409 sheet_open when a sheet is already shown; 422 not_visible, or no_speakers before diarize (mode ml).",
+              params: [.init("speaker", .string, "The speaker's number (1, 2, …) or name; the first otherwise.")],
+              call: ("POST", "/api/v1/documents/{id}/voice-profile/request")),
         .init("freeze", "Freeze", "Renders a track or a bus through its plugins into a file and plays it from that file, with the plugins idle: for a session with more plugins than the Mac plays. Its fader, pan, mute, sends and route come after the file and stay live. A step that would change what it was frozen from (its clips, its plugins; for a bus anything that feeds it; a track its plugins listen to) then fails with reason `frozen`; unfreeze first. Answers with a job; the freeze is one undo step.",
               params: [.init("strip", .string, "The id of the track or bus.", required: true)],
               call: ("POST", "/api/v1/documents/{id}/freeze"), startsJob: true),

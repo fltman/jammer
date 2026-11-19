@@ -188,6 +188,7 @@ struct SettingsTabs: View {
             ModelsSettings().tabItem { Label(L10n.text("settings.models"), systemImage: "square.and.arrow.down") }
             AgentSettings().tabItem { Label(L10n.text("settings.agents"), systemImage: "terminal") }
             PaidSettings().tabItem { Label(L10n.text("paid.settings.tab"), systemImage: "creditcard") }
+            VoiceProfileSettings().tabItem { Label(L10n.text("voiceProfiles.settings.tab"), systemImage: "person.wave.2") }
         }
     }
 }

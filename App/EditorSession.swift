@@ -29,6 +29,9 @@ final class EditorSession {
     /// What the status line says. Set as a text, it is information; `say` sets what kind of line it is
     /// (an error, a warning, something done), which gives it its symbol and what VoiceOver says first.
     var status: String? { didSet { if !sayingKind { statusKind = .info } } }
+    /// Each speaker's voiceprint from the last diarisation, by speaker number: in memory only, for voice profiles
+    /// (never saved in the document, never in an API answer).
+    var speakerPrints: [Int: [Float]] = [:]
     private(set) var statusKind: StateKind = .info
     @ObservationIgnored private var sayingKind = false
     func say(_ text: String?, _ kind: StateKind) {

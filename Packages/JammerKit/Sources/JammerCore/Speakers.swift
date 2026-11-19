@@ -42,6 +42,9 @@ public struct TrackDiarization: Sendable, Equatable {
     public var track: UUID
     public var names: [String]
     public var turns: [Turn]
+    /// Each speaker's voiceprint by name, when asked for (`Diarization.model(voiceprints:)`): kept in memory for
+    /// voice profiles, never saved in the document.
+    public var prints: [String: [Float]] = [:]
 
     public struct Turn: Sendable, Equatable {
         public var speaker: Int

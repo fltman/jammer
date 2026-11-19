@@ -51,3 +51,20 @@ An agent can set the amount, the times and the threshold, and limit it to a rang
 
 Tried on synthetic material with speech at known times (the level under the speech is the amount to within 0.1 dB, the ramps are the lengths asked for, and nothing outside them changes) and in the app on a spoken podcast intro with music under it.
 
+## One track per speaker
+
+**Audio › Split Speakers onto Tracks** gives each speaker found on a track a track of their own, named after them. Together the new tracks play exactly what the track did: where two people talk at once, that moment goes to the one whose turn is longer, and a pause between two people is split in the middle. The original track is muted and kept. It is one undo step, and no file is changed.
+
+## Voice profiles
+
+A voice profile lets Jämmer recognize a voice it has heard before. When it finds the speakers in a new recording, a speaker whose voice is like a saved profile is named after it.
+
+- **Saving one.** Find the speakers first, then choose **Audio › Find Speakers › Save Speaker as Voice Profile…**. Pick the speaker, give the profile a name, and say whose voice it is: your own, or someone who knows about it and has agreed that their voice is saved for recognition. Nothing is saved before that.
+- **What is saved.** A voiceprint: numbers the speaker model works out from the voice, not the recording. It is biometric data. It is kept only on this Mac, in `~/Library/Containers/com.brattoo.jammer/Data/Library/Application Support/Jammer/VoiceProfiles`, one file per profile, and Time Machine may have copies. It never goes into a document, an export, Send to Flimmer or to an agent.
+- **A suggestion, not a fact.** A speaker named after a profile was found to be *like* it. The status bar says how alike (0 to 1), the step is its own undo step, and a name you set yourself is never replaced. Each profile names one speaker at most in a document.
+- **Deleting and switching off.** **Jämmer › Settings… › Voice Profiles** lists the profiles with their dates. Deleting one removes its voiceprint from the Mac for good; documents that already have the name keep it, as it is their content. Recognition can be switched off there too.
+
+**How well it recognizes, measured before it was shown.** The likeness a speaker needs is 0.60. On 40 real readers (LibriSpeech, read speech), a profile made from one chapter was tried against another chapter by the same reader and by every other reader, clean and with noise, a phone line and a room added: no other reader was taken for the profile's owner in 4,680 tries in any condition. The owner was missed 4 % of the time on clean speech, 6 % in a room, 13 % with noise and 19 % over a phone line. Among 8 synthetic voices one pair from the same speech engine was taken for each other. Profiles made from a clean recording work best.
+
+**For agents.** `GET /api/v1/voice-profiles` lists the profiles (id, name, date), never the voiceprints. `POST …/voice-profile/request` shows the saving sheet in a visible window; the user decides, and the call never saves or deletes a profile. `diarize` says which profile each speaker is like and how alike (`matchedProfile`, `matchScore`, `threshold`). `split_speakers` splits a track.
+

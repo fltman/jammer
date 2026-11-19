@@ -138,7 +138,7 @@ final class JobRegistry {
                 if byTrack {
                     results = await Task.detached(priority: .userInitiated) { Diarization.byTrack(project, pool: pool, tracks: tracks) }.value
                 } else {
-                    results = try await Diarization.model(project, pool: pool, tracks: tracks, minSpeakers: minSpeakers, maxSpeakers: maxSpeakers) { p in
+                    results = try await Diarization.model(project, pool: pool, tracks: tracks, minSpeakers: minSpeakers, maxSpeakers: maxSpeakers, voiceprints: true) { p in
                         Task { @MainActor in
                             guard var j = self?.jobs[id], !j.isFinished else { return }
                             j.progress = min(0.99, p)
@@ -160,6 +160,13 @@ final class JobRegistry {
             var diarized = project
             diarized.applyDiarization(results, engine: engine)
             session?.applySpeakers(from: diarized)
+            // Voiceprints in memory, by speaker number, and the speakers named after saved profiles (a step of its own).
+            var recognized: (matches: [Int: VoiceMatch.Match], alternatives: [Int: VoiceMatch.Match]) = ([:], [:])
+            if let session {
+                session.speakerPrints = [:]
+                for r in results { for (name, v) in r.prints { if let i = session.project.speakers.firstIndex(of: name) { session.speakerPrints[i] = v } } }
+                recognized = session.nameAfterVoiceProfiles()
+            }
             let seconds = diarized.speakerSeconds()
             // The model merges similar voices easily (docs/DIARISATION.md); say so rather than
             // presenting one speaker as the answer.
@@ -175,6 +182,17 @@ final class JobRegistry {
                           "speakers": .array(diarized.speakers.map { .string($0) }),
                           "seconds": .array(diarized.speakers.indices.map { .number(((seconds[$0] ?? 0) * 10).rounded() / 10) }),
                           "turns": .number(Double(diarized.placedTurns().count))]
+            // Voice profiles, in the order of `speakers` (as the document has them now, after any naming): which
+            // saved profile each is like, how alike, and the threshold. Never a voiceprint.
+            if !byTrack, let names = session?.project.speakers {
+                let m = recognized.matches, a = recognized.alternatives
+                job.result?["speakers"] = .array(names.map { .string($0) })
+                job.result?["matchedProfile"] = .array(names.indices.map { m[$0].map { .string($0.profile.uuidString) } ?? .null })
+                job.result?["matchScore"] = .array(names.indices.map { m[$0].map { .number(($0.score * 100).rounded() / 100) } ?? .null })
+                job.result?["alternativeProfile"] = .array(names.indices.map { a[$0].map { .string($0.name) } ?? .null })
+                job.result?["alternativeScore"] = .array(names.indices.map { a[$0].map { .number(($0.score * 100).rounded() / 100) } ?? .null })
+                job.result?["threshold"] = .number(VoiceMatch.threshold)
+            }
             self?.finish(job)
         }
         return job
