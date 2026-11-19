@@ -89,6 +89,47 @@ struct AssistantTests {
         }
     }
 
+    /// A planner that names a track wrongly first and rightly when told what was wrong, counting its calls.
+    final class LearningPlanner: AssistantPlanner, @unchecked Sendable {
+        let id = "learning", paid = false
+        var goals: [String] = []
+        let right: String, wrong: String
+        init(right: String, wrong: String) { self.right = right; self.wrong = wrong }
+        func plan(goal: String, context: AssistantContext, history: [(user: String, reply: String)], actions: [AssistantAction]) async throws -> AssistantPlan {
+            goals.append(goal)
+            let track = goal.contains("Plan the request again") || goal.contains("Planera begäran igen") ? right : wrong
+            return AssistantPlan(reply: "", steps: [PlannedStep(op: "duck", params: ["tracks": .array([.string(track)])])])
+        }
+    }
+
+    @Test("A plan that names a strip the document doesn't have is asked for once more, with Jämmer's words and the list; never more than once")
+    func stripRetry() async throws {
+        let (p, _) = project()
+        let context = AssistantContext(project: p, selection: nil, playhead: 0)
+        let id = p.tracks[0].id.uuidString
+        // Wrong, then right: the second plan is the plan, and the model was told what was wrong, with the list.
+        let learns = LearningPlanner(right: id, wrong: "12")
+        let plan = try await learns.planChecked(goal: "duck it", context: context, history: [], actions: AssistantCatalog.actions)
+        #expect(learns.goals.count == 2 && plan.steps.first?.params["tracks"] == .array([.string(id)]))
+        #expect(learns.goals[1].contains("\"12\" is neither the id nor the name") && learns.goals[1].contains(id))
+        // In Swedish the note is Swedish.
+        let sv = LearningPlanner(right: id, wrong: "musik")
+        _ = try await sv.planChecked(goal: "sänk musiken med 12 dB när någon pratar", context: context, history: [], actions: AssistantCatalog.actions)
+        #expect(sv.goals.count == 2 && sv.goals[1].contains("Planera begäran igen"))
+        // Wrong twice: asked twice, never a third time; the second plan stands (its failure is said when it runs).
+        let stubborn = LearningPlanner(right: "12", wrong: "12")
+        let still = try await stubborn.planChecked(goal: "duck it", context: context, history: [], actions: AssistantCatalog.actions)
+        #expect(stubborn.goals.count == 2 && StripRetry.problem(still, in: context) != nil)
+        // A number where a track goes (`"under": 10`, seen in the evaluation) is no track either: asked again.
+        let numeric = try await SayingPlanner(reply: "", steps: [PlannedStep(op: "duck", params: ["tracks": .array([.string(id)]), "under": .number(10)])])
+            .planChecked(goal: "duck it by 10 dB", context: context, history: [], actions: AssistantCatalog.actions)
+        #expect(StripRetry.problem(numeric, in: context)?.contains("\"10\" is neither") == true)
+        // Right at once, or a name that fits: no second request.
+        let fine = LearningPlanner(right: id, wrong: p.tracks[0].name)
+        _ = try await fine.planChecked(goal: "duck it", context: context, history: [], actions: AssistantCatalog.actions)
+        #expect(fine.goals.count == 1)
+    }
+
     @Test("Macros become concrete steps against the document as it will be")
     func macros() throws {
         let (p, pool) = project()

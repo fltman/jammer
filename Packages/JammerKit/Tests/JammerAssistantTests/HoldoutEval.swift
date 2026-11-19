@@ -7,7 +7,9 @@ import Testing
 /// Runs a hold-out set once against the on-device model. `JAMMER_HOLDOUT=1`.
 @Suite("Assistant hold-out", .serialized, .enabled(if: ProcessInfo.processInfo.environment["JAMMER_HOLDOUT"] != nil))
 struct HoldoutEval {
-    static func matches(_ have: JSONValue?, _ want: String, tracks: [String]) -> Bool {
+    /// `tracks`: the strips' ids, `names` their names in the same order. Since 2026-11-19 a step may name a strip by
+    /// its name (StepRunner.resolveStrips), so the name counts as right where the id would.
+    static func matches(_ have: JSONValue?, _ want: String, tracks: [String], names: [String] = []) -> Bool {
         let text = AssistantEval.text(have)
         if want == "<0" || want == "<1" || want == ">0" {
             guard case .number(let d)? = have else { return false }
@@ -16,24 +18,30 @@ struct HoldoutEval {
         let options = want.split(separator: "|").map { w -> String in
             switch w { case "{track1}": tracks[0]; case "{track2}": tracks[1]; case "{music}": tracks.count > 2 ? tracks[2] : "-"; case "{voices}": tracks.count > 3 ? tracks[3] : "-"; default: String(w) }
         }
-        return options.contains { $0.caseInsensitiveCompare(text) == .orderedSame || (Double($0) != nil && Double($0) == Double(text)) }
+        let slots = ["{track1}": 0, "{track2}": 1, "{music}": 2, "{voices}": 3]
+        let byName = want.split(separator: "|").compactMap { slots[String($0)] }.filter { $0 < names.count }.map { names[$0] }
+        return (options + byName).contains { $0.caseInsensitiveCompare(text) == .orderedSame || (Double($0) != nil && Double($0) == Double(text)) }
     }
 
     @Test("Hold-out set, on-device (JAMMER_HOLDOUT=1 or 2)")
     func run() async throws {
         let which = ProcessInfo.processInfo.environment["JAMMER_HOLDOUT"]
-        let set = which == "5" ? HoldoutSet5.cases : which == "4" ? HoldoutSet4.cases : which == "3" ? HoldoutSet3.cases : which == "2" ? HoldoutSet2.cases : HoldoutSet1.cases
+        if ProcessInfo.processInfo.environment["JAMMER_EVAL_NORETRY"] == "1" { StripRetry.enabled = false }
+        let set = which == "6" ? HoldoutSet6.cases : which == "5" ? HoldoutSet5.cases : which == "4" ? HoldoutSet4.cases : which == "3" ? HoldoutSet3.cases : which == "2" ? HoldoutSet2.cases : HoldoutSet1.cases
         let info = AudioFileInfo(container: .wav, sampleFormat: .float32, bigEndian: false, channels: 2, sampleRate: 48_000,
                                  channelMask: nil, dataOffset: 0, frames: 48_000 * 60, chunks: [], bext: nil, ixml: nil, markers: [])
         var p = Project(source: SourceRef(name: "Anna", path: "/dev/null", info: info))
         let b = SourceRef(name: "Erik", path: "/dev/null", info: info)
         p.sources.append(b)
         p.tracks.append(Track(name: "Erik", clips: [Clip(sourceID: b.id, start: 0, length: 48_000 * 60)]))
+        // Set 6 is about naming tracks: its document is the film's, Dialog and Music.
+        if which == "6" { p.tracks[0].name = "Dialog"; p.tracks[1].name = "Music" }
         var tracks = p.tracks.map(\.id.uuidString)
         // Set 4 is about the mixer: its document has a bus the requests can name.
         if which == "4" || which == "5" { tracks.append(try p.addBus(name: "Music").id.uuidString) }
         // Set 5 is about the mixer's later parts: a VCA group to name as well.
         if which == "5" { tracks.append(try p.addVCA(name: "Voices").id.uuidString) }
+        let names = p.tracks.map(\.name) + p.buses.map(\.name) + p.vcas.map(\.name)
         let context = AssistantContext(project: p, selection: nil, playhead: 0)
         let actions = AssistantCatalog.actions
         var right = 0, rightForUser = 0, valuesRight = 0, valuesTotal = 0, invented = 0, wrongLanguage = 0, unaskedRuns = 0
@@ -42,7 +50,7 @@ struct HoldoutEval {
         for c in set {
             var plan = AssistantPlan(reply: "", steps: [])
             var failure: String?
-            do { plan = try await AssistantEval.planner.plan(goal: c.goal, context: context, history: [], actions: actions) } catch { failure = error.localizedDescription }
+            do { plan = try await AssistantEval.planner.planChecked(goal: c.goal, context: context, history: [], actions: actions) } catch { failure = error.localizedDescription }
             let got = plan.steps.map(\.op)
             let ok = failure == nil && got == c.ops
             let faults = ReplyGuard.faults(plan, goal: c.goal, context: context)
@@ -61,7 +69,7 @@ struct HoldoutEval {
                 let step = plan.steps.first { $0.op == op }
                 for (k, v) in expected {
                     valuesTotal += 1
-                    if Self.matches(step?.params[k], v, tracks: tracks) { valuesRight += 1 } else { notes.append("\(k)=\(AssistantEval.text(step?.params[k]).isEmpty ? "–" : AssistantEval.text(step?.params[k]))") }
+                    if Self.matches(step?.params[k], v, tracks: tracks, names: names) { valuesRight += 1 } else { notes.append("\(k)=\(AssistantEval.text(step?.params[k]).isEmpty ? "–" : AssistantEval.text(step?.params[k]))") }
                 }
             }
             if ok { right += 1 }

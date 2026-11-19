@@ -341,6 +341,39 @@ public protocol AssistantPlanner: Sendable {
               actions: [AssistantAction]) async throws -> AssistantPlan
 }
 
+/// One more try when a plan names a track, bus or group the document doesn't have (Anders's choice on the
+/// coordinator's proposal, 2026-11-19; the on-device model wrote "music" and then "12" where a track goes). The
+/// model is asked once more, with Jämmer's words for what was wrong and the strips' ids and names; whatever it
+/// plans then is the plan, and a step that still can't run fails as before, said once. Never more than one retry.
+public enum StripRetry {
+    /// Off only for the evaluation's "before" run (`JAMMER_EVAL_NORETRY=1`).
+    nonisolated(unsafe) public static var enabled = true
+
+    /// What is wrong with the plan's strips in this document, in Jämmer's words (with the list), or nil.
+    public static func problem(_ plan: AssistantPlan, in context: AssistantContext) -> String? {
+        let strips = context.tracks + context.buses + context.vcas
+        for s in plan.steps {
+            do { _ = try StepRunner.resolveStrips(Step(op: s.op, params: s.params), strips: strips) } catch { return error.localizedDescription }
+        }
+        return nil
+    }
+}
+
+extension AssistantPlanner {
+    /// `plan`, with one more try when a step names a strip the document doesn't have (`StripRetry`).
+    public func planChecked(goal: String, context: AssistantContext, history: [(user: String, reply: String)],
+                            actions: [AssistantAction]) async throws -> AssistantPlan {
+        let first = try await plan(goal: goal, context: context, history: history, actions: actions)
+        guard StripRetry.enabled, let problem = StripRetry.problem(first, in: context) else { return first }
+        let note = ReplyGuard.language(of: goal) == .swedish
+            ? "(Jämmer kunde inte använda den planen: \(problem) Planera begäran igen med ett id ur listan.)"
+            : "(Jämmer couldn't use that plan: \(problem) Plan the request again with an id from that list.)"
+        // The first plan stands if the second request fails outright: its own failure is then said when it runs.
+        guard let second = try? await plan(goal: "\(goal)\n\n\(note)", context: context, history: history, actions: actions) else { return first }
+        return second
+    }
+}
+
 public enum AssistantError: Error, LocalizedError, Equatable, KeyedFailure {
     /// The on-device model can't be used: a whole sentence.
     case unavailable(Said)

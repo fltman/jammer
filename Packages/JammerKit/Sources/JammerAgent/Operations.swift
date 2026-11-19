@@ -705,24 +705,37 @@ public enum StepRunner {
     /// so that whoever wrote it (often a model, which said "music" for the track called Music, 2026-11-19) can
     /// try again. Ids, "master" and anything that isn't a strip parameter pass as they are.
     public static func resolveStrips(_ step: Step, in project: Project) throws -> Step {
-        let strips: [(id: UUID, name: String)] = project.tracks.map { ($0.id, $0.name) } + project.buses.map { ($0.id, $0.name) } + project.vcas.map { ($0.id, $0.name) }
-        let known = Set(strips.map(\.id))
+        let strips = project.tracks.map { ($0.id.uuidString, $0.name) } + project.buses.map { ($0.id.uuidString, $0.name) } + project.vcas.map { ($0.id.uuidString, $0.name) }
+        return try resolveStrips(step, strips: strips)
+    }
+
+    /// The same against a list of the document's strips, as ids and names (what the assistant's context has).
+    public static func resolveStrips(_ step: Step, strips: [(id: String, name: String)]) throws -> Step {
+        let known = Set(strips.map { $0.id.uppercased() })
         func one(_ value: String, _ param: String) throws -> String {
-            if let u = UUID(uuidString: value), known.contains(u) { return value }
+            if known.contains(value.uppercased()) { return value }
             if value.lowercased() == "master" || UUID(uuidString: value) != nil { return value }
             let hits = strips.filter { $0.name.compare(value, options: [.caseInsensitive]) == .orderedSame }
-            if hits.count == 1 { return hits[0].id.uuidString }
-            let list = strips.map { "\($0.id.uuidString) (\($0.name))" }.joined(separator: ", ")
+            if hits.count == 1 { return hits[0].id }
+            let list = strips.map { "\($0.id) (\($0.name))" }.joined(separator: ", ")
             if hits.isEmpty {
                 throw StepFailure(Said("step.any.strip_unknown", "%1$@: %2$@ \"%3$@\" is neither the id nor the name of a track, bus or group. They are: %4$@.", step.op, param, value, list), reason: "not_found")
             }
             throw StepFailure(Said("step.any.strip_ambiguous", "%1$@: %2$@ \"%3$@\" is the name of more than one track, bus or group; give its id. They are: %4$@.", step.op, param, value, list), reason: "not_found")
         }
         var out = step
+        // A number where a strip goes is no strip either (the on-device model wrote `"under": 10` for "by 10 dB").
+        func text(_ v: JSONValue) -> String? {
+            switch v {
+            case .string(let s): s
+            case .number(let d): d == d.rounded() ? String(Int(d)) : String(d)
+            default: nil
+            }
+        }
         for (key, value) in step.params where stripParams.contains(key) {
             switch value {
-            case .string(let s): out.params[key] = .string(try one(s, key))
-            case .array(let items): out.params[key] = .array(try items.map { if case .string(let s) = $0 { return .string(try one(s, key)) }; return $0 })
+            case .string, .number: if let s = text(value) { out.params[key] = .string(try one(s, key)) }
+            case .array(let items): out.params[key] = .array(try items.map { v in if let s = text(v) { return .string(try one(s, key)) }; return v })
             default: break
             }
         }

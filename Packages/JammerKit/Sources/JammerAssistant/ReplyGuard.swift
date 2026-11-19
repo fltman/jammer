@@ -303,6 +303,6 @@ public extension AssistantPlanner {
     /// `plan`, with the reply checked (`ReplyGuard`). This is what reaches the screen, from every planner.
     func answer(goal: String, context: AssistantContext, history: [(user: String, reply: String)],
                 actions: [AssistantAction]) async throws -> AssistantPlan {
-        ReplyGuard.checked(try await plan(goal: goal, context: context, history: history, actions: actions), goal: goal, context: context, actions: actions)
+        ReplyGuard.checked(try await planChecked(goal: goal, context: context, history: history, actions: actions), goal: goal, context: context, actions: actions)
     }
 }

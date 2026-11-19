@@ -71,10 +71,11 @@ struct AssistantEval {
         var opsRight = 0, opsRightForUser = 0, paramsRight = 0, paramsTotal = 0, invented = 0, wrongLanguage = 0, unaskedRuns = 0
         var rows: [String] = []
         var seconds = 0.0
+        if ProcessInfo.processInfo.environment["JAMMER_EVAL_NORETRY"] == "1" { StripRetry.enabled = false }
         for c in Self.cases(track2: p.tracks[1].id.uuidString) {
             let t0 = ContinuousClock.now
             let plan: AssistantPlan
-            do { plan = try await planner.plan(goal: c.goal, context: context, history: [], actions: actions) } catch {
+            do { plan = try await planner.planChecked(goal: c.goal, context: context, history: [], actions: actions) } catch {
                 rows.append("| \(c.goal) | \(c.ops.joined(separator: ", ")) | error: \(error.localizedDescription) | ✗ |")
                 continue
             }

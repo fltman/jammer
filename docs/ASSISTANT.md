@@ -355,3 +355,17 @@ The evaluation, on-device model, the same day, before and after the change: stan
 
 Tried in the app afterwards with the same request: the model now wrote `"under": "12"` (the 12 dB in the wrong parameter), and Jämmer refused it with the list of tracks. So the request still doesn't go through on the on-device model; what changed is that a track's name works and that a wrong value is said once, with what would be right. "Ta bort alla ehm och tystnader längre än en sekund" (the app's own example) is what the film shows in Swedish.
 
+### One more try with the list (2026-11-19)
+
+Anders's choice on the coordinator's proposal: when a plan names a strip the document doesn't have (an unknown name, or a number where a track goes, as `"under": 10`), the model is asked once more with Jämmer's words and every strip's id and name (`StripRetry`, `planChecked`, used by the app and by the evaluation); a second wrong plan stands and fails when it runs, said once. Never more than one retry. Tested against stand-in planners (`stripRetry`, which fails with the retry switched off).
+
+Hold-out set 6 (`HoldoutCases6.swift`, 10 requests written before any answer was seen, the film's document with the tracks Dialog and Music) was added to measure it, and the scoring now takes a strip's name where its id would count. On-device model, the same day:
+
+| Set | Without the retry (`JAMMER_EVAL_NORETRY=1`) | With it |
+|---|---|---|
+| Standard | 17/18 | 17/18 |
+| Hold-out 1–5 | 21/24, 18/23, 21/29, 7/9, 12/15 | the same |
+| Hold-out 6 (tracks) | 6/10, values 7/19 | 6/10, values 7/19 |
+
+What it changed is not in the score, because the evaluation doesn't run the steps: "duck the music under the speech" was planned with `"under": 1` (a step that would fail) and, after the retry, without it (a step that runs). It didn't help the other two duck requests: "sänk musiken med 12 dB när någon pratar" gets `"under": "music"`, a real track (so no retry) but the one being ducked, which `duck` refuses in its own words; "duck Music under Dialog by 10 dB" still gets `"under": -10` after the retry. The set's other misses are not about names: "mute the Music track" and "tysta musikspåret" get a question back, "pan the dialog a little to the left" a click repair, and "set the Music track's level to -8 dB" a gain instead of the track's level.
+
