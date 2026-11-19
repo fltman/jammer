@@ -5,6 +5,7 @@ Not a list of commits: what behaves differently from before, for a user, an agen
 ## 2026-11-19
 
 - **Omnibar**, as in Glimmer: a glass field at the bottom of the window, where ⌘K puts the keyboard. It searches the commands as the palette did, with the ones you use first, and sends a request to the assistant (⌘Return always does). A text that could be either is decided by Apple's model on this Mac. The palette sheet is gone; **Edit › Omnibar** takes its place. Manual chapter 8.
+- **Tracks by name**: a step can name a track, bus or group by its name, ignoring case, as well as by its id; a name that fits none or several fails with the list of them. A failure is said once ("duck: …", not "duck: duck: …"). The assistant on the Mac's model: 96 of 118 on the six evaluation sets, the same before and after; "lower the music under speech" still doesn't go through on it (manual chapter 14).
 - **Send to Flimmer in every build**, after the last live run against Flimmer's guest passed (J3, pass 11: a 10-minute line in two parts, transcripts sent twice, a send canceled while preparing and one canceled 0.2 s after Send, rolled back in Flimmer with nothing left). Manual chapter 19, "Sending the sound back to Flimmer".
 - **Send to Flimmer**: a cancel reaches Flimmer's job whenever it comes, and a cancel that came after Flimmer had finished says so (the clips are remembered, and the change is undone in Flimmer with ⌘Z).
 
