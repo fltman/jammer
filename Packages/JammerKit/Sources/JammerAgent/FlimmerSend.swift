@@ -200,20 +200,52 @@ public enum FlimmerSend {
     }
 
     /// Flimmer's dry-run answer as lines: what it would create and mute, and above all overlaps.
-    public static func lines(answer: [String: Any], items: [Item]) -> [String] {
-        var out: [String] = []
+    /// Flimmer's answer in lines: warnings first (as many as `warnings(answer:)` counts), then what it made or
+    /// would make, then notes. Take groups (SEND-TO-FLIMMER-API.md, "Take groups", 2026-11-19): the muted list
+    /// holds the originals first and then every other heard member of their groups; each of those is said by
+    /// itself ("Also mutes"), never counted as an original. An earlier take of the same line in this send
+    /// (`active: false`) and an overlap with an older take of the same line (`sameTakeGroup`) are notes, not faults.
+    /// `sentBefore`: takes this document sent before (`ImportRecord.sentClips`), by their Flimmer id, with the clip's name.
+    public static func lines(answer: [String: Any], items: [Item], sentBefore: [String: String] = [:]) -> [String] {
+        var out: [String] = [], notes: [String] = []
+        func name(ofClip id: String) -> String {
+            if let n = items.first(where: { $0.clipId == id })?.name { return n }
+            if let n = sentBefore[id] { return "the take of \(n) sent before" }
+            return "a take in Flimmer (\(id.prefix(8)))"
+        }
         for o in (answer["overlaps"] as? [[String: Any]]) ?? [] {
             let i = (o["item"] as? NSNumber)?.intValue ?? -1
-            let name = items.indices.contains(i) ? items[i].name : "A clip"
-            out.append(String(format: "Warning: %@ would overlap the next clip on its track by %.2f s.", name, (o["seconds"] as? NSNumber)?.doubleValue ?? 0))
+            let clip = items.indices.contains(i) ? items[i].name : "A clip"
+            let seconds = (o["seconds"] as? NSNumber)?.doubleValue ?? 0
+            if o["sameTakeGroup"] as? Bool == true {
+                notes.append(String(format: "Note: an older take of %@ stays on its track, muted; the new one overlaps it by %.2f s.", clip, seconds))
+            } else {
+                out.append(String(format: "Warning: %@ would overlap the next clip on its track by %.2f s.", clip, seconds))
+            }
         }
-        let created = ((answer["wouldCreate"] ?? answer["created"]) as? [Any])?.count ?? 0
-        let muted = ((answer["wouldMute"] ?? answer["muted"]) as? [Any])?.count ?? 0
+        let createdList = ((answer["wouldCreate"] ?? answer["created"]) as? [[String: Any]]) ?? []
+        let mutedIds = ((answer["wouldMute"] ?? answer["muted"]) as? [Any])?.compactMap { $0 as? String } ?? []
         let done = answer["created"] != nil
-        if created > 0 || muted > 0 {
-            out.append("Flimmer \(done ? "made" : "would make") \(created) new clip\(created == 1 ? "" : "s")" + (muted > 0 ? " and mute\(done ? "d" : "") \(muted) original\(muted == 1 ? "" : "s") (kept, not changed)." : "."))
+        // The originals are the clips the takes are of; whatever else is muted is another member of a take group.
+        let originals = Set(createdList.compactMap { $0["takeOf"] as? String } + items.filter { $0.kind == .take }.compactMap(\.clipId))
+        let mutedOriginals = mutedIds.filter { originals.contains($0) }.count
+        let alsoMuted = mutedIds.filter { !originals.contains($0) }
+        let created = createdList.count
+        if created > 0 || !mutedIds.isEmpty {
+            out.append("Flimmer \(done ? "made" : "would make") \(created) new clip\(created == 1 ? "" : "s")"
+                       + (mutedOriginals > 0 ? " and mute\(done ? "d" : "") \(mutedOriginals) original\(mutedOriginals == 1 ? "" : "s") (kept, not changed)." : "."))
         }
+        for id in alsoMuted { out.append("Also mute\(done ? "d" : "s"): \(name(ofClip: id)) (kept, not changed).") }
+        for c in createdList where c["active"] as? Bool == false {
+            let i = (c["item"] as? NSNumber)?.intValue ?? -1
+            notes.append("Note: \(items.indices.contains(i) ? items[i].name : "a take") is an earlier take of the same line in this send; it is kept, muted, and the later one is heard.")
+        }
+        out += notes
         out += ((answer["warnings"] as? [String]) ?? []).map { "Flimmer: \($0)" }
+        // After an undo or redo in Flimmer that met someone else's change (result.history): Flimmer's own words.
+        if let h = answer["history"] as? [String: Any], let state = h["state"] as? String, state.hasSuffix("Failed") {
+            out.append("Flimmer: \(h["message"] as? String ?? (state == "undoFailed" ? "the undo couldn't be done" : "the redo couldn't be done")) (\(h["reason"] as? String ?? state)).")
+        }
         return out
     }
 
@@ -484,7 +516,7 @@ public enum FlimmerSend {
             let said = transcripts.isEmpty ? [] : ["Transcripts of \(transcripts.count) clip\(transcripts.count == 1 ? "" : "s") go after the sound, each on its own (when that box is ticked)."]
             return Prepared(mode: mode, plan: plan, items: items, uploads: uploads,
                             lines: lines(project, plan: plan, mode: mode, items: items, resampledTo: rate == project.sampleRate ? nil : rate) + notes + said,
-                            flimmerLines: lines(answer: answer, items: items),
+                            flimmerLines: lines(answer: answer, items: items, sentBefore: sentBefore(project, items: items)),
                             flimmerWarnings: warnings(answer: answer),
                             body: body(project, plan: plan, mode: mode, items: items, uploads: uploads, dryRun: false),
                             transcripts: transcripts)
@@ -525,8 +557,16 @@ public enum FlimmerSend {
         if let p = status["project"] as? [String: Any], let id = (p["id"] ?? p["projectId"]) as? String { return id }
         return status["projectId"] as? String
     }
+    /// The takes this document sent before for the items now going, by their Flimmer id, with the clip's name.
+    static func sentBefore(_ project: Project, items: [Item]) -> [String: String] {
+        let sent = project.imported?.sentClips ?? [:]
+        var out: [String: String] = [:]
+        for item in items { if let k = item.sentKey, let take = sent[k] { out[take] = item.name } }
+        return out
+    }
+
     /// The warnings in Flimmer's answer: its overlaps, which `lines(answer:items:)` puts first.
-    public static func warnings(answer: [String: Any]) -> Int { ((answer["overlaps"] as? [[String: Any]]) ?? []).count }
+    public static func warnings(answer: [String: Any]) -> Int { ((answer["overlaps"] as? [[String: Any]]) ?? []).filter { $0["sameTakeGroup"] as? Bool != true }.count }
 
     /// The user closed the sheet without sending.
     public static func cancel(_ prepared: Prepared, client: Client) async {

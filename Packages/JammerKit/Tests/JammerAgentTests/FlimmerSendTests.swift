@@ -41,6 +41,9 @@ final class PretendFlimmer: @unchecked Sendable {
     /// Jobs canceled with DELETE, and whether new jobs stay running (for the test that cancels in the middle).
     var canceledJobs: [String] = []
     var jobsStayRunning = false
+    /// Answer as Flimmer's take groups do (block D, 2026-11-19): each take's group has an older active take,
+    /// "take-old-<clip>", which is muted too and which the new take overlaps.
+    var takeGroups = false
     /// A job that the first poll finds running and that is done right after it (to cancel while it finishes).
     var finishesAfterFirstPoll = false
     var pendingResults: [String: [String: Any]] = [:]
@@ -239,6 +242,15 @@ final class PretendFlimmer: @unchecked Sendable {
         }
         for s in settings { guard tracks.contains(where: { $0.id == s["trackId"] as? String }) else { return no("unknown_track") } }
         let listed = b["listed"] as? [Any] ?? []
+        if takeGroups {
+            for (k, c) in create.enumerated() where c["takeOf"] != nil {
+                let of = c["takeOf"] as! String
+                create[k]["takeGroupId"] = of
+                create[k]["active"] = true
+                mute.append("take-old-\(of)")
+                overlaps.append(["item": c["item"] as! Int, "with": "take-old-\(of)", "seconds": 1.5, "sameTakeGroup": true])
+            }
+        }
         if b["dryRun"] as? Bool == true {
             return answer(200, ["dryRun": true, "wouldCreate": create, "wouldMute": mute, "wouldSetTracks": settings, "overlaps": overlaps, "listed": listed, "warnings": []], r)
         }
@@ -721,6 +733,33 @@ extension FlimmerSendTests {
         #expect(gone.allSatisfy { FlimmerSend.clipGone($0) } && gone[1].reason == "not_found" && gone[1].message == "No audio clip \(r.created[1]!).")
         #expect(Array(f.transcriptTargets[before...]) == [r.created[0]!, r.created[1]!], "nothing sent to another clip in their place")
         #expect(FlimmerSend.transcriptLines(gone).last?.hasSuffix("Flimmer no longer has that clip: send the sound again to make a new take.") == true)
+    }
+
+    @Test("Take groups (Flimmer block D): an older take that is muted too is said by itself, not counted as an original; an overlap with it is a note, not a warning")
+    func takeGroups() async throws {
+        var (p, pool) = filmWithWords()
+        let f = flimmer()
+        f.takeGroups = true
+        let c = FlimmerSend.Client(base: URL(string: "http://127.0.0.1:9002")!, transport: f.transport, pollInterval: 0.01)
+        try p.changeGain(Frame(5.5 * sr)..<Frame(6.5 * sr), by: -6)
+        let prepared = try await FlimmerSend.prepare(p, mode: .takes, client: c, render: render(pool))
+        let takes = prepared.items.filter { $0.kind == .take }
+        #expect(!takes.isEmpty)
+        let originals = takes.count
+        // The dry run: N originals, each older take by itself, and no warning for the overlap with it.
+        #expect(prepared.flimmerLines.contains("Flimmer would make \(takes.count) new clip\(takes.count == 1 ? "" : "s") and mute \(originals) original\(originals == 1 ? "" : "s") (kept, not changed)."), "\(prepared.flimmerLines)")
+        for t in takes { #expect(prepared.flimmerLines.contains("Also mutes: a take in Flimmer (\("take-old-\(t.clipId!)".prefix(8))) (kept, not changed)."), "\(prepared.flimmerLines)") }
+        #expect(prepared.flimmerWarnings == 0 && prepared.flimmerLines.contains { $0.hasPrefix("Note: an older take of") }, "\(prepared.flimmerLines)")
+        #expect(!prepared.flimmerLines.contains { $0.hasPrefix("Warning:") })
+        // An earlier take of the same line in one send (active: false) is a note; a failed undo in Flimmer is said in its words.
+        let answer: [String: Any] = ["created": [["item": 0, "kind": "take", "takeOf": "x", "active": false], ["item": 1, "kind": "take", "takeOf": "x", "active": true]],
+                                     "muted": ["x"], "history": ["state": "undoFailed", "reason": "stale", "message": "Someone changed the take group since"]]
+        let lines = FlimmerSend.lines(answer: answer, items: [])
+        #expect(lines.contains { $0.hasPrefix("Note:") && $0.contains("earlier take of the same line") } && lines.last == "Flimmer: Someone changed the take group since (stale).", "\(lines)")
+        #expect(lines.first == "Flimmer made 2 new clips and muted 1 original (kept, not changed).")
+        // A take this document sent before is named by its clip.
+        let named = FlimmerSend.lines(answer: ["wouldCreate": [["item": 0, "kind": "take", "takeOf": "orig"]], "wouldMute": ["orig", "take-7"]], items: [], sentBefore: ["take-7": "free-tal"])
+        #expect(named.contains("Also mutes: the take of free-tal sent before (kept, not changed)."), "\(named)")
     }
 
     @Test("Canceled while Flimmer's job runs (the sheet closed during the send): Jämmer cancels the job there with DELETE /api/v1/jobs/{id}, and no transcript goes")
