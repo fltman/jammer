@@ -28,6 +28,23 @@ Files from Flimmer carry exact times and separate levels for clips and tracks, a
 
 The status bar tells you how many tracks and clips came in and the first of any notes.
 
+## Sending the sound back to Flimmer
+
+When a film came from Flimmer, **File › Send to Flimmer…** sends the sound back to the same project. Flimmer has to be running with that project open.
+
+1. Choose **What to send**: **Each changed clip as a new take**, or **The whole mix as one clip**.
+2. Click **Check with Flimmer**. Jämmer prepares the files and asks Flimmer what it would do, without changing anything there. The sheet lists it: which clips become new takes, which new clips and tracks appear, and anything that won't sit under its picture any more.
+3. Click **Send**.
+
+Nothing is overwritten in Flimmer. A changed clip becomes a new take, and the original is muted and kept. One undo step in Flimmer takes the whole send back.
+
+- **Transcripts.** With **Send each clip's transcript too**, each clip's transcript goes after its sound. A transcript that someone corrected by hand in Flimmer is replaced only if you tick **Replace transcripts corrected by hand in Flimmer**. The sheet says which transcripts went, and Flimmer's own words for any that didn't.
+- **Send Transcripts Only** sends the transcripts again, to the clips this document sent before, without sending the sound. It needs Flimmer to have the same project open, and the sheet says why when it can't.
+- **Canceling.** **Cancel** while the files are being prepared removes them from Flimmer again. Cancel after **Send** cancels Flimmer's job, and Flimmer takes back whatever it had begun. If Flimmer had already finished, the status bar says so: the change is made there, and you undo it in Flimmer with ⌘Z.
+- **The document remembers** which take each clip became in Flimmer and in which project. That is kept in the document and sent nowhere.
+
+**What it has been tried with:** Flimmer's own test copy, in three live runs on 2026-11-18 and 2026-11-19: takes and new clips, a 10-minute line sent in parts, transcripts sent and sent again, corrected transcripts kept and replaced, and sends canceled while preparing and while Flimmer's job ran.
+
 ## Other timeline formats
 
 **File › Import Timeline…** also reads these, and **File › Export Timeline…** writes them, so a document's clips can go to another program and come back. Nothing is rendered on export: the file names the audio files your clips play, where they are on your Mac.

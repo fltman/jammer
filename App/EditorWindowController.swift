@@ -366,7 +366,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         UserDefaults.standard.set(!transcript.isHidden, forKey: "transcript.visible")
     }
 
-    /// File › Send to Flimmer… (debug builds until Flimmer has the receiving side).
+    /// File › Send to Flimmer…: the sound of a film that came from Flimmer goes back to it (docs/PLAN.md).
     @objc func sendToFlimmer(_ sender: Any?) {
         guard let window else { return }
         let model = FlimmerSendModel(session: session)

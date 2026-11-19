@@ -183,15 +183,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: Menus
 
-    /// Flimmer doesn't have the receiving side yet, so the command is in debug builds only;
-    /// it moves into every build (and the guide and manual) when it has been tried against Flimmer.
+    /// File › Send to Flimmer…: in every build since 2026-11-19, when the last live run against Flimmer's guest
+    /// (a 10-minute line in parts, transcripts, a send canceled mid-job and rolled back there) had passed.
     private var sendToFlimmerItems: [NSMenuItem] {
-        #if DEBUG
-        let i = NSMenuItem(title: L10n.text("file.sendToFlimmer"), action: #selector(EditorWindowController.sendToFlimmer(_:)), keyEquivalent: "")
-        return [i]
-        #else
-        return []
-        #endif
+        [NSMenuItem(title: L10n.text("file.sendToFlimmer"), action: #selector(EditorWindowController.sendToFlimmer(_:)), keyEquivalent: "")]
     }
 
     private func buildMenu() -> NSMenu {
