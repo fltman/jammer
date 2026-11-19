@@ -1,4 +1,4 @@
-// Features a release can be built without, with no code change (docs/RELEASE.md,
+// Features a release can be built without, with no code change (docs/RELEASING.md,
 // "Must be decided before release"). Debug builds always have them (Config/Debug.xcconfig).
 // This file is the switch: the package manifest reads it too, so with NO the code isn't
 // compiled into a release at all. Run scripts/export-agents-guide.sh after changing it.
@@ -15,6 +15,6 @@ JAMMER_SPECTRAL_FREEFORM = YES
 // CLAP plugins, each in a helper process of its own. With NO the two helper programs aren't
 // built into the app, nothing is scanned, and the guide, /operations, the Plugins sheet, the
 // manual, the FAQ and the site mention only Audio Units. NO until two things are done
-// (docs/RELEASE.md): the helpers' entitlement is approved, and a CLAP plugin from another
+// (docs/RELEASING.md): the helpers' entitlement is approved, and a CLAP plugin from another
 // vendor has worked in a signed build.
 JAMMER_CLAP = NO

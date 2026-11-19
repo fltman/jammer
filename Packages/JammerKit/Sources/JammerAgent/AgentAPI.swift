@@ -315,7 +315,7 @@ public enum AgentAPI {
     // MARK: Guide
 
     /// What an agent fetches first: what Jammer is and exactly how to drive it.
-    /// What a build can leave out (docs/RELEASE.md). The guide only describes what works.
+    /// What a build can leave out (docs/RELEASING.md). The guide only describes what works.
     public struct Features: Sendable, Equatable {
         public var dereverb: Bool
         public var spectralFreeform: Bool

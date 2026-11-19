@@ -96,7 +96,7 @@ targets:
           cp "$SRCROOT/Packages/JammerKit/Vendor/Sparkle/LICENSE" "$BUILT_PRODUCTS_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/Sparkle-LICENSE.txt"
       # The two helper programs that load VST 3 and CLAP plugins (so Jämmer never does) are
       # built from the package and put beside the app's own executable, each with a signature
-      # of its own. They get no entitlements here: what a release needs is in docs/RELEASE.md.
+      # of its own. They get no entitlements here: what a release needs is in docs/RELEASING.md.
       - name: Plugin helpers
         basedOnDependencyAnalysis: false
         script: |

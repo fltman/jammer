@@ -119,12 +119,12 @@ public enum Operations {
     static let end = OperationSpec.Param("end", .seconds, "Range end in seconds.")
 
     /// Drawing freeform areas in the spectrogram (lasso, brush; `spectral_edit` shapes polygon
-    /// and brush) can be left out of a build (docs/RELEASE.md): the app sets this at launch.
+    /// and brush) can be left out of a build (docs/RELEASING.md): the app sets this at launch.
     /// The code stays; only the box is offered then.
     nonisolated(unsafe) public static var spectralFreeform = true
 
     /// The steps this build offers.
-    /// Sidechain keys (`set_insert` `key`). On in every build since 2026-11-17 (docs/RELEASE.md, item 7);
+    /// Sidechain keys (`set_insert` `key`). On in every build since 2026-11-17 (docs/RELEASING.md, item 7);
     /// a build that has it switched off doesn't offer the parameter and refuses it.
     nonisolated(unsafe) public static var sidechain = true
     /// For a test that tries the keyed path without switching it on for every other test in the process.

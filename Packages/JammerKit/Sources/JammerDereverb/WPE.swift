@@ -8,7 +8,7 @@ import JammerCore
 /// band's own past, a few frames back, and that prediction is subtracted. The direct
 /// sound and early reflections (inside the prediction delay) are left alone. No model.
 /// A module of its own so a release can be built without it: with JAMMER_DEREVERB = NO in
-/// Config/Features.xcconfig none of this is compiled, and the app doesn't register it (docs/RELEASE.md).
+/// Config/Features.xcconfig none of this is compiled, and the app doesn't register it (docs/RELEASING.md).
 public enum WPEDereverb {
     struct WPE {
         var delay = 3          // frames skipped before the prediction starts (about 30 ms)

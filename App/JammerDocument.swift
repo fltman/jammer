@@ -14,7 +14,7 @@ enum AppData {
         #if DEBUG
         // A copy started by a test, or by another session, keeps its files to itself:
         // `-dataFolder <absolute path>` (media, recipes, the plugin catalogue all go under it). And a copy
-        // whose bundle id ends in ".guest" (a visitor's clone, see docs/RELEASE.md) has a folder of its
+        // whose bundle id ends in ".guest" (a visitor's clone, see docs/RELEASING.md) has a folder of its
         // own without being told, as it has its own settings, autosave and saved windows by that id.
         if let given = UserDefaults.standard.string(forKey: "dataFolder"), given.hasPrefix("/") { return URL(fileURLWithPath: given) }
         let name = (Bundle.main.bundleIdentifier ?? "").hasSuffix(".guest") ? "Jammer Debug Guest" : "Jammer Debug"

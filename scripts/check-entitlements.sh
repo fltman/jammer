@@ -5,7 +5,7 @@
 #
 #   the app:      com.apple.security.app-sandbox = false, and nothing else
 #                 (get-task-allow is Xcode's own in a Debug build and is allowed there);
-#                 never com.apple.security.cs.disable-library-validation (CLAUDE.md, docs/RELEASE.md);
+#                 never com.apple.security.cs.disable-library-validation (CLAUDE.md, docs/RELEASING.md);
 #   the helpers:  jammer-plugin-probe and jammer-plugin-host have none, until Anders approves theirs.
 #
 # Why it exists: a sibling app shipped builds for a day without an entitlement that had been added to a

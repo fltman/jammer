@@ -4,7 +4,7 @@ import Foundation
 import Testing
 @testable import JammerCore
 
-/// Sidechain keys against another vendor's plugin (docs/RELEASE.md, rehearsal item 7). The plugin is
+/// Sidechain keys against another vendor's plugin (docs/RELEASING.md, rehearsal item 7). The plugin is
 /// not part of Jämmer, not in the repository and not installed on the Mac: it is built by itself
 /// elsewhere, and this test is given the finished Audio Unit by path (`JAMMER_KEYED_AU`), loads it as a
 /// host loads a plugin, and registers it in this test process only. Without the path, nothing runs.

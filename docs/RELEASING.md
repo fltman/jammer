@@ -1,0 +1,90 @@
+# Releasing Jämmer
+
+How a release is built, signed, notarised and published, and what a release build contains. Every step that signs, uploads or publishes is done only on Anders's yes, each time.
+
+## The steps
+
+1. `scripts/precommit.sh` green (package tests, the app's build, the string catalogue, the manual against the menus, the language switch, the entitlements).
+2. `JAMMER_SIGN_ID="Developer ID Application: …" scripts/sign-release.sh`: a Release build signed with the Developer ID, the hardened runtime and timestamps; Sparkle signed from the inside out; no get-task-allow.
+3. `JAMMER_UPLOAD_ALLOWED=yes JAMMER_NOTARY_PROFILE=<profile> scripts/notarize-release.sh`: notarised by Apple, the ticket stapled, the archive made.
+4. Sparkle's `sign_update --account jammer` on the archive; the signature goes into the appcast (`Config/appcast-template.xml`), checked against the app's `SUPublicEDKey`.
+5. The site built with `the-apps/site/build.mjs --prod --strict`; the site, the archive under `releases/`, the release notes (`docs/release-notes/`) and `appcast.xml` go up together.
+
+## Release 0.1.0, prepared 2026-11-19
+
+With Anders's yes at each step, in this window:
+
+| Step | Result |
+|---|---|
+| Built and signed | `scripts/sign-release.sh` from commit 6596f89: Developer ID Application: Brattoo AB (V783A2L763), hardened runtime on every program in the bundle, timestamped, no get-task-allow; version 0.1.0 (1), com.brattoo.jammer. The feature switches unchanged since their last full check (`scripts/check-release-switches.sh`, 2026-11-17) |
+| Notarised | `scripts/notarize-release.sh` (profile `jammer-notary`): Apple answered Accepted, submission bc445f34-e461-4cd5-bf34-efee8bcc9d28; the ticket stapled; Gatekeeper: "accepted, source=Notarized Developer ID" |
+| Appcast signed | Sparkle's `sign_update --account jammer` on `Jammer-0.1.0.zip` (24,385,959 bytes); the signature verifies, a changed one is refused, and the app's `SUPublicEDKey` is the same key; `SUFeedURL` https://jammer.brattoo.com/appcast.xml |
+| Before it | The model download tried end to end in a test copy (the diarisation model, every file checked against the published sums, Find Speakers after a restart); release notes in `docs/release-notes/` |
+| The folder to publish | a local folder (the site built with `--prod --strict`, the release notes, the archive, the signed appcast; `LÄS-MIG.md` beside it). Anders publishes it, through the coordinator |
+
+
+## Plugins and processes
+
+Decided 2026-11-15 (Anders, through the coordinating session): VST 3 and CLAP plugins run in a helper process from the start, never in Jämmer's own. The app itself never gets `com.apple.security.cs.disable-library-validation`; only the helpers that load plugins (the scanner and the audio host) do, and adding it to their release entitlements is asked of Anders first, since it changes the signing.
+
+What was measured (2026-11-15, ad hoc signatures on this Mac):
+
+- A process without the hardened runtime loads an ad hoc-signed plugin. With the hardened runtime and no entitlements it refuses. With the hardened runtime and `disable-library-validation` it loads. A plugin with no signature at all can't be loaded on Apple silicon by anyone.
+- Jämmer is not sandboxed (`app-sandbox` false), so code inside Jämmer's process could reach everything Jämmer can: the user's files, the network, and the Keychain item with the OpenRouter key.
+- Not measured: plugins from other vendors (none are installed on this Mac), and plugins that need JIT or executable memory.
+
+The scan depends on `/usr/bin/sandbox-exec`, which Apple calls deprecated but ships in macOS 27. It confines the scanner helper (no network, no writes, of the user's files only the plugin folders and the bundle). If it is missing, Jämmer refuses to scan rather than load plugins unconfined; a replacement is then needed.
+
+### VST 3: what has and hasn't been tried (2026-11-16)
+
+The host (`vst3_host.cpp`, in the helper process) has been through our own test plugin in four shapes: one object for processor and controller, two separate classes that talk in messages the host makes for them, mono, and one with a side-chain bus. Tested: parameters in the plugin's own units, changes heard from the next block, state of both halves saved and restored (also when saved before a block has run), reset, latency compensated to the sample in an export, refusals in words (instrument, wrong channel count, not a VST 3 bundle), crash and hang in the helper, and in the app a crash in the middle of an export (the export finishes, the plugin is switched off, the status bar says so).
+
+Before VST 3 is offered to users (the app scanning `~/Library/Audio/Plug-Ins/VST3` and `/Library/…`, and the guide and manual mentioning it):
+
+1. Real plugins from at least two makers and two frameworks (one JUCE-built, one built on Steinberg's SDK), each asked of Anders first by name, source and licence. None is installed on this Mac.
+2. Things real plugins do that the test plugin doesn't: timers and run loops on the main thread (the helper's loop only reads its pipe), threads of their own, files they read at start (presets, licences: the confinement lets them read only the plugin folders and their bundle), `IPlugInterfaceSupport` and `IUnitInfo` queries (answered "no"), sample-accurate automation (every change lands at the start of a block).
+3. No editor windows: parameters are set from Jämmer's own list. A plugin whose state only makes sense through its editor is of little use until that exists.
+4. The same signing questions as CLAP (the helper's entitlement).
+
+### Plugin settings in a project from elsewhere (decided and built 2026-11-18: out of process)
+
+A project carries each plugin's saved settings, and they are handed to the plugin's own code. What is in place: settings that weren't made in this Jämmer (recognised by a digest of plugin id and settings, kept in the app's defaults, at most 5 000) are not loaded until the user says yes to "This project wants to load settings into …"; the default is "Open Without Them", and the plugin is then not started at all. The same gate sits in front of Audio Units, CLAP and VST 3, also when a step back in the project's own history asks for other settings. Tested with Apple's low-pass in the package tests and in the app.
+
+What that does not do: it doesn't make a plugin safe against settings the user does allow. An Audio Unit runs inside Jämmer unless Safe Mode is on, so a plugin with a parsing bug and a project built for it would run in Jämmer's process after one click on "Load Settings". **Decided by Anders, 2026-11-18, and built:** settings from elsewhere load only out of process. "Load in Separate Processes" keeps them in a list of their own (`plugins.confinedSettings`), and an Audio Unit started with them runs out of process whatever Safe Mode says (`InsertUnits.confined`, `runsOutOfProcess`), as do the settings that plugin makes afterwards (they may still carry what came in). The question names each plugin's kind (Audio Unit effect, music effect or instrument, and the maker's code; VST 3 and CLAP in a helper). Tested with Apple's low-pass: with such settings `isLoadedInProcess` is false and the settings are in; with settings made here it is true, as before. CLAP and VST 3 are already in a confined helper.
+
+## The build switches, checked in the binary (2026-11-16)
+
+`scripts/check-release-switches.sh` builds Release three times (reverb on, off, on) and counts the reverb code in the bundle each time; run it before a release and whenever a switch is added.
+
+What it found the first time: with `JAMMER_DEREVERB = NO` the Release build still had the reverb code. The package manifest read the switch from `Config/Features.xcconfig` when it was evaluated, and Xcode keeps an evaluated manifest until the manifest's own text changes. Shown by flipping the switch and changing the manifest's text together: then the code was gone and the binary's strings 250 kB shorter. Since then the switch stands in `Package.swift` as text, written by `scripts/apply-features.py` (which `scripts/export-agents-guide.sh` runs, and whose `--check` the package tests run), and the flip reaches the build both ways: reverb code counted 0 with NO and 1 with YES.
+
+The same script checks that the launch arguments meant for debug builds (`-openaiEndpoint`, `-openaiTestKey`, `-linkAnyOpen`, `-agentFolder`, `-pluginFolder`, `-masterMeasureOffsetDB`, `-pluginsStrip`, `-silentOutput`, `-dataFolder`, `-registerAudioUnit`, `-assistantScript`, `-ai.noKeychain`, `-linkJournalFolder`, `-mixerWriteMode`, `-stepProbe`) are not in a Release bundle: 0 of each, while the same search finds each once in the Debug build. `JAMMER_SPECTRAL_FREEFORM` and `JAMMER_CLAP` are not read by the manifest and never had this fault; the script proves them all the same, so that it is the one place every switch is proven and a new one isn't forgotten. Freeform leaves its code in the build by design, so it is shown in the app's Release compile conditions (1 with YES, 0 with NO). CLAP is shown by the two helper programs in the bundle: 0 with NO, 2 with YES, and 0 again as the file says. Run on 2026-11-16: every switch reaches the Release build both ways.
+
+## A guest copy, for another session's tests
+
+`scripts/guest-copy.sh` makes `build/guest/Jammer.app`: the Debug build under the bundle id `com.brattoo.jammer.debug.guest` (SIBLINGS.md §1), for a sibling's session that wants to try its round trip against Jämmer without sharing state with our own debug copy. The script's header says how to start it and what follows the id. Tried 2026-11-16: the guest alone opened a file, ran steps, added a plugin and played (silently); nothing under our own debug copy's data folder, settings, saved windows or caches was newer afterwards, and the guest had its own data folder (2 media files) and settings file. Started beside our own copy it took port 9301 while ours had 9003, and each said its own bundle id, pid and port in `GET /api/v1/status`. A debug Jämmer accepts a sibling's guest id (finding Flimmer, a file handed over for linked editing); a release build never does. Not tried: a guest Flimmer actually handing a file over.
+
+**After a visit** the visiting session runs `scripts/guest-clean.sh` (SIBLINGS.md §1): it removes the guest's own data folder (media, plugin catalogue, link journal), the autosaved documents the guest's own list names, and the guest's saved windows, each file by its exact path and printed as it goes; nothing of our own debug copy or of the real app is looked at. `--dry` only says what would go. Tried dry on 2026-11-17 (it listed the guest's seven files and its saved windows), and by `scripts/test-guest-clean.sh` (in the pre-commit check) on a planted tree in a folder of its own: the guest's six files go, each named; our own debug copy's files, another document among the autosaves, and a path the guest's list names outside the autosave folder all stay. Not yet run for real on this Mac (removing files outside the project is Anders's to allow). The shape of a real autosave list from macOS is not known to the script's author: where the list names no path the script can read, the guest's autosaved documents are left and it says so.
+
+**Fetching third-party code.** No script goes to the network on its own. The seven that clone, download or build another's code (`build-libdf`, `build-lame`, `build-whisper`, `fetch-r8brain`, `fetch-plugin-sdks`, `fetch-fluidaudio`, `build-test-sidechain-plugin`) stop with exit 77 and say why unless started with `JAMMER_FETCH_ALLOWED=yes`, which is set only after Anders has said yes in the session's own window. None of them is run by the pre-commit check, the tests or a build. The Swift package and the Xcode project name only what is in the repository (no dependency by URL), so `swift build`, `swift test` and `xcodebuild` never resolve a package from outside. `scripts/check-fetch-guard.sh` (in the pre-commit check) fails when a script that can fetch has no guard, or when a dependency by URL appears; proved by taking one guard away. Models are downloaded only by the app, when the user asks in Settings.
+
+## Release rehearsal: things that can only be checked in a signed build
+
+These can't be tried with ad hoc signing. A hardened ad hoc copy of the app doesn't start at all: library validation refuses Jämmer's own embedded frameworks (DeepFilter, LAME), "mapping process and mapped file (non-platform) have different Team IDs". Tried 2026-11-15.
+
+1. **Other developers' Audio Units run outside Jämmer.** The code loads an Audio Unit in Jämmer's process first and falls back to Apple's host process when that is refused. In a build with the hardened runtime and a Team ID, another developer's unit should be refused in-process and land in Apple's process; Apple's own load in Jämmer's. In today's debug builds, which have no hardened runtime (flags=0x2 despite the project setting), other developers' units load in Jämmer's process. The FAQ and manual therefore no longer say that other developers' units run in a process of their own (removed 2026-11-15); put the sentence back when this step has passed. What they do say is tried: with Safe mode on, an Audio Unit loads in Apple's host process (AUHostingServiceXPC appears, the unit processes); with it off, none appears. That a crash in that process leaves Jämmer standing has not been tried: it needs a unit that crashes. It needs a signed build and at least one Audio Unit from another developer installed (there is none on this Mac): add it to a track, check that it processes, and check with `ps` that an AUHostingService process holds it.
+2. **DeepFilter and LAME are signed with the same Team ID as the app**, and load under the hardened runtime. This is exactly what stopped the ad hoc copy. LAME is dynamic on purpose (LGPL), so it can't be folded into the app to avoid it.
+3. **The Keychain item.** The OpenRouter key is a generic password in the login keychain, made with `SecItemAdd` and no access settings of its own, so it gets the default access list: the app that made it, by its code signature; other apps make macOS ask the user. With an ad hoc signature that identity is the build's hash, so every rebuild counts as another app. In the signed build: save a key, check with Keychain Access that the item's access list names only Jämmer, and that another app asking is prompted. (No Jämmer item exists on this Mac today, so nothing could be inspected.) Consider the data-protection keychain with an access group instead, which needs the signing identity too.
+4. **The helpers** (`jammer-plugin-probe`, `jammer-plugin-host`) are inside the app bundle, signed and notarised with it, each with only its own entitlements.
+5. **The helpers' entitlement**: with Anders's approval, `disable-library-validation` on the two helpers and nothing else; check that the app itself still refuses other developers' code.
+6. **A real CLAP plugin**: one from another vendor (approved by Anders: name, source, licence), scanned, put on a track, heard, exported, and its helper killed in the middle of playback and of an export. Note what it needed that the confinement refused. Then `JAMMER_CLAP = YES`.
+7. **A sidechain key** (mixer step 6, not built yet when this was written): hidden from users until (a) a real plugin with a sidechain input, from another vendor and approved by Anders (name, source, licence), has been keyed from a track and from a bus, heard and exported, and (b) Safe Mode and CLAP either carry a key or refuse it in words, each tried. Done so far (2026-11-16): one plugin from another vendor, keyed from a track and from a bus, in a test (`ThirdPartyKeyTests`, `docs/LICENSES.md` "Used in tests only"), rendered and measured, not heard and not from the app. And in the app, the same plugin registered in the app's process by a debug argument: keyed, measured, played (silently, measured against a render) and exported, and the Key menu of the Plugins sheet seen. **Decided by Anders 2026-11-17: on in Release as it is**, with the reservation printed in the manual (the mixer page, "A plugin that listens to another track"): Audio Units only in a release, since CLAP and VST 3 are off there, and Safe Mode's refusal not seen with an installed plugin. Still to see when there is a plugin to see it with: Safe Mode's refusal seen (needs a plugin that is installed, since one registered in the process can't be loaded outside it), and CLAP's refusal seen.
+
+## CLAP in a release build
+
+CLAP is behind a switch, `JAMMER_CLAP` in `Config/Features.xcconfig`, and it is `NO` for releases (debug builds always have it). With `NO` the two helper programs aren't built into the app, nothing is scanned, and the guide, `/operations`, the Plugins sheet, the manual, the FAQ and the site mention only Audio Units (tried in the app 2026-11-15 with the switch off). After changing it, run `scripts/export-agents-guide.sh`.
+
+It is switched on when both of these are done (also steps 5 and 6 of the rehearsal above):
+
+1. **Anders has approved the entitlement on the helpers.** In a signed build with the hardened runtime, the helpers can only load other developers' plugins with `com.apple.security.cs.disable-library-validation` (measured, see above). They have no entitlements today. It goes on the two helpers only, never on the app, and is asked of Anders first because it changes the signing.
+2. **A CLAP plugin from another vendor has worked in a signed build.** So far only test plugins compiled here have been run. The confinement (no network, no writes, of the user's files only the plugin folders) is kept strict; what a real plugin turns out to need is opened one decision at a time.

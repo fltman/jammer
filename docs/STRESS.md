@@ -80,7 +80,7 @@ Two rules carry this. A file is opened only when the file's own header agrees wi
 
 Tried in the app with five packages: one with its sound inside (plays, no question), one naming a text file as audio (asked about as an outside file; never read; the export is silent and doesn't contain the text), one with a path climbing out (silent, no question), one naming a recording in another folder (silent until "Use These Files", then it plays), and a damaged one (an alert; the app carries on). The first version of this read the outside recording before the rule was in place, because the files were opened when the window was made; the by-hand check caught it.
 
-What an Audio Unit's saved state in a project could do to the plugin that loads it: since 2026-11-16 such settings are asked about before they are loaded (see `RELEASE.md`, "Plugin settings in a project from elsewhere"); what a plugin does with settings the user allows is still not covered.
+What an Audio Unit's saved state in a project could do to the plugin that loads it: since 2026-11-16 such settings are asked about before they are loaded (see `RELEASING.md`, "Plugin settings in a project from elsewhere"); what a plugin does with settings the user allows is still not covered.
 
 ### By hand, through File › Open and as a linked file (2026-11-16)
 

@@ -58,7 +58,7 @@ let package = Package(
         .target(name: "JammerCore", dependencies: ["JammerEngine"]),
         // Stem separation: Spleeter's U-Nets on MPSGraph, weights read from Deezer's own checkpoint.
         .target(name: "JammerStems", dependencies: ["JammerCore"]),
-        // Reverb reduction (WPE). Apart, so a release can be built without it (docs/RELEASE.md).
+        // Reverb reduction (WPE). Apart, so a release can be built without it (docs/RELEASING.md).
         .target(name: "JammerDereverb", dependencies: ["JammerCore"], swiftSettings: dereverbSettings),
         .testTarget(name: "JammerDereverbTests", dependencies: ["JammerDereverb", "JammerCore"], swiftSettings: dereverbSettings),
         .testTarget(name: "JammerStemsTests", dependencies: ["JammerStems", "JammerCore"]),

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Jämmer's appcast, to be published at https://jammer.brattoo.com/appcast.xml (Info.plist SUFeedURL).
-     Not uploaded: Anders publishes it with a release (docs/RELEASE.md, "Updates"). One <item> per version,
+     Not uploaded: Anders publishes it with a release (docs/RELEASING.md, "Updates"). One <item> per version,
      newest first. The signature is made by Sparkle's sign_update with the key in Anders's Keychain:
        Packages/JammerKit/Vendor/Sparkle/bin/sign_update --account jammer Jammer-0.1.0.zip
      which prints the sparkle:edSignature and length attributes for the enclosure below. -->

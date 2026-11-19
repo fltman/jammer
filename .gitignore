@@ -16,3 +16,8 @@ Packages/JammerKit/Vendor/
 .claude/worktrees/
 # This Mac's own settings (test media folder and the like): scripts/local.env.example says what goes in.
 scripts/local.env
+
+# Kept on this Mac only, never published (Anders, 2026-11-19): the release decisions with their legal background
+docs/RELEASE.md
+docs/LEGAL-REVIEW.md
+docs/PATENTS.md
