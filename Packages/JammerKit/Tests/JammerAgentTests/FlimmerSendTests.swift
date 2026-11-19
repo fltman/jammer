@@ -326,9 +326,26 @@ struct FlimmerSendTests {
         return (p, pool)
     }
 
+    @Test("After sending, the take this document sent before is named as the dry run named it, not as an unknown take in Flimmer (round D)")
+    func sentBeforeAfterSending() async throws {
+        var (p, pool) = film()
+        let f = flimmer(), c = client(f)
+        f.takeGroups = true
+        // The take this document sent before, still in Flimmer's take group (the pretend mutes it on a real send).
+        f.clips.append(.init(id: "take-old-C1", trackId: "T1", timelineOffset: 4.5, duration: 4, linked: false))
+        try p.changeGain(Frame(5.5 * sr)..<Frame(6.5 * sr), by: -6)
+        p.imported?.sentClips = ["C1": "take-old-C1"]
+        let prepared = try await FlimmerSend.prepare(p, mode: .takes, client: c, render: render(pool))
+        #expect(prepared.sentBefore == ["take-old-C1": "berattare"])
+        #expect(prepared.flimmerLines.contains { $0.contains("the take of berattare sent before") }, "\(prepared.flimmerLines)")
+        let r = try await FlimmerSend.sendAll(prepared, client: c, transcripts: false, replaceEdited: false)
+        #expect(r.lines.contains { $0.contains("the take of berattare sent before") } && !r.lines.contains { $0.contains("a take in Flimmer") }, "\(r.lines)")
+    }
+
     @Test("A clip a step rendered in place of part of a Flimmer clip (a band cut) goes back as a take of that clip, not as a new one")
     func renderedInPlaceIsATake() throws {
-        let (p, pool) = film()
+        var (p, pool) = film()
+        p.tracks[0].clips[1].origin?.name = "Fiskaren"   // as FCPXMLImport keeps it
         let sr = p.sampleRate
         // As spectral_attenuate does: C2 (9–12 s) split around 10–11 s, a new file for the middle.
         let n = Int(sr)
@@ -351,6 +368,8 @@ struct FlimmerSendTests {
         #expect(after.tracks[0].clips[2].origin?.clipId == "C2")
         let k = try kinds(after)
         #expect(k.contains { $0.0 == .take && $0.1 == "C2" } && !k.contains { $0.0 == .new }, "\(k)")
+        // Its title is the clip's own name, not the rendered file's ("Dialog (attenuated)").
+        #expect(FlimmerSend.items(after, plan: try FlimmerReturn.plan(after), mode: .takes).first { $0.clipId == "C2" }?.name == "Fiskaren")
         // A clip that is still there keeps its own; a new track's clips take nothing.
         #expect(after.tracks[0].clips[0].origin?.clipId == "C1")
         var added = p
@@ -604,23 +623,47 @@ struct FlimmerSendTests {
         #expect(f.lock.withLock { f.uploads.isEmpty } && f.lock.withLock { f.puts } < 29)
     }
 
-    @Test("Finding Flimmer: the name must match, and a debug copy pairs only with a debug copy")
+    @Test("Finding Flimmer: the name must match, and only a Flimmer of exactly this copy's kind counts, for every combination (SIBLINGS §5)")
     func find() async {
-        let f = flimmer()
-        #expect(await FlimmerSend.find(transport: f.transport, debug: true) == URL(string: "http://127.0.0.1:9002"))
-        #expect(await FlimmerSend.find(transport: f.transport, debug: false) == nil)
+        func flimmer(_ bundle: String?) -> FlimmerSend.Transport {
+            { r in
+                var app: [String: Any] = ["name": "Flimmer"]
+                if let bundle { app["bundleID"] = bundle }
+                return (try! JSONSerialization.data(withJSONObject: ["app": app]), HTTPURLResponse(url: r.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+            }
+        }
+        let ids: [String?: AgentAPI.BuildKind?] = ["com.brattoo.flimmer": .release, "com.brattoo.flimmer.debug": .debug,
+                                                   "com.brattoo.flimmer.debug.guest": .guest, nil: nil]
+        for own in AgentAPI.BuildKind.allCases {
+            for (bundle, kind) in ids {
+                let found = await FlimmerSend.find(transport: flimmer(bundle), own: own) != nil
+                // Same kind, or no bundle id at all for a release or debug copy; a guest never takes one without.
+                let expected = kind.map { $0 == own } ?? (own != .guest)
+                #expect(found == expected, "\(own) Jämmer, Flimmer \(bundle ?? "without a bundle id"): found \(found)")
+            }
+        }
         let other: FlimmerSend.Transport = { r in
             (try! JSONSerialization.data(withJSONObject: ["app": ["name": "Glimmer", "bundleID": "com.brattoo.glimmer"]]), HTTPURLResponse(url: r.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
         }
-        #expect(await FlimmerSend.find(transport: other, debug: false) == nil)
-        // A visiting test's guest copy of Flimmer is a debug build: a debug Jämmer pairs with it, a release one never.
-        let guest: FlimmerSend.Transport = { r in
-            (try! JSONSerialization.data(withJSONObject: ["app": ["name": "Flimmer", "bundleID": "com.brattoo.flimmer.debug.guest"]]), HTTPURLResponse(url: r.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+        #expect(await FlimmerSend.find(transport: other, own: .release) == nil)
+    }
+
+    @Test("A handed-over file's sender and a discovered sibling: exactly the same kind, every combination; the kinds read from the bundle id")
+    func siblingKinds() {
+        #expect(AgentAPI.buildKind(of: "com.brattoo.glimmer") == .release && AgentAPI.buildKind(of: "com.brattoo.glimmer.debug") == .debug
+                && AgentAPI.buildKind(of: "com.brattoo.glimmer.debug.guest") == .guest)
+        for own in AgentAPI.BuildKind.allCases {
+            for app in ["flimmer", "glimmer"] {
+                for (suffix, kind) in [("", AgentAPI.BuildKind.release), (".debug", .debug), (".debug.guest", .guest)] {
+                    let id = "com.brattoo.\(app)\(suffix)"
+                    #expect(AgentAPI.acceptsSibling(id, own: own) == (kind == own), "\(own) and \(id)")
+                    #expect((AgentAPI.siblingName(forBundle: id, own: own) != nil) == (kind == own), "sender \(id) to a \(own) copy")
+                }
+            }
+            #expect(AgentAPI.acceptsSibling(nil, own: own) == (own != .guest) && AgentAPI.acceptsSibling("", own: own) == (own != .guest))
         }
-        #expect(await FlimmerSend.find(transport: guest, debug: true) != nil)
-        #expect(await FlimmerSend.find(transport: guest, debug: false) == nil)
-        #expect(AgentAPI.isDebugBundle("com.brattoo.glimmer.debug") && AgentAPI.isDebugBundle("com.brattoo.glimmer.debug.guest")
-                && !AgentAPI.isDebugBundle("com.brattoo.glimmer") && !AgentAPI.isDebugBundle("com.brattoo.glimmer.guest"))
+        #expect(AgentAPI.siblingName(forBundle: "com.brattoo.flimmer.debug.guest", own: .guest) == "Flimmer")
+        #expect(AgentAPI.siblingName(forBundle: "com.apple.finder", own: .release) == nil)
     }
 }
 

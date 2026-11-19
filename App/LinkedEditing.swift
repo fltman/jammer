@@ -1,4 +1,5 @@
 import AppKit
+import JammerAgent
 import JammerCore
 
 /// "Edit in Jämmer" from a sibling app (SIBLINGS.md §6). A WAV, AIFF or FLAC that Flimmer
@@ -6,16 +7,6 @@ import JammerCore
 /// the mix back into the same file, in place, and autosave never touches it.
 @MainActor
 enum LinkedEditing {
-    /// Sibling apps by bundle id; debug builds talk to the siblings' debug builds (SIBLINGS.md §1).
-    static let siblings: [String: String] = {
-        #if DEBUG
-        // …and to a sibling's guest copy (a visiting test's clone, SIBLINGS.md §1). A release build never does.
-        ["com.brattoo.flimmer.debug": "Flimmer", "com.brattoo.glimmer.debug": "Glimmer",
-         "com.brattoo.flimmer.debug.guest": "Flimmer", "com.brattoo.glimmer.debug.guest": "Glimmer"]
-        #else
-        ["com.brattoo.flimmer": "Flimmer", "com.brattoo.glimmer": "Glimmer"]
-        #endif
-    }()
 
     /// The sibling app that sent an "open" Apple event, or nil (Finder, Dock…).
     static func requester(of event: NSAppleEventDescriptor) -> String? {
@@ -27,7 +18,8 @@ enum LinkedEditing {
         #endif
         guard let pid = event.attributeDescriptor(forKeyword: AEKeyword(keySenderPIDAttr))?.int32Value,
               let app = NSRunningApplication(processIdentifier: pid), let id = app.bundleIdentifier else { return nil }
-        return siblings[id]
+        // Only a sibling of exactly this copy's kind hands a file over (SIBLINGS §5).
+        return AgentAPI.siblingName(forBundle: id, own: AgentAPI.ownKind)
     }
 
     /// Opens `url` linked when a sibling asked and Jämmer can write the file back exactly;

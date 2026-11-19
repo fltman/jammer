@@ -11,7 +11,37 @@ public enum AgentAPI {
     /// The `app` object of GET /api/v1/status (SIBLINGS.md §2): with the bundle id, so a
     /// sibling never pairs a debug build (com.brattoo.jammer.debug) with a release one.
     /// A debug build, or a visiting test's guest copy of one (com.brattoo.<app>.debug.guest).
-    public static func isDebugBundle(_ id: String) -> Bool { id.hasSuffix(".debug") || id.hasSuffix(".debug.guest") }
+    /// Release, debug, or a visiting test's guest copy, read from the bundle id (SIBLINGS §5, sharpened 2026-11-19).
+    public enum BuildKind: String, Sendable, CaseIterable { case release, debug, guest }
+
+    public static func buildKind(of id: String) -> BuildKind {
+        id.hasSuffix(".debug.guest") ? .guest : id.hasSuffix(".debug") ? .debug : .release
+    }
+
+    /// This copy's kind, from its own bundle id (a test bundle without one counts as what it was built as).
+    public static var ownKind: BuildKind {
+        #if DEBUG
+        let fallback = "com.brattoo.jammer.debug"
+        #else
+        let fallback = "com.brattoo.jammer"
+        #endif
+        let id = Bundle.main.bundleIdentifier ?? fallback
+        return buildKind(of: id.hasPrefix("com.brattoo.jammer") ? id : fallback)
+    }
+
+    /// A sibling is accepted only of exactly the same kind: release with release, debug with debug, guest with guest
+    /// (SIBLINGS §5). A /status without a bundle id is never accepted by a guest.
+    public static func acceptsSibling(_ bundleID: String?, own: BuildKind) -> Bool {
+        guard let bundleID, !bundleID.isEmpty else { return own != .guest }
+        return buildKind(of: bundleID) == own
+    }
+
+    /// The sibling app a bundle id belongs to, when it is of this copy's kind (the sender of a handed-over file).
+    public static func siblingName(forBundle id: String, own: BuildKind) -> String? {
+        let base = id.replacingOccurrences(of: ".debug.guest", with: "").replacingOccurrences(of: ".debug", with: "")
+        guard let name = ["com.brattoo.flimmer": "Flimmer", "com.brattoo.glimmer": "Glimmer"][base], buildKind(of: id) == own else { return nil }
+        return name
+    }
 
     public static func appInfo(version: String, bundleID: String?) -> [String: Any] {
         ["name": appName, "displayName": "Jämmer", "version": version, "bundleID": bundleID ?? "com.brattoo.jammer"]

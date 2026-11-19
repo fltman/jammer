@@ -52,8 +52,7 @@ final class FlimmerSendModel {
         guard !project.transcripts.isEmpty else { return }
         if let no = FlimmerSend.transcriptsOnlyRefusal(project, openProject: nil) { transcriptsOnlyWhy = Self.said(no); return }
         Task {
-            let debug = AgentAPI.isDebugBundle(Bundle.main.bundleIdentifier ?? "")
-            guard let base = await FlimmerSend.find(transport: Self.transport, debug: debug) else {
+            guard let base = await FlimmerSend.find(transport: Self.transport, own: AgentAPI.ownKind) else {
                 transcriptsOnlyWhy = L10n.text("flimmer.transcriptsOnly.why.notRunning"); return
             }
             let client = FlimmerSend.Client(base: base, transport: Self.transport)
@@ -123,10 +122,8 @@ final class FlimmerSendModel {
         stage = .working(L10n.text("flimmer.looking"))
         task = Task {
             do {
-                // A guest copy (…debug.guest) is a debug build too, and pairs with a debug or guest Flimmer
-                // (found in the live test, 2026-11-18: the guest asked only for a release Flimmer).
-                let debug = AgentAPI.isDebugBundle(Bundle.main.bundleIdentifier ?? "")
-                guard let base = await FlimmerSend.find(transport: Self.transport, debug: debug) else {
+                // Only a Flimmer of exactly this copy's kind: release, debug or guest (SIBLINGS §5).
+                guard let base = await FlimmerSend.find(transport: Self.transport, own: AgentAPI.ownKind) else {
                     throw FlimmerSend.Failure("not_running", "Flimmer is not running. Start Flimmer, open the film's project there, and try again.")
                 }
                 let client = FlimmerSend.Client(base: base, transport: Self.transport)

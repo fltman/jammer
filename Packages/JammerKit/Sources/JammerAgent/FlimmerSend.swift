@@ -91,7 +91,7 @@ public enum FlimmerSend {
             // The name and "mono" are about the file the clip came in with, whatever it plays from now
             // (a repaired clip plays from a new file with a name of its own).
             let original = (first?.origin?.snapshot?.sourceID).flatMap { project.source($0) } ?? first.flatMap { project.source($0.sourceID) }
-            let title = original?.name ?? name(first)
+            let title = first?.origin?.name ?? original?.name ?? name(first)
             fields["name"] = .string(title)
             out.append(Item(kind: .take, name: title, clipId: t.clipId, range: t.range,
                             render: FlimmerReturn.soloProject(project, clipId: t.clipId), fields: fields, monoSource: original?.info.channels == 1))
@@ -518,17 +518,15 @@ public enum FlimmerSend {
     }
 
     /// Finds the running Flimmer: 9002 first, then 9201–9219; `app.name` must be exactly Flimmer,
-    /// and a debug Jämmer pairs only with a debug Flimmer (SIBLINGS.md §1–2).
-    public static func find(transport: @escaping Transport, debug: Bool) async -> URL? {
+    /// and only a Flimmer of exactly this copy's kind counts: release, debug or guest (SIBLINGS §5).
+    public static func find(transport: @escaping Transport, own: AgentAPI.BuildKind) async -> URL? {
         for port in [9002] + Array(9201...9219) {
             var r = URLRequest(url: URL(string: "http://127.0.0.1:\(port)/api/v1/status")!)
             r.timeoutInterval = port == 9002 ? 1 : 0.3
             guard let (data, response) = try? await transport(r), response.statusCode == 200,
                   let app = ((try? JSONSerialization.jsonObject(with: data)) as? [String: Any])?["app"] as? [String: Any],
                   app["name"] as? String == "Flimmer" else { continue }
-            let bundle = app["bundleID"] as? String ?? ""
-            // A guest copy (…debug.guest) is a debug build too; a release Jämmer never pairs with either.
-            if AgentAPI.isDebugBundle(bundle) == debug { return URL(string: "http://127.0.0.1:\(port)") }
+            if AgentAPI.acceptsSibling(app["bundleID"] as? String, own: own) { return URL(string: "http://127.0.0.1:\(port)") }
         }
         return nil
     }
@@ -553,6 +551,9 @@ public enum FlimmerSend {
         public var body: [String: J]
         /// Each item's transcript, by item, sent after the plan (`sendAll`).
         public var transcripts: [Int: [String: J]] = [:]
+        /// Takes this document sent before, by Flimmer id, with the clip's name: the lines after sending name them
+        /// as the dry run did ("the take of … sent before"; round D, 2026-11-19).
+        public var sentBefore: [String: String] = [:]
     }
 
     /// One item rendered to a WAV file at a bit depth and sample rate Flimmer takes.
@@ -615,7 +616,7 @@ public enum FlimmerSend {
                             flimmerSaid: Self.said(answer: answer, items: items, sentBefore: sentBefore(project, items: items)),
                             flimmerWarnings: warnings(answer: answer),
                             body: body(project, plan: plan, mode: mode, items: items, uploads: uploads, dryRun: false),
-                            transcripts: transcripts)
+                            transcripts: transcripts, sentBefore: sentBefore(project, items: items))
         } catch {
             for id in uploads { await client.remove(upload: id) }
             throw error
@@ -629,7 +630,7 @@ public enum FlimmerSend {
     /// The same, with how many of the lines (from the first) are warnings.
     public static func sendCounting(_ prepared: Prepared, client: Client) async throws -> (lines: [String], warnings: Int) {
         let answer = try await client.plan(prepared.body, items: prepared.items)
-        return (lines(answer: answer, items: prepared.items), warnings(answer: answer))
+        return (lines(answer: answer, items: prepared.items, sentBefore: prepared.sentBefore), warnings(answer: answer))
     }
     /// For real, and then the transcripts, each in a PUT of its own: only when the plan succeeded (a failed plan
     /// throws before any is sent), and each answered for itself.
@@ -644,7 +645,7 @@ public enum FlimmerSend {
         if transcripts, !canceledLate, !prepared.transcripts.isEmpty {
             outcomes = await sendTranscripts(prepared.transcripts, created: created, items: prepared.items, replaceEdited: replaceEdited, client: client)
         }
-        let said = Self.said(answer: answer, items: prepared.items)
+        let said = Self.said(answer: answer, items: prepared.items, sentBefore: prepared.sentBefore)
         return (said.map(\.text), said, warnings(answer: answer), outcomes, created, canceledLate)
     }
 
@@ -891,7 +892,7 @@ extension FlimmerSend {
                 let mine = clips.filter { $0.origin?.clipId == key }
                 guard let first = mine.min(by: { $0.start < $1.start }), let end = mine.map(\.end).max() else { continue }
                 let original = (first.origin?.snapshot?.sourceID).flatMap { project.source($0) } ?? project.source(first.sourceID)
-                out.append((Item(kind: .take, name: original?.name ?? "Clip", clipId: key, range: first.start..<end, render: FlimmerReturn.soloProject(project, clipId: key), fields: [:]), flimmer, first.start))
+                out.append((Item(kind: .take, name: first.origin?.name ?? original?.name ?? "Clip", clipId: key, range: first.start..<end, render: FlimmerReturn.soloProject(project, clipId: key), fields: [:]), flimmer, first.start))
             }
         }
         return out.sorted { $0.2 < $1.2 }.map { ($0.0, $0.1) }

@@ -508,6 +508,7 @@ public enum FCPXMLImport {
                     snap.start = clip.start; snap.sourceStart = clip.sourceStart; snap.length = clip.length
                     snap.gainDB = clip.gainDB; snap.fadeIn = clip.fadeIn; snap.fadeOut = clip.fadeOut; snap.sourceID = clip.sourceID
                     clip.origin?.snapshot = snap
+                    clip.origin?.name = c.name
                     if t.lane == 0 { clip.origin?.videoAudio = true }
                 }
                 // Clips on one track can't overlap here: one that does goes on a track of its own beside it.

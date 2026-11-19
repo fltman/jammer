@@ -111,6 +111,9 @@ public struct Origin: Codable, Hashable, Sendable {
     public var clipRelativeOffset: Double?
     /// How the clip or track was when it came in, to tell later what has changed.
     public var snapshot: Snapshot?
+    /// The clip's name as it came in, for its take's title after a change has rendered it into a file of another
+    /// name ("Atmosfär (attenuated)"; round D, 2026-11-19). Older documents have none.
+    public var name: String?
 
     public struct Snapshot: Codable, Hashable, Sendable {
         public var start: Frame = 0
