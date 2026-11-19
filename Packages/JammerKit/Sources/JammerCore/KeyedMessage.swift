@@ -72,6 +72,11 @@ public struct Said: Sendable, Equatable, CustomStringConvertible {
         keyed = KeyedMessage(key, values: values, inner: [inner.keyed])
         text = Self.fill(english, values.map(\.english) + [inner.text])
     }
+    /// Values first, then several sentences inside, in its last places in order.
+    public init(_ key: String, _ english: String, values: [SaidValue], inner: [Said]) {
+        keyed = KeyedMessage(key, values: values, inner: inner.map(\.keyed))
+        text = Self.fill(english, values.map(\.english) + inner.map(\.text))
+    }
     /// Several sentences inside, in its last places in order.
     public init(_ key: String, _ english: String, inner: [Said]) {
         keyed = KeyedMessage(key, [], inner: inner.map(\.keyed))

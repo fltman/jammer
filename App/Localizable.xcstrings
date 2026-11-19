@@ -11736,6 +11736,24 @@
         }
       }
     },
+    "flimmer.ownWords": {
+      "comment": "A detail under a line in Send to Flimmer: Flimmer's own text, which is API text in English. %@ is that text.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flimmer's own words: %@"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flimmers egna ord: %@"
+          }
+        }
+      }
+    },
     "flimmer.preparing": {
       "comment": "Progress line in the Send to Flimmer sheet.",
       "extractionState": "manual",
@@ -11986,13 +12004,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Transcript not sent: %1$@. Flimmer said: %2$@ [%3$@]"
+            "value": "Transcript not sent: %1$@: %2$@"
           }
         },
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Transkript inte skickat: %1$@. Flimmer sa: %2$@ [%3$@]"
+            "value": "Transkriptet skickades inte: %1$@: %2$@"
           }
         }
       }
@@ -23644,6 +23662,1464 @@
           "stringUnit": {
             "state": "translated",
             "value": "Reparera"
+          }
+        }
+      }
+    },
+    "send.count.clips.one": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 new clip"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 nytt klipp"
+          }
+        }
+      }
+    },
+    "send.count.clips.other": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ new clips"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ nya klipp"
+          }
+        }
+      }
+    },
+    "send.count.originals.one": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 original"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 original"
+          }
+        }
+      }
+    },
+    "send.count.originals.other": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ originals"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ original"
+          }
+        }
+      }
+    },
+    "send.error.clipDeleted": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ was removed in Flimmer after the film was exported, so there is nothing to make a take of."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ togs bort i Flimmer efter att filmen exporterades, så det finns inget att göra en take av."
+          }
+        }
+      }
+    },
+    "send.error.diskFull": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The disk Flimmer writes to is too full."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Disken som Flimmer skriver till är för full."
+          }
+        }
+      }
+    },
+    "send.error.duplicateClip": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Two files were sent for %@. That is a fault in Jämmer; please report it."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Två filer skickades för %@. Det är ett fel i Jämmer; rapportera det gärna."
+          }
+        }
+      }
+    },
+    "send.error.format": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flimmer didn't accept the file format (it takes WAV, mono or stereo, at 44.1 or 48 kHz)."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flimmer tog inte emot filformatet (det tar WAV, mono eller stereo, i 44,1 eller 48 kHz)."
+          }
+        }
+      }
+    },
+    "send.error.lockedTrack": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The track of %@ is locked in Flimmer. Unlock it there and send again."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spåret för %@ är låst i Flimmer. Lås upp det där och skicka igen."
+          }
+        }
+      }
+    },
+    "send.error.noProject": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flimmer has nobody signed in or no project open. Open the film's project in Flimmer and send again."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ingen är inloggad i Flimmer, eller inget projekt är öppet. Öppna filmens projekt i Flimmer och skicka igen."
+          }
+        }
+      }
+    },
+    "send.error.nothingToChange": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "There is nothing to send: no clip has changed since the film came in."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Det finns inget att skicka: inget klipp har ändrats sedan filmen kom in."
+          }
+        }
+      }
+    },
+    "send.error.positionKind": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ has changed between linked to a shot and free in Flimmer since the export. Export the film again from Flimmer."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ har ändrats mellan länkat till en bild och fritt i Flimmer sedan exporten. Exportera filmen igen från Flimmer."
+          }
+        }
+      }
+    },
+    "send.error.tooLarge": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A file is larger than Flimmer accepts."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En fil är större än vad Flimmer tar emot."
+          }
+        }
+      }
+    },
+    "send.error.tooOld": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This Flimmer can't receive sound from Jämmer yet. Update Flimmer."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Den här Flimmer kan inte ta emot ljud från Jämmer än. Uppdatera Flimmer."
+          }
+        }
+      }
+    },
+    "send.error.unknownClip": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flimmer has no clip for %@ in this project any more. Export the film again from Flimmer."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flimmer har inte längre något klipp för %@ i det här projektet. Exportera filmen igen från Flimmer."
+          }
+        }
+      }
+    },
+    "send.error.unknownTrack": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The track %@ should go on doesn't exist in Flimmer any more."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spåret som %@ ska till finns inte längre i Flimmer."
+          }
+        }
+      }
+    },
+    "send.error.upload": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flimmer no longer has the file for %@ (uploads are kept for an hour). Send again."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flimmer har inte längre filen för %@ (uppladdningar sparas i en timme). Skicka igen."
+          }
+        }
+      }
+    },
+    "send.error.viewer": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You're signed in to Flimmer as a viewer of this project. Only an editor or the owner can receive sound from Jämmer."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Du är inloggad i Flimmer som läsare av projektet. Bara en redaktör eller ägaren kan ta emot ljud från Jämmer."
+          }
+        }
+      }
+    },
+    "send.error.wrongProject": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Another project is open in Flimmer than the one this film came from. Open that project in Flimmer and send again."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ett annat projekt än det filmen kom från är öppet i Flimmer. Öppna det projektet i Flimmer och skicka igen."
+          }
+        }
+      }
+    },
+    "send.error.wrongStory": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The story this film was exported from isn't in the project that is open in Flimmer."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Berättelsen som filmen exporterades från finns inte i projektet som är öppet i Flimmer."
+          }
+        }
+      }
+    },
+    "send.flimmer.alsoMuted": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Also muted: %@ (kept, not changed)."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tystade även: %@ (behålls, ändras inte)."
+          }
+        }
+      }
+    },
+    "send.flimmer.alsoMutes": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Also mutes: %@ (kept, not changed)."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tystar även: %@ (behålls, ändras inte)."
+          }
+        }
+      }
+    },
+    "send.flimmer.answered": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flimmer answered: %@"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flimmer svarade: %@"
+          }
+        }
+      }
+    },
+    "send.flimmer.earlierTake": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Note: %@ is an earlier take of the same line in this send; it is kept, muted, and the later one is heard."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Obs: %@ är en tidigare take av samma replik i den här sändningen; den behålls tystad, och den senare hörs."
+          }
+        }
+      }
+    },
+    "send.flimmer.made": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flimmer made %@."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flimmer gjorde %@."
+          }
+        }
+      }
+    },
+    "send.flimmer.madeMuted": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flimmer made %1$@ and muted %2$@ (kept, not changed)."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flimmer gjorde %1$@ och tystade %2$@ (behålls, ändras inte)."
+          }
+        }
+      }
+    },
+    "send.flimmer.overlap": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Warning: %2$@ would overlap the next clip on its track by %1$@ s."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Varning: %2$@ skulle överlappa nästa klipp på sitt spår med %1$@ s."
+          }
+        }
+      }
+    },
+    "send.flimmer.ownWords": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flimmer's own words: %@"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flimmers egna ord: %@"
+          }
+        }
+      }
+    },
+    "send.flimmer.sameGroup": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Note: an older take of %2$@ stays on its track, muted; the new one overlaps it by %1$@ s."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Obs: en äldre take av %2$@ ligger kvar på sitt spår, tystad; den nya överlappar den med %1$@ s."
+          }
+        }
+      }
+    },
+    "send.flimmer.wouldMake": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flimmer would make %@."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flimmer skulle göra %@."
+          }
+        }
+      }
+    },
+    "send.flimmer.wouldMakeMute": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flimmer would make %1$@ and mute %2$@ (kept, not changed)."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flimmer skulle göra %1$@ och tysta %2$@ (behålls, ändras inte)."
+          }
+        }
+      }
+    },
+    "send.history.redo.added": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flimmer couldn't redo the send: a take was added to one of its groups since."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flimmer kunde inte göra om sändningen: en take har lagts till i en av dess grupper sedan dess."
+          }
+        }
+      }
+    },
+    "send.history.redo.other": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flimmer couldn't redo the send (%@)."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flimmer kunde inte göra om sändningen (%@)."
+          }
+        }
+      }
+    },
+    "send.history.redo.stale": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flimmer couldn't redo the send: someone changed one of its take groups since."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flimmer kunde inte göra om sändningen: någon har ändrat en av dess takegrupper sedan dess."
+          }
+        }
+      }
+    },
+    "send.history.undo.other": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flimmer couldn't undo the send (%@)."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flimmer kunde inte ångra sändningen (%@)."
+          }
+        }
+      }
+    },
+    "send.history.undo.stale": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flimmer couldn't undo the send: someone changed one of its take groups since."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flimmer kunde inte ångra sändningen: någon har ändrat en av dess takegrupper sedan dess."
+          }
+        }
+      }
+    },
+    "send.line.longer": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The document is %@ s longer than the film it came from: sound after a cut no longer sits under its picture."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dokumentet är %@ s längre än filmen det kom från: ljud efter ett klipp ligger inte längre under sin bild."
+          }
+        }
+      }
+    },
+    "send.line.missing": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A clip that came from Flimmer is no longer in this document. Nothing happens to it in Flimmer."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ett klipp som kom från Flimmer finns inte längre i dokumentet. Inget händer med det i Flimmer."
+          }
+        }
+      }
+    },
+    "send.line.mix": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The whole mix (%@ s) as one new clip on a new track, \"Jämmer mix\". The video clips' own sound is left out: Flimmer plays it itself."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hela mixen (%@ s) som ett nytt klipp på ett nytt spår, ”Jämmer mix”. Videoklippens eget ljud lämnas utanför: Flimmer spelar det själv."
+          }
+        }
+      }
+    },
+    "send.line.new.newTrack": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New clip on a new track, \"%1$@\" at %2$@ s, %3$@ s."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nytt klipp på ett nytt spår, ”%1$@”, vid %2$@ s, %3$@ s."
+          }
+        }
+      }
+    },
+    "send.line.new.track": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New clip on %1$@ at %2$@ s, %3$@ s."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nytt klipp på %1$@ vid %2$@ s, %3$@ s."
+          }
+        }
+      }
+    },
+    "send.line.resampled": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The document is %1$@ Hz; the files are converted to %2$@ Hz, which is what Flimmer takes."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dokumentet är %1$@ Hz; filerna omvandlas till %2$@ Hz, som Flimmer tar emot."
+          }
+        }
+      }
+    },
+    "send.line.shorter": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The document is %@ s shorter than the film it came from: sound after a cut no longer sits under its picture."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dokumentet är %@ s kortare än filmen det kom från: ljud efter ett klipp ligger inte längre under sin bild."
+          }
+        }
+      }
+    },
+    "send.line.stereo": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ was mono and comes back in stereo: what was done to it here made the two sides differ."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ var mono och kommer tillbaka i stereo: det som gjordes här gjorde de två sidorna olika."
+          }
+        }
+      }
+    },
+    "send.line.take": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New take of %1$@, %2$@ s."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ny take av %1$@, %2$@ s."
+          }
+        }
+      }
+    },
+    "send.line.take.1": {
+      "comment": "Send to Flimmer sheet: a new take with that many extra parts after it.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New take of %1$@, %2$@ s%3$@."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ny take av %1$@, %2$@ s%3$@."
+          }
+        }
+      }
+    },
+    "send.line.take.2": {
+      "comment": "Send to Flimmer sheet: a new take with that many extra parts after it.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New take of %1$@, %2$@ s%3$@%4$@."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ny take av %1$@, %2$@ s%3$@%4$@."
+          }
+        }
+      }
+    },
+    "send.line.take.3": {
+      "comment": "Send to Flimmer sheet: a new take with that many extra parts after it.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New take of %1$@, %2$@ s%3$@%4$@%5$@."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ny take av %1$@, %2$@ s%3$@%4$@%5$@."
+          }
+        }
+      }
+    },
+    "send.line.take.earlier": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": ", moved -%@ s"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": ", flyttad -%@ s"
+          }
+        }
+      }
+    },
+    "send.line.take.later": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": ", moved +%@ s"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": ", flyttad +%@ s"
+          }
+        }
+      }
+    },
+    "send.line.take.ownTrack": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": " (stays on its track in Flimmer)"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": " (stannar på sitt spår i Flimmer)"
+          }
+        }
+      }
+    },
+    "send.line.take.pieces": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": ", from %@ pieces"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": ", av %@ delar"
+          }
+        }
+      }
+    },
+    "send.line.track.muted": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Track %1$@: level %2$@ dB, muted."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spår %1$@: nivå %2$@ dB, tystat."
+          }
+        }
+      }
+    },
+    "send.line.track.unmuted": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Track %1$@: level %2$@ dB, not muted."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spår %1$@: nivå %2$@ dB, inte tystat."
+          }
+        }
+      }
+    },
+    "send.line.track.zero.muted": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Track %@: level 0 dB (the rest is in its files), muted."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spår %@: nivå 0 dB (resten ligger i filerna), tystat."
+          }
+        }
+      }
+    },
+    "send.line.track.zero.unmuted": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Track %@: level 0 dB (the rest is in its files), not muted."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spår %@: nivå 0 dB (resten ligger i filerna), inte tystat."
+          }
+        }
+      }
+    },
+    "send.line.transcripts.one": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transcripts of 1 clip go after the sound, each on its own (when that box is ticked)."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkriptet för 1 klipp skickas efter ljudet (när rutan är ikryssad)."
+          }
+        }
+      }
+    },
+    "send.line.transcripts.other": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transcripts of %@ clips go after the sound, each on its own (when that box is ticked)."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkript för %@ klipp skickas efter ljudet, vart och ett för sig (när rutan är ikryssad)."
+          }
+        }
+      }
+    },
+    "send.line.unchanged.one": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 clip is unchanged and not sent."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 klipp är oförändrat och skickas inte."
+          }
+        }
+      }
+    },
+    "send.line.unchanged.other": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ clips are unchanged and not sent."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ klipp är oförändrade och skickas inte."
+          }
+        }
+      }
+    },
+    "send.line.videoChanged": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A video clip's own sound was changed here. That is not sent in this version."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ett videoklipps eget ljud ändrades här. Det skickas inte i den här versionen."
+          }
+        }
+      }
+    },
+    "send.name.aClip": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "a clip"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ett klipp"
+          }
+        }
+      }
+    },
+    "send.name.aClipCapital": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A clip"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ett klipp"
+          }
+        }
+      }
+    },
+    "send.name.aTake": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "a take"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "en take"
+          }
+        }
+      }
+    },
+    "send.name.flimmerTake": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "a take in Flimmer (%@)"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "en take i Flimmer (%@)"
+          }
+        }
+      }
+    },
+    "send.name.plain": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@"
+          }
+        }
+      }
+    },
+    "send.name.quoted": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\""
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "”%@”"
+          }
+        }
+      }
+    },
+    "send.name.sentBefore": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "the take of %@ sent before"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "den take av %@ som skickades förut"
+          }
+        }
+      }
+    },
+    "send.reason.clipDeleted": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "the clip was removed in Flimmer."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "klippet togs bort i Flimmer."
+          }
+        }
+      }
+    },
+    "send.reason.duration": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "the transcript's length doesn't match the clip's file in Flimmer."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "transkriptets längd stämmer inte med klippets fil i Flimmer."
+          }
+        }
+      }
+    },
+    "send.reason.editedExists": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "a person corrected this transcript in Flimmer; tick \"Replace transcripts corrected by hand in Flimmer\" to replace it."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "någon har rättat det här transkriptet i Flimmer; kryssa i ”Ersätt transkript som rättats för hand i Flimmer” för att ersätta det."
+          }
+        }
+      }
+    },
+    "send.reason.forbidden": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flimmer refused it (an editor or the owner has to be signed in)."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flimmer avböjde (en redaktör eller ägaren måste vara inloggad)."
+          }
+        }
+      }
+    },
+    "send.reason.noClip": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flimmer's answer named no new clip for it."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flimmers svar nämnde inget nytt klipp för det."
+          }
+        }
+      }
+    },
+    "send.reason.noVideoAudio": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "a video's own sound isn't sent back in this version."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "en videos eget ljud skickas inte tillbaka i den här versionen."
+          }
+        }
+      }
+    },
+    "send.reason.notAvailable": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flimmer has nobody signed in or no project open."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ingen är inloggad i Flimmer, eller inget projekt är öppet."
+          }
+        }
+      }
+    },
+    "send.reason.serverTooOld": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "this Flimmer is too old for it. Update Flimmer."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "den här Flimmer är för gammal för det. Uppdatera Flimmer."
+          }
+        }
+      }
+    },
+    "send.reason.tooLarge": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "it is larger than Flimmer accepts."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "det är större än vad Flimmer tar emot."
+          }
+        }
+      }
+    },
+    "send.reason.unknownClip": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flimmer no longer has that clip."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flimmer har inte längre det klippet."
+          }
+        }
+      }
+    },
+    "send.reason.unreachable": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flimmer stopped answering."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flimmer slutade svara."
+          }
+        }
+      }
+    },
+    "send.reason.words": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flimmer couldn't place the transcript's words in the clip. That is a fault in Jämmer; please report it."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flimmer kunde inte placera transkriptets ord i klippet. Det är ett fel i Jämmer; rapportera det gärna."
+          }
+        }
+      }
+    },
+    "send.reason.wrongProject": {
+      "comment": "Send to Flimmer sheet (FlimmerSend.swift).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "another project is open in Flimmer."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ett annat projekt är öppet i Flimmer."
           }
         }
       }

@@ -755,11 +755,31 @@ extension FlimmerSendTests {
         let answer: [String: Any] = ["created": [["item": 0, "kind": "take", "takeOf": "x", "active": false], ["item": 1, "kind": "take", "takeOf": "x", "active": true]],
                                      "muted": ["x"], "history": ["state": "undoFailed", "reason": "stale", "message": "Someone changed the take group since"]]
         let lines = FlimmerSend.lines(answer: answer, items: [])
-        #expect(lines.contains { $0.hasPrefix("Note:") && $0.contains("earlier take of the same line") } && lines.last == "Flimmer: Someone changed the take group since (stale).", "\(lines)")
+        #expect(lines.contains { $0.hasPrefix("Note:") && $0.contains("earlier take of the same line") }, "\(lines)")
+        // Jämmer's own line for the state and reason, then Flimmer's text (API English) only as a marked detail.
+        #expect(Array(lines.suffix(2)) == ["Flimmer couldn't undo the send: someone changed one of its take groups since.", "Flimmer's own words: Someone changed the take group since"], "\(lines)")
         #expect(lines.first == "Flimmer made 2 new clips and muted 1 original (kept, not changed).")
         // A take this document sent before is named by its clip.
         let named = FlimmerSend.lines(answer: ["wouldCreate": [["item": 0, "kind": "take", "takeOf": "orig"]], "wouldMute": ["orig", "take-7"]], items: [], sentBefore: ["take-7": "free-tal"])
         #expect(named.contains("Also mutes: the take of free-tal sent before (kept, not changed)."), "\(named)")
+    }
+
+    @Test("Every code and reason Flimmer may answer has a line of Jämmer's own, by key; an unknown one is said by its code, never as an empty line; Flimmer's message is only a detail")
+    func reasonsSaid() {
+        for r in ["edited_exists", "unknown_clip", "not_found", "clip_deleted", "duration_mismatch", "words_not_ordered", "too_large", "server_too_old",
+                  "no_video_audio", "wrong_project", "not_available", "forbidden", "no_clip", "unreachable"] {
+            let s = FlimmerSend.reasonSaid(r, code: nil)
+            #expect(!s.text.isEmpty && s.keyed.key != "send.flimmer.answered", "\(r)")
+        }
+        // Unknown: by its code (or reason), with the generic key; never empty, even with nothing given.
+        #expect(FlimmerSend.reasonSaid("brand_new_reason", code: "unprocessable").text == "Flimmer answered: brand_new_reason")
+        #expect(FlimmerSend.reasonSaid(nil, code: nil).text == "Flimmer answered: error")
+        #expect(!FlimmerSend.historyLine(state: "somethingFailed", reason: nil).text.isEmpty)
+        // A plan error: Jämmer's line by key, Flimmer's message kept apart as the detail.
+        let f = FlimmerSend.explain(status: 422, error: ["code": "unprocessable", "reason": "locked_track", "item": 0, "message": "Track is locked"], items: [])
+        #expect(f.keyed?.key == "send.error.lockedTrack" && f.detail == "Track is locked" && !f.message.contains("Track is locked"))
+        let odd = FlimmerSend.explain(status: 422, error: ["code": "unprocessable", "reason": "who_knows", "message": "Something new"], items: [])
+        #expect(odd.message == "Flimmer answered: who_knows" && odd.detail == "Something new")
     }
 
     @Test("Canceled while Flimmer's job runs (the sheet closed during the send): Jämmer cancels the job there with DELETE /api/v1/jobs/{id}, and no transcript goes")

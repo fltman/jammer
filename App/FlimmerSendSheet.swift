@@ -73,6 +73,11 @@ final class FlimmerSendModel {
     }
 
     /// Clip by clip, in the window's language: which transcripts went and which didn't, with Flimmer's own words.
+    /// A failure in the window's language, with Flimmer's own words (API text) after it as a detail when it gave any.
+    static func failure(_ error: Error) -> String {
+        L10n.error(error) + ((error as? FlimmerSend.Failure)?.detail.map { "\n" + L10n.text("flimmer.ownWords", $0) } ?? "")
+    }
+
     static func lines(_ outcomes: [FlimmerSend.TranscriptOutcome], soundWent: Bool) -> [String] {
         guard !outcomes.isEmpty else { return [] }
         let good = outcomes.filter(\.ok), bad = outcomes.filter { !$0.ok }
@@ -82,8 +87,10 @@ final class FlimmerSendModel {
         else { out.append(L10n.text("flimmer.transcripts.some", String(good.count), String(outcomes.count), String(bad.count))) }
         for o in good { out.append(o.replacedEdited ? L10n.text("flimmer.transcripts.sentReplaced", o.name) : L10n.text("flimmer.transcripts.sent", o.name)) }
         for o in bad {
-            out.append(L10n.text("flimmer.transcripts.notSent", o.name, o.message ?? "", o.reason ?? "")
+            // Jämmer's own words for the reason; Flimmer's (API text, English) only as a detail after it.
+            out.append(L10n.text("flimmer.transcripts.notSent", o.name, L10n.message(FlimmerSend.reasonSaid(o.reason, code: nil).keyed))
                        + (FlimmerSend.clipGone(o) ? " " + L10n.text("flimmer.transcripts.gone") : ""))
+            if let m = o.message, !m.isEmpty, o.reason != "no_clip", o.reason != "unreachable" { out.append(L10n.text("flimmer.ownWords", m)) }
         }
         return out
     }
@@ -131,12 +138,13 @@ final class FlimmerSendModel {
                                             bitDepth: depth, sampleRate: rate, monoIfSame: item.monoSource, scratch: MediaStore.folder)
                 }, progress: { p in Task { @MainActor in if case .working = self.stage { self.stage = .working(L10n.text("flimmer.preparing.percent", String(Int(p * 100)))) } } })
                 prepared = p
-                lines = p.lines
-                flimmerLines = p.flimmerLines
+                // In the window's language (the package keeps the English for the API).
+                lines = p.said.map { L10n.message($0.keyed) }
+                flimmerLines = p.flimmerSaid.map { L10n.message($0.keyed) }
                 flimmerWarnings = p.flimmerWarnings
                 stage = .ready
             } catch {
-                stage = .failed(L10n.error(error))
+                stage = .failed(Self.failure(error))
             }
         }
     }
@@ -150,7 +158,7 @@ final class FlimmerSendModel {
                 // The document remembers what each clip became there, so its transcripts can go again on their own.
                 let remembered = FlimmerSend.remembering(session.project, items: prepared.items, created: r.created, projectId: session.project.imported?.projectId)
                 if remembered.imported != session.project.imported { session.commit(remembered, action: L10n.text("flimmer.remember.undo")) }
-                (flimmerLines, flimmerWarnings) = (r.lines, r.warnings)
+                (flimmerLines, flimmerWarnings) = (r.said.map { L10n.message($0.keyed) }, r.warnings)
                 transcriptLines = Self.lines(r.transcripts, soundWent: true)
                 transcriptFailures = r.transcripts.filter { !$0.ok }.count
                 self.prepared = nil
@@ -161,7 +169,7 @@ final class FlimmerSendModel {
                     : transcriptFailures == 0 ? L10n.text("flimmer.sent")
                     : L10n.text("flimmer.sent.transcriptsMissing", String(r.transcripts.count - transcriptFailures), String(r.transcripts.count))
             } catch {
-                stage = .failed(L10n.error(error))
+                stage = .failed(Self.failure(error))
             }
         }
     }

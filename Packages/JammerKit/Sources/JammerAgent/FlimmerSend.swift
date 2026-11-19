@@ -30,6 +30,8 @@ public enum FlimmerSend {
         public var reason: String?
         public var message: String
         public var keyed: KeyedMessage?
+        /// Flimmer's own words for it (API text, in English): shown only as a detail, marked as Flimmer's.
+        public var detail: String?
         public init(_ code: String, _ message: String, reason: String? = nil) {
             self.code = code
             self.reason = reason
@@ -171,56 +173,87 @@ public enum FlimmerSend {
 
     // MARK: What the user reads
 
-    /// Jämmer's own list of what would be sent, for the sheet shown before anything goes.
-    public static func lines(_ project: Project, plan: FlimmerReturn.Plan, mode: Mode, items: [Item], resampledTo: Double? = nil) -> [String] {
-        func t(_ f: Frame) -> String { String(format: "%.2f s", project.seconds(f)) }
-        var out: [String] = []
+    /// Jämmer's own list of what would be sent, for the sheet shown before anything goes: by key, so that the
+    /// window says it in its language (`said`); `lines` is the English, for the API and the tests.
+    public static func said(_ project: Project, plan: FlimmerReturn.Plan, mode: Mode, items: [Item], resampledTo: Double? = nil) -> [Said] {
+        func s(_ f: Frame) -> SaidValue { Said.n(project.seconds(f), 2) }
+        var out: [Said] = []
         if mode == .mix {
-            out.append("The whole mix (\(t(project.length))) as one new clip on a new track, \"Jämmer mix\". The video clips' own sound is left out: Flimmer plays it itself.")
+            out.append(Said("send.line.mix", "The whole mix (%@ s) as one new clip on a new track, \"Jämmer mix\". The video clips' own sound is left out: Flimmer plays it itself.", values: [s(project.length)]))
         } else {
             for (item, take) in zip(items, plan.takes) {
-                var s = "New take of \(item.name), \(t(Frame(item.range.count)))"
-                if take.pieces > 1 { s += ", from \(take.pieces) pieces" }
-                if take.movedBy != 0 { s += String(format: ", moved %+.2f s", project.seconds(take.movedBy)) }
-                if take.changedTrack { s += " (stays on its track in Flimmer)" }
-                out.append(s + ".")
+                var parts: [Said] = []
+                if take.pieces > 1 { parts.append(Said("send.line.take.pieces", ", from %@ pieces", values: [Said.n(Double(take.pieces))])) }
+                if take.movedBy > 0 { parts.append(Said("send.line.take.later", ", moved +%@ s", values: [Said.n(project.seconds(take.movedBy), 2)])) }
+                if take.movedBy < 0 { parts.append(Said("send.line.take.earlier", ", moved -%@ s", values: [Said.n(-project.seconds(take.movedBy), 2)])) }
+                if take.changedTrack { parts.append(Said("send.line.take.ownTrack", " (stays on its track in Flimmer)")) }
+                let v: [SaidValue] = [.text(item.name), s(Frame(item.range.count))]
+                // One key for each number of extra parts (none may be empty in the catalogue).
+                switch parts.count {
+                case 0: out.append(Said("send.line.take", "New take of %1$@, %2$@ s.", values: v))
+                case 1: out.append(Said("send.line.take.1", "New take of %1$@, %2$@ s%3$@.", values: v, inner: parts))
+                case 2: out.append(Said("send.line.take.2", "New take of %1$@, %2$@ s%3$@%4$@.", values: v, inner: parts))
+                default: out.append(Said("send.line.take.3", "New take of %1$@, %2$@ s%3$@%4$@%5$@.", values: v, inner: parts))
+                }
             }
-            for n in plan.new { out.append("New clip on \(n.trackId == nil ? "a new track, \"\(n.trackName)\"" : n.trackName) at \(t(n.range.lowerBound)), \(t(Frame(n.range.count))).") }
-            for c in plan.tracks { out.append(String(format: "Track %@: %@%@.", c.name, c.gainDB > 0 ? "level 0 dB (the rest is in its files)" : String(format: "level %.1f dB", c.gainDB), c.muted ? ", muted" : ", not muted")) }
-            if !plan.unchanged.isEmpty { out.append("\(plan.unchanged.count) clip\(plan.unchanged.count == 1 ? " is" : "s are") unchanged and not sent.") }
-            for _ in plan.missing { out.append("A clip that came from Flimmer is no longer in this document. Nothing happens to it in Flimmer.") }
-            for _ in plan.videoChanged { out.append("A video clip's own sound was changed here. That is not sent in this version.") }
+            for n in plan.new {
+                out.append(n.trackId == nil
+                    ? Said("send.line.new.newTrack", "New clip on a new track, \"%1$@\" at %2$@ s, %3$@ s.", values: [.text(n.trackName), s(n.range.lowerBound), s(Frame(n.range.count))])
+                    : Said("send.line.new.track", "New clip on %1$@ at %2$@ s, %3$@ s.", values: [.text(n.trackName), s(n.range.lowerBound), s(Frame(n.range.count))]))
+            }
+            for c in plan.tracks {
+                switch (c.gainDB > 0, c.muted) {
+                case (true, true): out.append(Said("send.line.track.zero.muted", "Track %@: level 0 dB (the rest is in its files), muted.", c.name))
+                case (true, false): out.append(Said("send.line.track.zero.unmuted", "Track %@: level 0 dB (the rest is in its files), not muted.", c.name))
+                case (false, true): out.append(Said("send.line.track.muted", "Track %1$@: level %2$@ dB, muted.", values: [.text(c.name), Said.n(c.gainDB, 1)]))
+                case (false, false): out.append(Said("send.line.track.unmuted", "Track %1$@: level %2$@ dB, not muted.", values: [.text(c.name), Said.n(c.gainDB, 1)]))
+                }
+            }
+            if plan.unchanged.count == 1 { out.append(Said("send.line.unchanged.one", "1 clip is unchanged and not sent.")) }
+            else if plan.unchanged.count > 1 { out.append(Said("send.line.unchanged.other", "%@ clips are unchanged and not sent.", values: [Said.n(Double(plan.unchanged.count))])) }
+            for _ in plan.missing { out.append(Said("send.line.missing", "A clip that came from Flimmer is no longer in this document. Nothing happens to it in Flimmer.")) }
+            for _ in plan.videoChanged { out.append(Said("send.line.videoChanged", "A video clip's own sound was changed here. That is not sent in this version.")) }
         }
         if plan.lengthChangedBy != 0 {
-            out.append(String(format: "The document is %.2f s %@ than the film it came from: sound after a cut no longer sits under its picture.",
-                              abs(project.seconds(plan.lengthChangedBy)), plan.lengthChangedBy < 0 ? "shorter" : "longer"))
+            let by = Said.n(abs(project.seconds(plan.lengthChangedBy)), 2)
+            out.append(plan.lengthChangedBy < 0
+                ? Said("send.line.shorter", "The document is %@ s shorter than the film it came from: sound after a cut no longer sits under its picture.", values: [by])
+                : Said("send.line.longer", "The document is %@ s longer than the film it came from: sound after a cut no longer sits under its picture.", values: [by]))
         }
-        if let r = resampledTo { out.append(String(format: "The document is %.0f Hz; the files are converted to %.0f Hz, which is what Flimmer takes.", project.sampleRate, r)) }
+        if let r = resampledTo {
+            out.append(Said("send.line.resampled", "The document is %1$@ Hz; the files are converted to %2$@ Hz, which is what Flimmer takes.", values: [Said.n(project.sampleRate, 0), Said.n(r, 0)]))
+        }
         return out
+    }
+    public static func lines(_ project: Project, plan: FlimmerReturn.Plan, mode: Mode, items: [Item], resampledTo: Double? = nil) -> [String] {
+        said(project, plan: plan, mode: mode, items: items, resampledTo: resampledTo).map(\.text)
     }
 
     /// Flimmer's dry-run answer as lines: what it would create and mute, and above all overlaps.
     /// Flimmer's answer in lines: warnings first (as many as `warnings(answer:)` counts), then what it made or
-    /// would make, then notes. Take groups (SEND-TO-FLIMMER-API.md, "Take groups", 2026-11-19): the muted list
-    /// holds the originals first and then every other heard member of their groups; each of those is said by
-    /// itself ("Also mutes"), never counted as an original. An earlier take of the same line in this send
-    /// (`active: false`) and an overlap with an older take of the same line (`sameTakeGroup`) are notes, not faults.
+    /// would make, then notes; by key, so the window says them in its language. Take groups (SEND-TO-FLIMMER-API.md,
+    /// "Take groups", 2026-11-19): the muted list holds the originals first and then every other heard member of
+    /// their groups; each of those is said by itself ("Also mutes"), never counted as an original. An earlier take
+    /// of the same line in this send (`active: false`) and an overlap with an older take of the same line
+    /// (`sameTakeGroup`) are notes, not faults. Flimmer's own `message` is API text in English: it is said only as
+    /// a detail, marked as Flimmer's; what Jämmer says is its own line for the code (SIBLINGS).
     /// `sentBefore`: takes this document sent before (`ImportRecord.sentClips`), by their Flimmer id, with the clip's name.
-    public static func lines(answer: [String: Any], items: [Item], sentBefore: [String: String] = [:]) -> [String] {
-        var out: [String] = [], notes: [String] = []
-        func name(ofClip id: String) -> String {
-            if let n = items.first(where: { $0.clipId == id })?.name { return n }
-            if let n = sentBefore[id] { return "the take of \(n) sent before" }
-            return "a take in Flimmer (\(id.prefix(8)))"
+    public static func said(answer: [String: Any], items: [Item], sentBefore: [String: String] = [:]) -> [Said] {
+        var out: [Said] = [], notes: [Said] = []
+        func name(ofClip id: String) -> Said {
+            if let n = items.first(where: { $0.clipId == id })?.name { return Said("send.name.plain", "%@", n) }
+            if let n = sentBefore[id] { return Said("send.name.sentBefore", "the take of %@ sent before", n) }
+            return Said("send.name.flimmerTake", "a take in Flimmer (%@)", String(id.prefix(8)))
         }
+        func item(_ i: Int) -> String? { items.indices.contains(i) ? items[i].name : nil }
         for o in (answer["overlaps"] as? [[String: Any]]) ?? [] {
             let i = (o["item"] as? NSNumber)?.intValue ?? -1
-            let clip = items.indices.contains(i) ? items[i].name : "A clip"
-            let seconds = (o["seconds"] as? NSNumber)?.doubleValue ?? 0
+            let seconds = Said.n((o["seconds"] as? NSNumber)?.doubleValue ?? 0, 2)
+            let clip: Said = item(i).map { Said("send.name.plain", "%@", $0) } ?? Said("send.name.aClipCapital", "A clip")
             if o["sameTakeGroup"] as? Bool == true {
-                notes.append(String(format: "Note: an older take of %@ stays on its track, muted; the new one overlaps it by %.2f s.", clip, seconds))
+                notes.append(Said("send.flimmer.sameGroup", "Note: an older take of %2$@ stays on its track, muted; the new one overlaps it by %1$@ s.", values: [seconds], inner: [clip]))
             } else {
-                out.append(String(format: "Warning: %@ would overlap the next clip on its track by %.2f s.", clip, seconds))
+                out.append(Said("send.flimmer.overlap", "Warning: %2$@ would overlap the next clip on its track by %1$@ s.", values: [seconds], inner: [clip]))
             }
         }
         let createdList = ((answer["wouldCreate"] ?? answer["created"]) as? [[String: Any]]) ?? []
@@ -232,49 +265,100 @@ public enum FlimmerSend {
         let alsoMuted = mutedIds.filter { !originals.contains($0) }
         let created = createdList.count
         if created > 0 || !mutedIds.isEmpty {
-            out.append("Flimmer \(done ? "made" : "would make") \(created) new clip\(created == 1 ? "" : "s")"
-                       + (mutedOriginals > 0 ? " and mute\(done ? "d" : "") \(mutedOriginals) original\(mutedOriginals == 1 ? "" : "s") (kept, not changed)." : "."))
+            let clips = created == 1 ? Said("send.count.clips.one", "1 new clip") : Said("send.count.clips.other", "%@ new clips", values: [Said.n(Double(created))])
+            let orig = mutedOriginals == 1 ? Said("send.count.originals.one", "1 original") : Said("send.count.originals.other", "%@ originals", values: [Said.n(Double(mutedOriginals))])
+            switch (done, mutedOriginals > 0) {
+            case (false, true): out.append(Said("send.flimmer.wouldMakeMute", "Flimmer would make %1$@ and mute %2$@ (kept, not changed).", inner: [clips, orig]))
+            case (true, true): out.append(Said("send.flimmer.madeMuted", "Flimmer made %1$@ and muted %2$@ (kept, not changed).", inner: [clips, orig]))
+            case (false, false): out.append(Said("send.flimmer.wouldMake", "Flimmer would make %@.", inner: [clips]))
+            case (true, false): out.append(Said("send.flimmer.made", "Flimmer made %@.", inner: [clips]))
+            }
         }
-        for id in alsoMuted { out.append("Also mute\(done ? "d" : "s"): \(name(ofClip: id)) (kept, not changed).") }
+        for id in alsoMuted {
+            out.append(done ? Said("send.flimmer.alsoMuted", "Also muted: %@ (kept, not changed).", inner: [name(ofClip: id)])
+                            : Said("send.flimmer.alsoMutes", "Also mutes: %@ (kept, not changed).", inner: [name(ofClip: id)]))
+        }
         for c in createdList where c["active"] as? Bool == false {
-            let i = (c["item"] as? NSNumber)?.intValue ?? -1
-            notes.append("Note: \(items.indices.contains(i) ? items[i].name : "a take") is an earlier take of the same line in this send; it is kept, muted, and the later one is heard.")
+            let clip: Said = item((c["item"] as? NSNumber)?.intValue ?? -1).map { Said("send.name.plain", "%@", $0) } ?? Said("send.name.aTake", "a take")
+            notes.append(Said("send.flimmer.earlierTake", "Note: %@ is an earlier take of the same line in this send; it is kept, muted, and the later one is heard.", inner: [clip]))
         }
         out += notes
-        out += ((answer["warnings"] as? [String]) ?? []).map { "Flimmer: \($0)" }
-        // After an undo or redo in Flimmer that met someone else's change (result.history): Flimmer's own words.
+        for w in (answer["warnings"] as? [String]) ?? [] { out.append(Said("send.flimmer.ownWords", "Flimmer's own words: %@", w)) }
+        // After an undo or redo in Flimmer that met someone else's change (result.history): Jämmer's line for it,
+        // and Flimmer's text as a detail.
         if let h = answer["history"] as? [String: Any], let state = h["state"] as? String, state.hasSuffix("Failed") {
-            out.append("Flimmer: \(h["message"] as? String ?? (state == "undoFailed" ? "the undo couldn't be done" : "the redo couldn't be done")) (\(h["reason"] as? String ?? state)).")
+            out.append(historyLine(state: state, reason: h["reason"] as? String))
+            if let m = h["message"] as? String, !m.isEmpty { out.append(Said("send.flimmer.ownWords", "Flimmer's own words: %@", m)) }
         }
         return out
     }
+    public static func lines(answer: [String: Any], items: [Item], sentBefore: [String: String] = [:]) -> [String] {
+        said(answer: answer, items: items, sentBefore: sentBefore).map(\.text)
+    }
 
-    /// An error from Flimmer in words the user can act on, naming the clip when it is about one.
+    /// An undo or redo that Flimmer couldn't do, by its state and reason; one it doesn't know is said by its words.
+    public static func historyLine(state: String, reason: String?) -> Said {
+        switch (state, reason ?? "") {
+        case ("undoFailed", "stale"): Said("send.history.undo.stale", "Flimmer couldn't undo the send: someone changed one of its take groups since.")
+        case ("redoFailed", "stale"): Said("send.history.redo.stale", "Flimmer couldn't redo the send: someone changed one of its take groups since.")
+        case ("redoFailed", "redo_failed"): Said("send.history.redo.added", "Flimmer couldn't redo the send: a take was added to one of its groups since.")
+        case ("undoFailed", _): Said("send.history.undo.other", "Flimmer couldn't undo the send (%@).", reason ?? state)
+        case ("redoFailed", _): Said("send.history.redo.other", "Flimmer couldn't redo the send (%@).", reason ?? state)
+        default: Said("send.flimmer.answered", "Flimmer answered: %@", reason.map { "\(state) (\($0))" } ?? state)
+        }
+    }
+
+    /// An error from Flimmer in words the user can act on, naming the clip when it is about one: Jämmer's own
+    /// line for its code and reason, by key; Flimmer's `message` (API text, English) only as `detail`.
     public static func explain(status: Int, error: [String: Any], items: [Item]) -> Failure {
         let code = error["code"] as? String ?? "error", reason = error["reason"] as? String
         let index = (error["item"] as? NSNumber)?.intValue
-        let clip = index.flatMap { items.indices.contains($0) ? "\"\(items[$0].name)\"" : nil } ?? "a clip"
-        let message: String
+        let clip: Said = index.flatMap { items.indices.contains($0) ? Said("send.name.quoted", "\"%@\"", items[$0].name) : nil } ?? Said("send.name.aClip", "a clip")
+        let said: Said
         switch (status, reason ?? code) {
-        case (403, _): message = "You're signed in to Flimmer as a viewer of this project. Only an editor or the owner can receive sound from Jämmer."
-        case (409, _): message = "Flimmer has nobody signed in or no project open. Open the film's project in Flimmer and send again."
-        case (_, "wrong_project"): message = "Another project is open in Flimmer than the one this film came from. Open that project in Flimmer and send again."
-        case (_, "wrong_story"): message = "The story this film was exported from isn't in the project that is open in Flimmer."
-        case (_, "unknown_clip"): message = "Flimmer has no clip for \(clip) in this project any more. Export the film again from Flimmer."
-        case (_, "clip_deleted"): message = "\(clip) was removed in Flimmer after the film was exported, so there is nothing to make a take of."
-        case (_, "unknown_track"): message = "The track \(clip) should go on doesn't exist in Flimmer any more."
-        case (_, "locked_track"): message = "The track of \(clip) is locked in Flimmer. Unlock it there and send again."
-        case (_, "duplicate_clip"): message = "Two files were sent for \(clip). That is a fault in Jämmer; please report it."
-        case (_, "wrong_position_kind"): message = "\(clip) has changed between linked to a shot and free in Flimmer since the export. Export the film again from Flimmer."
-        case (_, "unknown_upload"), (_, "upload_open"), (_, "upload_used"): message = "Flimmer no longer has the file for \(clip) (uploads are kept for an hour). Send again."
-        case (_, "nothing_to_change"): message = "There is nothing to send: no clip has changed since the film came in."
-        case (413, _): message = "A file is larger than Flimmer accepts."
-        case (415, _): message = "Flimmer didn't accept the file format (it takes WAV, mono or stereo, at 44.1 or 48 kHz)."
-        case (507, _): message = "The disk Flimmer writes to is too full."
-        case (404, _): message = "This Flimmer can't receive sound from Jämmer yet. Update Flimmer."
-        default: message = "Flimmer answered: \(error["message"] as? String ?? "error \(status)")"
+        case (403, _): said = Said("send.error.viewer", "You're signed in to Flimmer as a viewer of this project. Only an editor or the owner can receive sound from Jämmer.")
+        case (409, "edited_exists"): said = reasonSaid("edited_exists", code: code)
+        case (409, _): said = Said("send.error.noProject", "Flimmer has nobody signed in or no project open. Open the film's project in Flimmer and send again.")
+        case (_, "wrong_project"): said = Said("send.error.wrongProject", "Another project is open in Flimmer than the one this film came from. Open that project in Flimmer and send again.")
+        case (_, "wrong_story"): said = Said("send.error.wrongStory", "The story this film was exported from isn't in the project that is open in Flimmer.")
+        case (_, "unknown_clip"): said = Said("send.error.unknownClip", "Flimmer has no clip for %@ in this project any more. Export the film again from Flimmer.", inner: [clip])
+        case (_, "clip_deleted"): said = Said("send.error.clipDeleted", "%@ was removed in Flimmer after the film was exported, so there is nothing to make a take of.", inner: [clip])
+        case (_, "unknown_track"): said = Said("send.error.unknownTrack", "The track %@ should go on doesn't exist in Flimmer any more.", inner: [clip])
+        case (_, "locked_track"): said = Said("send.error.lockedTrack", "The track of %@ is locked in Flimmer. Unlock it there and send again.", inner: [clip])
+        case (_, "duplicate_clip"): said = Said("send.error.duplicateClip", "Two files were sent for %@. That is a fault in Jämmer; please report it.", inner: [clip])
+        case (_, "wrong_position_kind"): said = Said("send.error.positionKind", "%@ has changed between linked to a shot and free in Flimmer since the export. Export the film again from Flimmer.", inner: [clip])
+        case (_, "unknown_upload"), (_, "upload_open"), (_, "upload_used"): said = Said("send.error.upload", "Flimmer no longer has the file for %@ (uploads are kept for an hour). Send again.", inner: [clip])
+        case (_, "nothing_to_change"): said = Said("send.error.nothingToChange", "There is nothing to send: no clip has changed since the film came in.")
+        case (413, _): said = Said("send.error.tooLarge", "A file is larger than Flimmer accepts.")
+        case (415, _): said = Said("send.error.format", "Flimmer didn't accept the file format (it takes WAV, mono or stereo, at 44.1 or 48 kHz).")
+        case (507, _): said = Said("send.error.diskFull", "The disk Flimmer writes to is too full.")
+        case (404, _): said = Said("send.error.tooOld", "This Flimmer can't receive sound from Jämmer yet. Update Flimmer.")
+        default: said = reasonSaid(reason, code: code)
         }
-        return Failure(code, message, reason: reason)
+        var f = Failure(code, said, reason: reason)
+        f.detail = (error["message"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+        return f
+    }
+
+    /// Jämmer's own line for a reason or code Flimmer answered with (its transcript and upload errors among them);
+    /// one it doesn't know is said by its code, never as an empty line.
+    public static func reasonSaid(_ reason: String?, code: String?) -> Said {
+        switch reason ?? code ?? "" {
+        case "edited_exists": Said("send.reason.editedExists", "a person corrected this transcript in Flimmer; tick \"Replace transcripts corrected by hand in Flimmer\" to replace it.")
+        case "unknown_clip", "not_found": Said("send.reason.unknownClip", "Flimmer no longer has that clip.")
+        case "clip_deleted": Said("send.reason.clipDeleted", "the clip was removed in Flimmer.")
+        case "duration_mismatch": Said("send.reason.duration", "the transcript's length doesn't match the clip's file in Flimmer.")
+        case "words_not_ordered", "words_out_of_range", "wrong_time_base": Said("send.reason.words", "Flimmer couldn't place the transcript's words in the clip. That is a fault in Jämmer; please report it.")
+        case "too_large": Said("send.reason.tooLarge", "it is larger than Flimmer accepts.")
+        case "server_too_old": Said("send.reason.serverTooOld", "this Flimmer is too old for it. Update Flimmer.")
+        case "no_video_audio": Said("send.reason.noVideoAudio", "a video's own sound isn't sent back in this version.")
+        case "wrong_project": Said("send.reason.wrongProject", "another project is open in Flimmer.")
+        case "not_available": Said("send.reason.notAvailable", "Flimmer has nobody signed in or no project open.")
+        case "forbidden": Said("send.reason.forbidden", "Flimmer refused it (an editor or the owner has to be signed in).")
+        case "no_clip": Said("send.reason.noClip", "Flimmer's answer named no new clip for it.")
+        case "unreachable": Said("send.reason.unreachable", "Flimmer stopped answering.")
+        default: Said("send.flimmer.answered", "Flimmer answered: %@", reason ?? code ?? "error")
+        }
     }
 
     // MARK: Talking to Flimmer
@@ -451,8 +535,12 @@ public enum FlimmerSend {
         public var plan: FlimmerReturn.Plan
         public var items: [Item]
         public var uploads: [String]
-        public var lines: [String]
-        public var flimmerLines: [String]
+        /// Jämmer's own lines and Flimmer's, by key (the window says them in its language).
+        public var said: [Said]
+        public var flimmerSaid: [Said]
+        /// The same in English, for the API and the tests.
+        public var lines: [String] { said.map(\.text) }
+        public var flimmerLines: [String] { flimmerSaid.map(\.text) }
         /// How many of `flimmerLines`, from the first, are warnings. (Said as a number: a window must not
         /// tell a warning by its words, which are another language's tomorrow.)
         public var flimmerWarnings = 0
@@ -485,7 +573,7 @@ public enum FlimmerSend {
         }
         let limits = try await client.limits()
         let rate = sendRate(project)
-        var uploads: [String] = [], files: [Rendered] = [], notes: [String] = []
+        var uploads: [String] = [], files: [Rendered] = [], notes: [Said] = []
         // Each file sits in a folder of its own (see wavFile); the folder goes with it.
         defer { for f in files { try? FileManager.default.removeItem(at: f.file.deletingLastPathComponent()) } }
         do {
@@ -500,7 +588,7 @@ public enum FlimmerSend {
                                                       item.kind == .mix ? "The mix" : "\"\(item.name)\"", Double(size) / 1_073_741_824, Double(limits.maxBytes) / 1_073_741_824))
                 }
                 if item.monoSource, r.channels == 2 {
-                    notes.append("\(item.name) was mono and comes back in stereo: what was done to it here made the two sides differ.")
+                    notes.append(Said("send.line.stereo", "%@ was mono and comes back in stereo: what was done to it here made the two sides differ.", item.name))
                 }
                 progress(0.5 * Double(i + 1) / Double(items.count))
             }
@@ -513,10 +601,12 @@ public enum FlimmerSend {
             let answer = try await client.plan(dry, items: items)
             progress(1)
             let transcripts = transcriptBodies(project, items: items)
-            let said = transcripts.isEmpty ? [] : ["Transcripts of \(transcripts.count) clip\(transcripts.count == 1 ? "" : "s") go after the sound, each on its own (when that box is ticked)."]
+            let said: [Said] = transcripts.isEmpty ? [] : transcripts.count == 1
+                ? [Said("send.line.transcripts.one", "Transcripts of 1 clip go after the sound, each on its own (when that box is ticked).")]
+                : [Said("send.line.transcripts.other", "Transcripts of %@ clips go after the sound, each on its own (when that box is ticked).", values: [Said.n(Double(transcripts.count))])]
             return Prepared(mode: mode, plan: plan, items: items, uploads: uploads,
-                            lines: lines(project, plan: plan, mode: mode, items: items, resampledTo: rate == project.sampleRate ? nil : rate) + notes + said,
-                            flimmerLines: lines(answer: answer, items: items, sentBefore: sentBefore(project, items: items)),
+                            said: Self.said(project, plan: plan, mode: mode, items: items, resampledTo: rate == project.sampleRate ? nil : rate) + notes + said,
+                            flimmerSaid: Self.said(answer: answer, items: items, sentBefore: sentBefore(project, items: items)),
                             flimmerWarnings: warnings(answer: answer),
                             body: body(project, plan: plan, mode: mode, items: items, uploads: uploads, dryRun: false),
                             transcripts: transcripts)
@@ -540,7 +630,7 @@ public enum FlimmerSend {
     /// `canceledLate`: canceled after Flimmer had already done the plan. What it made is returned (to be said
     /// and remembered), and no transcript is sent after the cancel.
     public static func sendAll(_ prepared: Prepared, client: Client, transcripts: Bool, replaceEdited: Bool) async throws
-        -> (lines: [String], warnings: Int, transcripts: [TranscriptOutcome], created: [Int: String], canceledLate: Bool) {
+        -> (lines: [String], said: [Said], warnings: Int, transcripts: [TranscriptOutcome], created: [Int: String], canceledLate: Bool) {
         let answer = try await client.plan(prepared.body, items: prepared.items)
         let created = createdClips(answer)
         let canceledLate = Task.isCancelled
@@ -548,7 +638,8 @@ public enum FlimmerSend {
         if transcripts, !canceledLate, !prepared.transcripts.isEmpty {
             outcomes = await sendTranscripts(prepared.transcripts, created: created, items: prepared.items, replaceEdited: replaceEdited, client: client)
         }
-        return (lines(answer: answer, items: prepared.items), warnings(answer: answer), outcomes, created, canceledLate)
+        let said = Self.said(answer: answer, items: prepared.items)
+        return (said.map(\.text), said, warnings(answer: answer), outcomes, created, canceledLate)
     }
 
     /// The id of the project Flimmer has open, when its status says it (`project.id`, or `projectId`).
