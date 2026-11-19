@@ -160,12 +160,10 @@ final class JobRegistry {
             var diarized = project
             diarized.applyDiarization(results, engine: engine)
             session?.applySpeakers(from: diarized)
-            // Voiceprints in memory, by speaker number, and the speakers named after saved profiles (a step of its own).
-            var recognized: (matches: [Int: VoiceMatch.Match], alternatives: [Int: VoiceMatch.Match]) = ([:], [:])
+            // Voiceprints in memory, by speaker number (the names as the diarisation gave them).
             if let session {
                 session.speakerPrints = [:]
                 for r in results { for (name, v) in r.prints { if let i = session.project.speakers.firstIndex(of: name) { session.speakerPrints[i] = v } } }
-                recognized = session.nameAfterVoiceProfiles()
             }
             let seconds = diarized.speakerSeconds()
             // The model merges similar voices easily (docs/DIARISATION.md); say so rather than
@@ -175,6 +173,8 @@ final class JobRegistry {
             session?.status = diarized.speakers.isEmpty ? L10n.text("speakers.found.none")
                 : single ? L10n.text("speakers.found.single")
                 : L10n.count("speakers.found", diarized.speakers.count)
+            // The speakers named after saved profiles: a step of its own, after "Found n speakers", so its line is the one seen.
+            let recognized: (matches: [Int: VoiceMatch.Match], alternatives: [Int: VoiceMatch.Match]) = session?.nameAfterVoiceProfiles() ?? ([:], [:])
             job.status = .done
             job.progress = 1
             job.result = ["mode": .string(byTrack ? "by_track" : "ml"),

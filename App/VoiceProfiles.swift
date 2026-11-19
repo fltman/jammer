@@ -19,11 +19,9 @@ final class VoiceProfileStore {
         var print: [Float]
     }
 
-    /// ~/Library/Containers/<bundle>/Data/Library/Application Support/Jammer/VoiceProfiles for the sandboxed app
-    /// (what the manual names), one file per profile.
-    var folder: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appending(path: "Jammer/VoiceProfiles")
-    }
+    /// In the app's own data folder: ~/Library/Application Support/Jammer/VoiceProfiles in a release (the app is not
+    /// sandboxed; what the manual names), "Jammer Debug" for a debug build, so a test never lands among real ones.
+    var folder: URL { AppData.folder.appending(path: "VoiceProfiles") }
 
     private(set) var profiles: [Profile] = []
     private var loaded = false
@@ -107,6 +105,7 @@ struct VoiceProfileSheet: View {
     @State private var name: String
     @State private var whose: String? = nil
     @State private var failure: String?
+    @FocusState private var nameFocused: Bool
 
     init(session: EditorSession, speaker: Int?, close: @escaping () -> Void) {
         self.session = session
@@ -126,15 +125,24 @@ struct VoiceProfileSheet: View {
                 }
             }
             TextField(L10n.text("voiceProfiles.sheet.name"), text: $name)
+                .focused($nameFocused)
                 .accessibilityIdentifier("voiceProfile.name")
             Text(L10n.text("voiceProfiles.sheet.whose")).font(.subheadline)
-            Picker("", selection: $whose) {
-                Text(L10n.text("voiceProfiles.sheet.own")).tag(Optional("own"))
-                Text(L10n.text("voiceProfiles.sheet.consented")).tag(Optional("consented"))
+            // Rows of their own rather than a radio group: the consent's words must be read whole, never cut off.
+            ForEach([("own", L10n.text("voiceProfiles.sheet.own")), ("consented", L10n.text("voiceProfiles.sheet.consented"))], id: \.0) { value, label in
+                Button { whose = value } label: {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Image(systemName: whose == value ? "largecircle.fill.circle" : "circle").foregroundStyle(whose == value ? Color.accentColor : .secondary)
+                        Text(label).fixedSize(horizontal: false, vertical: true).multilineTextAlignment(.leading)
+                        Spacer(minLength: 0)
+                    }
+                    .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .accessibilityElement(children: .combine)
+                .accessibilityAddTraits(whose == value ? [.isButton, .isSelected] : .isButton)
+                .accessibilityIdentifier("voiceProfile.\(value)")
             }
-            .pickerStyle(.radioGroup)
-            .labelsHidden()
-            .accessibilityLabel(L10n.text("voiceProfiles.sheet.whose"))
             if let failure { StateLine(kind: .error, text: failure) }
             HStack {
                 Spacer()
@@ -147,6 +155,7 @@ struct VoiceProfileSheet: View {
         }
         .padding(20)
         .frame(width: 460)
+        .onAppear { nameFocused = true }
     }
 
     private func save() {
@@ -173,7 +182,8 @@ struct VoiceProfileSettings: View {
     @State private var deleting: VoiceProfileStore.Profile?
 
     var body: some View {
-        Form {
+        // As the other tabs: a plain stack of fixed width (a Form in this TabView was drawn empty, seen 2026-11-19).
+        VStack(alignment: .leading, spacing: 10) {
             Toggle(L10n.text("voiceProfiles.settings.recognize"), isOn: $recognize)
                 .onChange(of: recognize) { VoiceProfileStore.shared.recognize = recognize }
             Text(L10n.text("voiceProfiles.settings.text", VoiceProfileStore.shared.folder.path)).font(.caption).foregroundStyle(.secondary)
@@ -194,6 +204,8 @@ struct VoiceProfileSettings: View {
             }
         }
         .padding()
+        .frame(width: 560, alignment: .leading)
+        .frame(maxHeight: .infinity, alignment: .top)
         .onReceive(NotificationCenter.default.publisher(for: VoiceProfileStore.changed)) { _ in profiles = VoiceProfileStore.shared.all() }
         .confirmationDialog(L10n.text("voiceProfiles.delete.title", deleting?.name ?? ""), isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
             Button(L10n.text("voiceProfiles.settings.delete"), role: .destructive) {
