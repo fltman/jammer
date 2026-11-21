@@ -451,26 +451,62 @@ enum AgentRouter {
             case ["transcribe"]:
                 try only("POST")
                 let body = try json(r)
+                if JobRegistry.shared.latest("transcribe", document: session.agentID)?.isFinished == false {
+                    throw APIError.unprocessable("transcription_running", "A transcription is already running for this document.")
+                }
                 let lang = (body["language"] as? String) ?? Locale.current.identifier(.bcp47)
                 let name = (body["engine"] as? String) ?? "auto"
-                guard let choice = SpeechEngines.Choice(rawValue: name), SpeechEngines.Choice.offered.contains(choice) else {
-                    throw APIError.badRequest("engine must be one of \(SpeechEngines.Choice.offered.map(\.rawValue).joined(separator: ", ")).")
+                guard let choice = SpeechEngines.Choice(rawValue: name) else {
+                    throw APIError.badRequest("engine must be one of \(SpeechEngines.Choice.allCases.map(\.rawValue).joined(separator: ", ")).")
                 }
                 // A paid engine sends the audio to its provider and costs money: only on an explicit yes.
                 if choice.paid, body["allowPaid"] as? Bool != true {
                     throw APIError.paidNotAllowed("engine \(name) sends the audio to its provider and is paid for by the user. Pass \"allowPaid\": true to run it.")
                 }
                 // Allowing a paid request is not allowing any price: Jämmer has no price for this one.
-                if choice.paid, body["allowUnknownPrice"] as? Bool != true {
+                if choice.needsUnknownPrice, body["allowUnknownPrice"] as? Bool != true {
                     throw APIError.unprocessable("unknown_price", "Jämmer doesn't know what engine \(name) costs: its provider charges by its own price list, which Jämmer can't read. Pass \"allowUnknownPrice\": true beside \"allowPaid\": true to run it anyway.")
                 }
                 let model = body["model"] as? String
                 do { _ = try SpeechEngines.engine(choice, for: Locale(identifier: lang), model: model) } catch let e as SpeechEngines.Unavailable {
+                    if let requirement = e.requirement { throw APIError.modelMissing(requirement, e.message) }
                     throw APIError.unprocessable(e.reason, e.message)
                 }
                 let job = JobRegistry.shared.startTranscription(session, locale: Locale(identifier: lang),
                                                                 replace: body["replace"] as? Bool ?? false, engine: choice, model: model)
                 return .json(["job": job.json], status: 202)
+            case ["transcribe-voice-tracks"]:
+                try only("POST")
+                let body = try json(r)
+                let tracks = try transcriptionTrackIDs(body["tracks"], in: session.project)
+                let splitTrack = try transcriptionTrackIDs(body["splitTrack"].map { [$0] }, in: session.project)?.first
+                guard splitTrack == nil || tracks == nil else { throw APIError.badRequest("Choose tracks or splitTrack.") }
+                if let naming = body["nameSpeakers"], !(naming is Bool) { throw APIError.badRequest("nameSpeakers must be a boolean.") }
+                do {
+                    let job = try JobRegistry.shared.startVoiceTranscription(session, tracks: tracks, splitTrack: splitTrack,
+                                                                             nameSpeakers: body["nameSpeakers"] as? Bool ?? true)
+                    return .json(["job": job.json], status: 202)
+                } catch let error as SpeechEngines.Unavailable {
+                    if let requirement = error.requirement { throw APIError.modelMissing(requirement, error.message) }
+                    throw APIError.unprocessable(error.reason, error.message)
+                } catch let error as SplitSpeakersError {
+                    throw APIError.unprocessable(error.reason, error.localizedDescription)
+                }
+            case ["transcript", "export"]:
+                try only("GET")
+                guard let format = TranscriptExport(rawValue: r.query["format"] ?? "txt") else {
+                    throw APIError.badRequest("format must be txt, json, srt or vtt.")
+                }
+                let project = session.project
+                let tracks = try transcriptionTrackIDs(r.query["track"].map { [$0] }, in: project).map(Set.init)
+                do {
+                    let data = try await Task.detached { try format.data(project: project, tracks: tracks) }.value
+                    return Response(status: 200, contentType: format.contentType, body: data, extraHeaders: [
+                        "Content-Disposition": "attachment; filename=\"\(asciiName(session.name)).\(format.rawValue)\"",
+                    ])
+                } catch let error as TranscriptExport.Failure {
+                    throw APIError.unprocessable(error == .needsTimes ? "text_only" : "no_transcript", error.localizedDescription)
+                }
             case ["transcript"]:
                 try only("GET")
                 return try transcript(session, r)
@@ -1096,6 +1132,16 @@ enum AgentRouter {
             session.status = warning
         }
         return .json(answer, status: 201)
+    }
+
+    private static func transcriptionTrackIDs(_ value: Any?, in project: Project) throws -> [UUID]? {
+        guard let value else { return nil }
+        guard let tracks = value as? [String], !tracks.isEmpty else { throw APIError.badRequest("Supply one or more track IDs.") }
+        let known = Set(project.tracks.map(\.id))
+        return try tracks.map { value in
+            guard let id = UUID(uuidString: value), known.contains(id) else { throw APIError.notFound("There is no track \(value).") }
+            return id
+        }
     }
 
     private static func transcript(_ session: EditorSession, _ r: AgentAPI.Request) throws -> Response {

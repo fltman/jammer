@@ -26,6 +26,27 @@ public struct Job: Sendable, Equatable {
     public mutating func fail(_ code: String, _ e: Error) { fail(code, Said.of(e)) }
     /// Small facts about the outcome (counts, seconds, names).
     public var result: [String: JSONValue]?
+    public struct TranscribedTrack: Sendable, Equatable {
+        public let id: UUID
+        public let name: String
+        public let language: String
+        public let engine: String
+        public let words: Int
+
+        public init(id: UUID, name: String, language: String, engine: String, words: Int) {
+            self.id = id
+            self.name = name
+            self.language = language
+            self.engine = engine
+            self.words = words
+        }
+
+        var json: [String: Any] {
+            ["id": id.uuidString, "name": name, "language": language, "engine": engine, "words": words]
+        }
+    }
+
+    public var transcribedTracks: [TranscribedTrack]?
     /// The document it works on, if any.
     public var documentID: String?
 
@@ -51,14 +72,18 @@ public struct Job: Sendable, Equatable {
     public var json: [String: Any] {
         var d: [String: Any] = ["id": id, "kind": kind, "status": status.rawValue, "progress": (progress * 1_000).rounded() / 1_000]
         if let error { d["error"] = ["code": error.code, "message": error.message] }
-        if let result { d["result"] = result.mapValues(\.any) }
+        if result != nil || transcribedTracks != nil {
+            var facts = result?.mapValues(\.any) ?? [:]
+            if let transcribedTracks { facts["tracks"] = transcribedTracks.map(\.json) }
+            d["result"] = facts
+        }
         if let documentID { d["document"] = documentID }
         return d
     }
 
     public static func == (a: Job, b: Job) -> Bool {
         a.id == b.id && a.kind == b.kind && a.status == b.status && a.progress == b.progress
-            && a.error?.code == b.error?.code && a.error?.message == b.error?.message && a.result == b.result && a.documentID == b.documentID
+            && a.error?.code == b.error?.code && a.error?.message == b.error?.message && a.result == b.result && a.transcribedTracks == b.transcribedTracks && a.documentID == b.documentID
     }
 }
 

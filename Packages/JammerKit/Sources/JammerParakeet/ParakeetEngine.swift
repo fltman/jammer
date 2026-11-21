@@ -66,8 +66,7 @@ public final class ParakeetEngine: TranscriptionEngine, @unchecked Sendable {
     private func loadedManager() async throws -> AsrManager {
         if let m = lock.withLock({ manager }) { return m }
         guard isInstalled else { throw TranscriptionError.failed("Parakeet isn't installed (Settings › Models).") }
-        configureSource()
-        let models = try await AsrModels.load(from: directory, version: .v3, encoderPrecision: Self.precision)
+        let models = try AsrModels.loadLocal(from: directory, version: .v3, encoderPrecision: Self.precision)
         let m = AsrManager(config: .default)
         try await m.loadModels(models)
         lock.withLock { manager = m }
@@ -78,11 +77,17 @@ public final class ParakeetEngine: TranscriptionEngine, @unchecked Sendable {
                            progress: @escaping @Sendable (Double) -> Void) async throws -> SourceTranscript {
         let code = locale.language.languageCode?.identifier ?? ""
         guard Self.languages.contains(code) else { throw TranscriptionError.unsupportedLanguage(locale.identifier(.bcp47)) }
+        return try await Self.transcribe(source, pool: pool, locale: locale, language: Language(rawValue: code),
+                                         id: id, manager: loadedManager(), progress: progress)
+    }
+
+    static func transcribe(_ source: SourceRef, pool: SourcePool, locale: Locale, language: Language?, id: String,
+                           manager: AsrManager, progress: @escaping @Sendable (Double) -> Void) async throws -> SourceTranscript {
         let samples = try SpeechAudio.mono16k(source, pool: pool)
         progress(0.1)
-        let m = try await loadedManager()
         var state = TdtDecoderState.make()
-        let result = try await m.transcribe(samples, decoderState: &state, language: Language(rawValue: code))
+        let result = try await manager.transcribe(samples, decoderState: &state, language: language)
+        try Task.checkCancellation()
         progress(1)
         let words = Self.words(result.tokenTimings ?? [], sampleRate: source.info.sampleRate)
         return SourceTranscript(sourceID: source.id, language: locale.identifier(.bcp47), engine: id, words: words)

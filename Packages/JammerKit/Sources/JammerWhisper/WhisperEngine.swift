@@ -9,12 +9,12 @@ import whisper
 public final class WhisperEngine: TranscriptionEngine, @unchecked Sendable {
     public let model: ModelSpec
     public let modelPath: URL
-    /// The language the model is for (KB-Whisper: Swedish).
-    public let language: String
+    /// The model’s fixed language. Multilingual weights use the requested or detected language.
+    public let language: String?
     private let lock = NSLock()
     private var context: OpaquePointer?
 
-    public init(model: ModelSpec, path: URL, language: String = "sv") {
+    public init(model: ModelSpec, path: URL, language: String? = "sv") {
         self.model = model
         modelPath = path
         self.language = language
@@ -22,10 +22,40 @@ public final class WhisperEngine: TranscriptionEngine, @unchecked Sendable {
 
     deinit { if let context { whisper_free(context) } }
 
-    public var id: String { "whisper-\(model.id)" }
+    public var id: String { model.id.hasPrefix("whisper-") ? model.id : "whisper-\(model.id)" }
 
     public func supports(_ locale: Locale) async -> Bool {
-        locale.language.languageCode?.identifier == language && FileManager.default.fileExists(atPath: modelPath.path)
+        guard FileManager.default.fileExists(atPath: modelPath.path) else { return false }
+        let requested = Self.whisperLanguage(locale)
+        return language.map { $0 == requested } ?? (requested == "auto" || requested.withCString { whisper_lang_id($0) >= 0 })
+    }
+
+    private static func whisperLanguage(_ locale: Locale) -> String {
+        let code = locale.language.languageCode?.identifier ?? "auto"
+        if code == "nb" || code == "nn" { return "no" }
+        return code == "und" ? "auto" : code
+    }
+
+    private static var threads: Int32 { Int32(max(1, min(8, ProcessInfo.processInfo.activeProcessorCount - 2))) }
+
+    /// Ask the multilingual checkpoint about the compacted voice audio itself.
+    public func detectLanguage(_ source: SourceRef, pool: SourcePool) throws -> String? {
+        let samples = try SpeechAudio.mono16k(source, pool: pool, maxFrames: Frame(source.info.sampleRate * 30))
+        guard samples.count >= 16_000 else { return nil }
+        return try lock.withLock {
+            try Task.checkCancellation()
+            let ctx = try loadedContext()
+            let prepared = samples.withUnsafeBufferPointer { whisper_pcm_to_mel(ctx, $0.baseAddress, Int32($0.count), Self.threads) }
+            guard prepared == 0 else { throw TranscriptionError.failed("Whisper could not analyze the audio.") }
+            var probabilities = [Float](repeating: 0, count: Int(whisper_lang_max_id()) + 1)
+            let best = whisper_lang_auto_detect(ctx, 0, Self.threads, &probabilities)
+            guard best >= 0, probabilities.indices.contains(Int(best)),
+                  let code = whisper_lang_str(best) else { return nil }
+            let score = probabilities[Int(best)]
+            probabilities[Int(best)] = 0
+            guard score >= 0.5, score - (probabilities.max() ?? 0) >= 0.15 else { return nil }
+            return String(cString: code)
+        }
     }
 
     private func loadedContext() throws -> OpaquePointer {
@@ -44,8 +74,9 @@ public final class WhisperEngine: TranscriptionEngine, @unchecked Sendable {
                            progress: @escaping @Sendable (Double) -> Void) async throws -> SourceTranscript {
         guard await supports(locale) else { throw TranscriptionError.unsupportedLanguage(locale.identifier(.bcp47)) }
         let samples = try Self.mono16k(source, pool: pool)
+        let code = Self.whisperLanguage(locale)
         let task = Task.detached(priority: .userInitiated) { [self] () throws -> [RecognisedRun] in
-            try lock.withLock { try run(samples, progress: progress) }
+            try lock.withLock { try run(samples, language: code, progress: progress) }
         }
         let runs = try await withTaskCancellationHandler { try await task.value } onCancel: { task.cancel() }
         let words = WordBuilder.words(from: runs, sampleRate: source.info.sampleRate, sourceFrames: source.info.frames)
@@ -57,10 +88,10 @@ public final class WhisperEngine: TranscriptionEngine, @unchecked Sendable {
         init(_ p: @escaping @Sendable (Double) -> Void) { progress = p }
     }
 
-    private func run(_ samples: [Float], progress: @escaping @Sendable (Double) -> Void) throws -> [RecognisedRun] {
+    private func run(_ samples: [Float], language: String, progress: @escaping @Sendable (Double) -> Void) throws -> [RecognisedRun] {
         let ctx = try loadedContext()
         var p = whisper_full_default_params(WHISPER_SAMPLING_BEAM_SEARCH)
-        p.n_threads = Int32(max(1, min(8, ProcessInfo.processInfo.activeProcessorCount - 2)))
+        p.n_threads = Self.threads
         p.translate = false
         p.no_context = true
         p.print_progress = false

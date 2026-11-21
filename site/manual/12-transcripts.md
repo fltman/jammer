@@ -1,6 +1,6 @@
 # Transcripts and editing by text
 
-Jämmer can write down what's said and let you edit the audio by editing the text. Recognition runs on your Mac with Apple's speech recognition; nothing is uploaded.
+Jämmer can write down what's said and let you edit the audio by editing the text. The default engines run on your Mac. Paid transcription services are available as explicit choices.
 
 ## Transcribe
 
@@ -10,6 +10,22 @@ Jämmer can write down what's said and let you edit the audio by editing the tex
 Every track is transcribed. A track of music gets "words" too (the recognizer hears speech where there is none), so don't be surprised by a few stray words there; they do no harm, and you can ignore them.
 
 Swedish works through Apple's dictation recognition, which downloads its language files the first time (a few hundred MB, managed by macOS). English, German, French, Spanish, Italian, Portuguese and many more languages are supported as well; if a language isn't available on your Mac, Jämmer says so. You can keep editing while it transcribes.
+
+## Klang Pianissimo
+
+Install **Klang Pianissimo (Swedish)** or **Klang Pianissimo (Danish)** under **Jämmer › Settings › Models**. In the transcript panel, choose **Pianissimo · On this Mac** and the matching language. Local Pianissimo returns word timestamps for editing and subtitle export.
+
+Choose **Pianissimo · Berget AI** for hosted Swedish transcription. Save your Berget AI key under **Settings › Paid Services**. The confirmation shows which audio will be uploaded, Berget’s published rate, and an estimate. The service returns text without word timestamps. The integration has been tested with a simulated service. [Berget AI pricing](https://berget.ai/en/models)
+
+## Transcribe voice tracks independently
+
+Choose **Audio › Transcribe Voice Tracks** when each voice already has its own track, or **Audio › Split and Transcribe Speakers** after finding speakers in a shared recording. Install **Whisper small (multilingual)** under **Settings › Models** first. Whisper detects the language directly from the audio. Jämmer uses an installed Pianissimo model for Swedish or Danish and otherwise transcribes the track with multilingual Whisper. Short or ambiguous speech may have no identified language.
+
+Jämmer can name tracks from clear spoken introductions. If a speaker never gives their name, Jämmer looks for a handoff from the preceding speaker. When names repeat, it tries to distinguish them with a role, workplace, or interest said in the introductions, and uses numbers where necessary. You can turn naming off in the confirmation and review the names afterward. The audio stays on your Mac, and the result is one undo step.
+
+## Export transcripts
+
+Choose **File › Export Transcript** and select all audible tracks or a single track. **TXT** is plain text. **JSON** groups words, timing and recognition languages by track. **SRT** and **WebVTT** make subtitles using the timeline’s word timestamps. For text-only transcripts, choose TXT or JSON.
 
 ## At OpenAI instead (text only)
 

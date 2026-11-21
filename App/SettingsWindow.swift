@@ -45,7 +45,7 @@ struct ModelRow: Identifiable {
     var licence: String
     var installed: () -> Bool
     var install: (@escaping @Sendable (Double) -> Void) async throws -> Void
-    var remove: () throws -> Void
+    var remove: @MainActor () async throws -> Void
 }
 
 @MainActor
@@ -54,8 +54,15 @@ final class ModelsModel {
     var progress: [String: Double] = [:]
     var errors: [String: String] = [:]
     var tick = 0
+    var removing: Set<String> = []
 
-    let rows: [ModelRow] = {
+    let rows: [ModelRow]
+
+    init() {
+        rows = Self.makeRows()
+    }
+
+    private static func makeRows() -> [ModelRow] {
         let store = SpeechEngines.store
         var rows = ModelSpec.catalogue.map { spec in
             ModelRow(id: spec.id, title: spec.id.contains("medium") ? L10n.text("settings.models.whisperMedium.title") : L10n.text("settings.models.whisperSmall.title"), use: L10n.text("settings.models.whisper.use"), bytes: spec.size, licence: spec.licence,
@@ -63,12 +70,27 @@ final class ModelsModel {
                      install: { p in try await store.install(spec, progress: p) },
                      remove: { try store.remove(spec) })
         }
+        let multilingual = ModelSpec.multilingualWhisper
+        rows.append(ModelRow(id: multilingual.id, title: L10n.text("settings.models.whisperMultilingual.title"),
+                             use: L10n.text("settings.models.whisperMultilingual.use"), bytes: multilingual.size, licence: multilingual.licence,
+                             installed: { store.isInstalled(multilingual) },
+                             install: { p in try await store.install(multilingual, progress: p) },
+                             remove: { try store.remove(multilingual) }))
         let parakeet = SpeechEngines.parakeet
         rows.append(ModelRow(id: "parakeet", title: L10n.text("settings.models.parakeet.title"), use: L10n.text("settings.models.parakeet.use"),
                              bytes: ParakeetEngine.downloadBytes, licence: ParakeetEngine.licence,
                              installed: { parakeet.isInstalled },
                              install: { p in try await parakeet.install(progress: p) },
                              remove: { try parakeet.remove() }))
+        for variant in PianissimoModel.allCases {
+            guard let engine = SpeechEngines.pianissimo[variant] else { continue }
+            let title = variant == .swedish ? L10n.text("settings.models.pianissimo.sv") : L10n.text("settings.models.pianissimo.da")
+            rows.append(ModelRow(id: variant.id, title: title, use: L10n.text("settings.models.pianissimo.use"),
+                                 bytes: variant.downloadBytes, licence: "CC-BY-4.0",
+                                 installed: { engine.isInstalled },
+                                 install: { p in try await engine.install(progress: p) },
+                                 remove: { try await engine.remove() }))
+        }
         if let d = Diarization.engine as? FluidDiarizer {
             rows.append(ModelRow(id: "diarisation", title: L10n.text("settings.models.diarisation.title"), use: L10n.text("settings.models.diarisation.use"),
                                  bytes: Requirements.all.first { $0.id == "diarisation" }?.sizeBytes ?? 21_599_417, licence: "CC-BY-4.0 (pyannote, WeSpeaker, BUT Speech@FIT; Core ML by Fluid Inference)",
@@ -89,7 +111,7 @@ final class ModelsModel {
                              install: { p in try await soundtrack.install(progress: p) },
                              remove: { Stems.forget(); try soundtrack.remove() }))
         return rows
-    }()
+    }
 
     func install(_ row: ModelRow) {
         errors[row.id] = nil
@@ -107,8 +129,12 @@ final class ModelsModel {
     }
 
     func remove(_ row: ModelRow) {
-        do { try row.remove() } catch { errors[row.id] = L10n.error(error) }
-        tick += 1
+        guard removing.insert(row.id).inserted else { return }
+        Task {
+            do { try await row.remove() } catch { errors[row.id] = L10n.error(error) }
+            removing.remove(row.id)
+            tick += 1
+        }
     }
 }
 
@@ -127,32 +153,39 @@ struct ModelsSettings: View {
                     NSWorkspace.shared.activateFileViewerSelecting([SpeechEngines.store.folder])
                 }
             }
-            ForEach(model.rows) { row in
-                HStack(alignment: .top, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(row.title).font(.headline)
-                        Text(row.use).font(.callout).foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                        Text("\(ByteCountFormatter.string(fromByteCount: row.bytes, countStyle: .file)) · \(row.licence)")
-                            .font(.caption).foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                        if let e = model.errors[row.id] { StateLine(kind: .error, text: e) }
-                    }
-                    Spacer()
-                    if let p = model.progress[row.id] {
-                        ProgressView(value: p).frame(width: 90).accessibilityLabel(L10n.text("settings.models.downloading.ax", row.title))
-                    } else if row.installed() {
-                        Button(L10n.text("button.remove")) { model.remove(row) }.accessibilityLabel(L10n.text("button.remove.ax", row.title))
-                    } else {
-                        Button(L10n.text("settings.models.download")) {
-                            // Size, publisher, source and license first; nothing is fetched before the sheet's Download.
-                            ModelDownloadSheet.ask(ModelDownloadSheet.requirementID(forRow: row.id), on: NSApp.keyWindow) { model.install(row) }
-                        }.accessibilityLabel(L10n.text("settings.models.download.ax", row.title))
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    ForEach(model.rows) { row in
+                        HStack(alignment: .top, spacing: 12) {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(row.title).font(.headline)
+                                Text(row.use).font(.callout).foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                Text("\(ByteCountFormatter.string(fromByteCount: row.bytes, countStyle: .file)) · \(row.licence)")
+                                    .font(.caption).foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                if let e = model.errors[row.id] { StateLine(kind: .error, text: e) }
+                            }
+                            Spacer()
+                            if let p = model.progress[row.id] {
+                                ProgressView(value: p).frame(width: 90).accessibilityLabel(L10n.text("settings.models.downloading.ax", row.title))
+                            } else if row.installed() {
+                                Button(L10n.text("button.remove")) { model.remove(row) }
+                                    .disabled(model.removing.contains(row.id))
+                                    .accessibilityLabel(L10n.text("button.remove.ax", row.title))
+                            } else {
+                                Button(L10n.text("settings.models.download")) {
+                                    // Size, publisher, source and license first; nothing is fetched before the sheet's Download.
+                                    ModelDownloadSheet.ask(ModelDownloadSheet.requirementID(forRow: row.id), on: NSApp.keyWindow) { model.install(row) }
+                                }.accessibilityLabel(L10n.text("settings.models.download.ax", row.title))
+                            }
+                        }
+                        .id("\(row.id)-\(model.tick)")
+                        Divider()
                     }
                 }
-                .id("\(row.id)-\(model.tick)")
-                Divider()
             }
+            .frame(height: 470)
         }
         .padding(20)
         .frame(width: 560)

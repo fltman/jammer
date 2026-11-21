@@ -1,4 +1,5 @@
 import Foundation
+import JammerAgent
 import JammerCore
 import JammerParakeet
 import JammerSpeech
@@ -46,17 +47,33 @@ enum SpeechEngines {
     /// One Parakeet, so its model stays loaded between transcriptions.
     static let parakeet = ParakeetEngine(folder: store.folder, source: store.source)
 
-    enum Choice: String, CaseIterable {
-        case auto, apple, parakeet, whisper
-        /// OpenAI's file transcription: paid, the audio leaves the Mac, and the transcript has no word
-        /// times ("text only"). Shown in every build (PROVIDERS.md, rule 3, as rewritten 2026-11-16), with
-        /// what is true said where it is chosen: built from the documentation, not tried with a real
-        /// request. "auto" never chooses it; on this Mac is the default.
-        case openai
+    static let pianissimo = Dictionary(uniqueKeysWithValues: PianissimoModel.allCases.map {
+        ($0, PianissimoEngine(model: $0, store: store))
+    })
 
-        /// What a user or an agent may ask for now.
-        @MainActor static var offered: [Choice] { allCases }
-        var paid: Bool { self == .openai }
+    static let multilingualWhisper = WhisperEngine(model: .multilingualWhisper,
+                                                     path: store.path(for: .multilingualWhisper), language: nil)
+
+    typealias Choice = TranscriptionChoice
+
+    static var bergetKey: String? {
+        #if DEBUG
+        if bergetEndpoint != BergetPianissimo.defaultEndpoint,
+           let key = UserDefaults.standard.string(forKey: "bergetTestKey"), !key.isEmpty { return key }
+        #endif
+        return Keychain.get("berget")
+    }
+
+    static var bergetEndpoint: URL {
+        #if DEBUG
+        if let value = UserDefaults.standard.string(forKey: "bergetEndpoint"), let url = URL(string: value),
+           url.scheme == "ws", url.host() == "127.0.0.1" { return url }
+        #endif
+        return BergetPianissimo.defaultEndpoint
+    }
+
+    static func bergetPriceLine(_ price: Choice.Price) -> String {
+        L10n.text("berget.transcription.price", L10n.number(price.amount, 4), price.source, price.asOf)
     }
 
     /// The key, from the Keychain. A debug build started with `-openaiTestKey` and `-openaiEndpoint` on
@@ -81,7 +98,12 @@ enum SpeechEngines {
     struct Unavailable: Error, LocalizedError, KeyedFailure {
         var reason: String
         var said: Said
-        init(reason: String, message: Said) { self.reason = reason; said = message }
+        var requirement: String?
+        init(reason: String, message: Said, requirement: String? = nil) {
+            self.reason = reason
+            said = message
+            self.requirement = requirement
+        }
         var message: String { said.text }
         var errorDescription: String? { said.text }
         var keyed: KeyedMessage? { said.keyed }
@@ -94,6 +116,22 @@ enum SpeechEngines {
     static func engine(_ choice: Choice, for locale: Locale, model: String? = nil) throws -> any TranscriptionEngine {
         let lang = locale.language.languageCode?.identifier ?? ""
         switch choice {
+        case .pianissimo:
+            guard let model = PianissimoModel(rawValue: lang), let engine = pianissimo[model] else {
+                throw Unavailable(reason: "unsupported_language", message: Said("engine.pianissimo.language", "Local Pianissimo supports Swedish and Danish."))
+            }
+            guard engine.isInstalled else {
+                throw Unavailable(reason: "model_missing", message: Said("engine.pianissimo.missing", "Install the matching Klang Pianissimo model in Jämmer › Settings › Models."), requirement: model.id)
+            }
+            return engine
+        case .bergetPianissimo:
+            guard lang == "sv" else {
+                throw Unavailable(reason: "unsupported_language", message: Said("engine.berget.language", "Pianissimo at Berget AI supports Swedish."))
+            }
+            guard let key = bergetKey, !key.isEmpty else {
+                throw Unavailable(reason: "missing_key", message: Said("engine.berget.key", "Add your Berget AI key in Jämmer › Settings › Paid Services."))
+            }
+            return BergetPianissimo(key: key, endpoint: bergetEndpoint)
         case .openai:
             guard let key = openAIKey, !key.isEmpty else { throw Unavailable(reason: "missing_key", message: Said("engine.there_openai_key_add", "There is no OpenAI key. Add it in the assistant's settings.")) }
             let model = model ?? openAIModel

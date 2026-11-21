@@ -98,6 +98,8 @@ struct PaidSettings: View {
     @State private var accepted = UnknownPrice.accepted
     @State private var elevenKey = ""
     @State private var elevenSaved = Keychain.get("elevenlabs") != nil
+    @State private var bergetKey = ""
+    @State private var bergetSaved = Keychain.get("berget") != nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -112,6 +114,17 @@ struct PaidSettings: View {
                 Button(L10n.text("paid.elevenlabs.remove")) { Keychain.set("elevenlabs", nil); elevenSaved = false }.disabled(!elevenSaved)
             }
             Text(L10n.text("paid.elevenlabs.note")).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            Divider()
+            Text(L10n.text("paid.berget.title")).font(.headline)
+            HStack {
+                SecureField(bergetSaved ? L10n.text("paid.berget.saved") : L10n.text("paid.berget.key"), text: $bergetKey)
+                    .accessibilityLabel(L10n.text("paid.berget.key"))
+                    .accessibilityIdentifier("paid.berget.key")
+                    .onSubmit { saveBergetKey() }
+                Button(L10n.text("button.save")) { saveBergetKey() }.disabled(bergetKey.isEmpty)
+                Button(L10n.text("paid.elevenlabs.remove")) { Keychain.set("berget", nil); bergetSaved = false }.disabled(!bergetSaved)
+            }
+            Text(L10n.text("paid.berget.note")).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             Divider()
             Text(L10n.text("paid.settings.about")).fixedSize(horizontal: false, vertical: true)
             if accepted.isEmpty {
@@ -134,10 +147,19 @@ struct PaidSettings: View {
         .frame(width: 560)
         .frame(maxHeight: .infinity, alignment: .top)
         // The window is kept between showings, and an answer may be given while it is open.
+        .onAppear { bergetSaved = Keychain.get("berget") != nil }
         .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)) { _ in
             let now = UnknownPrice.accepted
             if now.map(\.id) != accepted.map(\.id) { accepted = now }
         }
+    }
+
+    private func saveBergetKey() {
+        let key = bergetKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else { return }
+        Keychain.set("berget", key)
+        bergetKey = ""
+        bergetSaved = Keychain.get("berget") != nil
     }
 
     private func saveElevenKey() {

@@ -741,6 +741,87 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         assistant.send()
     }
 
+    @objc func transcribeVoiceTracks(_ sender: Any?) { startVoiceTranscription(splitTrack: nil) }
+
+    @objc func splitAndTranscribeSpeakers(_ sender: Any?) {
+        guard let track = splittableTrack else { return }
+        startVoiceTranscription(splitTrack: track)
+    }
+
+    private func startVoiceTranscription(splitTrack: UUID?) {
+        guard let window else { return }
+        let alert = NSAlert()
+        if !SpeechEngines.store.isInstalled(.multilingualWhisper) {
+            alert.messageText = L10n.text("op.transcribe_voice_tracks.title")
+            alert.informativeText = L10n.text("voiceTranscribe.model")
+            alert.addButton(withTitle: L10n.text("settings.models"))
+            alert.addButton(withTitle: L10n.text("button.cancel"))
+            alert.beginSheetModal(for: window) { response in
+                if response == .alertFirstButtonReturn { SettingsWindow.show(pane: "models") }
+            }
+            return
+        }
+        alert.messageText = L10n.text(splitTrack == nil ? "op.transcribe_voice_tracks.title" : "voiceTranscribe.split")
+        alert.informativeText = L10n.text("voiceTranscribe.ask")
+        let names = NSButton(checkboxWithTitle: L10n.text("voiceTranscribe.names"), target: nil, action: nil)
+        names.state = .on
+        names.sizeToFit()
+        alert.accessoryView = names
+        alert.addButton(withTitle: L10n.text("transcript.transcribe"))
+        alert.addButton(withTitle: L10n.text("button.cancel"))
+        alert.beginSheetModal(for: window) { [weak self] response in
+            guard response == .alertFirstButtonReturn, let self else { return }
+            do {
+                _ = try JobRegistry.shared.startVoiceTranscription(session, splitTrack: splitTrack, nameSpeakers: names.state == .on)
+                if transcript.isHidden { toggleTranscript(nil) }
+            } catch { session.say(L10n.error(error), .error) }
+        }
+    }
+
+    @objc func exportTranscript(_ sender: Any?) {
+        guard let window else { return }
+        let project = session.project
+        let indices = Set(project.placedWords().map(\.track)).sorted()
+        guard !indices.isEmpty else { return }
+
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = session.name + ".txt"
+        panel.allowsOtherFileTypes = false
+        let formats = NSPopUpButton()
+        formats.addItems(withTitles: ["TXT", "JSON", "SRT", "WebVTT"])
+        let formatChoice = TranscriptSaveFormatChoice(panel: panel)
+        formats.target = formatChoice
+        formats.action = #selector(TranscriptSaveFormatChoice.changed(_:))
+        formatChoice.changed(formats)
+        let tracks = NSPopUpButton()
+        tracks.addItem(withTitle: L10n.text("transcript.export.allTracks"))
+        for index in indices {
+            let item = NSMenuItem(title: project.tracks[index].name, action: nil, keyEquivalent: "")
+            tracks.menu?.addItem(item)
+        }
+        let formatLabel = NSTextField(labelWithString: L10n.text("transcript.export.format"))
+        let trackLabel = NSTextField(labelWithString: L10n.text("transcript.export.track"))
+        formats.setAccessibilityLabel(formatLabel.stringValue)
+        tracks.setAccessibilityLabel(trackLabel.stringValue)
+        let grid = NSGridView(views: [[formatLabel, formats], [trackLabel, tracks]])
+        grid.frame = NSRect(x: 0, y: 0, width: 320, height: 60)
+        panel.accessoryView = grid
+        panel.beginSheetModal(for: window) { [weak self] response in
+            guard response == .OK, let self, let url = panel.url else { return }
+            let format = formatChoice.format
+            let selected = tracks.indexOfSelectedItem
+            let ids: Set<UUID>? = selected > 0 ? [project.tracks[indices[selected - 1]].id] : nil
+            Task {
+                do {
+                    try await Task.detached {
+                        try format.data(project: project, tracks: ids).write(to: url, options: .atomic)
+                    }.value
+                    session.status = L10n.text("transcript.export.done", url.lastPathComponent)
+                } catch { session.say(L10n.error(error), .error) }
+            }
+        }
+    }
+
     @objc func exportAudio(_ sender: Any?) {
         guard let window else { return }
         let panel = NSSavePanel()
@@ -862,6 +943,11 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         }
         if item.action == #selector(sendToFlimmer(_:)) { return session.project.imported?.app == "flimmer" }
         if item.action == #selector(saveVoiceProfile(_:)) { return !session.speakerPrints.isEmpty }
+        if item.action == #selector(exportTranscript(_:)) { return !session.project.placedWords().isEmpty }
+        if item.action == #selector(transcribeVoiceTracks(_:)) || item.action == #selector(splitAndTranscribeSpeakers(_:)) {
+            if JobRegistry.shared.latest("transcribe", document: session.agentID).map({ !$0.isFinished }) == true { return false }
+            return item.action == #selector(splitAndTranscribeSpeakers(_:)) ? splittableTrack != nil : !TrackSpeech.tracks(in: session.project).isEmpty
+        }
         if item.action == #selector(splitSpeakers(_:)) { return splittableTrack != nil }
         if item.action == #selector(showRestore(_:)) {
             return session.project.length > 0 && !(JobRegistry.shared.latest("restore", document: session.agentID).map { !$0.isFinished } ?? false)
@@ -1107,6 +1193,23 @@ final class MixerWindow: NSWindow, NSWindowDelegate {
         // (A text field in the window takes its own keys before this is asked.)
         if event.keyCode == 49, event.modifierFlags.intersection([.command, .option, .control]).isEmpty { session?.togglePlay(); return }
         super.keyDown(with: event)
+    }
+}
+
+/// Keeps the save panel's file type in sync with the transcript format.
+@MainActor
+private final class TranscriptSaveFormatChoice: NSObject {
+    private weak var panel: NSSavePanel?
+    private(set) var format: TranscriptExport = .txt
+
+    init(panel: NSSavePanel) { self.panel = panel }
+
+    @objc func changed(_ sender: NSPopUpButton) {
+        guard TranscriptExport.allCases.indices.contains(sender.indexOfSelectedItem), let panel else { return }
+        format = TranscriptExport.allCases[sender.indexOfSelectedItem]
+        if let fileType = UTType(filenameExtension: format.rawValue) { panel.allowedContentTypes = [fileType] }
+        let name = (panel.nameFieldStringValue as NSString).deletingPathExtension
+        panel.nameFieldStringValue = name + "." + format.rawValue
     }
 }
 

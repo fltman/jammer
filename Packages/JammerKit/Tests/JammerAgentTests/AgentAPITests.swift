@@ -408,7 +408,13 @@ struct SiblingTests {
         let ops = AgentAPI.operations
         #expect(!ops.isEmpty)
         for op in ops {
-            let keys: Set<String> = ["name", "description", "params", "paid", "undoable", "startsJob", "tier"]
+            var keys: Set<String> = ["name", "description", "params", "paid", "undoable", "startsJob", "tier"]
+            if let name = op["name"] as? String, ["batch", "transcribe"].contains(name) {
+                keys.insert("pricesByEngine")
+                let prices = op["pricesByEngine"] as? [String: [String: Any]]
+                #expect(prices?["openai"]?["priceKnown"] as? Bool == false)
+                #expect((prices?["berget_pianissimo"]?["price"] as? [String: Any])?["amount"] as? Double == 0.0035)
+            }
             #expect(Set(op.keys) == keys || Set(op.keys) == keys.union(["call"]), "\(op["name"] ?? "?")")
             let schema = try #require(op["params"] as? [String: Any])
             #expect(schema["type"] as? String == "object")

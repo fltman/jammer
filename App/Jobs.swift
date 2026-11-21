@@ -3,6 +3,7 @@ import JammerAgent
 import Observation
 import JammerCore
 import JammerPlugins
+import JammerParakeet
 import JammerStems
 import JammerSpeech
 import JammerWhisper
@@ -24,7 +25,10 @@ final class JobRegistry {
 
     /// The newest job of `kind` for a document, running or not.
     func latest(_ kind: String, document: String) -> Job? {
-        jobs.values.filter { $0.kind == kind && $0.documentID == document }.max { $0.id < $1.id }
+        let matches = jobs.values.filter { $0.kind == kind && $0.documentID == document }
+        return matches.first { !$0.isFinished } ?? matches.max {
+            (finishedAt[$0.id] ?? .distantPast) < (finishedAt[$1.id] ?? .distantPast)
+        }
     }
 
     var running: [Job] { jobs.values.filter { !$0.isFinished }.sorted { $0.id < $1.id } }
@@ -358,6 +362,139 @@ final class JobRegistry {
         func set() { lock.withLock { value = true } }
     }
 
+    func startVoiceTranscription(_ session: EditorSession, tracks: [UUID]? = nil,
+                                 splitTrack: UUID? = nil, nameSpeakers: Bool = true) throws -> Job {
+        guard latest("transcribe", document: session.agentID)?.isFinished != false else {
+            throw SpeechEngines.Unavailable(reason: "transcription_running",
+                message: Said("transcript.working", "Transcribing on this Mac…"))
+        }
+        guard SpeechEngines.store.isInstalled(.multilingualWhisper) else {
+            throw SpeechEngines.Unavailable(reason: "model_missing",
+                message: Said("voiceTranscribe.model", "Install multilingual Whisper in Jämmer › Settings › Models to detect each track’s language."),
+                requirement: ModelSpec.multilingualWhisper.id)
+        }
+        let base = session.project
+        var working = base
+        let ids = if let splitTrack { try working.splitSpeakers(track: splitTrack) }
+            else { tracks ?? TrackSpeech.tracks(in: working) }
+        let wanted = Set(ids)
+        let turns = working.placedTurns()
+        let restrictToSpeech = splitTrack == nil && working.hasOverlappingTracks
+        let inputs = working.tracks.indices.filter {
+            wanted.contains(working.tracks[$0].id) && !working.tracks[$0].clips.isEmpty && working.tracks[$0].frozen == nil
+        }.map { TrackSpeech(project: working, index: $0, turns: turns, restrictToSpeech: restrictToSpeech) }.filter { !$0.spans.isEmpty }
+        guard !inputs.isEmpty else {
+            throw SpeechEngines.Unavailable(reason: "nothing_to_transcribe",
+                message: Said("voiceTranscribe.noTracks", "There are no voice tracks to transcribe."))
+        }
+        var job = Job(kind: "transcribe", documentID: session.agentID)
+        let id = job.id
+        jobs[id] = job
+        let pool = session.pool
+        let whisper = SpeechEngines.multilingualWhisper
+        let pianissimo = SpeechEngines.pianissimo
+        tasks[id] = Task { [weak self, weak session] in
+            job.status = .running
+            self?.update(job)
+            do {
+                let results = try await Self.recognizeVoiceTracks(inputs, pool: pool, sampleRate: base.sampleRate, whisper: whisper,
+                                                                 pianissimo: pianissimo) { progress in
+                    Task { @MainActor in
+                        guard var job = self?.jobs[id], !job.isFinished else { return }
+                        job.progress = min(0.99, progress)
+                        self?.update(job)
+                    }
+                }
+                try Task.checkCancellation()
+                guard let session else { throw CancellationError() }
+                var current = session.project
+                if splitTrack != nil {
+                    guard current == base else { throw VoiceTrackJobError.changed }
+                    current = working
+                } else {
+                    guard current.speakerTurns == base.speakerTurns, inputs.allSatisfy({ input in
+                        current.tracks.contains { $0.id == input.track.id && $0.clips == input.track.clips && $0.frozen == nil }
+                    }) else { throw VoiceTrackJobError.changed }
+                }
+                let names = nameSpeakers ? VoiceTrackTranscription.names(for: results, sampleRate: base.sampleRate) : [:]
+                var details: [Job.TranscribedTrack] = []
+                for result in results {
+                    let track = result.track.track.id
+                    let transcript = result.transcript
+                    let count = result.track.apply(transcript, name: names[track], to: &current)
+                    let name = current.tracks.first { $0.id == track }?.name ?? result.track.track.name
+                    details.append(.init(id: track, name: name, language: transcript.language, engine: transcript.engine, words: count))
+                }
+                session.commit(current, action: L10n.text(splitTrack == nil ? "op.transcribe_voice_tracks.title" : "voiceTranscribe.split"))
+                session.status = L10n.text("voiceTranscribe.done")
+                job.status = .done
+                job.progress = 1
+                job.transcribedTracks = details
+                self?.finish(job)
+            } catch is CancellationError {
+                if self?.jobs[id]?.status != .cancelled {
+                    job.cancel(paidRequestLeft: false)
+                    self?.finish(job)
+                }
+            } catch {
+                guard self?.jobs[id]?.status != .cancelled else { return }
+                job.status = .failed
+                job.fail(error is VoiceTrackJobError ? "track_changed" : "transcription_failed", error)
+                session?.say(L10n.error(error), .error)
+                self?.finish(job)
+            }
+        }
+        return job
+    }
+
+    private enum VoiceTrackJobError: LocalizedError, KeyedFailure {
+        case changed
+        var errorDescription: String? { said.text }
+        var keyed: KeyedMessage? { said.keyed }
+        private var said: Said {
+            Said("voiceTranscribe.changed", "The voice tracks changed while transcription was running. Run it again on the current edit.")
+        }
+    }
+
+    @concurrent nonisolated private static func recognizeVoiceTracks(_ inputs: [TrackSpeech], pool: SourcePool, sampleRate: Double,
+                                                         whisper: WhisperEngine, pianissimo: [PianissimoModel: PianissimoEngine],
+                                                         progress: @escaping @Sendable (Double) -> Void) async throws -> [VoiceTrackTranscription.Result] {
+        let folder = FileManager.default.temporaryDirectory.appending(path: "jammer-voice-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
+        defer { try? FileManager.default.removeItem(at: folder) }
+        var results: [VoiceTrackTranscription.Result] = []
+        for (i, track) in inputs.enumerated() {
+            try Task.checkCancellation()
+            let file = folder.appending(path: "\(i).wav")
+            let input = try VoiceTrackTranscription.writeInput(track, sampleRate: sampleRate, pool: pool, to: file)
+            let analysisPool = SourcePool()
+            let base = Double(i) / Double(inputs.count), share = 1 / Double(inputs.count)
+            let language = try whisper.detectLanguage(input, pool: analysisPool) ?? "und"
+            let locale = Locale(identifier: language)
+            var specialized: SourceTranscript?
+            if let model = PianissimoModel(rawValue: language), let recognizer = pianissimo[model], recognizer.isInstalled {
+                do {
+                    let refined = try await recognizer.transcribe(input, pool: analysisPool, locale: locale) { progress(base + $0 * share) }
+                    if !refined.words.isEmpty { specialized = refined }
+                } catch {
+                    try Task.checkCancellation()
+                    // If the optional specialist model can't run, Whisper still recognizes this track.
+                }
+            }
+            var transcript: SourceTranscript
+            if let specialized {
+                transcript = specialized
+            } else {
+                transcript = try await whisper.transcribe(input, pool: analysisPool, locale: locale) { progress(base + $0 * share) }
+            }
+            transcript.language = language
+            results.append(.init(track: track, transcript: transcript))
+            try FileManager.default.removeItem(at: file)
+            progress(base + share)
+        }
+        return results
+    }
+
     func startTranscription(_ session: EditorSession, locale: Locale, replace: Bool, engine choice: SpeechEngines.Choice = .auto, model: String? = nil) -> Job {
         var job = Job(kind: "transcribe", documentID: session.agentID)
         jobs[job.id] = job
@@ -365,17 +502,15 @@ final class JobRegistry {
         let used = Set(project.tracks.flatMap { $0.clips.map(\.sourceID) })
         let todo = project.sources.filter { src in used.contains(src.id) && (replace || !project.transcripts.contains { $0.sourceID == src.id }) }
         let pool = session.pool
-        // See SpeechEngines: KB-Whisper for Swedish, then Parakeet, then Apple (docs/TRANSCRIPTION.md).
-        // A paid engine that can't be had is never quietly replaced by another: the caller checked it first,
-        // and if it has gone since, the job fails saying so.
-        let wanted = try? SpeechEngines.engine(choice, for: locale, model: model)
-        if choice.paid, wanted == nil {
+        let engine: any TranscriptionEngine
+        do {
+            engine = try SpeechEngines.engine(choice, for: locale, model: model)
+        } catch {
             job.status = .failed
-            job.fail("engine_unavailable", Said("job.engineUnavailable", "The %@ engine can't be used now (its key or model is missing). Nothing was sent.", choice.rawValue))
-            jobs[job.id] = job
+            job.fail((error as? SpeechEngines.Unavailable)?.reason ?? "engine_unavailable", error)
+            finish(job)
             return job
         }
-        let engine: any TranscriptionEngine = wanted ?? AppleSpeechEngine()
         let id = job.id
         let total = Double(todo.reduce(Frame(0)) { $0 + $1.info.frames })
         tasks[id] = Task { [weak self, weak session] in
@@ -393,7 +528,7 @@ final class JobRegistry {
                 for src in todo {
                     try Task.checkCancellation()
                     // From here a paid engine's request leaves the app.
-                    if choice.paid { self?.paidSent[id] = "OpenAI" }
+                    if let provider = choice.provider { self?.paidSent[id] = provider }
                     let base = done
                     let share = Double(src.info.frames) / max(1, total)
                     let t = try await engine.transcribe(src, pool: pool, locale: locale) { p in

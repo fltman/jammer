@@ -41,6 +41,12 @@ enum CommandPalette {
             .init(id: "transcript", title: L10n.text("palette.transcript"), detail: L10n.text("menu.view"), shortcut: "⌥⌘T") {
                 NSApp.sendAction(#selector(EditorWindowController.toggleTranscript(_:)), to: nil, from: nil)
             },
+            .init(id: "transcribe_voice_tracks", title: L10n.text("op.transcribe_voice_tracks.title"), detail: L10n.text("menu.audio"), shortcut: "") {
+                NSApp.sendAction(#selector(EditorWindowController.transcribeVoiceTracks(_:)), to: nil, from: nil)
+            },
+            .init(id: "export_transcript", title: L10n.text("op.export_transcript.title"), detail: L10n.text("menu.file"), shortcut: "") {
+                NSApp.sendAction(#selector(EditorWindowController.exportTranscript(_:)), to: nil, from: nil)
+            },
             .init(id: "restore", title: L10n.text("palette.restore"), detail: L10n.text("menu.audio"), shortcut: "") {
                 NSApp.sendAction(#selector(EditorWindowController.showRestore(_:)), to: nil, from: nil)
             },

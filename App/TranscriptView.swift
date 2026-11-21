@@ -19,8 +19,11 @@ final class TranscriptPanel: NSView, NSTextViewDelegate {
     private let scroll = NSScrollView()
     private let empty = NSTextField(wrappingLabelWithString: "")
     private let language = NSPopUpButton()
-    /// Where the transcribing is done. Shown only while the paid route is being tried out (hidden providers on).
+    /// Where the transcribing is done.
     private let engine = NSPopUpButton()
+    private var selectedEngine: SpeechEngines.Choice {
+        (engine.selectedItem?.representedObject as? String).flatMap(SpeechEngines.Choice.init(rawValue:)) ?? .auto
+    }
     private let transcribeButton = NSButton(title: L10n.text("transcript.transcribe"), target: nil, action: nil)
     private let progress = NSProgressIndicator()
     private var placed: [PlacedWord] = []
@@ -30,7 +33,7 @@ final class TranscriptPanel: NSView, NSTextViewDelegate {
     private var updatingSelection = false
 
     static var languages: [(String, String)] { [
-        (L10n.text("lang.sv"), "sv-SE"), (L10n.text("lang.enUS"), "en-US"), (L10n.text("lang.enGB"), "en-GB"), (L10n.text("lang.de"), "de-DE"),
+        (L10n.text("lang.sv"), "sv-SE"), (L10n.text("lang.da"), "da-DK"), (L10n.text("lang.nb"), "nb-NO"), (L10n.text("lang.enUS"), "en-US"), (L10n.text("lang.enGB"), "en-GB"), (L10n.text("lang.de"), "de-DE"),
         (L10n.text("lang.fr"), "fr-FR"), (L10n.text("lang.es"), "es-ES"), (L10n.text("lang.it"), "it-IT"), (L10n.text("lang.ptBR"), "pt-BR"),
     ] }
 
@@ -62,12 +65,17 @@ final class TranscriptPanel: NSView, NSTextViewDelegate {
         progress.isIndeterminate = false
         progress.isHidden = true
         progress.widthAnchor.constraint(equalToConstant: 120).isActive = true
-        engine.addItem(withTitle: L10n.text("transcript.engine.local"))
-        engine.lastItem?.representedObject = SpeechEngines.Choice.auto.rawValue
-        engine.addItem(withTitle: L10n.text("transcript.engine.openai"))
-        engine.lastItem?.representedObject = SpeechEngines.Choice.openai.rawValue
-        // Said where it is chosen: what this choice means, before the sheet says it in full.
-        engine.lastItem?.toolTip = L10n.text("transcript.engine.openai.help")
+        let choices: [(SpeechEngines.Choice, String, String?)] = [
+            (.auto, L10n.text("transcript.engine.local"), nil),
+            (.pianissimo, L10n.text("transcript.engine.pianissimo"), L10n.text("transcript.engine.pianissimo.help")),
+            (.bergetPianissimo, L10n.text("transcript.engine.berget"), L10n.text("transcript.engine.berget.help")),
+            (.openai, L10n.text("transcript.engine.openai"), L10n.text("transcript.engine.openai.help")),
+        ]
+        for (choice, title, help) in choices {
+            engine.addItem(withTitle: title)
+            engine.lastItem?.representedObject = choice.rawValue
+            engine.lastItem?.toolTip = help
+        }
         engine.toolTip = L10n.text("transcript.engine.help")
         engine.controlSize = .small
         engine.setAccessibilityLabel(L10n.text("transcript.engine.ax"))
@@ -147,10 +155,11 @@ final class TranscriptPanel: NSView, NSTextViewDelegate {
             } else if let job, job.status == .failed {
                 empty.stringValue = job.errorKeyed.map(L10n.message) ?? job.error?.message ?? L10n.text("transcript.failed")
             } else {
-                // True for the choice that is made: on this Mac nothing leaves it; at OpenAI the audio does.
-                let away = engine.selectedItem?.representedObject as? String == SpeechEngines.Choice.openai.rawValue
-                empty.stringValue = away ? L10n.text("transcript.empty.openai")
-                                         : L10n.text("transcript.empty.local")
+                empty.stringValue = switch selectedEngine {
+                case .openai: L10n.text("transcript.empty.openai")
+                case .bergetPianissimo: L10n.text("transcript.empty.berget")
+                default: L10n.text("transcript.empty.local")
+                }
             }
         } else {
             empty.isHidden = true
@@ -289,12 +298,57 @@ final class TranscriptPanel: NSView, NSTextViewDelegate {
     @objc func transcribe(_ sender: Any?) {
         let code = language.selectedItem?.representedObject as? String ?? "sv-SE"
         UserDefaults.standard.set(code, forKey: "transcript.language")
-        if engine.selectedItem?.representedObject as? String == SpeechEngines.Choice.openai.rawValue {
-            Task { await transcribeAtOpenAI(Locale(identifier: code)) }
+        let locale = Locale(identifier: code)
+        switch selectedEngine {
+        case .openai:
+            Task { await transcribeAtOpenAI(locale) }
+        case .bergetPianissimo:
+            Task { await transcribeAtBerget(locale) }
+        default:
+            _ = JobRegistry.shared.startTranscription(session, locale: locale, replace: !session.project.transcripts.isEmpty, engine: selectedEngine)
+            refresh()
+        }
+    }
+
+    private func transcribeAtBerget(_ locale: Locale) async {
+        let choice = SpeechEngines.Choice.bergetPianissimo
+        do { _ = try SpeechEngines.engine(choice, for: locale) } catch {
+            let alert = NSAlert()
+            alert.messageText = L10n.text("transcript.engine.berget")
+            alert.informativeText = L10n.error(error)
+            if let window { _ = await alert.beginSheetModal(for: window) } else { alert.runModal() }
             return
         }
-        _ = JobRegistry.shared.startTranscription(session, locale: Locale(identifier: code), replace: !session.project.transcripts.isEmpty)
+        guard let price = choice.price else { return }
+        let replace = !session.project.transcripts.isEmpty
+        let sources = transcriptionSources(replace: replace)
+        guard !sources.isEmpty else { return }
+        let seconds = sources.reduce(0.0) { $0 + Double($1.info.frames) / $1.info.sampleRate }
+        let estimate = seconds / 60 * price.amount
+        let alert = NSAlert()
+        alert.messageText = L10n.text("berget.transcription.ask")
+        alert.informativeText = L10n.text("berget.transcription.upload", L10n.count("storage.files", sources.count),
+                                        L10n.number(seconds / 60, 2), L10n.number(estimate, 4))
+            + "\n\n" + SpeechEngines.bergetPriceLine(price)
+        alert.addButton(withTitle: L10n.text("button.send"))
+        alert.addButton(withTitle: L10n.text("button.cancel"))
+        let answer: NSApplication.ModalResponse
+        if let window { answer = await alert.beginSheetModal(for: window) } else { answer = alert.runModal() }
+        guard answer == .alertFirstButtonReturn else { return }
+        guard sources == transcriptionSources(replace: replace) else {
+            session.say(L10n.text("berget.transcription.changed"), .warning)
+            return
+        }
+        _ = JobRegistry.shared.startTranscription(session, locale: locale, replace: replace, engine: choice)
         refresh()
+    }
+
+    private func transcriptionSources(replace: Bool) -> [SourceRef] {
+        let project = session.project
+        let used = Set(project.tracks.flatMap { $0.clips.map(\.sourceID) })
+        return project.sources.filter { source in
+            used.contains(source.id) && (replace || !project.transcripts.contains { $0.sourceID == source.id })
+        }
     }
 
     /// The paid route: what leaves the Mac and who charges for it is said first, and nothing is sent
@@ -320,10 +374,8 @@ final class TranscriptPanel: NSView, NSTextViewDelegate {
             return
         }
         // What goes: the whole of each file the document plays from that has no transcript yet (or all of them, when transcribing again).
-        let p = session.project
-        let replace = !p.transcripts.isEmpty
-        let used = Set(p.tracks.flatMap { $0.clips.map(\.sourceID) })
-        let todo = p.sources.filter { s in used.contains(s.id) && (replace || !p.transcripts.contains { $0.sourceID == s.id }) }
+        let replace = !session.project.transcripts.isEmpty
+        let todo = transcriptionSources(replace: replace)
         let seconds = todo.reduce(0.0) { $0 + Double($1.info.frames) / $1.info.sampleRate }
         let pieces = todo.reduce(0) { $0 + max(1, Int((Double($1.info.frames) / $1.info.sampleRate / 600).rounded(.up))) }
         let length = seconds >= 3600 ? L10n.text("duration.hoursMinutes", String(Int(seconds) / 3600), String(Int(seconds) % 3600 / 60)) : L10n.text("duration.minutesSeconds", String(Int(seconds) / 60), String(Int(seconds) % 60))

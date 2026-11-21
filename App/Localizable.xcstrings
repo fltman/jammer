@@ -4766,24 +4766,6 @@
         }
       }
     },
-    "batch.paid.job": {
-      "comment": "A paid job in the batch question. %1$@ engine, %2$@ language.",
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "• transcribe with %1$@ (%2$@)"
-          }
-        },
-        "sv": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "• skriv ut med %1$@ (%2$@)"
-          }
-        }
-      }
-    },
     "batch.paid.notSent": {
       "comment": "Batch status when the paid question was declined.",
       "extractionState": "manual",
@@ -4791,13 +4773,47 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Not started: nothing was sent to OpenAI."
+            "value": "Batch canceled. No audio was sent."
           }
         },
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Inte startad: inget skickades till OpenAI."
+            "value": "Batchen avbröts. Inget ljud skickades."
+          }
+        }
+      }
+    },
+    "batch.paid.openai": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OpenAI charges your account. Jämmer cannot quote its transcription price. Review OpenAI’s terms before sending audio."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OpenAI debiterar ditt konto. Jämmer kan inte ange priset för transkriberingen. Läs OpenAI:s villkor innan du skickar ljud."
+          }
+        }
+      }
+    },
+    "batch.paid.provider": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ (%2$@)"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ (%2$@)"
           }
         }
       }
@@ -4809,13 +4825,30 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The recipe “%1$@” transcribes at OpenAI:\n%2$@\n\nFor each of %3$@, the whole file will be uploaded to OpenAI and transcribed there.\n\nOpenAI charges your account for it by its own price list; Jämmer can’t read that price list and doesn’t guess the cost.\n\nJämmer hasn’t been able to read OpenAI’s terms for what it does with uploaded audio. Read them at OpenAI before sending anything that isn’t yours to share."
+            "value": "The recipe “%1$@” sends all of each of %3$@ to these transcription services.\n%2$@"
           }
         },
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Receptet ”%1$@” skriver ut hos OpenAI:\n%2$@\n\nFör var och en av %3$@ laddas hela filen upp till OpenAI och skrivs ut där.\n\nOpenAI debiterar ditt konto enligt sin egen prislista; Jämmer kan inte läsa den prislistan och gissar inte kostnaden.\n\nJämmer har inte kunnat läsa OpenAI:s villkor för vad de gör med uppladdat ljud. Läs dem hos OpenAI innan du skickar något som inte är ditt att dela."
+            "value": "Receptet ”%1$@” skickar hela ljudet i var och en av %3$@ till följande transkriberingstjänster.\n%2$@"
+          }
+        }
+      }
+    },
+    "batch.paid.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Confirm paid transcription"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bekräfta betald transkribering"
           }
         }
       }
@@ -5122,6 +5155,74 @@
           "stringUnit": {
             "state": "translated",
             "value": "Batchkörning"
+          }
+        }
+      }
+    },
+    "berget.transcription.ask": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transcribe with Berget AI?"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkribera hos Berget AI?"
+          }
+        }
+      }
+    },
+    "berget.transcription.changed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The source files changed. Review the new upload before sending."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Källfilerna har ändrats. Granska den nya uppladdningen innan du skickar."
+          }
+        }
+      }
+    },
+    "berget.transcription.price": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Berget AI charges €%1$@ per audio minute. Rate from %2$@, checked %3$@."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Berget AI tar %1$@ euro per ljudminut. Pris från %2$@, kontrollerat %3$@."
+          }
+        }
+      }
+    },
+    "berget.transcription.upload": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jämmer will send the full audio of %1$@ to Berget AI for Swedish transcription. About %2$@ audio minutes, estimated at €%3$@. The transcript comes back as text only."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jämmer skickar hela ljudet från %1$@ till Berget AI för svensk transkribering. Cirka %2$@ ljudminuter med en beräknad kostnad på %3$@ euro. Du får tillbaka text utan ordtider."
           }
         }
       }
@@ -5821,6 +5922,40 @@
         }
       }
     },
+    "engine.berget.key": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add your Berget AI key in Jämmer › Settings › Paid Services."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lägg till din Berget AI-nyckel i Jämmer › Inställningar › Betaltjänster."
+          }
+        }
+      }
+    },
+    "engine.berget.language": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pianissimo at Berget AI supports Swedish."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pianissimo hos Berget AI stöder svenska."
+          }
+        }
+      }
+    },
     "engine.kb_whisper_swedish": {
       "extractionState": "manual",
       "localizations": {
@@ -5885,6 +6020,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "Parakeet kan inte %@; den täcker 25 europeiska språk."
+          }
+        }
+      }
+    },
+    "engine.pianissimo.language": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Local Pianissimo supports Swedish and Danish."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lokala Pianissimo stöder svenska och danska."
+          }
+        }
+      }
+    },
+    "engine.pianissimo.missing": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Install the matching Klang Pianissimo model in Jämmer › Settings › Models."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Installera rätt Klang Pianissimo-modell i Jämmer › Inställningar › Modeller."
           }
         }
       }
@@ -6562,6 +6731,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Dokumentet har inga klipp att skriva."
+          }
+        }
+      }
+    },
+    "error.batch.engine": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The transcription engine %@ is unknown."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkriberingsmotorn %@ är okänd."
           }
         }
       }
@@ -10584,6 +10770,40 @@
         }
       }
     },
+    "error.transcript.exportEmpty": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "There is no transcript to export for those tracks."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Det finns ingen transkribering att exportera för de spåren."
+          }
+        }
+      }
+    },
+    "error.transcript.exportTimes": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Subtitle export needs word timestamps. Choose TXT or JSON, or transcribe with a local engine."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Undertexter kräver ordtider. Välj TXT eller JSON, eller transkribera med en lokal motor."
+          }
+        }
+      }
+    },
     "error.transcript.noWords": {
       "comment": "An error’s reason, shown in the status line after a step that failed (the agent API says the same in English). Placeholders are names, ids or numbers.",
       "extractionState": "manual",
@@ -11661,6 +11881,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Exportera tidslinje…"
+          }
+        }
+      }
+    },
+    "op.export_transcript.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export Transcript"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exportera transkribering"
           }
         }
       }
@@ -13533,23 +13770,6 @@
         }
       }
     },
-    "job.engineUnavailable": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The %@ engine can't be used now (its key or model is missing). Nothing was sent."
-          }
-        },
-        "sv": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Motorn %@ kan inte användas nu (dess nyckel eller modell saknas). Inget skickades."
-          }
-        }
-      }
-    },
     "job.mayHaveBeenCharged": {
       "extractionState": "manual",
       "localizations": {
@@ -13581,6 +13801,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mellanslag"
+          }
+        }
+      }
+    },
+    "lang.da": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Danish"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Danska"
           }
         }
       }
@@ -13689,6 +13926,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Italienska"
+          }
+        }
+      }
+    },
+    "lang.nb": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Norwegian Bokmål"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Norskt bokmål"
           }
         }
       }
@@ -20156,6 +20410,23 @@
         }
       }
     },
+    "op.transcribe_voice_tracks.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transcribe Voice Tracks"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkribera röstspår"
+          }
+        }
+      }
+    },
     "op.unfreeze.title": {
       "comment": "The title of the operation unfreeze: in the menus, the command palette, the assistant’s plan and as the undo name (“Undo …”). The agent API keeps the English title.",
       "extractionState": "manual",
@@ -21368,6 +21639,74 @@
           "stringUnit": {
             "state": "translated",
             "value": "Overdub med rösten för %@…"
+          }
+        }
+      }
+    },
+    "paid.berget.key": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Berget AI API key"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "API-nyckel för Berget AI"
+          }
+        }
+      }
+    },
+    "paid.berget.note": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uses the same key as Berget in the assistant. The Pianissimo route was built from the documentation and has been tested with a simulated service."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Samma nyckel används för Berget i assistenten. Anslutningen för Pianissimo bygger på dokumentationen och har provats mot en simulerad tjänst."
+          }
+        }
+      }
+    },
+    "paid.berget.saved": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Berget AI key saved"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Berget AI-nyckeln är sparad"
+          }
+        }
+      }
+    },
+    "paid.berget.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Berget AI transcription"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkribering hos Berget AI"
           }
         }
       }
@@ -25786,6 +26125,57 @@
         }
       }
     },
+    "settings.models.pianissimo.da": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Klang Pianissimo (Danish)"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Klang Pianissimo (danska)"
+          }
+        }
+      }
+    },
+    "settings.models.pianissimo.sv": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Klang Pianissimo (Swedish)"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Klang Pianissimo (svenska)"
+          }
+        }
+      }
+    },
+    "settings.models.pianissimo.use": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On-device transcription with word timestamps."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lokal transkribering med ordtider."
+          }
+        }
+      }
+    },
     "settings.models.showInFinder": {
       "comment": "Button.",
       "extractionState": "manual",
@@ -25941,6 +26331,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "KB-Whisper medium (svenska, 539 MB)"
+          }
+        }
+      }
+    },
+    "settings.models.whisperMultilingual.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Whisper small (multilingual)"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Whisper small (flerspråkig)"
+          }
+        }
+      }
+    },
+    "settings.models.whisperMultilingual.use": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Detects and transcribes the language of each voice track."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hittar språket och transkriberar varje röstspår."
           }
         }
       }
@@ -30559,6 +30983,23 @@
         }
       }
     },
+    "transcript.empty.berget": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Berget AI transcribes Swedish audio for a fee and returns plain text."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Berget AI transkriberar svenskt ljud mot betalning och returnerar ren text."
+          }
+        }
+      }
+    },
     "transcript.empty.local": {
       "comment": "Shown in the empty panel.",
       "extractionState": "manual",
@@ -30609,6 +31050,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "Transkriberingsmotor"
+          }
+        }
+      }
+    },
+    "transcript.engine.berget": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pianissimo · Berget AI"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pianissimo · Berget AI"
+          }
+        }
+      }
+    },
+    "transcript.engine.berget.help": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paid Swedish transcription at Berget AI. Returns text without word timestamps."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Betald svensk transkribering hos Berget AI. Ger text utan ordtider."
           }
         }
       }
@@ -30681,6 +31156,108 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ljudet laddas upp till OpenAI och transkriberas där, mot betalning. Texten kommer tillbaka utan tiden för varje ord: du kan läsa, söka i och rätta den, men inte redigera ljudet med den. Byggd efter OpenAI:s dokumentation, inte provad med en riktig förfrågan."
+          }
+        }
+      }
+    },
+    "transcript.engine.pianissimo": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pianissimo · On this Mac"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pianissimo · På den här Macen"
+          }
+        }
+      }
+    },
+    "transcript.engine.pianissimo.help": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Local Swedish or Danish transcription. Install the matching model in Settings."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lokal transkribering på svenska eller danska. Installera rätt modell i Inställningar."
+          }
+        }
+      }
+    },
+    "transcript.export.allTracks": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All audible tracks"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alla hörbara spår"
+          }
+        }
+      }
+    },
+    "transcript.export.done": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exported %@"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exporterade %@"
+          }
+        }
+      }
+    },
+    "transcript.export.format": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Format"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Format"
+          }
+        }
+      }
+    },
+    "transcript.export.track": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Track"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spår"
           }
         }
       }
@@ -31688,6 +32265,125 @@
           "stringUnit": {
             "state": "translated",
             "value": "Vems röst är det?"
+          }
+        }
+      }
+    },
+    "voiceTranscribe.ask": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jämmer detects the language and transcribes the audio of each voice track on this Mac."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jämmer hittar språket och transkriberar ljudet från varje röstspår på den här Macen."
+          }
+        }
+      }
+    },
+    "voiceTranscribe.changed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The voice tracks changed while transcription was running. Run it again on the current edit."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Röstspåren ändrades under transkriberingen. Kör igen med den aktuella redigeringen."
+          }
+        }
+      }
+    },
+    "voiceTranscribe.done": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Voice track transcription finished."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkriberingen av röstspåren är klar."
+          }
+        }
+      }
+    },
+    "voiceTranscribe.model": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Install multilingual Whisper in Jämmer › Settings › Models to detect each track’s language."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Installera flerspråkiga Whisper i Jämmer › Inställningar › Modeller för att hitta språket på varje spår."
+          }
+        }
+      }
+    },
+    "voiceTranscribe.names": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Name tracks from spoken introductions"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Namnge spår utifrån talade presentationer"
+          }
+        }
+      }
+    },
+    "voiceTranscribe.noTracks": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "There are no voice tracks to transcribe."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Det finns inga röstspår att transkribera."
+          }
+        }
+      }
+    },
+    "voiceTranscribe.split": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Split and Transcribe Speakers"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dela upp och transkribera talare"
           }
         }
       }

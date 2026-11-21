@@ -57,6 +57,23 @@ public enum Requirements {
     static let installedCheck = "GET /api/v1/requirements answers \"installed\": true for it, and Settings › Models says Installed"
     static let read = "2026-11-19"
 
+    static func pianissimo(_ model: PianissimoModel) -> Requirement {
+        let manifest = model.manifest
+        let base = "https://huggingface.co"
+        let swedish = model == .swedish
+        let language = swedish ? "Swedish" : "Danish"
+        let publisher = swedish ? "Klang AI AB (Core ML conversion by markstrom)" : "Klang AI AB"
+        return Requirement(id: model.id, name: "Klang Pianissimo (\(language))", kind: .model, neededBy: ["transcribe", "transcribe_voice_tracks"], required: false,
+                           sizeBytes: model.downloadBytes, license: .init(spdx: "CC-BY-4.0", url: "https://creativecommons.org/licenses/by/4.0/"),
+                           source: .init(publisher: publisher, url: "\(base)/\(manifest.repo)",
+                                         version: swedish ? "Core ML int8 1.1.0" : "Core ML int8",
+                                         commit: manifest.commit,
+                                         checkedAt: "\(base)/api/models/\(manifest.repo)/tree/\(manifest.commit)?recursive=true",
+                                         checkedOn: "2026-11-21"),
+                           install: .inApp(where: models), location: "\(folder)/\(model.id)", remove: "Remove in \(models)",
+                           check: installedCheck, manifest: manifest)
+    }
+
     /// Everything, release and debug.
     public static let all: [Requirement] = [
         Requirement(id: "kb-whisper-small", name: "KB-Whisper small (Swedish)", kind: .model, neededBy: ["transcribe"], required: false,
@@ -73,12 +90,25 @@ public enum Requirements {
                                   commit: "0abe10b9d7f75d0902656e5c06c5c4d549604dc5",
                                   checkedAt: "https://huggingface.co/api/models/KBLab/kb-whisper-medium/tree/0abe10b9d7f75d0902656e5c06c5c4d549604dc5 (lfs.oid)", checkedOn: read),
                     install: .inApp(where: models), location: folder, remove: "Remove in \(models)", check: installedCheck),
+        Requirement(id: "whisper-small-multilingual", name: "Whisper small (multilingual)", kind: .model,
+                    neededBy: ["transcribe_voice_tracks"], required: true, sizeBytes: 190_085_487,
+                    license: .init(spdx: "MIT", url: "https://github.com/openai/whisper/blob/main/LICENSE"),
+                    source: .init(publisher: "OpenAI (GGML conversion by whisper.cpp)",
+                                  url: "https://huggingface.co/ggerganov/whisper.cpp/blob/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-small-q5_1.bin",
+                                  version: "small Q5_1", sha256: "ae85e4a935d7a567bd102fe55afc16bb595bdb618e11b2fc7591bc08120411bb",
+                                  commit: "5359861c739e955e79d9a303bcbc70fb988958b1",
+                                  checkedAt: "https://huggingface.co/api/models/ggerganov/whisper.cpp/tree/5359861c739e955e79d9a303bcbc70fb988958b1",
+                                  checkedOn: "2026-11-21"),
+                    install: .inApp(where: models), location: folder + "/whisper-small-multilingual",
+                    remove: "Remove in \(models)", check: installedCheck),
         Requirement(id: "parakeet-tdt-0.6b-v3", name: "Parakeet TDT 0.6B v3 (25 languages)", kind: .model, neededBy: ["transcribe"], required: false,
                     sizeBytes: 632_169_729, license: .init(spdx: "CC-BY-4.0", url: "https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3"),
                     source: .init(publisher: "NVIDIA (Core ML conversion by Fluid Inference)", url: "https://huggingface.co/FluidInference/parakeet-tdt-0.6b-v3-coreml",
                                   version: "Core ML int8 v2", commit: "7dd20fe6b1797d35f5e3307e8b1732d9a178edfe",
                                   checkedAt: "https://huggingface.co/api/models/FluidInference/parakeet-tdt-0.6b-v3-coreml/tree/7dd20fe6b1797d35f5e3307e8b1732d9a178edfe?recursive=true (lfs.oid per LFS file, oid as git blob id for the rest)", checkedOn: read),
                     install: .inApp(where: models), location: folder, remove: "Remove in \(models)", check: installedCheck, manifest: .parakeetV3),
+        pianissimo(.swedish),
+        pianissimo(.danish),
         Requirement(id: "diarisation", name: "Speaker diarisation (pyannote Community-1)", kind: .model, neededBy: ["diarize", "request_voice_profile", "split_speakers"], required: false,
                     sizeBytes: 21_599_417, license: .init(spdx: "CC-BY-4.0", url: "https://huggingface.co/pyannote/speaker-diarization-community-1"),
                     source: .init(publisher: "pyannote (Core ML conversion by Fluid Inference)", url: "https://huggingface.co/FluidInference/speaker-diarization-coreml",

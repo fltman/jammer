@@ -54,14 +54,15 @@ enum BatchJobs {
             }
         case "transcribe":
             let locale = Locale(identifier: step.params["language"]?.string ?? Locale.current.identifier(.bcp47))
-            let choice = SpeechEngines.Choice(rawValue: step.params["engine"]?.string ?? "auto") ?? .auto
-            // Never a paid engine without the request's word (BatchRequest.parse sets it after allowPaid and
-            // allowUnknownPrice; the window asks first).
+            guard let choice = SpeechEngines.Choice(rawValue: step.params["engine"]?.string ?? "auto") else {
+                throw BatchError("bad_request", Said("error.batch.engine", "The transcription engine %@ is unknown.", step.params["engine"]?.string ?? ""))
+            }
+            // BatchRequest.parse checks the required payment permissions. The window asks first.
             if choice.paid, !step.paidAllowed {
                 throw BatchError("paid_not_allowed", Said("error.batch.paidNotAllowed", "The job transcribe with engine %@ uploads the audio to its provider, which charges the user's account. Pass \"allowPaid\": true to run it.", choice.rawValue))
             }
             let engine: any TranscriptionEngine
-            do { engine = try await MainActor.run { try SpeechEngines.engine(choice, for: locale) } } catch let e as SpeechEngines.Unavailable { throw BatchError(e.reason, e.message) }
+            do { engine = try await MainActor.run { try SpeechEngines.engine(choice, for: locale, model: step.params["model"]?.string) } } catch let e as SpeechEngines.Unavailable { throw BatchError(e.reason, e.message) }
             var p = project
             let used = Set(p.tracks.flatMap { $0.clips.map(\.sourceID) })
             for src in p.sources where used.contains(src.id) { p.setTranscript(try await engine.transcribe(src, pool: pool, locale: locale) { _ in }) }
@@ -156,22 +157,28 @@ final class BatchModel {
         }
     }
 
-    /// The question before a run with paid jobs: what is uploaded and to whom, that the price is unknown and why.
-    private func askPaid(_ paid: [[String: Any]]) -> Bool {
-        let lines = paid.map { j -> String in
-            let p = j["params"] as? [String: Any] ?? [:]
-            return L10n.text("batch.paid.job", p["engine"] as? String ?? "", p["language"] as? String ?? Locale.current.identifier(.bcp47))
+    /// Lists every upload and the provider's rate before the batch starts.
+    private func askPaid(_ jobs: [(TranscriptionChoice, String)]) -> Bool {
+        let lines = jobs.compactMap { choice, language in
+            choice.provider.map { L10n.text("batch.paid.provider", $0, language) }
         }.joined(separator: "\n")
+        let choices = Set(jobs.map { $0.0 })
+        let prices = choices.sorted { $0.rawValue < $1.rawValue }.compactMap { $0.price }.map(SpeechEngines.bergetPriceLine)
+        let unknown = choices.contains(.openai) ? UnknownPriceBox(service: "openai.transcription", name: "OpenAI") : nil
         let alert = NSAlert()
-        alert.messageText = L10n.text("openai.ask.title")
-        alert.informativeText = L10n.text("batch.paid.text", recipe.name, lines, L10n.count("storage.files", files.count))
+        alert.messageText = L10n.text("batch.paid.title")
+        var details = [L10n.text("batch.paid.text", recipe.name, lines, L10n.count("storage.files", files.count))]
+        details += prices
+        if unknown != nil { details.append(L10n.text("batch.paid.openai")) }
+        alert.informativeText = details.joined(separator: "\n\n")
         alert.addButton(withTitle: L10n.text("button.send"))
         alert.addButton(withTitle: L10n.text("button.cancel"))
-        let unknown = UnknownPriceBox(service: "openai.transcription", name: "OpenAI")
-        UnknownPriceBox.place([unknown.view], in: alert)
-        unknown.gate(alert.buttons[0])
+        if let unknown {
+            UnknownPriceBox.place([unknown.view], in: alert)
+            unknown.gate(alert.buttons[0])
+        }
         guard alert.runModal() == .alertFirstButtonReturn else { return false }
-        unknown.sent()
+        unknown?.sent()
         return true
     }
 
@@ -190,14 +197,16 @@ final class BatchModel {
         body["files"] = files.map(\.path)
         body["output"] = output.path
         body["export"] = ["format": format.rawValue]
-        // A paid job (transcribe at OpenAI): asked once for the whole run, every paid job named, before anything
-        // is sent (SIBLINGS, "Betalt kräver alltid en fråga"); the request carries the answer, and nothing else does.
         let jobs = (body["jobs"] as? [[String: Any]]) ?? []
-        let paid = jobs.filter { j in (j["op"] as? String) == "transcribe" && BatchRequest.paidEngines.contains(((j["params"] as? [String: Any])?["engine"] as? String) ?? "auto") }
+        let paid = jobs.compactMap { job -> (TranscriptionChoice, String)? in
+            guard job["op"] as? String == "transcribe", let params = job["params"] as? [String: Any],
+                  let name = params["engine"] as? String, let choice = TranscriptionChoice(rawValue: name), choice.paid else { return nil }
+            return (choice, params["language"] as? String ?? Locale.current.identifier(.bcp47))
+        }
         if !paid.isEmpty {
             guard askPaid(paid) else { status = L10n.text("batch.paid.notSent"); return }
             body["allowPaid"] = true
-            body["allowUnknownPrice"] = true
+            if paid.contains(where: { $0.0.needsUnknownPrice }) { body["allowUnknownPrice"] = true }
         }
         do {
             // The user picked these files and this folder here, so no agent-folder check.

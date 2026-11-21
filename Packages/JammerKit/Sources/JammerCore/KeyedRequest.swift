@@ -26,4 +26,10 @@ public enum KeyedRequest {
     public static func data(for request: URLRequest, session: URLSession) async throws -> (Data, URLResponse) {
         try await session.data(for: request, delegate: Delegate())
     }
+
+    public static func webSocket(for request: URLRequest, session: URLSession) -> URLSessionWebSocketTask {
+        let task = session.webSocketTask(with: request)
+        task.delegate = Delegate()
+        return task
+    }
 }

@@ -54,8 +54,8 @@ public struct BatchRequest: Sendable {
     public struct JobStep: Sendable, Equatable {
         public var op: String
         public var params: [String: JSONValue]
-        /// Set only by `parse` when the request allowed a paid job (allowPaid and allowUnknownPrice: an agent's
-        /// word, or the window's question answered). The runner refuses a paid job without it, so no other
+        /// Set by `parse` after it checks allowPaid and, for an unknown rate, allowUnknownPrice.
+        /// The runner refuses a paid job without it, so no other
         /// way of making a request can send audio to a paid service unasked (SIBLINGS, "Betalt kräver alltid en fråga").
         public internal(set) var paidAllowed = false
         public init(op: String, params: [String: JSONValue] = [:]) {
@@ -63,11 +63,14 @@ public struct BatchRequest: Sendable {
             self.params = params
         }
         /// A job that sends audio to a paid service: transcribe with a paid engine.
-        public var isPaid: Bool { op == "transcribe" && BatchRequest.paidEngines.contains(params["engine"]?.string ?? "auto") }
+        var transcriptionChoice: TranscriptionChoice? {
+            guard op == "transcribe" else { return nil }
+            return TranscriptionChoice(rawValue: params["engine"]?.string ?? "auto")
+        }
+        public var isPaid: Bool { transcriptionChoice?.paid == true }
     }
 
-    /// The transcription engines a provider charges for (the app's `SpeechEngines.Choice.paid`; a test keeps them together).
-    public static let paidEngines: Set<String> = ["openai"]
+    public static let paidEngines = Set(TranscriptionChoice.allCases.filter(\.paid).map(\.rawValue))
 
     public var inputs: [URL]
     public var steps: [Step]
@@ -159,14 +162,14 @@ public struct BatchRequest: Sendable {
             }
             jobs.append(JobStep(op: op, params: params))
         }
-        // A paid job runs only on the request's word: allowPaid, and allowUnknownPrice (Jämmer can't read the
-        // provider's price). The window asks before it gives them; an agent passes them itself.
+        // Check every paid job before the batch runs. Unknown prices need their own permission.
         if let paid = jobs.first(where: \.isPaid) {
             let engine = paid.params["engine"]?.string ?? ""
             guard body["allowPaid"] as? Bool == true else {
                 throw BatchError("paid_not_allowed", Said("error.batch.paidNotAllowed", "The job transcribe with engine %@ uploads the audio to its provider, which charges the user's account. Pass \"allowPaid\": true to run it.", engine))
             }
-            guard body["allowUnknownPrice"] as? Bool == true else {
+            if let unknown = jobs.first(where: { $0.transcriptionChoice?.needsUnknownPrice == true }), body["allowUnknownPrice"] as? Bool != true {
+                let engine = unknown.params["engine"]?.string ?? ""
                 throw BatchError("unknown_price", Said("error.batch.unknownPrice", "Jämmer doesn't know what engine %@ costs (its provider charges by its own price list). Pass \"allowUnknownPrice\": true as well to run it.", engine))
             }
             for i in jobs.indices where jobs[i].isPaid { jobs[i].paidAllowed = true }

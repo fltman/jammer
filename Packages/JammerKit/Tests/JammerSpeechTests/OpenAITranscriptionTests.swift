@@ -152,10 +152,10 @@ struct OpenAITranscriptionTests {
 
     @Test("Cuts: nothing to cut in a short file; a file without pauses is cut at the limit all the same")
     func cuts() {
-        #expect(OpenAITranscription.cuts([Float](repeating: 0.1, count: 16_000 * 5), limit: 16_000 * 20, search: 16_000 * 5) == [0, 80_000])
-        let steady = OpenAITranscription.cuts([Float](repeating: 0.1, count: 16_000 * 50), limit: 16_000 * 20, search: 16_000 * 5)
+        #expect(SpeechAudio.cuts([Float](repeating: 0.1, count: 16_000 * 5), limit: 16_000 * 20, search: 16_000 * 5) == [0, 80_000])
+        let steady = SpeechAudio.cuts([Float](repeating: 0.1, count: 16_000 * 50), limit: 16_000 * 20, search: 16_000 * 5)
         #expect(steady.first == 0 && steady.last == 800_000 && zip(steady, steady.dropFirst()).allSatisfy { $1 - $0 <= 16_000 * 20 && $1 > $0 })
-        #expect(OpenAITranscription.spread("ett två tre", over: 0..<1_100).map(\.text) == ["ett", "två", "tre"])
-        #expect(OpenAITranscription.spread("   ", over: 0..<1_000).isEmpty)
+        #expect(SpeechAudio.spread("ett två tre", over: 0..<1_100).map(\.text) == ["ett", "två", "tre"])
+        #expect(SpeechAudio.spread("   ", over: 0..<1_000).isEmpty)
     }
 }

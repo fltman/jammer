@@ -242,6 +242,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             item(L10n.text("file.importTracks"), #selector(EditorWindowController.importTracks(_:)), "i", [.command, .shift]),
             item(L10n.text("file.importTimeline"), #selector(AppDelegate.importTimeline(_:)), ""),
             item(L10n.text("file.export"), #selector(EditorWindowController.exportAudio(_:)), "e", [.command, .shift]),
+            item(L10n.text("op.export_transcript.title"), #selector(EditorWindowController.exportTranscript(_:)), ""),
             item(L10n.text("file.exportTimeline"), #selector(EditorWindowController.exportTimeline(_:)), ""),
             item(L10n.text("file.batch"), #selector(AppDelegate.showBatch(_:)), "b", [.command, .option]),
             item(L10n.text("file.storage"), #selector(AppDelegate.showStorage(_:)), ""),
@@ -308,6 +309,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return i
             } + [.separator(), item(L10n.text("voiceProfiles.menu.save"), #selector(EditorWindowController.saveVoiceProfile(_:)), "")]),
             item(L10n.text("op.split_speakers.title"), #selector(EditorWindowController.splitSpeakers(_:)), ""),
+            item(L10n.text("voiceTranscribe.split"), #selector(EditorWindowController.splitAndTranscribeSpeakers(_:)), ""),
+            item(L10n.text("op.transcribe_voice_tracks.title"), #selector(EditorWindowController.transcribeVoiceTracks(_:)), ""),
             submenu(L10n.text("audio.stems"), ["music4": L10n.text("audio.stems.music"), "dialog": L10n.text("audio.stems.soundtrack")].sorted { $0.key > $1.key }.map { model, title in
                 let i = item(title, #selector(EditorWindowController.separateStems(_:)), "")
                 i.representedObject = model

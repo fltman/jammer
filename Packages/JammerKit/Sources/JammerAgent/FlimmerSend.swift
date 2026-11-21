@@ -736,6 +736,7 @@ extension FlimmerSend {
         if !model.isEmpty { s["model"] = .string(model) }
         let provider: String? = switch name {
         case "openai": "openai"
+        case "berget": "berget"
         case "elevenlabs", "scribe", "overdub": "elevenlabs"
         default: nil
         }

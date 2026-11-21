@@ -27,6 +27,11 @@ public struct ModelSpec: Sendable, Equatable, Identifiable {
         file: "ggml-model-q5_0.bin", size: 539_212_484,
         sha256: "7f8762e0ade9e0073674c0d5acae942a0b1ea98add9baa008ee89c94eaba43d0", licence: "Apache-2.0",
         revision: "0abe10b9d7f75d0902656e5c06c5c4d549604dc5")
+    public static let multilingualWhisper = ModelSpec(
+        id: "whisper-small-multilingual", title: "Whisper small (multilingual)", repo: "ggerganov/whisper.cpp",
+        file: "ggml-small-q5_1.bin", size: 190_085_487,
+        sha256: "ae85e4a935d7a567bd102fe55afc16bb595bdb618e11b2fc7591bc08120411bb", licence: "MIT",
+        revision: "5359861c739e955e79d9a303bcbc70fb988958b1")
     public static let catalogue = [kbWhisperSmallQ5, kbWhisperMediumQ5]
 }
 
@@ -104,10 +109,30 @@ public struct ModelStore: Sendable {
         guard free > spec.size + 200_000_000 else { throw ModelError.notEnoughSpace(needed: spec.size) }
         let part = dest.appendingPathExtension("part")
         try? FileManager.default.removeItem(at: part)
-        let request = URLRequest(url: url(for: spec))
-        let observer = Box<NSKeyValueObservation>()
-        let tmp: URL = try await withTaskCancellationHandler {
-            try await withCheckedThrowingContinuation { (c: CheckedContinuation<URL, Error>) in
+        defer { try? FileManager.default.removeItem(at: part) }
+        try await Self.downloadFile(at: url(for: spec), to: part, session: session) { progress(min(0.99, $0)) }
+        let written = (try FileManager.default.attributesOfItem(atPath: part.path)[.size] as? NSNumber)?.int64Value ?? -1
+        guard written == spec.size else {
+            try? FileManager.default.removeItem(at: part)
+            throw ModelError.wrongSize(expected: spec.size, got: written)
+        }
+        guard try Self.sha256(of: part) == spec.sha256 else {
+            try? FileManager.default.removeItem(at: part)
+            throw ModelError.wrongChecksum
+        }
+        try? FileManager.default.removeItem(at: dest)
+        try FileManager.default.moveItem(at: part, to: dest)
+        progress(1)
+        return dest
+    }
+
+    /// Downloads straight to disk. Callers verify the file before making it available.
+    public static func downloadFile(at url: URL, to destination: URL, session: URLSession = .shared,
+                                    progress: @escaping @Sendable (Double) -> Void) async throws {
+        let request = URLRequest(url: url)
+        let observer = DownloadTask()
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (c: CheckedContinuation<Void, Error>) in
                 let task = session.downloadTask(with: request) { file, response, error in
                     if let error { c.resume(throwing: error); return }
                     if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
@@ -116,29 +141,16 @@ public struct ModelStore: Sendable {
                     guard let file else { c.resume(throwing: ModelError.http(0)); return }
                     // The system deletes `file` when this returns: move it now.
                     do {
-                        try FileManager.default.moveItem(at: file, to: part)
-                        c.resume(returning: part)
+                        try FileManager.default.moveItem(at: file, to: destination)
+                        c.resume()
                     } catch { c.resume(throwing: error) }
                 }
-                observer.value = task.progress.observe(\.fractionCompleted) { p, _ in progress(min(0.99, p.fractionCompleted)) }
-                observer.task = task
-                task.resume()
+                observer.value = task.progress.observe(\.fractionCompleted) { p, _ in progress(min(1, max(0, p.fractionCompleted))) }
+                observer.start(task)
             }
-        } onCancel: { observer.task?.cancel() }
+        } onCancel: { observer.cancel() }
         observer.value = nil
-        let written = (try FileManager.default.attributesOfItem(atPath: tmp.path)[.size] as? NSNumber)?.int64Value ?? -1
-        guard written == spec.size else {
-            try? FileManager.default.removeItem(at: tmp)
-            throw ModelError.wrongSize(expected: spec.size, got: written)
-        }
-        guard try Self.sha256(of: tmp) == spec.sha256 else {
-            try? FileManager.default.removeItem(at: tmp)
-            throw ModelError.wrongChecksum
-        }
-        try? FileManager.default.removeItem(at: dest)
-        try FileManager.default.moveItem(at: part, to: dest)
-        progress(1)
-        return dest
+        try Task.checkCancellation()
     }
 
     /// SHA-256 of a file, read in 1 MB pieces.
@@ -154,9 +166,25 @@ public struct ModelStore: Sendable {
 }
 
 /// Lets the download's progress observation and task outlive the closure that made them.
-final class Box<T>: @unchecked Sendable {
-    var value: T?
-    var task: URLSessionTask?
+private final class DownloadTask: @unchecked Sendable {
+    var value: NSKeyValueObservation?
+    private let lock = NSLock()
+    private var task: URLSessionTask?
+    private var cancelled = false
+
+    func start(_ task: URLSessionTask) {
+        lock.withLock {
+            self.task = task
+            if cancelled { task.cancel() } else { task.resume() }
+        }
+    }
+
+    func cancel() {
+        lock.withLock {
+            cancelled = true
+            task?.cancel()
+        }
+    }
 }
 
 extension ModelError: KeyedFailure {}

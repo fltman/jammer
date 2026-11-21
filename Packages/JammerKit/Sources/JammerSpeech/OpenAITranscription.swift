@@ -38,38 +38,14 @@ public struct OpenAITranscription: TranscriptionEngine {
     /// The documentation gives no list of languages to check against; the provider answers for itself.
     public func supports(_ locale: Locale) async -> Bool { true }
 
-    static let rate = 16_000
-
-    /// Where to cut `samples` into pieces of at most `limit` samples: each cut at the quietest 0.4 s
-    /// within `search` samples before the limit. Returns the piece boundaries, first 0, last `count`.
-    static func cuts(_ samples: [Float], limit: Int, search: Int) -> [Int] {
-        var out = [0]
-        let window = max(1, rate * 4 / 10), hop = max(1, window / 4)
-        while samples.count - out.last! > limit {
-            let end = out.last! + limit
-            let from = max(out.last! + limit / 2, end - search)
-            var best = end, quietest = Float.greatestFiniteMagnitude
-            var at = from
-            while at + window <= end {
-                var e: Float = 0
-                for i in at..<(at + window) { e += samples[i] * samples[i] }
-                if e < quietest { quietest = e; best = at + window / 2 }
-                at += hop
-            }
-            out.append(best)
-        }
-        out.append(samples.count)
-        return out
-    }
-
     /// 16 kHz mono 16-bit WAV.
     static func wav(_ samples: ArraySlice<Float>) -> Data {
         var d = Data(capacity: 44 + samples.count * 2)
         func le<T: FixedWidthInteger>(_ v: T) { withUnsafeBytes(of: v.littleEndian) { d.append(contentsOf: $0) } }
         d.append(contentsOf: Array("RIFF".utf8)); le(UInt32(36 + samples.count * 2)); d.append(contentsOf: Array("WAVEfmt ".utf8))
-        le(UInt32(16)); le(UInt16(1)); le(UInt16(1)); le(UInt32(rate)); le(UInt32(rate * 2)); le(UInt16(2)); le(UInt16(16))
+        le(UInt32(16)); le(UInt16(1)); le(UInt16(1)); le(UInt32(SpeechAudio.rate)); le(UInt32(SpeechAudio.rate * 2)); le(UInt16(2)); le(UInt16(16))
         d.append(contentsOf: Array("data".utf8)); le(UInt32(samples.count * 2))
-        for s in samples { le(Int16(max(-1, min(1, s)) * 32_767)) }
+        d.append(SpeechAudio.pcm16(samples))
         return d
     }
 
@@ -90,31 +66,15 @@ public struct OpenAITranscription: TranscriptionEngine {
         return String(decoding: data.prefix(300), as: UTF8.self)
     }
 
-    /// The words of a piece, spread over it by their length: there are no times to go by.
-    static func spread(_ text: String, over range: Range<Frame>) -> [Word] {
-        let tokens = text.split(whereSeparator: \.isWhitespace).map(String.init)
-        let total = tokens.reduce(0) { $0 + $1.count }
-        guard total > 0, !range.isEmpty else { return [] }
-        var out: [Word] = []
-        var done = 0
-        for t in tokens {
-            let a = range.lowerBound + Frame(Double(range.count) * Double(done) / Double(total))
-            done += t.count
-            let b = range.lowerBound + Frame(Double(range.count) * Double(done) / Double(total))
-            out.append(Word(text: t, start: a, end: max(a + 1, b), untimed: true))
-        }
-        return out
-    }
-
     public func transcribe(_ source: SourceRef, pool: SourcePool, locale: Locale,
                            progress: @escaping @Sendable (Double) -> Void) async throws -> SourceTranscript {
         guard let key = key(), !key.isEmpty else { throw TranscriptionError.failed("there is no OpenAI key. Add it under Jämmer › Settings.") }
         guard !model.isEmpty else { throw TranscriptionError.failed("no OpenAI model is chosen.") }
         let samples = try SpeechAudio.mono16k(source, pool: pool)
-        let limit = min(Int(maxSeconds * Double(Self.rate)), (maxBytes - 44) / 2)
-        guard limit > Self.rate else { throw TranscriptionError.failed("the size limit is too small to send anything.") }
-        let cuts = Self.cuts(samples, limit: limit, search: Int(searchSeconds * Double(Self.rate)))
-        let scale = source.info.sampleRate / Double(Self.rate)
+        let limit = min(Int(maxSeconds * Double(SpeechAudio.rate)), (maxBytes - 44) / 2)
+        guard limit > SpeechAudio.rate else { throw TranscriptionError.failed("the size limit is too small to send anything.") }
+        let cuts = SpeechAudio.cuts(samples, limit: limit, search: Int(searchSeconds * Double(SpeechAudio.rate)))
+        let scale = source.info.sampleRate / Double(SpeechAudio.rate)
         var words: [Word] = []
         var before = ""
         for i in 0..<(cuts.count - 1) {
@@ -144,7 +104,7 @@ public struct OpenAITranscription: TranscriptionEngine {
                 throw TranscriptionError.failed("OpenAI's answer wasn't in the form its documentation shows.")
             }
             let range = Frame(Double(cuts[i]) * scale)..<min(source.info.frames, Frame(Double(cuts[i + 1]) * scale))
-            words += Self.spread(text, over: range)
+            words += SpeechAudio.spread(text, over: range)
             before += " " + text
             progress(Double(cuts[i + 1]) / Double(max(1, samples.count)))
         }

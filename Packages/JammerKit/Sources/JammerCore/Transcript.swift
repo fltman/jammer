@@ -144,7 +144,7 @@ extension Project {
     /// is that bleed, and isn't shown. Words nobody's turn covers are kept.
     private func droppingBleed(_ words: [PlacedWord]) -> [PlacedWord] {
         guard tracks.count > 1, !speakerTurns.isEmpty else { return words }
-        let turns = placedTurns()
+        let turns = placedTurns().filter { !tracks[$0.track].isMuted }
         guard Set(turns.map(\.track)).count > 1 else { return words }
         // The other tracks' turns count with 0.3 s to spare: bleed words sit right at their edges.
         let margin = Frame(0.3 * sampleRate)

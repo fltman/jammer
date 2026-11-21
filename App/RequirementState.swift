@@ -11,7 +11,10 @@ enum RequirementState {
         switch id {
         case "kb-whisper-small": SpeechEngines.store.isInstalled(ModelSpec.kbWhisperSmallQ5)
         case "kb-whisper-medium": SpeechEngines.store.isInstalled(ModelSpec.kbWhisperMediumQ5)
+        case ModelSpec.multilingualWhisper.id: SpeechEngines.store.isInstalled(.multilingualWhisper)
         case "parakeet-tdt-0.6b-v3": SpeechEngines.parakeet.isInstalled
+        case PianissimoModel.swedish.id: SpeechEngines.pianissimo[.swedish]?.isInstalled ?? false
+        case PianissimoModel.danish.id: SpeechEngines.pianissimo[.danish]?.isInstalled ?? false
         case "diarisation": (Diarization.engine as? FluidDiarizer)?.isInstalled ?? false
         case "spleeter-4stems": Stems.model.isInstalled
         case "mrx": Stems.soundtrack.isInstalled

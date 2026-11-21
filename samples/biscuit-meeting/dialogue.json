@@ -1,0 +1,50 @@
+[
+  {
+    "role": "Swedish chair",
+    "language": "sv",
+    "voice_id": "onwK4e9ZLuTAKqWW03F9",
+    "text": "Hej! Jag heter Anders. Jag jobbar som mötesordförande. Vi har kallat till ett krismöte. Någon har doppat ett kex i kaffet och lämnat kvar halva kexet på botten. Nu vill hela styrelsen se en åtgärdsplan."
+  },
+  {
+    "role": "Danish safety officer",
+    "language": "da",
+    "voice_id": "N2lVS1w4EtoT3dr4eOWO",
+    "text": "Hej. Jeg hedder Anders. Jeg arbejder som sikkerhedschef. Vi har undersøgt koppen, og der er ingen fare for mennesker. Kaffen er dog så stærk, at skeen muligvis skal have en arbejdsskadeerstatning."
+  },
+  {
+    "role": "English risk officer",
+    "language": "en",
+    "voice_id": "XrExE9yKIg1WjnnlVkGX",
+    "text": "Hello. My name is Beth. I work as a risk officer. I have put the biscuit on the risk register. It is the first risk we have had to retrieve with a teaspoon."
+  },
+  {
+    "role": "Swedish chair",
+    "language": "sv",
+    "voice_id": "onwK4e9ZLuTAKqWW03F9",
+    "text": "Tack, Beth. Nästa talare är Anders. Han arbetar som kexinspektör. Du får ordet."
+  },
+  {
+    "role": "Norwegian biscuit inspector",
+    "language": "nb",
+    "voice_id": "pNInz6obpgDQGcFmaJgB",
+    "text": "Tusen takk. Jeg har undersøkt både koppen og kjekspakken. Det ser ut til at kjeksen ble senket med vilje. Jeg anbefaler at vi gjennomfører et nytt forsøk. Av hensyn til vitenskapen trenger jeg minst seks kjeks."
+  },
+  {
+    "role": "Danish safety officer",
+    "language": "da",
+    "voice_id": "N2lVS1w4EtoT3dr4eOWO",
+    "text": "Seks? Så skal vi have en nødplan for de sidste to i pakken. Jeg foreslår, at vi evakuerer dem til min tallerken."
+  },
+  {
+    "role": "English risk officer",
+    "language": "en",
+    "voice_id": "XrExE9yKIg1WjnnlVkGX",
+    "text": "Motion carried. I'll update the minutes. For the record, every time I said Anders, at least two people unmuted."
+  },
+  {
+    "role": "Swedish chair",
+    "language": "sv",
+    "voice_id": "onwK4e9ZLuTAKqWW03F9",
+    "text": "Då är vi klara. Anders, Anders och Anders godkänner protokollet. Beth, du får skriva under. Ditt namn är det enda som får plats på en rad."
+  }
+]

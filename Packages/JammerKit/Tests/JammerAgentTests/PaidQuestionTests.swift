@@ -26,6 +26,17 @@ struct PaidQuestionTests {
         #expect(try BatchRequest.parse(body([["op": "transcribe", "params": ["engine": "parakeet"]]]), policy: nil).jobs.first?.paidAllowed == false)
     }
 
+    @Test("Berget requires payment consent and a mixed batch also requires consent to OpenAI's unknown price")
+    func bergetBatch() throws {
+        let berget: [String: Any] = ["op": "transcribe", "params": ["engine": "berget_pianissimo", "language": "sv"]]
+        do { _ = try BatchRequest.parse(body([berget]), policy: nil); Issue.record("Paid request accepted") }
+        catch let error as BatchError { #expect(error.reason == "paid_not_allowed") }
+        let allowed = try BatchRequest.parse(body([berget], ["allowPaid": true]), policy: nil)
+        #expect(allowed.jobs.first?.paidAllowed == true)
+        do { _ = try BatchRequest.parse(body([berget, openai], ["allowPaid": true]), policy: nil); Issue.record("Unknown price accepted") }
+        catch let error as BatchError { #expect(error.reason == "unknown_price") }
+    }
+
     @Test("A paid job made any other way than through the request never carries the leave (the runner refuses it)")
     func noBackDoor() {
         let made = BatchRequest.JobStep(op: "transcribe", params: ["engine": .string("openai")])
@@ -51,6 +62,6 @@ struct PaidQuestionTests {
     func paidEngines() {
         let engines = Operations.endpoints.first { $0.name == "transcribe" }?.params.first { $0.name == "engine" }?.options ?? []
         #expect(BatchRequest.paidEngines.isSubset(of: Set(engines)), "\(engines)")
-        #expect(BatchRequest.paidEngines == ["openai"])
+        #expect(BatchRequest.paidEngines == ["openai", "berget_pianissimo"])
     }
 }
