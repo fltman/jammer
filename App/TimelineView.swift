@@ -569,6 +569,11 @@ final class TimelineOverlay: NSView {
 
     /// Where a dragged edge may snap: clip edges, markers, the playhead and the selection's edges (⌃ turns it off).
     private func snapped(_ f: Frame, event: NSEvent?, except: Frame? = nil) -> Frame {
+        let was = snapX
+        defer {
+            // A light tap on a Force Touch trackpad the moment an edge snaps (COMFORT 76); nothing while it stays.
+            if let x = snapX, x != was { NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now) }
+        }
         snapX = nil
         if event?.modifierFlags.contains(.control) == true { return f }
         var frames = project.tracks.flatMap { $0.clips.flatMap { [$0.start, $0.end] } } + project.markers.map(\.position) + [session.playhead]

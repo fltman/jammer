@@ -6,6 +6,7 @@ import SwiftUI
 /// per tool with its symbol, its name and letter as the help tag, the current one lit. The letters pick the same
 /// tools while the timeline has the keys, and View › Tool lists them.
 struct ToolPalette: View {
+    @State private var hovered: String?
     @Bindable var session: EditorSession
     let choose: (String) -> Void
 
@@ -20,10 +21,12 @@ struct ToolPalette: View {
                         .font(.system(size: 14, weight: .medium))
                         .frame(width: 28, height: 26)
                         .foregroundStyle(on ? Theme.neonColor : .secondary)
-                        .background(on ? Theme.neonColor.opacity(0.16) : .clear, in: .rect(cornerRadius: 6))
+                        .background(on ? Theme.neonColor.opacity(0.16) : hovered == t.id ? Color.white.opacity(0.08) : .clear, in: .rect(cornerRadius: 6))
                         .contentShape(.rect)
                 }
                 .buttonStyle(.plain)
+                // The tool under the pointer lights a little (COMFORT 21, 46).
+                .onHover { inside in hovered = inside ? t.id : (hovered == t.id ? nil : hovered) }
                 .help(L10n.text("tool.help", name, t.letter.uppercased()))
                 .accessibilityLabel(name)
                 .accessibilityAddTraits(on ? [.isButton, .isSelected] : .isButton)

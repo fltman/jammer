@@ -80,6 +80,8 @@ The `echo` operation (for agents and sibling apps; a menu entry comes later) add
 
 Undo never throws work away. If you undo a few steps and then do something else, the steps you undid stay in the history as a branch. **View › Show History** (⌥⌘Y) shows the whole tree: the branch you're on is bright, other branches are dim; click a step to choose it, and double-click it (or press Return) to go there. Going to a step is itself one step, so ⌘Z brings you back to where you were.
 
+What Jämmer says in the status bar goes by itself after a few seconds; a warning stays half a minute and an error until something else is said. When a command fails, **Try Again** beside the message runs it again with the same choices. Double-click a level or pan value beside its slider (in the track headers and the mixer) to set it back to 0 dB or the middle.
+
 A long command, or an agent's steps, that finishes after you've changed the document goes on top of your change when the two touched different things. When they touched the same clip or setting, your change stays, and the result is kept in the history as a branch marked "(late)", so nothing slow or paid has to be done again: choose it there to use it.
 
 The history is saved inside the `.jammer` package, so it's still there when you open the project again. It keeps the last 500 steps; when it has to drop some, it drops old side branches first and says so at the top of the History window.

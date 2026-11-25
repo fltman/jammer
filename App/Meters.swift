@@ -10,12 +10,8 @@ import SwiftUI
 @MainActor
 @Observable
 final class StripMeters {
-    struct Level: Equatable {
-        var db: Double = -.infinity
-        var held: Double = -.infinity
-        var heldAt: Date = .distantPast
-        var clipped = false
-    }
+    /// The bar, the held peak's line, and the clip light: MeterBallistics (no flash faster than 3 Hz).
+    typealias Level = MeterBallistics.Level
     private(set) var levels: [UUID: Level] = [:]
     /// Where the mix first reaches full scale on the timeline (the timeline's clip light, Flimmer's K5): found in the
     /// background 1.5 s after the document last changed, with a plan of its own and never by playing. nil: nowhere.
@@ -29,9 +25,7 @@ final class StripMeters {
     @ObservationIgnored private var loop: Task<Void, Never>?
     @ObservationIgnored private weak var session: EditorSession?
 
-    static let floor = -60.0
-    static let fall = 20.0     // dB a second
-    static let hold = 1.5      // seconds
+    static let floor = MeterBallistics.floor
 
     func attach(_ session: EditorSession) {
         self.session = session
@@ -96,13 +90,9 @@ final class StripMeters {
         }
         var next = levels
         for id in p.tracks.map(\.id) + p.buses.map(\.id) + [Master.id] {
-            var l = next[id] ?? Level()
             let db = peaks[id].map { $0 > 0 ? 20 * log10(Double($0)) : -.infinity } ?? -.infinity
-            let fallen = l.db - Self.fall * dt
-            l.db = max(db, fallen < Self.floor ? -.infinity : fallen)
-            if db >= l.held || now.timeIntervalSince(l.heldAt) > Self.hold { l.held = db; l.heldAt = now }
-            if db >= 0 { l.clipped = true }
-            next[id] = l
+            // The ballistics, with the bar held a third of a second after it rises (no flash faster than 3 Hz).
+            next[id] = MeterBallistics.next(next[id] ?? Level(), peak: db, dt: dt, now: now)
         }
         if next != levels { levels = next }
     }

@@ -65,17 +65,40 @@ final class EditorSession {
     private(set) var peakProgress: [UUID: Double] = [:]
     /// What the status line says. Set as a text, it is information; `say` sets what kind of line it is
     /// (an error, a warning, something done), which gives it its symbol and what VoiceOver says first.
-    var status: String? { didSet { if !sayingKind { statusKind = .info } } }
+    var status: String? { didSet { retry = nil; if !sayingKind { statusKind = .info; fadeStatus() } } }
+    /// What Try Again beside a failure in the status bar does: the same step again (COMFORT 50). Gone with the line.
+    private(set) var retry: (@MainActor () -> Void)?
     /// Each speaker's voiceprint from the last diarisation, by speaker number: in memory only, for voice profiles
     /// (never saved in the document, never in an API answer).
     var speakerPrints: [Int: [Float]] = [:]
     private(set) var statusKind: StateKind = .info
     @ObservationIgnored private var sayingKind = false
-    func say(_ text: String?, _ kind: StateKind) {
+    func say(_ text: String?, _ kind: StateKind, retry: (@MainActor () -> Void)? = nil) {
         sayingKind = true
         status = text
         statusKind = kind
         sayingKind = false
+        self.retry = retry
+        fadeStatus()
+    }
+
+    /// Receipts go by themselves (COMFORT 55): what was done, after 8 s; a warning after 30 s. An error stays until
+    /// something else is said, and so does what is still going on (progress).
+    @ObservationIgnored private var statusGeneration = 0
+    private func fadeStatus() {
+        statusGeneration += 1
+        let generation = statusGeneration, text = status
+        let seconds: Double? = switch statusKind {
+        case .info, .success: 8
+        case .warning: 30
+        case .error, .progress: nil
+        }
+        guard text != nil, let seconds else { return }
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(seconds))
+            guard let self, self.statusGeneration == generation, self.status == text else { return }
+            self.status = nil
+        }
     }
     var lastAnalysis: LoudnessResult?
     var volume: Float = (UserDefaults.standard.object(forKey: "playback.volume") as? Float) ?? 1 {
@@ -676,7 +699,7 @@ final class EditorSession {
                 // (A line that says what didn't go: an error, by its symbol and to VoiceOver.)
                 say(op == "detect_tempo" && failed.reason == "no_steady_tempo" ? L10n.text("tempo.none")
                     : op == "duck" && failed.reason == "no_speech" ? L10n.text("duck.noSpeech")
-                    : failed.keyed.map(L10n.message) ?? failed.error, .error)
+                    : failed.keyed.map(L10n.message) ?? failed.error, .error, retry: { [weak self] in self?.perform(op, params, saying: saying) })
                 NSSound.beep()
             } else if op == "limit", let info = r.first?.info, let after = info["truePeakAfter"], let cut = info["reductionMaxDB"], let secs = info["limitedSeconds"] {
                 status = L10n.text("limit.done", L10n.number(after, 2), L10n.number(cut, 1), L10n.number(secs, 1))

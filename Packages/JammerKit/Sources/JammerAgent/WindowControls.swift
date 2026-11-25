@@ -53,6 +53,7 @@ public enum WindowControls {
         // An agent's own export or steps stop when it closes the connection (AgentRouter.stopsOnHangUp).
         c("status.stopWait", "EditorWindowController.swift", "Stop beside an export or a command still running", .route("POST", doc + "/steps")),
         c("status.clipWarning", "EditorWindowController.swift", "0 dBFS at … clicked: the playhead goes there", .none(.view)),
+        c("status.tryAgain", "EditorWindowController.swift", "Try Again beside a failed step: the same step again", .route("POST", doc + "/steps")),
         // The export dialogs' own options
         // The chapters JSON written beside the file is GET …/chapters with the same start and end.
         c("export.options", "EditorWindowController.swift", "Export Audio: format, sample rate, dither, selection only, chapters", op("export")),

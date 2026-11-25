@@ -878,6 +878,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
 
         let panel = NSSavePanel()
         panel.nameFieldStringValue = FileNames.safe(session.name, ext: "txt")
+        ExportFolders.open(panel, "transcript")
         panel.allowsOtherFileTypes = false
         let formats = NSPopUpButton()
         formats.addItems(withTitles: ["TXT", "JSON", "SRT", "WebVTT"])
@@ -909,6 +910,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         panel.accessoryView = grid
         panel.beginSheetModal(for: window) { [weak self] response in
             guard response == .OK, let self, let url = panel.url else { return }
+            ExportFolders.keep(url, "transcript")
             let format = formatChoice.format
             UserDefaults.standard.set(format.rawValue, forKey: "transcript.export.format")
             let selected = tracks.indexOfSelectedItem
@@ -934,6 +936,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         // The name carries the chosen format's extension from the start, and follows it when the format changes, so
         // the panel's question about a file of that name is about the file that will be written (COMFORT 16).
         panel.nameFieldStringValue = FileNames.safe(session.name, ext: model.choice.fileExtension)
+        ExportFolders.open(panel, "audio")
         model.onChoice = { [weak panel] c in
             guard let panel else { return }
             panel.nameFieldStringValue = (panel.nameFieldStringValue as NSString).deletingPathExtension + "." + c.fileExtension
@@ -941,6 +944,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         panel.accessoryView = NSHostingView(rootView: ExportAccessory(model: model))
         panel.beginSheetModal(for: window) { [weak self] response in
             guard response == .OK, let chosen = panel.url, let self else { return }
+            ExportFolders.keep(chosen, "audio")
             let url = chosen.deletingPathExtension().appendingPathExtension(model.choice.fileExtension)
             var options = EditorSession.ExportOptions(encoding: model.choice.encoding, dither: model.dither, encoded: model.choice.encoded,
                                                       chapters: model.chapters, chaptersJSON: model.chaptersJSON)
@@ -985,6 +989,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         let panel = NSSavePanel()
         panel.allowedContentTypes = formats.compactMap { UTType(filenameExtension: $0.fileExtension) }
         panel.nameFieldStringValue = FileNames.safe(session.name, ext: "otio")
+        ExportFolders.open(panel, "timeline")
         let popup = NSPopUpButton(frame: .zero, pullsDown: false)
         let titles: [TimelineFormat: String] = [.edl: L10n.text("export.timeline.edl"), .otio: L10n.text("export.timeline.otio"), .dawproject: L10n.text("export.timeline.dawproject")]
         for f in formats { popup.addItem(withTitle: titles[f] ?? f.rawValue) }
@@ -1000,6 +1005,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         panel.beginSheetModal(for: window) { [weak self] response in
             withExtendedLifetime(chooser) {}
             guard response == .OK, let chosen = panel.url, let self else { return }
+            ExportFolders.keep(chosen, "timeline")
             let format = formats[popup.indexOfSelectedItem]
             let url = chosen.deletingPathExtension().appendingPathExtension(format.fileExtension)
             do {
@@ -1293,6 +1299,12 @@ struct StatusBar: View {
                 StateLine(kind: session.statusKind, text: status, font: .system(size: 11, design: .monospaced))
                     .foregroundStyle(.primary).lineLimit(1).layoutPriority(2).help(status)
                     .accessibilityIdentifier("status.line")
+                if let retry = session.retry {
+                    Button(L10n.text("status.tryAgain")) { retry() }
+                        .controlSize(.small)
+                        .help(L10n.text("status.tryAgain.help"))
+                        .accessibilityIdentifier("status.tryAgain")
+                }
             }
             Spacer()
             // The timeline's clip light: where the mix first reaches full scale; a click goes there.
@@ -1473,5 +1485,18 @@ enum Remembered {
     }
     static func keep(_ values: [String: String]) {
         for (k, v) in values { UserDefaults.standard.set(v, forKey: "dialog." + k) }
+    }
+}
+
+/// The folder each kind of export was last saved in, offered again (COMFORT 70): audio, transcripts and timelines
+/// each go to their own place. Per Mac.
+enum ExportFolders {
+    static func open(_ panel: NSSavePanel, _ kind: String) {
+        if let path = UserDefaults.standard.string(forKey: "export.folder." + kind), FileManager.default.fileExists(atPath: path) {
+            panel.directoryURL = URL(fileURLWithPath: path, isDirectory: true)
+        }
+    }
+    static func keep(_ file: URL, _ kind: String) {
+        UserDefaults.standard.set(file.deletingLastPathComponent().path, forKey: "export.folder." + kind)
     }
 }

@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import JammerAgent
 import Observation
@@ -87,6 +88,8 @@ final class JobRegistry {
     }
 
     private func finish(_ job: Job) {
+        // Done or failed while Jämmer is in the background: the Dock says so once (COMFORT 56); the window says what.
+        if job.status == .done || job.status == .failed, !NSApp.isActive { NSApp.requestUserAttention(.informationalRequest) }
         jobs[job.id] = job
         tasks[job.id] = nil
         finishedAt[job.id] = Date()

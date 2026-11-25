@@ -17882,6 +17882,24 @@
         }
       }
     },
+    "mixer.level.reset.help": {
+      "comment": "Tooltip of a level value beside a slider.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Double-click to set the level back to 0 dB."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dubbelklicka för att sätta tillbaka nivån till 0 dB."
+          }
+        }
+      }
+    },
     "mixer.master.ceiling.ax": {
       "comment": "Spoken label.",
       "extractionState": "manual",
@@ -18292,6 +18310,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ %% vänster"
+          }
+        }
+      }
+    },
+    "mixer.pan.reset.help": {
+      "comment": "Tooltip of a pan value beside a slider.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Double-click to put the pan back in the middle."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dubbelklicka för att lägga panoreringen i mitten igen."
           }
         }
       }
@@ -20062,6 +20098,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "↩ kör · ⌘↩ fråga · esc tillbaka"
+          }
+        }
+      }
+    },
+    "omnibar.noMatch": {
+      "comment": "⌘K when no command matches what was typed (before the Ask row's own detail).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No command matches."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inget kommando passar."
           }
         }
       }
@@ -24291,6 +24345,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Inga pluginer på %@. Lägg till en nedan; den körs efter klippen och före spårets gain."
+          }
+        }
+      }
+    },
+    "plugins.noneFound": {
+      "comment": "The Add Plugin menu when the catalogue was read and has no plugins.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No plugins found on this Mac"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inga pluginer hittades på den här Macen"
           }
         }
       }
@@ -29198,6 +29270,42 @@
           "stringUnit": {
             "state": "translated",
             "value": "%1$@ BPM %2$@ (karta)"
+          }
+        }
+      }
+    },
+    "status.tryAgain": {
+      "comment": "Button beside a failure in the status bar.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Try Again"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Försök igen"
+          }
+        }
+      }
+    },
+    "status.tryAgain.help": {
+      "comment": "Tooltip of Try Again in the status bar.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Runs the same step again, with the same choices."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kör samma steg igen, med samma val."
           }
         }
       }

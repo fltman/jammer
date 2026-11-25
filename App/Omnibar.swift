@@ -57,7 +57,9 @@ final class OmnibarModel {
         // A command that can't run now says why in place of its detail (SIBLINGS comfort list: a disabled command says why).
         var rows = found.compactMap { f in byId[f.entry.id].map { Row(id: $0.id, title: $0.title, detail: $0.unavailable ?? ($0.detail == $0.title ? "" : $0.detail), shortcut: $0.shortcut, command: $0) } }
         if !text.isEmpty {
-            rows.append(Row(id: "omnibar.ask", title: L10n.text("omnibar.ask", text), detail: L10n.text("omnibar.ask.detail"), shortcut: "⌘↩", command: nil))
+            // No command matches: said, above the question to the assistant (COMFORT 64).
+            let detail = rows.isEmpty ? L10n.text("omnibar.noMatch") + " " + L10n.text("omnibar.ask.detail") : L10n.text("omnibar.ask.detail")
+            rows.append(Row(id: "omnibar.ask", title: L10n.text("omnibar.ask", text), detail: detail, shortcut: "⌘↩", command: nil))
         }
         let route = CommandSearch.route(text, best: found.first)
         let fallback = route == .ask ? rows.count - 1 : 0
@@ -149,6 +151,8 @@ struct OmnibarView: View {
                             .contentShape(.rect)
                         }
                         .buttonStyle(.plain)
+                        // The row under the pointer is the chosen one, so Return and a click mean the same row (COMFORT 64).
+                        .onHover { inside in if inside { model.chosen = i } }
                         .accessibilityLabel(row.detail.isEmpty ? row.title : "\(row.title), \(row.detail)")
                         .accessibilityAddTraits(i == r.selected ? .isSelected : [])
                     }

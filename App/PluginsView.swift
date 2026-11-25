@@ -13,6 +13,8 @@ struct PluginsSheet: View {
     let done: () -> Void
     @State private var trackID: UUID?
     @State private var catalogue: [PluginInfo] = []
+    /// The catalogue has been read once: an empty one then means none were found, not still looking (COMFORT 49).
+    @State private var catalogueRead = false
     @State private var failed: [PluginCatalogue.Failure] = []
     @State private var scanning = false
     @State private var safeMode = EditorSession.pluginSafeMode
@@ -59,7 +61,7 @@ struct PluginsSheet: View {
                 .frame(minHeight: 170)
                 .id(session.pluginsVersion)
                 Menu(L10n.text("plugins.add")) {
-                    if catalogue.isEmpty { Text(L10n.text("plugins.looking")) }
+                    if catalogue.isEmpty { Text(catalogueRead ? L10n.text("plugins.noneFound") : L10n.text("plugins.looking")) }
                     ForEach(Dictionary(grouping: catalogue, by: \.manufacturer).sorted { $0.key < $1.key }, id: \.key) { group in
                         Menu(group.key) {
                             ForEach(group.value, id: \.id) { info in
@@ -129,6 +131,7 @@ struct PluginsSheet: View {
         .onExitCommand { done() }
         .task {
             catalogue = await Task.detached { PluginCatalog.effects() }.value
+            catalogueRead = true
             failed = HostedPlugins.current().failed
         }
     }

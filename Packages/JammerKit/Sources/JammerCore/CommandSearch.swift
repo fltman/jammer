@@ -20,8 +20,9 @@ public enum CommandSearch {
     /// appear in `text` in order. Word starts, a run of letters next to each other, a match at the start and a
     /// shorter text count for more.
     public static func score(_ query: String, _ text: String) -> Double? {
-        let q = Array(query.lowercased().filter { !$0.isWhitespace })
-        let t = Array(text.lowercased())
+        // Accents don't matter either way: "lak" finds "Läk", "Jammer" "Jämmer" (COMFORT 19).
+        let q = Array(fold(query).filter { !$0.isWhitespace })
+        let t = Array(fold(text))
         guard !q.isEmpty else { return 0 }
         guard q.count <= t.count else { return nil }
         var total = 0.0, at = 0, last = -2
@@ -41,6 +42,42 @@ public enum CommandSearch {
             if r.lowerBound == whole.startIndex || !whole[whole.index(before: r.lowerBound)].isLetter { total += 3 }
         }
         return total - Double(t.count) * 0.02
+    }
+
+    static func fold(_ s: String) -> String { s.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil) }
+
+    /// A typo forgiven (COMFORT 19): each word of the query of four letters or more may be one letter off from a word
+    /// of the text (one changed, missing, extra, or two swapped), shorter words must begin one. Scored just over the
+    /// listing's floor, so an exact match always ranks above it. nil when a word finds nothing.
+    public static func forgiving(_ query: String, _ text: String) -> Double? {
+        let words = fold(query).split(whereSeparator: \.isWhitespace).map(String.init)
+        let have = fold(text).split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init)
+        guard !words.isEmpty else { return nil }
+        var total = 0.0
+        for w in words {
+            if have.contains(where: { $0.hasPrefix(w) }) { total += 2.6 * Double(w.count); continue }
+            guard w.count >= 4, have.contains(where: { oneOff(w, $0) || oneOff(w, String($0.prefix(w.count))) }) else { return nil }
+            total += 2.2 * Double(w.count)
+        }
+        return total - Double(text.count) * 0.02
+    }
+
+    /// One letter changed, missing, extra, or two neighbours swapped.
+    static func oneOff(_ a: String, _ b: String) -> Bool {
+        let x = Array(a), y = Array(b)
+        if x == y { return true }
+        if x.count == y.count {
+            let diff = x.indices.filter { x[$0] != y[$0] }
+            if diff.count == 1 { return true }
+            return diff.count == 2 && diff[1] == diff[0] + 1 && x[diff[0]] == y[diff[1]] && x[diff[1]] == y[diff[0]]
+        }
+        guard abs(x.count - y.count) == 1 else { return false }
+        let (long, short) = x.count > y.count ? (x, y) : (y, x)
+        var i = 0, j = 0, skipped = false
+        while i < long.count, j < short.count {
+            if long[i] == short[j] { i += 1; j += 1 } else if skipped { return false } else { skipped = true; i += 1 }
+        }
+        return true
     }
 
     /// How often and how lately each entry was run from the omnibar: a small lift, so that what you use comes
@@ -85,8 +122,8 @@ public enum CommandSearch {
         }
         var found: [(Entry, Double)] = []
         for e in entries {
-            let title = score(q, e.title)
-            let both = score(q, "\(e.detail) \(e.title)").map { $0 * 0.8 }
+            let title = score(q, e.title) ?? forgiving(q, e.title)
+            let both = (score(q, "\(e.detail) \(e.title)") ?? forgiving(q, "\(e.detail) \(e.title)")).map { $0 * 0.8 }
             guard let best = [title, both].compactMap({ $0 }).max(), best >= 2 * Double(q.filter { !$0.isWhitespace }.count) else { continue }
             found.append((e, best + (usage[e.id]?.lift(now: now) ?? 0)))
         }

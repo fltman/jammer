@@ -38,6 +38,7 @@ private struct TrackHeader: View {
     /// The value under the hand while a slider is dragged; committed on release.
     @State private var level: Double?
     @State private var pan: Double?
+    @State private var hovered: String?
 
     private var current: Bool { session.currentTrack == track.id }
     private var soloed: Bool { session.solo.contains(track.id) }
@@ -71,6 +72,10 @@ private struct TrackHeader: View {
                 Spacer(minLength: 0)
                 Text(L10n.number(level ?? track.gainDB, 1, sign: true) + " dB").font(.system(size: 10, design: .monospaced))
                     .foregroundStyle(.secondary).lineLimit(1)
+                    // A double-click on the value puts the level back to 0 dB, one step (COMFORT 65).
+                    .contentShape(.rect)
+                    .onTapGesture(count: 2) { if track.gainDB != 0 { set(["gainDB": .number(0)]) } }
+                    .help(L10n.text("mixer.level.reset.help"))
             }
             MeterBar(level: session.meters.level(track.id)) { session.meters.clearClip(track.id) }.frame(height: 6)
             if height >= 74 {
@@ -109,8 +114,10 @@ private struct TrackHeader: View {
         Button(action: action) {
             Text(letter).font(.system(size: 10, weight: .bold)).frame(width: 18, height: 16)
                 .foregroundStyle(on ? Color.black : .secondary)
-                .background(on ? color : Color.white.opacity(0.08), in: .rect(cornerRadius: 3))
+                .background(on ? color : Color.white.opacity(hovered == letter ? 0.2 : 0.08), in: .rect(cornerRadius: 3))
         }
+        // The button under the pointer lights a little (COMFORT 21, 46).
+        .onHover { inside in hovered = inside ? letter : (hovered == letter ? nil : hovered) }
         .buttonStyle(.plain)
         .help(help)
         .accessibilityLabel(help)

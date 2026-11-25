@@ -27,6 +27,18 @@ struct CommandSearchTests {
         #expect(CommandSearch.search("collect", in: entries).first?.entry.id == "collect")
     }
 
+    @Test("A typo is forgiven and accents don't matter; an exact match still ranks first; a far-off word finds nothing")
+    func forgiving() {
+        #expect(CommandSearch.search("nomralize", in: entries).first?.entry.id == "norm-16")
+        #expect(CommandSearch.search("reduse noise", in: entries).first?.entry.id == "noise")
+        let swedish: [CommandSearch.Entry] = [.init(id: "heal", title: "Läk område", detail: "Reparera"), .init(id: "help", title: "Jämmer-hjälp", detail: "Hjälp")]
+        #expect(CommandSearch.search("lak omrade", in: swedish).first?.entry.id == "heal")
+        #expect(CommandSearch.search("jammer hjalp", in: swedish).first?.entry.id == "help")
+        #expect(CommandSearch.search("fade in", in: entries).first?.entry.id == "fade-in")
+        #expect(CommandSearch.search("zzyzx", in: entries).isEmpty)
+        #expect(CommandSearch.oneOff("trancsribe", "transcribe") && !CommandSearch.oneOff("trnscrbe", "transcribe"))
+    }
+
     @Test("What you use comes first among equal matches, and an empty field lists only what has been used")
     func usage() {
         #expect(CommandSearch.search("fade", in: entries).first?.entry.id == "fade-in")

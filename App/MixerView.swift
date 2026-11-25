@@ -500,6 +500,10 @@ struct MixerStrip: View {
             .accessibilityLabel(L10n.text("mixer.level.ax", name))
             .accessibilityValue(Text(Self.levelText(level)))
             Text(Self.levelText(level)).monospacedDigit().lineLimit(1).frame(width: 72, alignment: .trailing)
+                // A double-click on the value puts the level back to 0 dB, one step (COMFORT 65).
+                .contentShape(.rect)
+                .onTapGesture(count: 2) { if gainDB != 0 { level = 0; change(["gainDB": .number(0)]) } }
+                .help(L10n.text("mixer.level.reset.help"))
             if Operations.automationOn {
                 // How the fader is taken while the sound plays. Not saved; Read again when the window leaves the front.
                 Picker(L10n.text("mixer.mode.label", name), selection: Binding(get: { session.writeMode(id) }, set: { session.writeModes[id] = $0 })) {
@@ -528,6 +532,10 @@ struct MixerStrip: View {
                 .accessibilityValue(Text(panAutomated ? L10n.text("mixer.pan.automated.help") : Self.panText(position)))
                 .accessibilityIdentifier("mixer.strip.pan")
                 Text(panAutomated ? L10n.text("mixer.pan.automated") : Self.panText(position)).font(.caption).lineLimit(1).frame(width: 72, alignment: .leading)
+                    // A double-click on the value puts the pan back in the middle (COMFORT 65).
+                    .contentShape(.rect)
+                    .onTapGesture(count: 2) { if !panAutomated, pan != 0 { position = 0; change(["pan": .number(0)]) } }
+                    .help(panAutomated ? "" : L10n.text("mixer.pan.reset.help"))
                     .foregroundStyle(panAutomated ? .secondary : .primary)
                     .help(panAutomated ? L10n.text("mixer.pan.automated.help") : "")
             } else if field {

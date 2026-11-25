@@ -100,3 +100,40 @@ struct FirstOverTests {
         #expect(PlanCompiler.compile(p, pool: pool).firstOver(0..<p.length, cancelled: { true }) == nil)
     }
 }
+
+@Suite("Meters flash no faster than 3 Hz")
+struct MeterFlashTests {
+    /// How often the red top (−3 dBFS and up) lights in `seconds` of a signal that is `on` for `duty` of each period.
+    func lightings(hz: Double, duty: Double, seconds: Double = 4) -> Int {
+        var l = MeterBallistics.Level()
+        let t0 = Date(timeIntervalSince1970: 0), dt = 1.0 / 30
+        var lit = false, count = 0
+        for n in 0..<Int(seconds / dt) {
+            let t = Double(n) * dt
+            let on = (t * hz).truncatingRemainder(dividingBy: 1) < duty
+            l = MeterBallistics.next(l, peak: on ? -1 : -40, dt: dt, now: t0.addingTimeInterval(t))
+            let red = l.db >= -3
+            if red, !lit { count += 1 }
+            lit = red
+        }
+        return count
+    }
+
+    @Test("A 6 Hz and a 10 Hz pulse near full scale light the red top at most three times a second")
+    func noFastFlash() {
+        for hz in [4.0, 6.0, 10.0] {
+            #expect(lightings(hz: hz, duty: 0.2) <= 3 * 4, "\(hz) Hz: \(lightings(hz: hz, duty: 0.2)) in 4 s")
+        }
+    }
+
+    @Test("A single peak still shows: up at once, held a third of a second, then falling 20 dB a second")
+    func singlePeak() {
+        let t0 = Date(timeIntervalSince1970: 0)
+        var l = MeterBallistics.next(.init(), peak: -6, dt: 1.0 / 30, now: t0)
+        #expect(l.db == -6)
+        l = MeterBallistics.next(l, peak: -60, dt: 0.2, now: t0.addingTimeInterval(0.2))
+        #expect(l.db == -6, "still up within a third of a second")
+        l = MeterBallistics.next(l, peak: -60, dt: 0.2, now: t0.addingTimeInterval(0.4))
+        #expect(abs(l.db - -10) < 1e-9, "then down 20 dB a second")
+    }
+}

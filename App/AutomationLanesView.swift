@@ -478,8 +478,13 @@ final class AutomationLanesView: NSView {
         if let s = session.selection { to.append(s.lowerBound); to.append(s.upperBound) }
         let reach = 6 * viewport.framesPerPoint
         let best = to.min { abs($0 - frame) < abs($1 - frame) }
-        return best.map { abs(Double($0 - frame)) <= reach ? $0 : frame } ?? frame
+        let out = best.map { abs(Double($0 - frame)) <= reach ? $0 : frame } ?? frame
+        // A light tap the moment a point snaps (COMFORT 76).
+        if out != frame, out != lastSnap { NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now) }
+        lastSnap = out != frame ? out : nil
+        return out
     }
+    private var lastSnap: Frame?
 
     /// A click in the timeline, offered here first. True: it was about a point, and the timeline leaves it alone.
     func mouseDown(_ event: NSEvent, at p: NSPoint) -> Bool {
