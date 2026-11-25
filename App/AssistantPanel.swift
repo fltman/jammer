@@ -65,6 +65,26 @@ final class AssistantModel {
     var replyLanguage: NLLanguage?
     var input = ""
     var busy = false
+    /// What the spinner says: planning with whom, or running the plan.
+    var phase: String?
+    /// The planning or the plan now running, and the jobs it started: Stop (Esc) ends it, and only its own jobs
+    /// (COMFORT 7; Glimmer b8695e6: Stop on a plan stops only its jobs).
+    @ObservationIgnored private var work: Task<Void, Never>?
+    @ObservationIgnored private var planJobs: Set<String> = []
+    /// Whether the plan running now has changed the document yet (a stop then says so: those steps can be undone).
+    @ObservationIgnored private var changedSomething = false
+    /// A paid request has left for the provider in this planning: a stop may come too late to spare the charge.
+    @ObservationIgnored private var paidRequestOut: String?
+
+    func stop() {
+        guard busy, let work else { return }
+        work.cancel()
+        for id in planJobs { _ = JobRegistry.shared.cancel(id) }
+        planJobs = []
+        let text = paidRequestOut.map { L10n.reply("assistant.reply.stoppedPaid", replyLanguage, $0) }
+            ?? (changedSomething ? L10n.reply("assistant.reply.stoppedPart", replyLanguage) : L10n.reply("assistant.reply.stopped", replyLanguage))
+        messages.append(Message(role: .note, text: text))
+    }
     /// A plan waiting for the user's go-ahead (destructive, or from a paid model).
     var pending: AssistantPlan?
     /// What the pending plan does, worked out from its steps (not from the model's words).
@@ -166,12 +186,16 @@ final class AssistantModel {
     func send() {
         let goal = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !goal.isEmpty, !busy else { return }
+        // A plan waiting for a yes isn't replaced without a word.
+        if pending != nil { cancelPending() }
         input = ""
         messages.append(Message(role: .user, text: goal))
         replyLanguage = ReplyGuard.language(of: goal)
         busy = true
-        Task {
-            defer { busy = false }
+        changedSomething = false
+        paidRequestOut = nil
+        work = Task {
+            defer { busy = false; phase = nil; work = nil; planJobs = []; paidRequestOut = nil }
             // A source other than the Mac's own model needs a model chosen there: without one the
             // request is not quietly answered by another model than the one the settings name.
             if source != "device", model.isEmpty {
@@ -184,11 +208,15 @@ final class AssistantModel {
                 guard await confirmPaid(goal) else { messages.append(Message(role: .note, text: L10n.reply("assistant.reply.notSent", replyLanguage))); return }
             }
             do {
+                phase = L10n.text("assistant.thinking", sourceName)
                 actions = await actions(for: goal)
                 let context = AssistantContext(project: session.project, selection: session.selection, playhead: session.playhead)
+                if p.paid { paidRequestOut = sourceName }
                 // `answer`, not `plan`: the model's sentence is checked before it is shown (ReplyGuard). A
                 // measurement is written by Jämmer from its result, never by the model.
                 let plan = try await p.answer(goal: goal, context: context, history: history, actions: actions)
+                paidRequestOut = nil
+                try Task.checkCancellation()
                 history.append((goal, plan.reply))
                 var text = plan.reply
                 if let cost = plan.cost {
@@ -213,6 +241,10 @@ final class AssistantModel {
                 } else {
                     await run(plan)
                 }
+            } catch is CancellationError {
+                // Stopped: stop() has said so.
+            } catch let e as URLError where e.code == .cancelled {
+                // Stopped while the request was out.
             } catch {
                 messages.append(Message(role: .note, text: L10n.replyError(error, replyLanguage)))
             }
@@ -239,7 +271,8 @@ final class AssistantModel {
         pending = nil
         pendingImpact = nil
         busy = true
-        Task { defer { busy = false }; await run(plan) }
+        changedSomething = false
+        work = Task { defer { busy = false; phase = nil; work = nil; planJobs = [] }; await run(plan) }
     }
 
     func cancelPending() {
@@ -251,6 +284,7 @@ final class AssistantModel {
     /// Steps (and macros) run together as one undo step; jobs and measurements run in
     /// between, in order.
     func run(_ plan: AssistantPlan) async {
+        phase = L10n.text("assistant.running")
         var batch: [PlannedStep] = []
         func flush() async -> Bool {
             guard !batch.isEmpty else { return true }
@@ -266,10 +300,12 @@ final class AssistantModel {
                 let steps = try MacroExpander.expand(batch, state: state)
                 guard !steps.isEmpty else { messages.append(Message(role: .note, text: L10n.reply("assistant.reply.nothingToChange", replyLanguage))); return true }
                 let results = await session.run(steps, action: L10n.text("assistant.title"))
+                if results.contains(where: { $0.reason == "stopped" }) { return false }
                 if let f = results.first(where: { $0.status == .failed }) {
                     messages.append(Message(role: .note, text: L10n.reply("assistant.reply.stepFailed", replyLanguage, L10n.operation(f.op), f.keyed.map(L10n.message) ?? f.error ?? "")))
                     return false
                 }
+                changedSomething = true
                 messages.append(Message(role: .note, text: L10n.replyCount("assistant.reply.done", replyLanguage, steps.count)))
                 for res in results where res.op == "loudness_preset" {
                     if res.info["limitedByPeak"] == 1, let after = res.info["integratedAfter"], let target = res.info["target"] {
@@ -285,6 +321,7 @@ final class AssistantModel {
             }
         }
         for s in plan.steps {
+            if Task.isCancelled { return }
             if let a = actions.first(where: { $0.name == s.op }), case .sibling(let slug, _, _) = a.kind,
                let sib = siblings.first(where: { $0.slug == slug }) {
                 guard await flush() else { return }
@@ -351,11 +388,15 @@ final class AssistantModel {
     }
 
     private func runJob(_ job: Job) async -> Bool {
+        planJobs.insert(job.id)
+        defer { planJobs.remove(job.id) }
         while let j = JobRegistry.shared.job(job.id), !j.isFinished {
             try? await Task.sleep(for: .milliseconds(250))
         }
         let done = JobRegistry.shared.job(job.id)
-        if done?.status == .done { return true }
+        if done?.status == .done { changedSomething = true; return true }
+        // Stopped (from the plan's Stop or the job's own): said once, by whoever stopped it.
+        if done?.status == .cancelled { return false }
         messages.append(Message(role: .note, text: done?.errorKeyed.map { L10n.replyError(L10n.KeyedOnly(keyed: $0), replyLanguage) } ?? done?.error?.message ?? L10n.reply("assistant.reply.jobUnfinished", replyLanguage, job.kind)))
         return false
     }
@@ -486,7 +527,7 @@ struct AssistantView: View {
                                         Button(L10n.text("assistant.runAnyway")) { model.confirmPending() }
                                     } else {
                                         Button(L10n.text("batch.run")) { model.confirmPending() }.keyboardShortcut(.defaultAction)
-                                        Button(L10n.text("button.cancel")) { model.cancelPending() }
+                                        Button(L10n.text("button.cancel")) { model.cancelPending() }.keyboardShortcut(.cancelAction)
                                     }
                                 }
                             }
@@ -494,7 +535,16 @@ struct AssistantView: View {
                             .background(RoundedRectangle(cornerRadius: 6).fill(Color.white.opacity(0.06)))
                             .overlay(RoundedRectangle(cornerRadius: 6).stroke(alarming ? StateKind.warning.color : .clear, lineWidth: 1.5))
                         }
-                        if model.busy { ProgressView().controlSize(.small) }
+                        if model.busy {
+                            HStack(spacing: 8) {
+                                ProgressView().controlSize(.small)
+                                if let phase = model.phase { Text(phase).font(.caption).foregroundStyle(.secondary) }
+                                Button(L10n.text("job.stop")) { model.stop() }
+                                    .keyboardShortcut(.cancelAction)
+                                    .controlSize(.small)
+                                    .help(L10n.text("assistant.stop.help"))
+                            }
+                        }
                     }
                     .padding(12)
                 }

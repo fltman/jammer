@@ -566,14 +566,16 @@ final class EditorSession {
             guard !Task.isCancelled, let self else { return }
             wait = self.beginWait(L10n.text("status.working", action)) { stop.set() }
         }
-        var (results, end) = await Task.detached(priority: .userInitiated) { () -> ([StepResult], EditState) in
+        let work = Task.detached(priority: .userInitiated) { () -> ([StepResult], EditState) in
             var s = start
             // Loudness is measured on the mix as heard, plugins included.
             let r = StepRunner.run(steps, on: &s, measure: { p, range in
                 LoudnessMeter.measure(PlanCompiler.mixBlocking(p, pool: pool, outOfProcess: safe), range)
             }, stopped: { stop.isSet })
             return (r, s)
-        }.value
+        }
+        // The caller's task cancelled (the assistant's Stop) stops it too.
+        var (results, end) = await withTaskCancellationHandler { await work.value } onCancel: { stop.set() }
         shower.cancel()
         if let wait { endWait(wait) }
         if stop.isSet, results.allSatisfy({ $0.status == .done }), let last = steps.last {

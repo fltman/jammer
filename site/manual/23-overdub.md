@@ -26,7 +26,7 @@ Select the words to replace, then choose **Speech › Overdub…**. Pick the voi
 
 The new clip is marked as made with a cloned voice, and its track shows **Cloned voice**. The mark stays in the document, follows the sound through cuts, mixes and repairs, and an exported WAV (or one sent to Flimmer) says so in its metadata. A file from another app that says it contains speech made with a cloned voice is marked the same way when it comes in. ElevenLabs puts an inaudible watermark in what it makes. Jämmer keeps ElevenLabs' file exactly as it came, watermark included, and plays a decoded copy.
 
-Once sent, a clone or an Overdub can't be stopped: it runs to its end, and ElevenLabs charges for it. (A paid job that can be canceled, such as transcribing at OpenAI, says after a cancel that the service may have charged, and Jämmer doesn't fetch anything it still sends back.)
+While a clone or an Overdub is out, the status bar shows it with a stop button. Once sent, ElevenLabs may already be working on it and may charge for it even if you stop, and Jämmer says so. A stopped Overdub puts nothing in the document. A clone that ElevenLabs finished anyway is always kept in the document's list, so that you can delete it from Jämmer; one that was stopped before Jämmer heard back may still be in your ElevenLabs account, and Jämmer tells you to look there. (A paid job that can be canceled, such as transcribing at OpenAI, also says after a cancel that the service may have charged, and Jämmer doesn't fetch anything it still sends back.)
 
 ## Deleting a voice
 

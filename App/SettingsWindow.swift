@@ -113,19 +113,32 @@ final class ModelsModel {
         return rows
     }
 
+    /// Downloads under way, by row: Stop cancels one (COMFORT 7).
+    @ObservationIgnored private var downloads: [String: Task<Void, Never>] = [:]
+    var stopped: Set<String> = []
+
     func install(_ row: ModelRow) {
         errors[row.id] = nil
+        stopped.remove(row.id)
         progress[row.id] = 0
-        Task {
+        let id = row.id
+        downloads[id] = Task {
             do {
-                let id = row.id
                 try await row.install { p in Task { @MainActor in self.progress[id] = p } }
+            } catch is CancellationError {
+            } catch let e as URLError where e.code == .cancelled {
             } catch {
-                errors[row.id] = L10n.text("settings.models.failed", L10n.error(error))
+                if !stopped.contains(id) { errors[id] = L10n.text("settings.models.failed", L10n.error(error)) }
             }
-            progress[row.id] = nil
+            progress[id] = nil
+            downloads[id] = nil
             tick += 1
         }
+    }
+
+    func stopDownload(_ row: ModelRow) {
+        stopped.insert(row.id)
+        downloads[row.id]?.cancel()
     }
 
     func remove(_ row: ModelRow) {
@@ -165,10 +178,15 @@ struct ModelsSettings: View {
                                     .font(.caption).foregroundStyle(.secondary)
                                     .fixedSize(horizontal: false, vertical: true)
                                 if let e = model.errors[row.id] { StateLine(kind: .error, text: e) }
+                                else if model.stopped.contains(row.id), model.progress[row.id] == nil, !row.installed() {
+                                    StateLine(kind: .info, text: L10n.text("settings.models.stopped"))
+                                }
                             }
                             Spacer()
                             if let p = model.progress[row.id] {
                                 ProgressView(value: p).frame(width: 90).accessibilityLabel(L10n.text("settings.models.downloading.ax", row.title))
+                                Button(L10n.text("job.stop")) { model.stopDownload(row) }
+                                    .accessibilityLabel(L10n.text("settings.models.stop.ax", row.title))
                             } else if row.installed() {
                                 Button(L10n.text("button.remove")) { model.remove(row) }
                                     .disabled(model.removing.contains(row.id))

@@ -7,7 +7,7 @@ The omnibar is the field at the bottom of the window. Press **⌘K** (or choose 
 Type part of a command's name, for example `norm` or `fade`. The letters only need to appear in order. The best matches are listed above the field, and the commands you run most often from the omnibar come first among matches that are equally good. The omnibar lists transport and view commands, export, loudness measurement, agent access, and every editing operation with its presets (fades, silence, crop, gain ±1 and ±6 dB, and the four normalize targets).
 
 - **↑ / ↓** move between the rows. **Return** runs the highlighted row. You can also click a row.
-- **Esc** empties the field and gives the keyboard back to the timeline.
+- **Esc** empties the field and gives the keyboard back to the timeline; while the model on this Mac is still choosing a command, Esc also stops that, and nothing runs.
 
 The omnibar, the menus and the agent API share one list of operations, so a command works the same way wherever you start it.
 

@@ -82,9 +82,12 @@ final class OmnibarModel {
             let shown = r.rows.compactMap(\.command)
             let typed = text
             deciding = true
-            Task {
+            deciding_ = Task {
                 let i = await OmnibarRouter.pick(typed, among: shown.map { .init(id: $0.id, title: $0.title, detail: $0.detail) })
                 deciding = false
+                deciding_ = nil
+                // Esc while it decided: nothing runs and nothing is sent (COMFORT 7).
+                guard !Task.isCancelled else { return }
                 if let i { run(shown[i]) } else { send(typed) }
             }
             return
@@ -107,9 +110,14 @@ final class OmnibarModel {
     }
 
     func cancel() {
+        deciding_?.cancel()
+        deciding_ = nil
+        deciding = false
         query = ""
         leave()
     }
+    /// The decision under way (the model on this Mac picking a command): Esc cancels it.
+    @ObservationIgnored private var deciding_: Task<Void, Never>?
 }
 
 struct OmnibarView: View {

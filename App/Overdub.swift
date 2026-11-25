@@ -14,6 +14,8 @@ extension EditorSession {
         let (attestation, files) = try OverdubService.prepareClone(project, plan: plan, kind: kind, adult: adult, consent: consent, samples: samples)
         guard Keychain.get("elevenlabs") != nil else { throw ElevenLabs.NoKey() }
         let made = try await OverdubService(provider: Self.elevenLabs()).clone(name: name, attestation: attestation, samples: samples, files: files)
+        // No stop check here on purpose: a voice ElevenLabs has made is always kept on record, so that it can be
+        // deleted from Jämmer rather than left behind in the account.
         var p = project
         p.voices.append(made.0)
         commit(p, action: L10n.text("overdub.undo.clone", name))
@@ -27,6 +29,8 @@ extension EditorSession {
         let after = p0.placedWords(in: range.upperBound..<min(p0.length, range.upperBound + p0.frames(10))).map(\.word.text).joined(separator: " ")
         let source = try await OverdubService(provider: Self.elevenLabs()).speak(voice, text: text, model: model, previous: before, next: after,
                                                                                  sampleRate: p0.sampleRate, folder: MediaStore.folder)
+        // Stopped while the answer came: the speech is not put in (it was paid for; the caller says so).
+        try Task.checkCancellation()
         var p = project
         try p.overdub(range, track: track, with: source, words: text, language: p.transcripts.first?.language ?? "en")
         commit(p, action: L10n.text("overdub.undo.overdub"))
@@ -108,10 +112,17 @@ extension EditorWindowController {
         let kind: VoiceAttestation.Kind? = whose.indexOfSelectedItem == 1 ? .own : whose.indexOfSelectedItem == 2 ? .ownerConsent : nil
         let who = name.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         session.say(L10n.text("overdub.clone.working"), .progress)
+        // The request can be stopped from the status bar (COMFORT 7); once it has gone, ElevenLabs may already have
+        // made the voice and charged, and the line says so.
+        let session = self.session, isAdult = adult.state == .on, voiceName = who.isEmpty ? L10n.text("overdub.clone.unnamed") : who
+        let request = Task { try await session.cloneVoice(name: voiceName, kind: kind, adult: isAdult, consent: consent, samples: samples) }
+        let wait = session.beginWait(L10n.text("overdub.clone.working")) { request.cancel() }
+        defer { session.endWait(wait) }
         do {
-            let (voice, verify) = try await session.cloneVoice(name: who.isEmpty ? L10n.text("overdub.clone.unnamed") : who, kind: kind,
-                                                                adult: adult.state == .on, consent: consent, samples: samples)
+            let (voice, verify) = try await request.value
             session.say(verify ? L10n.text("overdub.clone.verify", voice.name) : L10n.text("overdub.clone.done", voice.name), verify ? .warning : .success)
+        } catch where request.isCancelled {
+            session.say(L10n.text("overdub.clone.stopped"), .warning)
         } catch {
             session.say(EditorSession.overdubProblem(error), .error)
         }
@@ -154,9 +165,15 @@ extension EditorWindowController {
         unknown.sent()
         let voice = voices.indices.contains(pick.indexOfSelectedItem) ? voices[pick.indexOfSelectedItem] : first
         session.say(L10n.text("overdub.working", voice.name), .progress)
+        let session = self.session, words = text.stringValue, chosenModel = model.titleOfSelectedItem ?? Overdub.models[0]
+        let request = Task { try await session.overdub(voice: voice, range: sel, text: words, model: chosenModel, track: track) }
+        let wait = session.beginWait(L10n.text("overdub.working", voice.name)) { request.cancel() }
+        defer { session.endWait(wait) }
         do {
-            _ = try await session.overdub(voice: voice, range: sel, text: text.stringValue, model: model.titleOfSelectedItem ?? Overdub.models[0], track: track)
+            _ = try await request.value
             session.say(L10n.text("overdub.done", voice.name), .success)
+        } catch where request.isCancelled {
+            session.say(L10n.text("job.mayHaveBeenCharged", "ElevenLabs"), .warning)
         } catch {
             session.say(EditorSession.overdubProblem(error), .error)
         }

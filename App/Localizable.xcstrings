@@ -2055,6 +2055,60 @@
         }
       }
     },
+    "assistant.reply.stopped": {
+      "comment": "Assistant note after Stop when nothing had been done.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stopped. Nothing changed."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stoppat. Inget ändrades."
+          }
+        }
+      }
+    },
+    "assistant.reply.stoppedPaid": {
+      "comment": "Assistant note after Stop while a paid request was out. %@ is the provider.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stopped. The request had already gone to %@, which may have charged for it; nothing it sends back is used."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stoppat. Förfrågan hade redan gått till %@, som kan ha debiterat för den; inget som skickas tillbaka används."
+          }
+        }
+      }
+    },
+    "assistant.reply.stoppedPart": {
+      "comment": "Assistant note after Stop when part of the plan had run.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stopped. What the plan had already done stays, and can be undone with ⌘Z."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stoppat. Det planen redan hade gjort ligger kvar och kan ångras med ⌘Z."
+          }
+        }
+      }
+    },
     "assistant.reply.transcribingFirst": {
       "comment": "A line in the assistant’s conversation, in the language of the user’s question. Before removing filler words in a document without a transcript.",
       "extractionState": "manual",
@@ -2145,6 +2199,24 @@
         }
       }
     },
+    "assistant.running": {
+      "comment": "Assistant spinner while a plan runs.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Running the plan…"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kör planen…"
+          }
+        }
+      }
+    },
     "assistant.settings.ax": {
       "comment": "Spoken label of the gear button.",
       "extractionState": "manual",
@@ -2231,6 +2303,42 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ (din nyckel, betalt)"
+          }
+        }
+      }
+    },
+    "assistant.stop.help": {
+      "comment": "Help tag on the assistant's Stop.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stop (Esc): the planning or the plan, and only its own jobs"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stoppa (Esc): planeringen eller planen, och bara dess egna jobb"
+          }
+        }
+      }
+    },
+    "assistant.thinking": {
+      "comment": "Assistant spinner while it plans. %@ is the source, e.g. \"OpenRouter\".",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Thinking with %@…"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tänker med %@…"
           }
         }
       }
@@ -21760,6 +21868,24 @@
         }
       }
     },
+    "overdub.clone.stopped": {
+      "comment": "Status line after cloning was stopped.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stopped. Jämmer kept no voice. If ElevenLabs had already made it, it is in your ElevenLabs account (and may have been charged); delete it there."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stoppat. Jämmer sparade ingen röst. Om ElevenLabs redan hade gjort den finns den i ditt ElevenLabs-konto (och kan ha debiterats); radera den där."
+          }
+        }
+      }
+    },
     "overdub.clone.text": {
       "extractionState": "manual",
       "localizations": {
@@ -27142,6 +27268,42 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ljud › Dela upp i stems: sång, trummor, bas och övrigt ur ett musikspår. Från Deezers egen utgåva."
+          }
+        }
+      }
+    },
+    "settings.models.stop.ax": {
+      "comment": "VoiceOver label of a model download's Stop. %@ is the model.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stop downloading %@"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stoppa nedladdningen av %@"
+          }
+        }
+      }
+    },
+    "settings.models.stopped": {
+      "comment": "Settings › Models after Stop.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Download stopped."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nedladdningen stoppades."
           }
         }
       }
