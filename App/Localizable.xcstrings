@@ -2415,24 +2415,6 @@
         }
       }
     },
-    "attenuate.done": {
-      "comment": "Status line. Three numbers.",
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Attenuated %1$@–%2$@ Hz by %3$@ dB."
-          }
-        },
-        "sv": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Dämpade %1$@–%2$@ Hz med %3$@ dB."
-          }
-        }
-      }
-    },
     "attenuate.from": {
       "comment": "Field label.",
       "extractionState": "manual",
@@ -2537,24 +2519,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Till, i hertz"
-          }
-        }
-      }
-    },
-    "attenuate.working": {
-      "comment": "Status line.",
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Attenuating…"
-          }
-        },
-        "sv": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Dämpar…"
           }
         }
       }
@@ -28724,6 +28688,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Markering %1$@–%2$@ (%3$@)"
+          }
+        }
+      }
+    },
+    "status.stoppedByAgent": {
+      "comment": "Status bar: an agent closed its connection while its export or steps ran, so they stopped.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stopped by the agent. Nothing changed."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stoppat av agenten. Inget ändrades."
           }
         }
       }

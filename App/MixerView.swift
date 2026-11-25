@@ -155,8 +155,8 @@ struct MixerSheet: View {
         if on {
             session.status = L10n.text("freeze.working", name)
             _ = JobRegistry.shared.startFreeze(session, strip: id)
-        } else if let thawed = try? session.project.unfreezing(id) {
-            session.commit(thawed, action: L10n.text("freeze.undo.action", name))
+        } else {
+            do { try session.unfreeze(id) } catch { session.say(L10n.error(error), .error) }
         }
     }
 

@@ -204,8 +204,10 @@ final class AgentServer {
                     let response = await AgentRouter.route(request, port: port)
                     send(response, on: connection)
                 }
-                // A short turn stops when its caller hangs up (TurnTranscription); other routes finish what they began.
-                if request.method == "POST", request.segments == ["api", "v1", "transcribe"] {
+                // A short turn, an export and a run of steps stop when their caller hangs up (TurnTranscription; the
+                // coordinator, 2026-11-25: an agent can stop what it is waiting for). A stopped run applies nothing and a
+                // stopped export leaves nothing behind. Other routes finish what they began.
+                if AgentAPI.stopsOnHangUp(method: request.method, segments: request.segments) {
                     connection.receive(minimumIncompleteLength: 1, maximumLength: 1) { _, _, isComplete, error in
                         if isComplete || error != nil { work.cancel() }
                     }
@@ -408,9 +410,30 @@ enum AgentRouter {
                 throw APIError.notFound("No open document with id \(p[3]). GET /api/v1/documents lists them.")
             }
             switch Array(p.dropFirst(4)) {
+            case [] where r.method == "DELETE":
+                // File › Close (DocumentClose): only a document with nothing unsaved; never discards, never saves unasked.
+                session.checkLink()
+                let state = DocumentClose.State(edited: session.document?.isDocumentEdited ?? false, linkedFile: session.linkedFile?.fileName,
+                                                lostLink: session.lostLink?.why, sheet: session.window?.attachedSheet != nil)
+                if let no = DocumentClose.refusal(state) { throw no }
+                guard let doc = session.document else { throw APIError.notFound("No open document with id \(p[3]).") }
+                doc.close()
+                return .json(["closed": true, "document": p[3]])
             case []:
-                try only("GET")
+                try only("GET", "DELETE")
                 return .json(["document": detail(session)])
+            case ["flimmer-return"]:
+                // What Send to Flimmer would send, for an agent that delivers it through Flimmer's own API. Reads only.
+                try only("GET")
+                let mode = try flimmerMode(r)
+                do {
+                    return .json(try FlimmerSend.returnPreview(session.project, mode: mode) { "/api/v1/documents/\(session.agentID)/flimmer-return/\($0)/audio?mode=\(mode.rawValue)" })
+                } catch {
+                    throw APIError.unprocessable(error.code, error.message)
+                }
+            case let q where q.count == 3 && q[0] == "flimmer-return" && q[2] == "audio":
+                try only("GET")
+                return try await flimmerReturnAudio(session, r, index: q[1])
             case ["steps"]:
                 try only("POST")
                 return try await steps(session, r)
@@ -573,7 +596,7 @@ enum AgentRouter {
                     throw APIError.notFound("No track or bus with id \(body["strip"] as? String ?? ""). GET …/mixer lists them.")
                 }
                 if p.last == "unfreeze" {
-                    do { session.commit(try session.project.unfreezing(id), action: L10n.text("freeze.undo.action", strip.name)) }
+                    do { try session.unfreeze(id) }
                     catch let e as FreezeError { throw APIError.unprocessable(e.reason, e.localizedDescription) }
                     return .json(["mixer": mixerJSON(session.project, plan: session.plan, session: session)])
                 }
@@ -1123,6 +1146,8 @@ enum AgentRouter {
             }
         }
         let results = await session.run(steps, action: steps.count == 1 ? L10n.operation(steps[0].op) : L10n.text("agent.edits"))
+        // The agent hung up: nothing was applied, and the window says why its wait went away.
+        if Task.isCancelled, results.contains(where: { $0.reason == "stopped" }) { session.say(L10n.text("status.stoppedByAgent"), .info) }
         let list: [[String: Any]] = results.enumerated().map { i, res in
             var d: [String: Any] = ["index": i, "op": res.op, "status": res.status.rawValue]
             if let e = res.error { d["error"] = e }
@@ -1184,6 +1209,32 @@ enum AgentRouter {
             guard let id = UUID(uuidString: value), known.contains(id) else { throw APIError.notFound("There is no track \(value).") }
             return id
         }
+    }
+
+    private static func flimmerMode(_ r: AgentAPI.Request) throws -> FlimmerSend.Mode {
+        guard let mode = FlimmerSend.Mode(rawValue: r.query["mode"] ?? "takes") else { throw APIError.badRequest("mode is takes or mix.") }
+        return mode
+    }
+
+    /// One item's file, exactly as Send to Flimmer renders it (plugins included, at Flimmer's rate), 16-bit unless
+    /// ?bitDepth=24.
+    private static func flimmerReturnAudio(_ session: EditorSession, _ r: AgentAPI.Request, index: String) async throws -> Response {
+        let mode = try flimmerMode(r)
+        let depth = Int(r.query["bitDepth"] ?? "16") ?? 0
+        guard [16, 24].contains(depth) else { throw APIError.badRequest("bitDepth is 16 or 24.") }
+        let items: [FlimmerSend.Item]
+        do { items = try FlimmerSend.returnItems(session.project, mode: mode).items } catch { throw APIError.unprocessable(error.code, error.message) }
+        guard let i = Int(index), items.indices.contains(i) else { throw APIError.notFound("No item \(index); GET …/flimmer-return lists \(items.count).") }
+        let item = items[i], pool = session.pool, safe = EditorSession.pluginSafeMode, rate = FlimmerSend.sendRate(session.project)
+        let rendered = try await Task.detached(priority: .userInitiated) {
+            try FlimmerSend.wavFile(PlanCompiler.mixBlocking(item.render, pool: pool, outOfProcess: safe), range: item.range, bitDepth: depth, sampleRate: rate,
+                                    monoIfSame: item.monoSource, comment: item.render.syntheticNote(in: item.range), scratch: MediaStore.folder)
+        }.value
+        defer { try? FileManager.default.removeItem(at: rendered.file.deletingLastPathComponent()) }
+        let data = try Data(contentsOf: rendered.file)
+        return Response(status: 200, contentType: "audio/wav", body: data, extraHeaders: [
+            "Content-Disposition": "attachment; filename=\"\(asciiName(item.name))-jammer.wav\"",
+        ])
     }
 
     private static func transcript(_ session: EditorSession, _ r: AgentAPI.Request) throws -> Response {
@@ -1495,9 +1546,16 @@ enum AgentRouter {
             sampleRate = n.doubleValue
         }
         let delivery: LoudnessDelivery?
+        // A closed connection stops it (stopsOnHangUp): the file isn't finished and the temporary one is removed.
+        let stop = JobRegistry.StopFlag()
         do {
-            delivery = try await session.export(to: tmp, options: .init(encoding: encoding, range: range, dither: obj["dither"] as? Bool ?? false, encoded: encoded,
-                                                                        chapters: obj["chapters"] as? Bool ?? true, loudness: target, tracks: only, sampleRate: sampleRate))
+            delivery = try await withTaskCancellationHandler {
+                try await session.export(to: tmp, options: .init(encoding: encoding, range: range, dither: obj["dither"] as? Bool ?? false, encoded: encoded,
+                                                                 chapters: obj["chapters"] as? Bool ?? true, loudness: target, tracks: only, sampleRate: sampleRate), stop: stop)
+            } onCancel: { stop.set() }
+        } catch is CancellationError {
+            session.say(L10n.text("status.stoppedByAgent"), .info)
+            throw APIError(409, "stopped", "The export was stopped (the connection closed).")
         } catch let e as MasterCeilingError {
             // The master's limiter couldn't hold the file: the reason, and in the words the peak it measured.
             throw APIError.unprocessable(MasterCeilingError.reason, e.localizedDescription)

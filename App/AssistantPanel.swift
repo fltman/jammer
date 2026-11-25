@@ -368,7 +368,7 @@ final class AssistantModel {
                 guard session.project.frozen(id) == nil else { messages.append(Message(role: .note, text: L10n.reply("error.freeze.alreadyFrozen", replyLanguage, strip.name))); return true }
                 return await runJob(JobRegistry.shared.startFreeze(session, strip: id))
             }
-            do { session.commit(try session.project.unfreezing(id), action: L10n.text("freeze.undo.action", strip.name)); return true }
+            do { try session.unfreeze(id); return true }
             catch { messages.append(Message(role: .note, text: L10n.replyError(error, replyLanguage))); return false }
         case "measure_loudness":
             let r = await session.analyze(session.selection)

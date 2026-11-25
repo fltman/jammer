@@ -570,14 +570,43 @@ public enum FlimmerSend {
     /// The rate the files go at: the document's when Flimmer takes it, else 48 kHz.
     public static func sendRate(_ project: Project) -> Double { [44_100, 48_000].contains(project.sampleRate) ? project.sampleRate : 48_000 }
 
-    /// Renders and uploads every file, then asks Flimmer for a dry run. Uploads are removed again if anything fails.
-    public static func prepare(_ project: Project, mode: Mode, client: Client, render: Render, progress: @Sendable (Double) -> Void = { _ in }) async throws -> Prepared {
+    /// The items Send to Flimmer would send now, or why there are none (the same checks as `prepare`).
+    public static func returnItems(_ project: Project, mode: Mode) throws(Failure) -> (plan: FlimmerReturn.Plan, items: [Item]) {
         if let no = refusal(project) { throw no }
         let plan = (try? FlimmerReturn.plan(project)) ?? .init()
         let items = self.items(project, plan: plan, mode: mode)
         guard !items.isEmpty || !plan.tracks.isEmpty else {
             throw Failure("nothing_to_change", Said("error.flimmer.there_nothing_send_clip", "There is nothing to send: no clip or track has changed since the film came in."))
         }
+        return (plan, items)
+    }
+
+    /// What Send to Flimmer would send, for an agent that delivers it through Flimmer's own API (GET …/flimmer-return;
+    /// the coordinator, 2026-11-25: Send to Flimmer reaches another app, so the agent fetches the content here): each
+    /// item with its file's address (`audio(i)`), its transcript body, and the plan's body with a placeholder where
+    /// each upload's id goes. Nothing is rendered, uploaded or sent.
+    public static func returnPreview(_ project: Project, mode: Mode, audio: (Int) -> String) throws(Failure) -> [String: Any] {
+        let (plan, items) = try returnItems(project, mode: mode)
+        let transcripts = transcriptBodies(project, items: items)
+        let rate = sendRate(project)
+        func secs(_ f: Frame) -> Double { (Double(f) / project.sampleRate * 1_000_000).rounded() / 1_000_000 }
+        let placeholders = items.indices.map { "<upload of item \($0)>" }
+        return [
+            "mode": mode.rawValue, "sampleRate": rate,
+            "items": items.enumerated().map { i, item -> [String: Any] in
+                ["index": i, "kind": item.kind.rawValue, "name": item.name, "clipId": item.clipId ?? NSNull(),
+                 "start": secs(item.range.lowerBound), "end": secs(item.range.upperBound), "monoSource": item.monoSource,
+                 "fields": item.fields.mapValues(\.any), "audio": audio(i),
+                 "transcript": transcripts[i].map { $0.mapValues(\.any) } ?? NSNull()]
+            },
+            "body": body(project, plan: plan, mode: mode, items: items, uploads: placeholders, dryRun: false).mapValues(\.any),
+            "said": said(project, plan: plan, mode: mode, items: items, resampledTo: rate == project.sampleRate ? nil : rate).map(\.text),
+        ]
+    }
+
+    /// Renders and uploads every file, then asks Flimmer for a dry run. Uploads are removed again if anything fails.
+    public static func prepare(_ project: Project, mode: Mode, client: Client, render: Render, progress: @Sendable (Double) -> Void = { _ in }) async throws -> Prepared {
+        let (plan, items) = try returnItems(project, mode: mode)
         let limits = try await client.limits()
         let rate = sendRate(project)
         var uploads: [String] = [], files: [Rendered] = [], notes: [Said] = []

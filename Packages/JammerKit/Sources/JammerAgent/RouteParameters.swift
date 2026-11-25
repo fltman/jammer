@@ -56,6 +56,9 @@ extension AgentAPI {
         // A whole file for another app: the audio itself, or JSON naming an upload; never a path (FileTranscription).
         .init("POST", "/api/v1/transcribe/file", query: ["language", "engine"], body: ["upload"]),
         .init("GET", doc), .init("DELETE", doc),
+        // What Send to Flimmer would send, and each item's file (FlimmerSend.returnPreview).
+        .init("GET", doc + "/flimmer-return", query: ["mode"]),
+        .init("GET", doc + "/flimmer-return/{n}/audio", query: ["mode", "bitDepth"]),
         .init("POST", doc + "/steps", body: ["steps", "allowPaid"]),
         .init("POST", doc + "/undo"),
         .init("POST", doc + "/save"), .init("POST", doc + "/redo"),

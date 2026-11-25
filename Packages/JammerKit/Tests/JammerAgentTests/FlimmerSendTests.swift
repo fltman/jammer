@@ -399,6 +399,27 @@ struct FlimmerSendTests {
         do { try await body(); return nil } catch { return error as? FlimmerSend.Failure }
     }
 
+    @Test("What Send to Flimmer would send, for an agent: the same items as prepare, each with its file's address, and the plan's body with a placeholder per upload; nothing sent")
+    func returnPreview() throws {
+        var (p, _) = film()
+        try p.changeGain(Frame(5.5 * sr)..<Frame(6.5 * sr), by: -6)
+        p.tracks[1].clips[0].start += Frame(0.5 * sr)
+        let preview = try FlimmerSend.returnPreview(p, mode: .takes) { "/audio/\($0)" }
+        let items = try #require(preview["items"] as? [[String: Any]])
+        #expect(items.map { $0["clipId"] as? String } == ["C1", "C3"] && items.map { $0["audio"] as? String } == ["/audio/0", "/audio/1"])
+        #expect(items[0]["kind"] as? String == "take" && items[0]["start"] as? Double == 4.5 && items[0]["end"] as? Double == 8.5)
+        let body = try #require(preview["body"] as? [String: Any])
+        #expect(body["projectId"] as? String == "P1" && body["dryRun"] as? Bool == false)
+        #expect(String(describing: body).contains("<upload of item 0>") && String(describing: body).contains("<upload of item 1>"))
+        #expect(preview["sampleRate"] as? Double == 48_000 && (preview["said"] as? [String])?.isEmpty == false)
+        // The same refusals as Send: not from Flimmer, nothing changed.
+        let (unchanged, _) = film()
+        #expect(throws: FlimmerSend.Failure.self) { _ = try FlimmerSend.returnPreview(unchanged, mode: .takes) { _ in "" } }
+        var mine = p
+        mine.imported = nil
+        do { _ = try FlimmerSend.returnPreview(mine, mode: .takes) { _ in "" }; Issue.record("not refused") } catch { #expect(error.code == "not_from_flimmer") }
+    }
+
     @Test("Takes: changed clips go as files, a dry run first, then one undo step; unchanged clips stay")
     func takes() async throws {
         var (p, pool) = film()

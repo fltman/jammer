@@ -94,7 +94,7 @@ public enum Commands {
     /// The commands and window controls (`WindowControls`) the agent can't reach yet, each with `.gap` saying what is
     /// missing. This list may only shrink: a test fails on a gap that isn't here, on one here that is no longer a gap,
     /// and if the list grows past its count of 2026-11-25.
-    public static let knownGaps: Set<String> = ["file.close", "status.stopWait"]
+    public static let knownGaps: Set<String> = []
 
     private static let byID: [String: Command] = Dictionary(all.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
 
@@ -121,8 +121,7 @@ public enum Commands {
         // File
         add("file.new", .file, 0, key("file.new"), key: "n", agent: .route("POST", "/api/v1/documents"))
         add("file.open", .file, 0, key("file.open"), key: "o", agent: .route("POST", "/api/v1/documents"))
-        add("file.close", .file, 1, key("file.close"), key: "w",
-            agent: .gap("Closing a document: DELETE …/documents/{id} isn't built (a window the user may have touched); waiting for the coordinator's word"))
+        add("file.close", .file, 1, key("file.close"), key: "w", agent: .route("DELETE", doc))
         add("file.save", .file, 1, key("file.save"), key: "s", agent: .route("POST", doc + "/save"))
         add("file.saveAs", .file, 1, key("file.saveAs"), key: "s", [.shift], agent: .none(.userFiles))
         add("file.duplicate", .file, 1, key("file.duplicate"), key: "s", [.option, .shift], agent: .none(.userFiles))

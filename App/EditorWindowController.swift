@@ -281,19 +281,9 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         alert.addButton(withTitle: L10n.text("button.cancel"))
         alert.beginSheetModal(for: window) { [session] response in
             guard response == .alertFirstButtonReturn else { return }
-            let p = session.project, pool = session.pool
-            let band = min(low.doubleValue, high.doubleValue)...max(low.doubleValue, high.doubleValue), gain = min(0, db.doubleValue)
-            Task {
-                session.status = L10n.text("attenuate.working")
-                let result = await Task.detached { Result { try p.applyingSpectralAttenuation(range: sel, freq: band, gainDB: gain, pool: pool, media: MediaStore.folder) } }.value
-                switch result {
-                case .success(let q):
-                    session.commit(q, action: L10n.text("attenuate.title"))
-                    session.status = L10n.text("attenuate.done", L10n.number(band.lowerBound, 0), L10n.number(band.upperBound, 0), L10n.number(-gain, 0))
-                case .failure(let e):
-                    session.status = L10n.error(e)
-                }
-            }
+            // The agent's own operation, so the window and the API do the same (one undo step, over the selection).
+            let lo = min(low.doubleValue, high.doubleValue), hi = max(low.doubleValue, high.doubleValue)
+            session.perform("spectral_attenuate", ["low": .number(lo), "high": .number(hi), "db": .number(max(-80, min(0, db.doubleValue)))])
         }
     }
 

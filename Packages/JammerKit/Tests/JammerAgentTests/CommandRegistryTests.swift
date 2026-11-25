@@ -32,7 +32,7 @@ struct CommandRegistryTests {
         }
         // The known gaps are exactly the gaps, and the list only shrinks (SIBLINGS, "Agenten når allt som fönstret gör").
         #expect(gaps == Commands.knownGaps, "gaps \(gaps.sorted()) against knownGaps \(Commands.knownGaps.sorted())")
-        #expect(Commands.knownGaps.count <= 2, "knownGaps may only shrink")
+        #expect(Commands.knownGaps.count <= 0, "knownGaps may only shrink")
         // Consent and payment are answered by the user; nothing else may claim it.
         #expect(Commands.all.filter { $0.agent == .none(.consent) }.allSatisfy { ["speech.cloneVoice", "speech.overdub"].contains($0.id) })
     }

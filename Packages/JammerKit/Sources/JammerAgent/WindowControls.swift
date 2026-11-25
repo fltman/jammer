@@ -47,11 +47,14 @@ public enum WindowControls {
         c("transport.volume", "EditorWindowController.swift", "The playback volume (this Mac's)", .none(.listening)),
         c("transport.zoom", "EditorWindowController.swift", "The zoom buttons", .none(.view)),
         c("status.stopJob", "EditorWindowController.swift", "Stop beside a running job", .route("DELETE", "/api/v1/jobs/{id}")),
-        c("status.stopWait", "EditorWindowController.swift", "Stop beside an export or a command still running",
-          .gap("An agent's own export or steps can't be stopped once sent: only jobs can (DELETE …/jobs/{id})")),
+        // An agent's own export or steps stop when it closes the connection (AgentRouter.stopsOnHangUp).
+        c("status.stopWait", "EditorWindowController.swift", "Stop beside an export or a command still running", .route("POST", doc + "/steps")),
         c("status.clipWarning", "EditorWindowController.swift", "0 dBFS at … clicked: the playhead goes there", .none(.view)),
         // The export dialogs' own options
-        c("export.options", "EditorWindowController.swift", "Export Audio: format, sample rate, dither, selection only, chapters, chapters JSON", op("export")),
+        // The chapters JSON written beside the file is GET …/chapters with the same start and end.
+        c("export.options", "EditorWindowController.swift", "Export Audio: format, sample rate, dither, selection only, chapters", op("export")),
+        c("export.chaptersJSON", "EditorWindowController.swift", "Export Audio: chapters JSON beside the file", .route("GET", doc + "/chapters")),
+        c("flimmer.send", "FlimmerSendSheet.swift", "Send to Flimmer: takes or the mix, transcripts (the agent fetches them here and delivers them through Flimmer's API)", .route("GET", doc + "/flimmer-return")),
         c("exportTranscript.options", "EditorWindowController.swift", "Export Transcript: format, track, selection only", op("export_transcript")),
         c("exportTimeline.options", "EditorWindowController.swift", "Export Timeline: format", op("export_timeline")),
         c("importTracks.align", "EditorWindowController.swift", "Imported tracks lined up with the others", op("align_tracks")),

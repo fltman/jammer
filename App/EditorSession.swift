@@ -35,6 +35,12 @@ final class EditorSession {
         if let i = waits.firstIndex(where: { $0.id == id }) { waits[i].label = label }
     }
     func endWait(_ id: UUID) { waits.removeAll { $0.id == id } }
+
+    /// Unfreezing a strip, the one way for the mixer, the assistant and the agent: one undo step.
+    func unfreeze(_ id: UUID) throws {
+        let name = project.strip(id)?.name ?? ""
+        commit(try project.unfreezing(id), action: L10n.text("freeze.undo.action", name))
+    }
     /// The waits the status bar shows: this document's, and what Jämmer is doing for another app.
     var shownWaits: [Wait] { waits + (AgentServer.shared.sibling.map { [$0] } ?? []) }
 
