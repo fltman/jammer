@@ -40,12 +40,26 @@ public struct Command: Sendable, Identifiable {
         case userFiles
         /// The omnibar and the assistant: the agent's own counterpart is the API itself.
         case assistant
+        /// A gesture only a pointer makes, whose result the agent sets directly (a live fader ride: set_automation;
+        /// zooming and scrolling the view; a plugin's own window: set_insert parameter).
+        case pointer
+        /// Writes the clipboard, which is the user's.
+        case clipboard
+        /// The user's own safety decisions: what the agent may reach (its folders), files from outside the project,
+        /// plugins and their settings trusted, models installed or removed. An agent never widens its own reach.
+        case safety
+        /// Reaches another app: the agent fetches the content here (export, transcript, takes) and delivers it through
+        /// that app's own API (Send to Flimmer; the coordinator, 2026-11-25).
+        case anotherApp
     }
 
     public enum Agent: Sendable, Equatable {
         case operation(String)
         case route(String, String)
         case none(Exemption)
+        /// The window does it and the agent can't yet: what is missing. Only `Commands.knownGaps` may say so, and
+        /// that list may only shrink (SIBLINGS, "Agenten når allt som fönstret gör", 2026-11-25).
+        case gap(String)
     }
 
     public var id: String
@@ -77,6 +91,11 @@ public enum Commands {
     /// Every command, in menu order (made once; titles are said by the window when shown).
     public static let all: [Command] = make()
 
+    /// The commands and window controls (`WindowControls`) the agent can't reach yet, each with `.gap` saying what is
+    /// missing. This list may only shrink: a test fails on a gap that isn't here, on one here that is no longer a gap,
+    /// and if the list grows past its count of 2026-11-25.
+    public static let knownGaps: Set<String> = ["file.close", "status.stopWait"]
+
     private static let byID: [String: Command] = Dictionary(all.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
 
     private static func make() -> [Command] {
@@ -102,7 +121,8 @@ public enum Commands {
         // File
         add("file.new", .file, 0, key("file.new"), key: "n", agent: .route("POST", "/api/v1/documents"))
         add("file.open", .file, 0, key("file.open"), key: "o", agent: .route("POST", "/api/v1/documents"))
-        add("file.close", .file, 1, key("file.close"), key: "w", agent: .route("DELETE", doc))
+        add("file.close", .file, 1, key("file.close"), key: "w",
+            agent: .gap("Closing a document: DELETE …/documents/{id} isn't built (a window the user may have touched); waiting for the coordinator's word"))
         add("file.save", .file, 1, key("file.save"), key: "s", agent: .route("POST", doc + "/save"))
         add("file.saveAs", .file, 1, key("file.saveAs"), key: "s", [.shift], agent: .none(.userFiles))
         add("file.duplicate", .file, 1, key("file.duplicate"), key: "s", [.option, .shift], agent: .none(.userFiles))
@@ -112,7 +132,7 @@ public enum Commands {
         add("file.export", .file, 3, key("file.export"), key: "e", [.shift], agent: .operation("export"))
         add("file.exportTranscript", .file, 3, key("file.exportTranscript"), agent: .operation("export_transcript"))
         add("file.exportTimeline", .file, 3, key("file.exportTimeline"), agent: .operation("export_timeline"))
-        add("file.sendToFlimmer", .file, 4, key("file.sendToFlimmer"), agent: .none(.window))
+        add("file.sendToFlimmer", .file, 4, key("file.sendToFlimmer"), agent: .none(.anotherApp))
         add("file.collect", .file, 5, key("file.collect"), agent: .none(.userFiles))
         add("file.linkedWaiting", .file, 5, key("menu.file.linkedWaiting"), agent: .none(.userFiles))
         add("file.batch", .file, 5, key("file.batch"), key: "b", [.option], agent: .operation("batch"))

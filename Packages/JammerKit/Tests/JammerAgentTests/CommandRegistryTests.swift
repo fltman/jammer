@@ -10,21 +10,29 @@ struct CommandRegistryTests {
     static let repo = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         .deletingLastPathComponent().deletingLastPathComponent()
 
-    @Test("Every command has an agent counterpart: an operation in the registry, a route the API has, or an accepted reason")
+    @Test("Every command and window control has an agent counterpart: an operation in the registry, a route the API has, an accepted reason, or a known gap")
     func agentCoverage() {
         let ops = Set((Operations.all + Operations.endpoints).map(\.name))
         let routes = AgentAPI.routes
-        for c in Commands.all {
-            switch c.agent {
+        let everything = Commands.all.map { ($0.id, $0.agent) } + WindowControls.all.map { ($0.id, $0.agent) }
+        var gaps: Set<String> = []
+        for (id, agent) in everything {
+            switch agent {
             case .operation(let name):
-                #expect(ops.contains(name), "\(c.id): no operation \(name)")
+                #expect(ops.contains(name), "\(id): no operation \(name)")
             case .route(let method, let path):
                 let pattern = AgentAPI.RouteParameters(method, path).pattern
-                #expect(routes.contains { $0.method == method && $0.pattern == pattern }, "\(c.id): no route \(method) \(path)")
+                #expect(routes.contains { $0.method == method && $0.pattern == pattern }, "\(id): no route \(method) \(path)")
             case .none(let why):
-                #expect(Command.Exemption.allCases.contains(why), "\(c.id)")
+                #expect(Command.Exemption.allCases.contains(why), "\(id)")
+            case .gap(let missing):
+                #expect(!missing.isEmpty, "\(id): a gap says what is missing")
+                gaps.insert(id)
             }
         }
+        // The known gaps are exactly the gaps, and the list only shrinks (SIBLINGS, "Agenten når allt som fönstret gör").
+        #expect(gaps == Commands.knownGaps, "gaps \(gaps.sorted()) against knownGaps \(Commands.knownGaps.sorted())")
+        #expect(Commands.knownGaps.count <= 2, "knownGaps may only shrink")
         // Consent and payment are answered by the user; nothing else may claim it.
         #expect(Commands.all.filter { $0.agent == .none(.consent) }.allSatisfy { ["speech.cloneVoice", "speech.overdub"].contains($0.id) })
     }
@@ -61,6 +69,16 @@ struct CommandRegistryTests {
         // The kept list of the app's menus (Config/menus-en.txt) holds no item the registry doesn't.
         let kept = try String(contentsOf: Self.repo.appending(path: "Config/menus-en.txt"), encoding: .utf8)
         #expect(!kept.isEmpty)
+    }
+
+    @Test("The window controls: ids unique and apart from the commands', each in a file that exists")
+    func windowControls() {
+        let ids = WindowControls.all.map(\.id)
+        #expect(Set(ids).count == ids.count)
+        #expect(Set(ids).isDisjoint(with: Commands.all.map(\.id)))
+        for c in WindowControls.all {
+            #expect(FileManager.default.fileExists(atPath: Self.repo.appending(path: c.file).path), "\(c.id): \(c.file)")
+        }
     }
 
     @Test("Every command is reachable from ⌘K unless it is the system's own")
