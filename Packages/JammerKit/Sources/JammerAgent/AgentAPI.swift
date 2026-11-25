@@ -391,7 +391,7 @@ public enum AgentAPI {
         | Method | Path | What it does |
         |---|---|---|
         | GET | `\(guidePath)` | This guide (Markdown). |
-        | GET | `/api/v1/status` | App name and version, API version, port, open documents. |
+        | GET | `/api/v1/status` | App name and version, API version, port, open documents, running jobs, and `providerKeys`: for each cloud provider (`openrouter`, `berget`, `grunden`, `openai`, `anthropic`, `xai`, `google`, `elevenlabs`) whether the user has saved a key, never the key. Keys are added by the user in Settings. |
         | GET | `/api/v1/operations` | Everything this API can do, as JSON: every step operation with its parameters, and the calls that have an endpoint of their own (`restore`, `transcribe`, `export` and so on). The latter carry `"call": {"method", "path"}` and are not valid in `steps`. |
         | GET | `/api/v1/documents` | The open documents: `id`, `name`, `duration` (seconds), `frames`, `sampleRate`, `channels`, `playing`, `edited` (it has changes that aren't saved) and `frontmost` (the one the user has in front). |
         | POST | `/api/v1/documents` | Open audio: raw bytes (`Content-Type: audio/…` or `application/octet-stream`, optional `?name=`), JSON `{"audio": "<base64>", "name"}`, or JSON `{"upload": "<id>", "name"}`. Answers `201` with `{"document"}`, plus `"warning"` when the file was cut short and opened with the sound that was there. A file is untrusted: one that is damaged, has no sound in it, claims more than 32 channels or a sample rate outside 8–768 kHz, or would decode to more than the disk has room for, is refused with `400` and the reason in words. |

@@ -22,16 +22,20 @@ public enum TranscriptionChoice: String, CaseIterable, Sendable {
         public let per: String
         public let source: String
         public let asOf: String
+        /// The provider's own words for the rate, as read at `source` on `asOf` (SIBLINGS, "Okänt pris").
+        public let quote: String
 
         var json: [String: Any] {
-            ["amount": amount, "currency": currency, "per": per, "source": source, "asOf": asOf]
+            ["amount": amount, "currency": currency, "per": per, "source": source, "asOf": asOf, "quote": quote]
         }
     }
 
     public var price: Price? {
         guard self == .bergetPianissimo else { return nil }
+        // Berget's model list gives the rate per second; 5.833333e-05 × 60 = 0.0035 per audio minute.
         return Price(amount: 0.0035, currency: "EUR", per: "audio minute",
-                     source: "https://berget.ai/en/models", asOf: "2026-11-21")
+                     source: "https://api.berget.ai/v1/models", asOf: "2026-11-25",
+                     quote: #"{"id": "klang/pianissimo", "pricing": {"currency": "EUR", "input": 5.833333e-05, "unit": "€ / second"}}"#)
     }
 
     static var paidOptions: [String: [String: Any]] {

@@ -27,5 +27,7 @@ Window size and position are remembered too.
 - **Stem separation** (Spleeter 4stems): vocals, drums, bass and other from a music track (MIT; 146 MB; from Deezer's own release).
 - **Soundtrack separation** (MRX): speech, music and effects from film or video sound (MIT; 122 MB; from MERL's own repository).
 - **Speaker diarisation**: for Find Speakers on a mixed recording (CC-BY-4.0; about 22 MB). Find Speakers offers to download it the first time.
+- **Klang Pianissimo** Swedish or Danish (Klang AI AB, from NVIDIA Parakeet; CC-BY-4.0; about 690 MB and 630 MB): transcription with word timings on this Mac.
+- **Whisper small, multilingual** (OpenAI, whisper.cpp's conversion; MIT; 190 MB): for transcribing each voice track in its own language.
 
 When you transcribe, Jämmer picks KB-Whisper for Swedish if it's installed, otherwise Parakeet if it's installed and knows the language, otherwise the Mac's own recognizer, which needs no download. Agents can ask for a particular engine but can't download models; that's up to you.

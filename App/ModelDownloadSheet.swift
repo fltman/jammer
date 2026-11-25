@@ -60,7 +60,12 @@ struct ModelDownloadSheet: View {
     /// Shows the sheet on `window` (or as a window of its own) and runs `download` only on the user's click.
     @MainActor
     static func ask(_ id: String, on window: NSWindow?, download: @escaping () -> Void) {
-        guard let r = Requirements.all.first(where: { $0.id == id }) else { return download() }
+        // A model the register doesn't list is never fetched: no sheet, no download (a row with a new id must be
+        // added to Requirements first).
+        guard let r = Requirements.all.first(where: { $0.id == id }) else {
+            NSLog("Jammer: %@ isn't in the install register; not downloaded", id)
+            return
+        }
         let host = NSHostingController(rootView: AnyView(EmptyView()))
         let close: () -> Void = { [weak host] in
             guard let sheet = host?.view.window else { return }

@@ -1,5 +1,6 @@
 import AppKit
 import JammerAgent
+import JammerAssistant
 import JammerCore
 import JammerDiarize
 import JammerPlugins
@@ -276,7 +277,9 @@ enum AgentRouter {
                           "api": AgentAPI.version, "port": Int(port), "pid": Int(ProcessInfo.processInfo.processIdentifier), "agentFolders": AgentFolders.urls.count,
                           "linkJournal": ["entries": LinkJournalStore.counts.entries, "broken": LinkJournalStore.counts.broken],
                           "documents": AgentRegistry.shared.sessions.map(summary),
-                          "jobs": JobRegistry.shared.running.map(\.json)])
+                          "jobs": JobRegistry.shared.running.map(\.json),
+                          // Which providers have a key saved (never the key): from the one list of providers (PROVIDERS.md, rule 2).
+                          "providerKeys": ProviderKeys.status])
         case let p where p.count == 4 && Array(p.prefix(3)) == ["api", "v1", "jobs"]:
             try only("GET", "DELETE")
             let job = r.method == "GET" ? JobRegistry.shared.job(p[3]) : JobRegistry.shared.cancel(p[3])

@@ -52,7 +52,7 @@ AAF, DDP and ARA2 are not here: AAF and DDP wait for Anders's decisions on agree
 
 | Service | Terms read | What Jämmer does about them |
 |---|---|---|
-| Berget AI (hosted Klang Pianissimo) | [Inference API](https://api.berget.ai/), [published rate](https://berget.ai/en/models), checked 2026-11-21 | User’s own Berget key in the Keychain. Swedish audio is uploaded only for explicit paid requests. The documented endpoint returns text without word timestamps. |
+| Berget AI (hosted Klang Pianissimo) | [Inference API](https://api.berget.ai/), published rate in [Berget’s model list](https://api.berget.ai/v1/models) (klang/pianissimo: €0.00005833 per second, €0.0035 per audio minute), read 2026-11-25 | User’s own Berget key in the Keychain. Swedish audio is uploaded only for explicit paid requests. The documented endpoint returns text without word timestamps. |
 | ElevenLabs (Overdub: Instant Voice Cloning, text to speech) | Terms of Service, Prohibited Use Policy, ElevenAPI Terms and Service-Specific Terms dated 9 October 2026, OEM Terms dated 28 February 2025; read 2026-11-17 (elevenlabs.io/terms-of-use, /use-policy, /elevenapi-terms, /oem-terms) | The user's own key from their own account, in their Keychain; nothing resold, bundled or proxied (Anders read the clauses on wrappers and proxies, resale and OEM and said "Bygg med egen nyckel", 2026-11-17). Cloning needs the user's attestation, an adult, and the consent sentence heard in the recording before anything is uploaded; the record is kept in the document. ElevenLabs' output kept as it came (its watermark with it); made speech marked in the document and in an exported WAV (LIST/INFO ICMT). Tested against a stand-in server only. |
 
 ## Test-only tools (not shipped)

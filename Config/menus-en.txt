@@ -18,6 +18,7 @@ File › Collect Audio and Save
 File › Import Tracks…	⇧⌘I
 File › Import Timeline…	
 File › Export Audio…	⇧⌘E
+File › Export Transcript	
 File › Export Timeline…	
 File › Batch…	⌥⌘B
 File › Storage…	
@@ -81,6 +82,8 @@ Audio › Find Speakers › 3 Speakers
 Audio › Find Speakers › 4 Speakers	
 Audio › Find Speakers › Save Speaker as Voice Profile…	
 Audio › Split Speakers onto Tracks	
+Audio › Split and Transcribe Speakers	
+Audio › Transcribe Voice Tracks	
 Audio › Separate Stems	
 Audio › Separate Stems › Vocals, Drums, Bass, Other (music)	
 Audio › Separate Stems › Speech, Music, Effects (soundtrack)	

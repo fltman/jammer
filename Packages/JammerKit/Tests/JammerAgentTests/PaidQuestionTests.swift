@@ -58,6 +58,19 @@ struct PaidQuestionTests {
         #expect(t?.body?.isSuperset(of: ["allowPaid", "allowUnknownPrice"]) == true)
     }
 
+    @Test("Every paid transcription engine has a price with its source, date and the provider's words, or is marked unknown and needs allowUnknownPrice")
+    func paidPrices() {
+        for c in TranscriptionChoice.allCases where c.paid {
+            if let p = c.price {
+                #expect(p.source.hasPrefix("https://") && p.asOf.count == 10 && !p.quote.isEmpty && p.amount > 0, "\(c.rawValue)")
+                #expect(!c.needsUnknownPrice)
+            } else {
+                #expect(c.needsUnknownPrice, "\(c.rawValue)")
+            }
+        }
+        #expect(TranscriptionChoice.bergetPianissimo.price?.amount == 0.0035)
+    }
+
     @Test("The batch's paid engines are the transcribe engines that send audio away")
     func paidEngines() {
         let engines = Operations.endpoints.first { $0.name == "transcribe" }?.params.first { $0.name == "engine" }?.options ?? []

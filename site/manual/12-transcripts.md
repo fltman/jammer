@@ -15,6 +15,8 @@ Swedish works through Apple's dictation recognition, which downloads its languag
 
 Install **Klang Pianissimo (Swedish)** or **Klang Pianissimo (Danish)** under **Jämmer › Settings › Models**. In the transcript panel, choose **Pianissimo · On this Mac** and the matching language. Local Pianissimo returns word timestamps for editing and subtitle export.
 
+Klang Pianissimo is made by Klang AI AB, fine-tuned from NVIDIA Parakeet TDT 0.6B v3, and licensed under [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/): the [Swedish original](https://huggingface.co/KlangAI/pianissimo-sv) runs here as a [Core ML conversion by markstrom](https://huggingface.co/markstrom/pianissimo-sv-coreml), the [Danish original](https://huggingface.co/KlangAI/pianissimo-da) as [Klang AI AB's own Core ML build](https://huggingface.co/KlangAI/pianissimo-da-coreml).
+
 Choose **Pianissimo · Berget AI** for hosted Swedish transcription. Save your Berget AI key under **Settings › Paid Services**. The confirmation shows which audio will be uploaded, Berget’s published rate, and an estimate. The service returns text without word timestamps. The integration has been tested with a simulated service. [Berget AI pricing](https://berget.ai/en/models)
 
 ## Transcribe voice tracks independently
