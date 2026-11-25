@@ -90,6 +90,7 @@ Opening a document answers `201 Created`. To send the audio inside JSON instead:
 | GET | `/api/v1/voice-profiles` | The voice profiles saved on this Mac: `{"profiles": [{"id", "name", "createdAt"}], "recognize", "threshold"}`. Never a voiceprint. Profiles are made and deleted only in the window, by the user, with consent. A speaker `diarize` (mode ml) names after a profile is *like* it (`matchedProfile`, `matchScore` and `threshold` in the job's result, in the order of `speakers`): say "is like Anna", never "is Anna". |
 | POST | `/api/v1/documents/{id}/voice-profile/request` | Shows the sheet that saves a speaker as a voice profile, if the window is visible and in front (body `{"speaker": "2"}` or a name, optional). `202 {"shown": true}`, not what the user chose: list the profiles afterwards. `409 sheet_open` when a sheet is shown, `422 not_visible`, or `no_speakers` before `diarize` (mode ml). Never brings the app forward, never saves or deletes a profile. |
 | GET | `/api/v1/documents/{id}/chapters` | The markers as Podcasting 2.0 chapters: `{"version": "1.2.0", "chapters": [{"startTime", "endTime", "title"}]}` (Content-Type `application/json+chapters`), optionally over `?start=&end=`. With the same `start` and `end` as an export, it is the chapters file Export Audio writes beside the file. |
+| GET | `/api/v1/documents/{id}/recording` | Recording, read only: `{"armed": [{"track", "name", "input", "channels"}], "recording", "start", "punchOut", "seconds"}` (`punchOut` when a selection is recorded into, from a pre-roll). Arming a track, the microphone, Record and deleting a take are the person's in the window; no call starts them (SIBLINGS §5). What was recorded is ordinary clips and sources afterwards, and each track's `takes`: the stretches recorded more than once, every take kept, one chosen; `set_take` plays another. |
 | GET | `/api/v1/documents/{id}/flimmer-return?mode=takes\|mix` | What Send to Flimmer would send, for an agent that delivers it through Flimmer's own API; nothing is rendered, uploaded or sent. → `{"mode", "sampleRate", "items": [{"index", "kind": "take"\|"new"\|"mix", "name", "clipId", "start", "end", "monoSource", "fields", "audio", "transcript"}], "body", "said"}`. `body` is the plan for Flimmer, with `<upload of item n>` where each upload's id goes; `transcript` is that item's transcript body, or null. 422 with the reason when there is nothing to send (`not_from_flimmer`, `needs_new_export`, `nothing_to_change`). |
 | GET | `/api/v1/documents/{id}/flimmer-return/{n}/audio?mode=&bitDepth=16\|24` | Item `n`'s file, exactly as Send to Flimmer renders it: WAV at Flimmer's rate, plugins included, mono when the original was. |
 | GET | `/api/v1/jobs/{id}` | A job's state. |
@@ -743,6 +744,16 @@ Moves clips on the timeline, sound and all (their words and fades go with them):
 | `clips` | list | Clip ids, moved together by `by`. |
 | `at` | seconds | The new start of `clip`. |
 | `by` | seconds | How far to move, in seconds; negative is earlier. |
+
+### `set_take`
+
+Plays another take of a stretch recorded more than once (a track's `takes` list them: each group's id, its takes with their ids and numbers, and which is chosen). The stretch is laid again from what lay under it before it was recorded, with that take over it; if the takes were moved since, they go with the chosen take's clip. Takes are recorded and deleted only in the window. One undo step.
+
+| Param | Type | Description |
+|---|---|---|
+| `track` | string | **Required.** Track id. |
+| `group` | string | **Required.** The takes' group id (the track's takes list). |
+| `take` | string | **Required.** The take to play. |
 
 ### `set_clip`
 

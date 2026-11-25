@@ -218,6 +218,8 @@ public struct Track: Codable, Hashable, Sendable, Identifiable {
     /// Locked: no step may change its clips (StepRunner refuses it, naming the track). Level, pan, mute and the
     /// mixer stay free: the lock keeps the audio where it is, not how it is heard.
     public var locked = false
+    /// The stretches recorded more than once, every take kept and one chosen (Recording.swift). Empty: none.
+    public var takes: [TakeGroup] = []
 
     public init(id: UUID = UUID(), name: String, clips: [Clip] = [], gainDB: Double = 0, isMuted: Bool = false, inserts: [Insert] = []) {
         self.id = id
@@ -228,7 +230,7 @@ public struct Track: Codable, Hashable, Sendable, Identifiable {
         self.inserts = inserts
     }
 
-    private enum CodingKeys: String, CodingKey { case locked, id, name, clips, gainDB, isMuted, inserts, group, origin, ducked, pan, output, sends, vca, frozen, position, rotation }
+    private enum CodingKeys: String, CodingKey { case locked, id, name, clips, gainDB, isMuted, inserts, group, origin, ducked, pan, output, sends, vca, frozen, position, rotation, takes }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -251,6 +253,7 @@ public struct Track: Codable, Hashable, Sendable, Identifiable {
         // The same for a field's turn out of range.
         rotation = (try? c.decodeIfPresent(FieldRotation.self, forKey: .rotation)).flatMap { $0 }.flatMap { $0.isValid && !$0.isNone ? $0 : nil }
         locked = try c.decodeIfPresent(Bool.self, forKey: .locked) ?? false
+        takes = try c.decodeIfPresent([TakeGroup].self, forKey: .takes) ?? []
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -274,6 +277,7 @@ public struct Track: Codable, Hashable, Sendable, Identifiable {
         if pan != 0 { try c.encode(pan, forKey: .pan) }
         try c.encodeIfPresent(output, forKey: .output)
         if !sends.isEmpty { try c.encode(sends, forKey: .sends) }
+        if !takes.isEmpty { try c.encode(takes, forKey: .takes) }
     }
 
     public var end: Frame { clips.map(\.end).max() ?? 0 }
@@ -360,10 +364,15 @@ public struct Project: Codable, Equatable, Sendable {
     /// What a project with a cloned voice or speech made with one is saved as: an app before it would drop the
     /// record of consent and the mark on the made speech, so it refuses the file instead.
     public static let voiceFormatVersion = 7
-    public static let newestFormatVersion = 7
+    /// What a project with recorded takes is saved as: an app before it would play the chosen take and drop the
+    /// others when it saved, so it refuses the file instead.
+    public static let takeFormatVersion = 8
+    public static let newestFormatVersion = 8
 
     /// A cloned voice, or speech made with one.
     public var usesVoices: Bool { !voices.isEmpty || sources.contains { $0.synthetic != nil } }
+    /// Takes kept on some track (format 8).
+    public var usesTakes: Bool { tracks.contains { !$0.takes.isEmpty } }
 
     /// A file without a mask heard in BS.2051's order.
     public var usesOrder: Bool { sources.contains { $0.needsOrder && $0.unmaskedOrder == .bs2051 } }
@@ -434,6 +443,9 @@ public struct Project: Codable, Equatable, Sendable {
     public var timecode: TimecodeSettings?
     /// A film shown beside the sound, following the playhead. nil: none.
     public var video: VideoReference?
+    /// The document's own id, the same wherever its file is moved or copied to: set the first time it records, and
+    /// what an unfinished recording's journal is kept under (Recording.swift). nil: never recorded.
+    public var documentID: UUID?
 
     public struct ImportRecord: Codable, Equatable, Sendable {
         public var app: String
@@ -470,11 +482,11 @@ public struct Project: Codable, Equatable, Sendable {
         self.transcripts = transcripts
     }
 
-    private enum CodingKeys: String, CodingKey { case formatVersion, sampleRate, channels, tracks, markers, sources, tempo, transcripts, speakers, speakerTurns, imported, timecode, video, buses, master, vcas, automation, voices, speakerSuggestions }
+    private enum CodingKeys: String, CodingKey { case formatVersion, sampleRate, channels, tracks, markers, sources, tempo, transcripts, speakers, speakerTurns, imported, timecode, video, buses, master, vcas, automation, voices, speakerSuggestions, documentID }
 
     public func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
-        try c.encode(usesVoices ? Self.voiceFormatVersion : usesOrder ? Self.orderFormatVersion : usesFields ? Self.fieldFormatVersion : channels > 2 ? Self.immersiveFormatVersion : usesAutomation ? Self.automationFormatVersion
+        try c.encode(usesTakes ? Self.takeFormatVersion : usesVoices ? Self.voiceFormatVersion : usesOrder ? Self.orderFormatVersion : usesFields ? Self.fieldFormatVersion : channels > 2 ? Self.immersiveFormatVersion : usesAutomation ? Self.automationFormatVersion
                      : usesMixer ? Self.mixerFormatVersion : Self.formatVersion, forKey: .formatVersion)
         try c.encode(sampleRate, forKey: .sampleRate)
         try c.encode(channels, forKey: .channels)
@@ -488,6 +500,7 @@ public struct Project: Codable, Equatable, Sendable {
         try c.encodeIfPresent(imported, forKey: .imported)
         try c.encodeIfPresent(timecode, forKey: .timecode)
         try c.encodeIfPresent(video, forKey: .video)
+        try c.encodeIfPresent(documentID, forKey: .documentID)
         if !buses.isEmpty { try c.encode(buses, forKey: .buses) }
         if !master.isDefault { try c.encode(master, forKey: .master) }
         if !vcas.isEmpty { try c.encode(vcas, forKey: .vcas) }
@@ -526,6 +539,7 @@ public struct Project: Codable, Equatable, Sendable {
         // on a timeline) is left out.
         video = (try? c.decodeIfPresent(VideoReference.self, forKey: .video)).flatMap { $0 }
             .flatMap { !$0.path.isEmpty && $0.path.utf8.count <= 4_096 && (0...Frame(86_400 * 768_000)).contains($0.start) ? $0 : nil }
+        documentID = try c.decodeIfPresent(UUID.self, forKey: .documentID)
         timecode = (try? c.decodeIfPresent(TimecodeSettings.self, forKey: .timecode)).flatMap { $0 }
             .flatMap { (0..<(24 * 3_600 * $0.rate.base)).contains($0.startFrames) ? $0 : nil }
         speakerTurns = try c.decodeIfPresent([SourceSpeakers].self, forKey: .speakerTurns) ?? []

@@ -222,6 +222,12 @@ final class EditorSession {
     var tool = "select" { didSet { if let s = SpectralTool(rawValue: tool) { spectralTool = s } } }
     /// The track last clicked in: what the Track menu acts on (view state, not part of the document).
     var currentTrack: UUID?
+    /// Recording (App/Recording.swift): the armed tracks and their inputs, never saved; the recording going on now.
+    var armed: [UUID: Recorder.Arm] = [:]
+    var recording: RecordingNow?
+    @ObservationIgnored var recorder: Recorder?
+    @ObservationIgnored var recordTimer: Timer?
+    @ObservationIgnored var inputLatency: Frame = 0
     /// Text typed in a dialog that was cancelled, offered again when it opens next (COMFORT 8): per document, while open.
     @ObservationIgnored var drafts: [String: String] = [:]
     /// The marker whose flag was clicked last: Transport › Rename Marker… and Delete Marker act on it.
@@ -565,9 +571,22 @@ final class EditorSession {
     /// Opens the sources again under the pool's current rule and rebuilds what plays.
     func reloadAudio() { replace(with: project) }
 
+    /// The document's own id, given the first time it records (the recording's journal is kept under it): not an
+    /// undo step, and never taken away by one; written with the next autosave.
+    func documentIdentity() -> UUID {
+        if let id = project.documentID { return id }
+        var p = project
+        let id = UUID()
+        p.documentID = id
+        replace(with: p)
+        return id
+    }
+
     private func replace(with newProject: Project) {
         let before = project
         var newProject = newProject
+        // The document's id is who it is, not what it holds: an undo to a moment before it was given keeps it.
+        if newProject.documentID == nil { newProject.documentID = before.documentID }
         if !collected.isEmpty {
             for i in newProject.sources.indices {
                 if let r = collected[newProject.sources[i].id] { newProject.sources[i] = r }
@@ -728,7 +747,11 @@ final class EditorSession {
 
     // MARK: Playback
 
-    func togglePlay() { isPlaying ? stop() : play() }
+    /// Space: while recording it ends the recording (the takes kept), as ⌘R does.
+    func togglePlay() {
+        if recording != nil { stopRecording(); return }
+        isPlaying ? stop() : play()
+    }
 
     #if DEBUG
     static let silentOutput = UserDefaults.standard.bool(forKey: "silentOutput")
@@ -953,7 +976,8 @@ final class EditorSession {
 
     func play(from frame: Frame? = nil) {
         var start = frame ?? (selection?.lowerBound ?? playhead)
-        if start >= project.length { start = 0 }
+        // From the end, playing starts again from the start; recording there goes on from where it is.
+        if start >= project.length, recording == nil { start = 0 }
         do {
             underrunsAtStart = output.underruns
             #if DEBUG

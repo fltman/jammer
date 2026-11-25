@@ -58,6 +58,7 @@
 | Shortcut | Command |
 |---|---|
 | Space or ⌥⌘P | Play / Stop |
+| ⌘R | Record / Stop Recording (Space also stops a recording) |
 | Return | Go to Start |
 | ← / → | Back / forward one second |
 | ⌥← / ⌥→ | Nudge the clips in the selection (or the one under the playhead) on the current track 10 ms; with ⇧, 100 ms. Holding the key is one step |

@@ -86,8 +86,10 @@ final class StripMeters {
             peaks[Master.id] = session.output.meterPeaks(from: from, to: frame + 1, kind: 2, count: 1).first
         } else {
             lastFrame = nil
-            if levels.values.allSatisfy({ $0.db == -.infinity && $0.held == -.infinity }) { return }
+            if session.armed.isEmpty, levels.values.allSatisfy({ $0.db == -.infinity && $0.held == -.infinity }) { return }
         }
+        // An armed track's meter shows its input, before and while it records (the level set before pressing Record).
+        for id in session.armed.keys { if let p = session.inputPeak(id) { peaks[id] = p } }
         var next = levels
         for id in p.tracks.map(\.id) + p.buses.map(\.id) + [Master.id] {
             let db = peaks[id].map { $0 > 0 ? 20 * log10(Double($0)) : -.infinity } ?? -.infinity

@@ -1,5 +1,6 @@
 import AppKit
 import JammerAgent
+import JammerAudio
 import JammerCore
 import JammerDiarize
 import JammerStems
@@ -194,7 +195,14 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         }
     }
 
-    func windowWillClose(_ notification: Notification) { closeMixer(); session.stop() }
+    func windowWillClose(_ notification: Notification) {
+        // A recording is ended and kept, and the input closed, before the window goes.
+        session.stopRecording()
+        session.armed = [:]
+        session.recorder?.disarm()
+        session.recorder = nil
+        closeMixer(); session.stop()
+    }
 
     // MARK: Actions (reached through the responder chain)
 
@@ -1097,6 +1105,14 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
             return needs(p.voices.contains { $0.deleted == nil }, L10n.text("reason.cloneFirst"))
         case "speech.deleteVoice": return needs(p.voices.contains { $0.deleted == nil }, L10n.text("reason.cloneFirst"))
         case "transport.previousMarker", "transport.nextMarker": return needs(!p.markers.isEmpty, L10n.text("reason.noMarkers"))
+        case "transport.record":
+            item?.title = session.recording != nil ? L10n.text("record.stop") : L10n.text("record.record")
+            if session.recording != nil { return (true, nil) }
+            return session.recordRefusal.map { (false, $0) } ?? (true, nil)
+        case "track.arm":
+            guard let t = currentTrack else { return (false, L10n.text("reason.chooseTrack")) }
+            item?.state = session.armed[t.id] != nil ? .on : .off
+            return (true, nil)
         case "transport.renameMarker", "transport.deleteMarker":
             if let m = session.markerInFocus {
                 item?.title = id == "transport.renameMarker" ? L10n.text("transport.renameMarker.named", m.name) : L10n.text("transport.deleteMarker.named", m.name)
@@ -1183,6 +1199,29 @@ struct TransportBar: View {
             }
             .buttonStyle(.borderless)
             .help(session.isPlaying ? L10n.text("transport.stop.help") : L10n.text("transport.play.help"))
+            // Record: only here and in Transport › Record (⌘R), never from the agent API (SIBLINGS §5).
+            Button { session.toggleRecording() } label: {
+                Label(session.recording != nil ? L10n.text("record.stop") : L10n.text("record.record"), systemImage: session.recording != nil ? "stop.circle.fill" : "record.circle")
+                    .labelStyle(.iconOnly)
+                    .foregroundStyle(session.recording != nil || !session.armed.isEmpty ? StateKind.error.color : .secondary)
+                    .frame(width: 18)
+            }
+            .buttonStyle(.borderless)
+            .disabled(session.recordRefusal != nil)
+            .help(session.recordRefusal ?? (session.recording != nil ? L10n.text("record.stop.help") : L10n.text("record.record.help")))
+            .accessibilityIdentifier("transport.record")
+            if let rec = session.recording {
+                // The indicator: steady, no blinking and no pulse (the flash rule; the coordinator, 2026-11-25).
+                SwiftUI.TimelineView(.periodic(from: rec.since, by: 1)) { context in
+                    HStack(spacing: 4) {
+                        Image(systemName: "circle.fill").font(.system(size: 9)).foregroundStyle(StateKind.error.color).accessibilityHidden(true)
+                        Text(L10n.text("record.indicator", EditorSession.recordedTime(context.date.timeIntervalSince(rec.since)))).font(.system(.callout, design: .monospaced))
+                            .foregroundStyle(StateKind.error.color)
+                    }
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("transport.recording")
+            }
             Text(formatTime(session.project.seconds(session.playhead)))
                 .font(.system(.title3, design: .monospaced).weight(.medium))
                 .foregroundStyle(Theme.neonColor)

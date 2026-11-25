@@ -19,6 +19,23 @@
         }
       }
     },
+    "NSMicrophoneUsageDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jämmer records the tracks you arm, from the input you choose, only while you record in the window. Nothing it records leaves the Mac."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jämmer spelar in de spår du förbereder, från ingången du väljer, bara medan du spelar in i fönstret. Inget den spelar in lämnar Macen."
+          }
+        }
+      }
+    },
     "NSMotionUsageDescription": {
       "extractionState": "manual",
       "localizations": {

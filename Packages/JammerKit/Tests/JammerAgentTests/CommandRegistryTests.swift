@@ -104,4 +104,19 @@ struct CommandRegistryTests {
         let plain = Commands.all.filter { !$0.key.isEmpty && $0.modifiers.isEmpty }.map(\.key)
         #expect(Set(plain).isDisjoint(with: tools.map(\.letter)), "plain-key shortcuts: \(plain)")
     }
+
+    /// Recording is the person's in the window (SIBLINGS §5): arming and Record have no agent counterpart, as commands
+    /// or as window controls, and the API's only recording route reads.
+    @Test
+    func recordingStaysInTheWindow() {
+        for id in ["transport.record", "track.arm"] {
+            #expect(Commands.all.first { $0.id == id }?.agent == .none(.microphone), "\(id)")
+        }
+        for id in ["header.arm", "transport.recordButton", "clip.deleteTake", "recording.recover"] {
+            #expect(WindowControls.all.first { $0.id == id }?.agent == .none(.microphone), "\(id)")
+        }
+        let routes = AgentAPI.routes.filter { $0.path.hasSuffix("/recording") }
+        #expect(routes.map(\.method) == ["GET"])
+        #expect(WindowControls.all.first { $0.id == "clip.takes" }?.agent == .operation("set_take"), "choosing among takes is a step")
+    }
 }

@@ -25,7 +25,7 @@ for k in sorted(d): print("%s=%s" % (k, json.dumps(d[k])))'
 }
 failed=0
 codesign -v "$app" 2>/dev/null || { echo "check-entitlements: $app is not signed, or its signature doesn't hold"; exit 1; }
-want=("com.apple.security.app-sandbox=false")
+want=("com.apple.security.app-sandbox=false" "com.apple.security.device.audio-input=true")
 allowed_in_debug=("com.apple.security.get-task-allow=true")
 never=("com.apple.security.cs.disable-library-validation")
 have=("${(@f)$(read_keys "$app/Contents/MacOS/Jammer")}")

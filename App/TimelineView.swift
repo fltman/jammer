@@ -482,7 +482,9 @@ final class TimelineOverlay: NSView {
         // Shown right after the action returns: a menu tracked inside it would keep VoiceOver (or any caller) waiting.
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
-            CommandCenter.contextMenu(.clip).popUp(positioning: nil, at: at, in: self)
+            let menu = CommandCenter.contextMenu(.clip)
+            self.session.addTakeItems(to: menu, clip: id)
+            menu.popUp(positioning: nil, at: at, in: self)
         }
         return true
     }
@@ -1318,7 +1320,10 @@ final class TimelineOverlay: NSView {
         // A clip: it is selected, and its menu has what acts on it (cut, copy, delete, split, fades, gain).
         if !areaMode, let t = project.tracks[safe: laneIndex(at: p.y)], let c = t.clips.first(where: { $0.range.contains(frame(at: p)) }) {
             if session.selection.map({ !($0.lowerBound <= c.start && $0.upperBound >= c.end) }) ?? true { session.selection = c.range }
-            return CommandCenter.contextMenu(.clip)
+            // A recorded clip's menu also lists its takes (Recording.swift).
+            let menu = CommandCenter.contextMenu(.clip)
+            session.addTakeItems(to: menu, clip: c.id)
+            return menu
         }
         return CommandCenter.contextMenu(.timeline)
     }

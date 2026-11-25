@@ -389,6 +389,9 @@ public enum Operations {
         .init("move_clip", "Move Clip", "Moves clips on the timeline, sound and all (their words and fades go with them): `clip` to `at`, or `clip` or `clips` by `by` seconds. Refused, with nothing moved, when one would start before 0 or lie over a clip on its track that isn't moved (reason overlaps, before_start). One undo step.",
               params: [.init("clip", .string, "Clip id."), .init("clips", .list, "Clip ids, moved together by `by`."),
                        .init("at", .seconds, "The new start of `clip`."), .init("by", .seconds, "How far to move, in seconds; negative is earlier.")]),
+        .init("set_take", "Choose Take", "Plays another take of a stretch recorded more than once (a track's `takes` list them: each group's id, its takes with their ids and numbers, and which is chosen). The stretch is laid again from what lay under it before it was recorded, with that take over it; if the takes were moved since, they go with the chosen take's clip. Takes are recorded and deleted only in the window. One undo step.",
+              params: [.init("track", .string, "Track id.", required: true), .init("group", .string, "The takes' group id (the track's takes list).", required: true),
+                       .init("take", .string, "The take to play.", required: true)]),
         .init("set_clip", "Change Clip", "Changes one clip by its id (the tracks' clips list them): trims its start or end on the timeline (the sound stays where it is; a clip can't reach over the next one or past its file), sets its fades and their shape, or its gain. What isn't given stays.",
               params: [.init("clip", .string, "Clip id.", required: true), .init("start", .seconds, "New start of the clip on the timeline."),
                        .init("end", .seconds, "New end of the clip on the timeline."), .init("fadeIn", .seconds, "Fade-in length in seconds; 0 removes it."),
@@ -1572,6 +1575,14 @@ public enum StepRunner {
             }
             do { try s.project.moveClips(ids, by: delta) } catch let e as ClipEditError {
                 throw StepFailure(Said.of(e), reason: e == .overlaps ? "overlaps" : e == .beforeStart ? "before_start" : "no_clip")
+            }
+        case "set_take":
+            guard let track = p["track"]?.string.flatMap(UUID.init(uuidString:)), let group = p["group"]?.string.flatMap(UUID.init(uuidString:)),
+                  let take = p["take"]?.string.flatMap(UUID.init(uuidString:)) else {
+                throw StepFailure(Said("step.set_take.ids", "set_take: \"track\", \"group\" and \"take\" must be ids (a track's takes list them)."))
+            }
+            do { try s.project.chooseTake(take, of: group, onTrack: track) } catch let e as TakeError {
+                throw StepFailure(Said.of(e), reason: e.reason)
             }
         case "set_clip":
             guard let id = p["clip"]?.string.flatMap(UUID.init(uuidString:)) else { throw StepFailure(Said("step.set_clip.id", "set_clip: \"clip\" must be a clip id.")) }

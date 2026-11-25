@@ -51,6 +51,11 @@ public struct Command: Sendable, Identifiable {
         /// Reaches another app: the agent fetches the content here (export, transcript, takes) and delivers it through
         /// that app's own API (Send to Flimmer; the coordinator, 2026-11-25).
         case anotherApp
+        /// Opens the microphone, or decides what becomes of what it recorded: arming, recording, deleting a take and
+        /// putting back an unfinished recording are the person's in the window, never an agent's (SIBLINGS §5,
+        /// whatever reaches an audience or a device needs a visible choice in the window). Choosing among the takes
+        /// kept is an ordinary step (set_take).
+        case microphone
     }
 
     public enum Agent: Sendable, Equatable {
@@ -192,6 +197,7 @@ public enum Commands {
         add("track.rename", .track, 0, key("track.rename"), agent: op("set_track"), contexts: [.track, .strip])
         add("track.mute", .track, 1, key("track.mute"), agent: op("set_track"), contexts: [.track, .strip])
         add("track.solo", .track, 1, key("track.solo"), agent: .route("POST", doc + "/solo"), contexts: [.track, .strip])
+        add("track.arm", .track, 1, key("track.arm"), agent: .none(.microphone), contexts: [.track])
         add("track.lock", .track, 1, key("track.lock"), agent: op("set_track"), contexts: [.track])
         add("track.duplicate", .track, 4, key("track.duplicate"), agent: op("duplicate_track"), contexts: [.track])
         add("track.moveUp", .track, 4, key("track.moveUp"), agent: op("move_track"), contexts: [.track])
@@ -263,6 +269,8 @@ public enum Commands {
 
         // Transport
         add("transport.play", .transport, 0, key("transport.play"), key: "p", [.option], agent: .route("POST", doc + "/play"))
+        // Recording: the armed tracks record from the playhead; again to stop (App/Recording.swift).
+        add("transport.record", .transport, 0, key("record.record"), key: "r", agent: .none(.microphone))
         add("transport.goToStart", .transport, 0, key("transport.goToStart"), agent: op("set_playhead"))
         add("transport.goToEnd", .transport, 0, key("transport.goToEnd"), agent: op("set_playhead"))
         add("transport.previousMarker", .transport, 1, key("transport.previousMarker"), agent: op("set_playhead"))

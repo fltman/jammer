@@ -115,6 +115,8 @@ targets:
       properties:
         # Developer ID first; the sandbox is decided after the plugin-hosting prototype.
         com.apple.security.app-sandbox: false
+        # Recording: the input device, after macOS's microphone question; started only in the window (2026-11-25).
+        com.apple.security.device.audio-input: true
     info:
       path: App/Info.plist
       properties:
@@ -132,6 +134,7 @@ targets:
         # The public half of the EdDSA key (made 2026-11-17 in Anders's Keychain, account "jammer"; the private half never leaves it).
         SUPublicEDKey: hrZ3zKoaguRUnHgwwWFmKhpr7UUKP5la6bEeO+QNIo4=
         NSSpeechRecognitionUsageDescription: Jämmer transcribes your recordings on this Mac so you can edit them as text. The audio never leaves the Mac.
+        NSMicrophoneUsageDescription: Jämmer records the tracks you arm, from the input you choose, only while you record in the window. Nothing it records leaves the Mac.
         NSMotionUsageDescription: When you choose Follow Head Movements, Jämmer turns what you hear on headphones as your head turns. It reads only your headphones' motion, only while you listen, and keeps nothing.
         CFBundleDocumentTypes:
           - CFBundleTypeName: Jammer Project

@@ -133,3 +133,92 @@ final class Counter: @unchecked Sendable {
     var value: Int { lock.withLock { n } }
     func next() -> Int { lock.withLock { defer { n += 1 }; return n } }
 }
+
+/// The recorder with the test input (`-testInput`, Debug only): a whole arm, record and stop with no device at all.
+@Suite("Recording with the test input", .serialized)
+struct RecorderTests {
+    @Test("Armed with the sine test input the meters move, a take is written, and the device is never asked for (no microphone question)")
+    func sineNeverAsksTheDevice() throws {
+        let before = Recorder.deviceRequests
+        let dir = FileManager.default.temporaryDirectory.appending(path: "jammer-rec-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let a = UUID(), b = UUID()
+        let r = Recorder(source: .sine, deviceChannels: 2, sampleRate: 48_000)
+        try r.arm([.init(track: a, first: 0, channels: 1), .init(track: b, first: 0, channels: 2)])
+        Thread.sleep(forTimeInterval: 0.2)
+        #expect(abs(r.peak(a) - 0.25) < 0.01, "the input meter sees the sine before recording")
+        try r.record(into: dir, name: { $0 == a ? "a.wav" : "b.wav" }, freeSpace: { .max }) { _ in }
+        Thread.sleep(forTimeInterval: 0.5)
+        let (takes, ending) = try #require(r.stopRecording())
+        r.disarm()
+        #expect(ending == .stopped && takes.count == 2 && takes.allSatisfy { $0.dropped == 0 && $0.frames > 12_000 })
+        let info = try AudioFileReader.info(at: dir.appending(path: "b.wav"))
+        #expect(info.channels == 2 && info.frames == takes[1].frames && info.sampleFormat == .float32)
+        #expect(Recorder.deviceRequests == before, "no microphone question, no device input")
+    }
+
+    @Test("The silence test input: a take of digital silence, and still no device")
+    func silence() throws {
+        let before = Recorder.deviceRequests
+        let dir = FileManager.default.temporaryDirectory.appending(path: "jammer-rec-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let t = UUID()
+        let r = Recorder(source: .silence, deviceChannels: 1, sampleRate: 48_000)
+        try r.arm([.init(track: t, first: 0, channels: 1)])
+        try r.record(into: dir, name: { _ in "s.wav" }, freeSpace: { .max }) { _ in }
+        Thread.sleep(forTimeInterval: 0.2)
+        let (takes, _) = try #require(r.stopRecording())
+        r.disarm()
+        let url = dir.appending(path: "s.wav")
+        let info = try AudioFileReader.info(at: url)
+        let samples = SourcePool().read(SourceRef(name: "s", path: url.path, info: info), from: 0, count: Int(info.frames))
+        #expect(takes[0].frames > 0 && samples.allSatisfy { $0 == 0 })
+        #expect(Recorder.deviceRequests == before)
+    }
+
+    @Test("Inputs that aren't on the device are refused before anything starts")
+    func badInput() {
+        let r = Recorder(source: .silence, deviceChannels: 1, sampleRate: 48_000)
+        #expect(throws: RecordingError.badInput) { try r.arm([.init(track: UUID(), first: 1, channels: 1)]) }
+    }
+}
+
+@Suite("The recording's journal: found under the document's id, the takes made whole")
+struct RecordingJournalTests {
+    @Test("Written, found again by the id alone, the files recovered to what goes on the timeline, removed")
+    func roundTrip() throws {
+        let dir = FileManager.default.temporaryDirectory.appending(path: "jammer-journal-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let a = dir.appending(path: "a.wav"), b = dir.appending(path: "b.wav")
+        do {
+            let w = try WAVWriter(url: a, options: .init(encoding: .float32, channels: 1, sampleRate: 48_000))
+            try w.write([Float](repeating: 0.25, count: 3_000))
+            try w.checkpoint()
+            try w.write([Float](repeating: 0.25, count: 1_000))
+            // Cut off here: no finish.
+        }
+        do {
+            let w = try WAVWriter(url: b, options: .init(encoding: .float32, channels: 1, sampleRate: 48_000))
+            try w.write([Float](repeating: 0.5, count: 100))
+            try w.checkpoint()
+        }
+        let doc = UUID(), track = UUID()
+        let j = RecordingJournal(documentID: doc, documentPath: "/somewhere/else.jammer",
+                                 takes: [.init(track: track, path: a.path, channels: 1), .init(track: UUID(), path: b.path, channels: 1),
+                                         .init(track: UUID(), path: dir.appending(path: "gone.wav").path, channels: 1)],
+                                 at: 96_000, sourceStart: 500, length: 2_000, sampleRate: 48_000, started: Date(timeIntervalSince1970: 1_800_000_000))
+        try j.write(in: dir)
+        #expect(RecordingJournal.left(by: UUID(), in: dir) == nil)
+        let back = try #require(RecordingJournal.left(by: doc, in: dir))
+        #expect(back == j)
+        let found = back.recover()
+        #expect(found.map(\.take.track) == [track], "b holds nothing past the pre-roll; the gone file is left out")
+        #expect(found.first?.frames == 2_000, "the punch-out holds it to its length")
+        #expect(try AudioFileReader.info(at: a).frames == 4_000, "the file itself made whole")
+        RecordingJournal.remove(doc, in: dir)
+        #expect(RecordingJournal.left(by: doc, in: dir) == nil)
+    }
+}

@@ -85,6 +85,11 @@ final class JammerDocument: NSDocument {
         addWindowController(wc)
         // Which of Jämmer's own files this document uses is noted as it opens (File › Storage…).
         StorageScanner.note(s)
+        // A recording this document didn't finish (Jämmer or the Mac stopped) is offered back, found by the
+        // document's id wherever its file is now (asked after the other questions an opening document asks).
+        DispatchQueue.main.async { [weak wc, weak s] in
+            DispatchQueue.main.async { if let w = wc?.window, let s { s.offerUnfinishedRecording(in: w) } }
+        }
         if readFromPackage {
             // Once the window is up: audio the project names outside itself is asked about, not just read.
             DispatchQueue.main.async { [weak wc, weak s] in

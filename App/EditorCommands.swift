@@ -58,6 +58,15 @@ extension EditorWindowController {
         if !timeline.automationKey(event) { NSSound.beep() }
     }
 
+    /// Transport › Record (⌘R): the armed tracks record from the playhead; again to stop.
+    @objc func toggleRecording(_ sender: Any?) { session.toggleRecording() }
+
+    /// Track › Arm to Record: the current track, armed or not.
+    @objc func toggleArm(_ sender: Any?) {
+        guard let id = session.currentTrack ?? session.project.tracks.first?.id else { return }
+        Task { await session.toggleArm(id) }
+    }
+
     /// Edit › Remove Filler Words: every eh, ehm, öh… the transcript has, deleted from the audio as one step.
     @objc func removeFillerWords(_ sender: Any?) {
         let fillers = session.project.placedWords().filter {

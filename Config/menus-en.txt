@@ -80,6 +80,7 @@ View › Focus Mode	⌃⇧⌘F
 Track › Rename Track…	
 Track › Mute	
 Track › Solo	
+Track › Arm to Record	
 Track › Lock Track	
 Track › Layout	
 Track › Layout › Mono	
@@ -157,6 +158,7 @@ Speech › Clone Voice…
 Speech › Overdub…	
 Speech › Delete Cloned Voice…	
 Transport › Play	⌥⌘P
+Transport › Record	⌘R
 Transport › Go to Start	
 Transport › Go to End	
 Transport › Previous Marker	

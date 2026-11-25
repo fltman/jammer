@@ -425,6 +425,15 @@ enum AgentRouter {
             case []:
                 try only("GET", "DELETE")
                 return .json(["document": detail(session)])
+            case ["recording"]:
+                // Recording is read here, never started: arming, the microphone and Record are the window's (SIBLINGS §5).
+                try only("GET")
+                return .json(["armed": session.project.tracks.compactMap { t in session.armed[t.id].map { a in
+                                  ["track": t.id.uuidString, "name": t.name, "input": a.first + 1, "channels": a.channels] as [String: Any] } },
+                              "recording": session.recording != nil,
+                              "start": session.recording.map { session.project.seconds($0.start) } ?? NSNull(),
+                              "punchOut": session.recording.flatMap { r in r.length.map { session.project.seconds(r.start + $0) } } ?? NSNull(),
+                              "seconds": session.recording.map { (Date().timeIntervalSince($0.since) * 10).rounded() / 10 } ?? NSNull()])
             case ["flimmer-return"]:
                 // What Send to Flimmer would send, for an agent that delivers it through Flimmer's own API. Reads only.
                 try only("GET")

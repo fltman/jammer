@@ -2,6 +2,10 @@
 
 Not a list of commits: what behaves differently from before, for a user, an agent, or a file. Newest first.
 
+## 2026-11-26
+
+- **Recording** (not in a release yet): tracks armed with **R** in their headers record from the Mac's input, each from its own input channel or pair, while the others play (Transport › Record, ⌘R). A selection is a punch, played into from two seconds before it. Every take over a stretch is kept and one plays; a recorded clip's menu chooses another or deletes one. A crash loses at most the last second, and the document offers its takes back when it opens again, wherever its file has moved. The agent API reads the recording's state (`GET …/recording`) and chooses among takes (`set_take`); it never arms, records or deletes a take. A document with takes is saved as format 8, which earlier Jämmers refuse instead of dropping the takes.
+
 ## 2026-11-19
 
 - **0.1.1: a paid batch job always asks first.** In 0.1.0 a batch job that transcribed with OpenAI could upload audio without a question, for someone with their own OpenAI key and either a recipe of their own or an agent that asked for it. Now the Batch window asks once per run, naming every paid job and saying that the audio is uploaded to OpenAI and that Jämmer doesn't know the price; an agent's batch needs `allowPaid` and `allowUnknownPrice`, and the job itself refuses to run without them.

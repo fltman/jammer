@@ -10957,6 +10957,60 @@
         }
       }
     },
+    "error.record.badInput": {
+      "comment": "Recording: armed inputs aren't on the device.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The chosen inputs aren't on this input device."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "De valda ingångarna finns inte på den här ljudenheten."
+          }
+        }
+      }
+    },
+    "error.record.device": {
+      "comment": "Recording: the input device didn't start. %@ the code.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The input device wouldn't start (%@)."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ljudingången ville inte starta (%@)."
+          }
+        }
+      }
+    },
+    "error.record.notArmed": {
+      "comment": "Recording: nothing armed.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No track is armed to record."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inget spår är förberett för inspelning."
+          }
+        }
+      }
+    },
     "error.rhythm.doesNotFit": {
       "comment": "An error’s reason, shown in the status line after a step that failed (the agent API says the same in English). Placeholders are names, ids or numbers.",
       "extractionState": "manual",
@@ -11288,6 +11342,78 @@
           "stringUnit": {
             "state": "translated",
             "value": "De här kan inte flyttas till papperskorgen, eftersom de används, inte gjordes av Jämmer eller hör till ett projekt som inte kan läsas just nu: %@."
+          }
+        }
+      }
+    },
+    "error.take.locked": {
+      "comment": "Takes: the track is locked.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The track is locked: its clips stay as they are."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spåret är låst: dess klipp förblir som de är."
+          }
+        }
+      }
+    },
+    "error.take.noTake": {
+      "comment": "Takes: no such take.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "There's no take with that id among them."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Det finns ingen tagning med det id:t bland dem."
+          }
+        }
+      }
+    },
+    "error.take.noTakes": {
+      "comment": "Takes: no such group of takes.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "There are no takes with that id on the track."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Det finns inga tagningar med det id:t på spåret."
+          }
+        }
+      }
+    },
+    "error.take.noTrack": {
+      "comment": "Takes: no such track.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "There's no track with that id."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Det finns inget spår med det id:t."
           }
         }
       }
@@ -21677,6 +21803,24 @@
         }
       }
     },
+    "op.set_take.title": {
+      "comment": "Operation title: choosing which recorded take plays.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose Take"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Välj tagning"
+          }
+        }
+      }
+    },
     "op.set_tempo.title": {
       "comment": "The title of the operation set_tempo: in the menus, the command palette, the assistant’s plan and as the undo name (“Undo …”). The agent API keeps the English title.",
       "extractionState": "manual",
@@ -25184,6 +25328,24 @@
         }
       }
     },
+    "reason.armFirst": {
+      "comment": "Why Record is off.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arm a track first (R in its header)."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Förbered ett spår först (R i dess huvud)."
+          }
+        }
+      }
+    },
     "reason.automation": {
       "comment": "Command registry (comfort block).",
       "extractionState": "manual",
@@ -25666,6 +25828,612 @@
           "stringUnit": {
             "state": "translated",
             "value": "En transkribering pågår."
+          }
+        }
+      }
+    },
+    "record.action": {
+      "comment": "Undo name of a recording.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Record"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inspelning"
+          }
+        }
+      }
+    },
+    "record.arm.help": {
+      "comment": "Tooltip of R in a track header. %@ the track.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arm %@ to record: its input is metered here, and Record records it"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Förbered %@ för inspelning: ingången mäts här, och Spela in spelar in den"
+          }
+        }
+      }
+    },
+    "record.armWhileRecording": {
+      "comment": "A track armed while recording.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arm tracks before recording; stop first to add one."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Förbered spår innan du spelar in; sluta först för att lägga till ett."
+          }
+        }
+      }
+    },
+    "record.denied": {
+      "comment": "The microphone isn't allowed.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jämmer may not use the microphone. Allow it under System Settings › Privacy & Security › Microphone."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jämmer får inte använda mikrofonen. Tillåt det under Systeminställningar › Integritet och säkerhet › Mikrofon."
+          }
+        }
+      }
+    },
+    "record.disarm.help": {
+      "comment": "Tooltip of a lit R. %@ the track.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Disarm %@"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sluta förbereda %@"
+          }
+        }
+      }
+    },
+    "record.diskFull": {
+      "comment": "Status bar: recording stopped because the disk reached its reserve. %@ the time kept.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recording stopped: the disk is nearly full. %@ was kept."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inspelningen stoppades: disken är nästan full. %@ sparades."
+          }
+        }
+      }
+    },
+    "record.done": {
+      "comment": "Status bar after recording.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld take recorded"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld takes recorded"
+                }
+              }
+            }
+          }
+        },
+        "sv": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld tagning inspelad"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld tagningar inspelade"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "record.dropped": {
+      "comment": "Status bar: the writer fell behind. %@ milliseconds lost.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recorded, but %@ ms of sound were lost: the disk didn't keep up."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inspelat, men %@ ms ljud gick förlorade: disken hann inte med."
+          }
+        }
+      }
+    },
+    "record.failed": {
+      "comment": "Status bar: the recording couldn't be written. %@ the system's reason.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recording stopped: a file couldn't be written (%@). What was recorded until then is kept."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inspelningen stoppades: en fil kunde inte skrivas (%@). Det som spelats in dittills finns kvar."
+          }
+        }
+      }
+    },
+    "record.indicator": {
+      "comment": "The steady recording indicator in the transport bar. %@ is the time recorded.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recording %@"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spelar in %@"
+          }
+        }
+      }
+    },
+    "record.input.ax": {
+      "comment": "VoiceOver: an armed track's input menu. %@ the track.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Input of %@"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ingång för %@"
+          }
+        }
+      }
+    },
+    "record.input.help": {
+      "comment": "Tooltip of an armed track's input menu.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The input this track records"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ingången som spåret spelar in"
+          }
+        }
+      }
+    },
+    "record.input.mono": {
+      "comment": "An input channel. %@ its number.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In %@"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In %@"
+          }
+        }
+      }
+    },
+    "record.input.stereo": {
+      "comment": "Two input channels. %1$@ and %2$@ their numbers.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In %1$@+%2$@"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In %1$@+%2$@"
+          }
+        }
+      }
+    },
+    "record.locked": {
+      "comment": "Arming a locked track. %@ the track.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ is locked: unlock it to record onto it."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ är låst: lås upp det för att spela in på det."
+          }
+        }
+      }
+    },
+    "record.noInput": {
+      "comment": "No input device.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This Mac has no input device. Connect one, or choose it under System Settings › Sound › Input."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Den här Macen har ingen ljudingång. Anslut en, eller välj den under Systeminställningar › Ljud › Ingång."
+          }
+        }
+      }
+    },
+    "record.noJournal": {
+      "comment": "Status bar: the recovery journal couldn't be written. %@ the reason.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recording, but without a journal to bring it back after a crash (%@)."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spelar in, men utan journal som kan ta tillbaka den efter en krasch (%@)."
+          }
+        }
+      }
+    },
+    "record.noRoom": {
+      "comment": "Why Record is off: under two minutes of room.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "There's room for less than two minutes of recording on this disk (Jämmer keeps 2 GB free)."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Det finns plats för mindre än två minuters inspelning på den här disken (Jämmer håller 2 GB fritt)."
+          }
+        }
+      }
+    },
+    "record.rate": {
+      "comment": "The input device's rate isn't the document's. %1$@ device, %2$@ and %3$@ rates.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ runs at %2$@ Hz and this document at %3$@ Hz. Set the device to %3$@ Hz in Audio MIDI Setup, then arm again."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ går i %2$@ Hz och dokumentet i %3$@ Hz. Ställ in enheten på %3$@ Hz i Ljud-MIDI-konfiguration och förbered spåret igen."
+          }
+        }
+      }
+    },
+    "record.record": {
+      "comment": "Transport › Record, and the Record button.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Record"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spela in"
+          }
+        }
+      }
+    },
+    "record.record.help": {
+      "comment": "Tooltip of the Record button.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Records the armed tracks from the playhead while the others play (⌘R). Arm a track with R in its header."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spelar in de förberedda spåren från markören medan de andra spelas (⌘R). Förbered ett spår med R i dess huvud."
+          }
+        }
+      }
+    },
+    "record.room10": {
+      "comment": "Status bar while recording: ten minutes of disk left.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "About ten minutes of recording fit on this disk; it stops by itself before the disk is full."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ungefär tio minuters inspelning får plats på disken; den stoppar av sig själv innan disken är full."
+          }
+        }
+      }
+    },
+    "record.stop": {
+      "comment": "Transport › Record while recording.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stop Recording"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sluta spela in"
+          }
+        }
+      }
+    },
+    "record.stop.help": {
+      "comment": "Tooltip of the Record button while recording.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stops recording; the takes go onto their tracks as one step (⌘R or Space)."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Slutar spela in; tagningarna läggs på sina spår som ett steg (⌘R eller mellanslag)."
+          }
+        }
+      }
+    },
+    "recover.done": {
+      "comment": "Status bar after putting takes back.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld take put back"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld takes put back"
+                }
+              }
+            }
+          }
+        },
+        "sv": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld tagning tillbakalagd"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld tagningar tillbakalagda"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "recover.forget": {
+      "comment": "Button: don't ask again (the files stay).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Forget"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Glöm"
+          }
+        }
+      }
+    },
+    "recover.later": {
+      "comment": "Button: ask again next time.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Later"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Senare"
+          }
+        }
+      }
+    },
+    "recover.putBack": {
+      "comment": "Button: put the takes back.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Put Back"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lägg tillbaka"
+          }
+        }
+      }
+    },
+    "recover.text": {
+      "comment": "Alert text. %@ when it started.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jämmer or the Mac stopped while recording (started %@). The takes are kept up to their last second. Put them back where they were recorded?"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jämmer eller Macen stannade under inspelningen (startad %@). Tagningarna finns kvar fram till sista sekunden. Lägga tillbaka dem där de spelades in?"
+          }
+        }
+      }
+    },
+    "recover.textMoved": {
+      "comment": "Alert text when the document has moved since. %1$@ when it started, %2$@ where the document was.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jämmer or the Mac stopped while recording (started %1$@, when this document was at %2$@). The takes are kept up to their last second. Put them back where they were recorded?"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jämmer eller Macen stannade under inspelningen (startad %1$@, när dokumentet låg i %2$@). Tagningarna finns kvar fram till sista sekunden. Lägga tillbaka dem där de spelades in?"
+          }
+        }
+      }
+    },
+    "recover.title": {
+      "comment": "Alert on opening: a recording didn't finish.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A recording in this document didn't finish"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En inspelning i dokumentet blev inte klar"
           }
         }
       }
@@ -31674,6 +32442,24 @@
         }
       }
     },
+    "step.set_take.ids": {
+      "comment": "set_take: the ids are missing or wrong.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "set_take: \"track\", \"group\" and \"take\" must be ids (a track's takes list them)."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "set_take: \"track\", \"group\" och \"take\" måste vara id:n (ett spårs tagningar listar dem)."
+          }
+        }
+      }
+    },
     "step.set_tempo.beats_unit_whole_numbers": {
       "extractionState": "manual",
       "localizations": {
@@ -32845,6 +33631,114 @@
         }
       }
     },
+    "take.action.delete": {
+      "comment": "Undo name: a take deleted.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete Take"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Radera tagning"
+          }
+        }
+      }
+    },
+    "take.chosen": {
+      "comment": "Status bar after choosing a take. %@ its number.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Take %@ plays"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tagning %@ spelas"
+          }
+        }
+      }
+    },
+    "take.delete": {
+      "comment": "Delete the playing take, in a clip's menu. %@ its number.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete Take %@"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Radera tagning %@"
+          }
+        }
+      }
+    },
+    "take.deleted": {
+      "comment": "Status bar after deleting a take. %@ its number.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Take %@ deleted (⌘Z brings it back; its file stays until Storage clears it)"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tagning %@ raderad (⌘Z tar tillbaka den; filen finns kvar tills Lagring rensar den)"
+          }
+        }
+      }
+    },
+    "take.item": {
+      "comment": "A take in a clip's menu. %1$@ its number, %2$@ its length.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Take %1$@ (%2$@)"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tagning %1$@ (%2$@)"
+          }
+        }
+      }
+    },
+    "take.menu": {
+      "comment": "Heading of the takes in a recorded clip's menu.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Takes"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tagningar"
+          }
+        }
+      }
+    },
     "tempo.beats.ax": {
       "comment": "Spoken label.",
       "extractionState": "manual",
@@ -33433,6 +34327,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Zooma"
+          }
+        }
+      }
+    },
+    "track.arm": {
+      "comment": "Track › Arm to Record.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arm to Record"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Förbered för inspelning"
           }
         }
       }

@@ -58,6 +58,7 @@ extension AgentAPI {
         .init("GET", doc), .init("DELETE", doc),
         // What Send to Flimmer would send, and each item's file (FlimmerSend.returnPreview).
         .init("GET", doc + "/flimmer-return", query: ["mode"]),
+        .init("GET", doc + "/recording"),
         .init("GET", doc + "/flimmer-return/{n}/audio", query: ["mode", "bitDepth"]),
         .init("POST", doc + "/steps", body: ["steps", "allowPaid"]),
         .init("POST", doc + "/undo"),

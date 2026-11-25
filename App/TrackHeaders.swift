@@ -1,5 +1,6 @@
 import AppKit
 import JammerAgent
+import JammerAudio
 import JammerCore
 import SwiftUI
 
@@ -42,6 +43,7 @@ private struct TrackHeader: View {
 
     private var current: Bool { session.currentTrack == track.id }
     private var soloed: Bool { session.solo.contains(track.id) }
+    private var armed: Bool { session.armed[track.id] != nil }
     private var lockLabel: String { track.locked ? L10n.text("trackHeader.unlock", track.name) : L10n.text("trackHeader.lock", track.name) }
 
     var body: some View {
@@ -61,6 +63,29 @@ private struct TrackHeader: View {
                     var s = session.solo
                     if s.contains(track.id) { s.remove(track.id) } else { s.insert(track.id) }
                     session.setSolo(s)
+                }
+                // Arm to record (only here, in the window: SIBLINGS §5). Red while armed, with its input beside it.
+                toggle("R", on: armed, color: StateKind.error.color, help: armed ? L10n.text("record.disarm.help", track.name) : L10n.text("record.arm.help", track.name)) {
+                    Task { await session.toggleArm(track.id) }
+                }
+                .accessibilityIdentifier("header.arm")
+                if let arm = session.armed[track.id], let r = session.recorder {
+                    Menu {
+                        ForEach(0..<r.deviceChannels, id: \.self) { ch in
+                            Button(L10n.text("record.input.mono", String(ch + 1))) { session.setInput(track.id, first: ch, channels: 1) }
+                        }
+                        ForEach(stride(from: 0, to: r.deviceChannels - 1, by: 2).map { $0 }, id: \.self) { ch in
+                            Button(L10n.text("record.input.stereo", String(ch + 1), String(ch + 2))) { session.setInput(track.id, first: ch, channels: 2) }
+                        }
+                    } label: {
+                        Text(arm.channels == 2 ? L10n.text("record.input.stereo", String(arm.first + 1), String(arm.first + 2)) : L10n.text("record.input.mono", String(arm.first + 1)))
+                            .font(.system(size: 9))
+                    }
+                    .menuStyle(.borderlessButton)
+                    .fixedSize()
+                    .help(L10n.text("record.input.help"))
+                    .accessibilityLabel(L10n.text("record.input.ax", track.name))
+                    .accessibilityIdentifier("header.input")
                 }
                 Button { set(["locked": .bool(!track.locked)]) } label: {
                     Image(systemName: track.locked ? "lock.fill" : "lock.open").font(.system(size: 10)).frame(width: 20, height: 16)
