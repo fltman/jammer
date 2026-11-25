@@ -4808,13 +4808,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "OpenAI charges your account. Jämmer cannot quote its transcription price. Review OpenAI’s terms before sending audio."
+            "value": "OpenAI charges your account for it by its own price list; Jämmer can’t read that price list and doesn’t guess the cost.\n\nJämmer hasn’t been able to read OpenAI’s terms for what it does with uploaded audio. Read them at OpenAI before sending anything that isn’t yours to share."
           }
         },
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "OpenAI debiterar ditt konto. Jämmer kan inte ange priset för transkriberingen. Läs OpenAI:s villkor innan du skickar ljud."
+            "value": "OpenAI debiterar ditt konto enligt sin egen prislista; Jämmer kan inte läsa den prislistan och gissar inte kostnaden.\n\nJämmer har inte kunnat läsa OpenAI:s villkor för vad de gör med uppladdat ljud. Läs dem hos OpenAI innan du skickar något som inte är ditt att dela."
           }
         }
       }
@@ -4843,13 +4843,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The recipe “%1$@” sends all of each of %3$@ to these transcription services.\n%2$@"
+            "value": "The recipe “%1$@” transcribes with these services:\n%2$@\n\nFor each of %3$@, the whole file will be uploaded to the service and transcribed there."
           }
         },
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Receptet ”%1$@” skickar hela ljudet i var och en av %3$@ till följande transkriberingstjänster.\n%2$@"
+            "value": "Receptet ”%1$@” transkriberar med de här tjänsterna:\n%2$@\n\nFör var och en av %3$@ laddas hela filen upp till tjänsten och transkriberas där."
           }
         }
       }

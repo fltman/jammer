@@ -195,6 +195,7 @@ def check(root, require=None):
                         faults.append(f'{path}:{n}: text for the user written in the code: "{text[:60]}"')
     faults += text_logic(root)
     faults += british(root, strings)
+    faults += swedish_print(strings)
     faults += loose_colours(root)
     return faults
 
@@ -217,6 +218,18 @@ def loose_colours(root):
 # Canceled. Looked for in the catalogue's English and in the texts written in the app's code. A literal
 # that is one word of code (a key, a field of the agent API such as "analyzedSeconds") is not a text.
 BRITISH = re.compile(r'\b(centre|colour|grey|cancell(?:ed|ing)|behaviour|favour|normalis|organis|recognis|licence|analys(?:e|ed|ing)\b|catalogue|labelled|travell|programme|metre)', re.I)
+# Swedish for a transcript is "transkript" and for transcribing "transkribera": "utskrift" reads as a printout and
+# "skriv ut" is Print (the coordinator, 2026-11-25).
+SWEDISH_PRINT = re.compile(r'(?i)\b(utskrift\w*|skriv(?:er|s|a)? ut|skrevs ut)\b')
+def swedish_print(strings):
+    faults = []
+    for key, entry in sorted(strings.items()):
+        loc = entry.get('localizations', {}).get('sv', {})
+        for _, text in units(loc):
+            m = SWEDISH_PRINT.search(text)
+            if m: faults.append(f'{key} (sv): "{m.group(1)}" reads as printing; say transkript / transkribera')
+    return faults
+
 def british(root, strings):
     faults = []
     for key, entry in sorted(strings.items()):
@@ -313,6 +326,8 @@ def self_test(root):
             'an alert text in a file listed as moved': (None, 'App/Code.swift\n', 'alert.messageText = "Send it?"\n'),
             'a British form in the catalogue': (lambda s: s['a.one']['localizations']['en']['stringUnit'].update(value='Centre %@'), None, ''),
             'a British form in a text in the code': (None, None, 'note("Cancelled; nothing changed.")\n'),
+            '"utskrift" for a transcript in Swedish': (lambda s: sv(s, 'a.one', 'Utskrift %@'), None, ''),
+            '"skriv ut" for transcribing in Swedish': (lambda s: sv(s, 'a.one', 'Skriv ut %@'), None, ''),
             'a state coloured by hand in a view': (None, None, 'Text(problem).foregroundStyle(.orange)\n'),
             'a colour chosen by a line\'s first word': (None, None, 'let c = line.hasPrefix("Warning") ? red : green\n'),
             'a decision made on the status line\'s words': (None, None, 'if session.status == "Uploading the files" { ask() }\n'),
