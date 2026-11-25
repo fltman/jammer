@@ -22,7 +22,7 @@ When the sheet opens, Jämmer looks at the audio and tells you what it found, fo
 
 ## Amount and preview
 
-**Amount** blends between the original (0 %) and the full repair (100 %). **Preview** plays up to 30 seconds from the selection (or the playhead) with the repair; switch between **Original** and **Repaired** while it plays to compare. Nothing changes until you click **Apply**.
+**Amount** blends between the original (0 %) and the full repair (100 %). **Preview** (or Space) plays up to 30 seconds from the selection (or the playhead) with the repair, and Space again stops it; switch between **Original** and **Repaired** while it plays to compare. Nothing changes until you click **Apply**.
 
 ## What Apply does
 

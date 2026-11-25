@@ -100,6 +100,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        EscapeCloses.install()
         // Updates: release builds only (Updates.enabled).
         Updates.shared.start()
         // Noise reduction: DeepFilterNet 3 with the model that ships in the app.

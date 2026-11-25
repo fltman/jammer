@@ -7638,6 +7638,24 @@
         }
       }
     },
+    "error.clip.beforeStart": {
+      "comment": "A clip moved before the timeline's start.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A clip can't start before the start of the timeline."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ett klipp kan inte börja före tidslinjens början."
+          }
+        }
+      }
+    },
     "error.clip.beyondSource": {
       "comment": "Clip and marker edits.",
       "extractionState": "manual",
@@ -13470,6 +13488,24 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "history.row.help": {
+      "comment": "Tooltip of a step in the History list.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Double-click, or press Return, to go to this step."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dubbelklicka, eller tryck på Retur, för att gå till det här steget."
           }
         }
       }
@@ -19664,6 +19700,84 @@
         }
       }
     },
+    "nudge.clips": {
+      "comment": "Part of nudge.status: how many clips.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld clip"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld clips"
+                }
+              }
+            }
+          }
+        },
+        "sv": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld klipp"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld klipp"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "nudge.none": {
+      "comment": "Status bar: ⌥← or ⌥→ with no clip to nudge.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No clip to nudge here: select clips on the current track, or put the playhead in one."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inget klipp att knuffa här: markera klipp på det aktuella spåret, eller lägg uppspelningsmarkören i ett."
+          }
+        }
+      }
+    },
+    "nudge.status": {
+      "comment": "Status bar while ⌥←/⌥→ is held. %1$@ is e.g. \"2 clips\", %2$@ the milliseconds with sign.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nudging %1$@ %2$@ ms"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Knuffar %1$@ %2$@ ms"
+          }
+        }
+      }
+    },
     "omnibar.ask": {
       "comment": "The omnibar row that sends the typed text to the assistant. %@ is the text.",
       "extractionState": "manual",
@@ -20643,6 +20757,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mät loudness"
+          }
+        }
+      }
+    },
+    "op.move_clip.title": {
+      "comment": "Operation title: moving clips on the timeline.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move Clip"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flytta klipp"
           }
         }
       }
@@ -30571,6 +30703,60 @@
           "stringUnit": {
             "state": "translated",
             "value": "loudness_preset: okänd förinställning."
+          }
+        }
+      }
+    },
+    "step.move_clip.at": {
+      "comment": "Agent error.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "move_clip: \"at\" moves one clip; use \"by\" for several."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "move_clip: \"at\" flyttar ett klipp; använd \"by\" för flera."
+          }
+        }
+      }
+    },
+    "step.move_clip.ids": {
+      "comment": "Agent error for move_clip without ids (English is the API's).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "move_clip: give \"clip\" or \"clips\" (clip ids)."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "move_clip: ange \"clip\" eller \"clips\" (klippens id)."
+          }
+        }
+      }
+    },
+    "step.move_clip.where": {
+      "comment": "Agent error.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "move_clip: give \"at\" (seconds) or \"by\" (seconds)."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "move_clip: ange \"at\" (sekunder) eller \"by\" (sekunder)."
           }
         }
       }

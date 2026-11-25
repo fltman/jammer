@@ -386,6 +386,9 @@ public enum Operations {
         .init("set_marker", "Change Marker", "Moves, renames or resizes one marker, by its id (the document's markers list them). What isn't given stays.",
               params: [.init("marker", .string, "Marker id.", required: true), .init("at", .seconds, "New position in seconds."),
                        .init("name", .string, "New name."), .init("duration", .seconds, "Region length in seconds; 0 for a point.")]),
+        .init("move_clip", "Move Clip", "Moves clips on the timeline, sound and all (their words and fades go with them): `clip` to `at`, or `clip` or `clips` by `by` seconds. Refused, with nothing moved, when one would start before 0 or lie over a clip on its track that isn't moved (reason overlaps, before_start). One undo step.",
+              params: [.init("clip", .string, "Clip id."), .init("clips", .list, "Clip ids, moved together by `by`."),
+                       .init("at", .seconds, "The new start of `clip`."), .init("by", .seconds, "How far to move, in seconds; negative is earlier.")]),
         .init("set_clip", "Change Clip", "Changes one clip by its id (the tracks' clips list them): trims its start or end on the timeline (the sound stays where it is; a clip can't reach over the next one or past its file), sets its fades and their shape, or its gain. What isn't given stays.",
               params: [.init("clip", .string, "Clip id.", required: true), .init("start", .seconds, "New start of the clip on the timeline."),
                        .init("end", .seconds, "New end of the clip on the timeline."), .init("fadeIn", .seconds, "Fade-in length in seconds; 0 removes it."),
@@ -1551,6 +1554,25 @@ public enum StepRunner {
         case "set_marker":
             guard let id = p["marker"]?.string.flatMap(UUID.init(uuidString:)) else { throw StepFailure(Said("step.set_marker.id", "set_marker: \"marker\" must be a marker id.")) }
             try s.project.setMarker(id, position: frames("at"), name: p["name"]?.string, length: frames("duration"))
+        case "move_clip":
+            let one = p["clip"]?.string.flatMap(UUID.init(uuidString:))
+            let many = (p["clips"]?.strings ?? []).compactMap(UUID.init(uuidString:))
+            let ids = Set(many + (one.map { [$0] } ?? []))
+            guard !ids.isEmpty else { throw StepFailure(Said("step.move_clip.ids", "move_clip: give \"clip\" or \"clips\" (clip ids).")) }
+            let delta: Frame
+            if let at = frames("at") {
+                guard ids.count == 1, let id = ids.first, let c = s.project.tracks.flatMap(\.clips).first(where: { $0.id == id }) else {
+                    throw StepFailure(Said("step.move_clip.at", "move_clip: \"at\" moves one clip; use \"by\" for several."))
+                }
+                delta = at - c.start
+            } else if let by = p["by"]?.double {
+                delta = Frame((by * s.project.sampleRate).rounded())
+            } else {
+                throw StepFailure(Said("step.move_clip.where", "move_clip: give \"at\" (seconds) or \"by\" (seconds)."))
+            }
+            do { try s.project.moveClips(ids, by: delta) } catch let e as ClipEditError {
+                throw StepFailure(Said.of(e), reason: e == .overlaps ? "overlaps" : e == .beforeStart ? "before_start" : "no_clip")
+            }
         case "set_clip":
             guard let id = p["clip"]?.string.flatMap(UUID.init(uuidString:)) else { throw StepFailure(Said("step.set_clip.id", "set_clip: \"clip\" must be a clip id.")) }
             let shape = p["shape"]?.string.map { $0 == "linear" ? FadeShape.linear : .equalPower }

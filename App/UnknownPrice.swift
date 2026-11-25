@@ -176,8 +176,40 @@ extension NSAlert {
     /// Return and needs a click, and Cancel answers Esc in every language (NSAlert gives Esc only to a button
     /// titled "Cancel" in English).
     func returnNeverPays() {
+        // (Esc for an alert of one button: EscapeCloses.)
         guard buttons.count >= 2 else { return }
         buttons[0].keyEquivalent = ""
         buttons[1].keyEquivalent = "\u{1b}"
+    }
+}
+
+/// Esc closes every alert and sheet that only says something (one button), as Return does (COMFORT 42): NSAlert gives
+/// Esc only to a button titled "Cancel" in English, so an OK-only alert used to stay. One watch for the whole app, so
+/// an alert added later needs nothing of its own. An alert with a choice (two buttons or more) is left to its buttons.
+@MainActor
+enum EscapeCloses {
+    private static var monitor: Any?
+
+    static func install() {
+        guard monitor == nil else { return }
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            guard event.keyCode == 53, event.modifierFlags.intersection([.command, .option, .control, .shift]).isEmpty,
+                  let window = event.window ?? NSApp.keyWindow, window.sheetParent != nil || NSApp.modalWindow === window,
+                  let only = soleButton(in: window.contentView) else { return event }
+            only.performClick(nil)
+            return nil
+        }
+    }
+
+    /// The one push button of a window's content, if there is exactly one and nothing in the window takes Esc itself.
+    static func soleButton(in view: NSView?) -> NSButton? {
+        var buttons: [NSButton] = []
+        func walk(_ v: NSView) {
+            if let b = v as? NSButton, !b.isHidden, b.bezelStyle == .push || b.bezelStyle == .rounded, b.isEnabled { buttons.append(b) }
+            v.subviews.forEach(walk)
+        }
+        if let view { walk(view) }
+        guard buttons.count == 1, buttons[0].keyEquivalent != "\u{1b}" else { return nil }
+        return buttons[0]
     }
 }

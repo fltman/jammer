@@ -47,6 +47,8 @@ When you export from the start of the project, the first file's bext and iXML go
 
 ## Separately recorded speakers (double-enders)
 
+Drop audio files from Finder on the timeline to add them as tracks starting where you drop them (a line shows where); drop a film to look at it in the Picture window from that point.
+
 When each speaker recorded their own side (a "double-ender"), choose **File › Import Tracks…** (⇧⌘I) and pick their files, together with the call recording (Zoom, Riverside, a phone recording) if you have one. Jämmer adds each as a track and lines them up by comparing the sound itself, to the sample. The call recording, where everyone is heard, makes the best reference, and Jämmer picks it by itself: the track that matches all the others best. The status bar says how far each track moved and flags a track without a clear match, which is left where it was. Import and alignment are one undo step.
 
 ## Editing a clip for Flimmer

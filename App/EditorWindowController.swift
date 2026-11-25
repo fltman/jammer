@@ -172,11 +172,18 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         else { session.document?.save(sender) }
     }
 
+    /// The window has given the timeline the keys once (on opening).
+    private var keysGivenOnce = false
+
     @objc(duplicateDocument:) func duplicateOrCopy(_ sender: Any?) {
         if session.wasLinked { session.saveJammerCopy() } else { session.document?.duplicate(sender) }
     }
 
     func windowDidBecomeKey(_ notification: Notification) {
+        // The timeline gets the keys when the window first opens, or when nothing in it has them. Coming back to
+        // the window (an app switch) leaves them where they were: in the assistant's field, the find bar (COMFORT 23).
+        guard !keysGivenOnce || window?.firstResponder === window || window?.firstResponder == nil else { return }
+        keysGivenOnce = true
         window?.makeFirstResponder(timeline.firstResponderView)
         // Again once SwiftUI has done its part: in a window opened while the app is active, it gave the
         // assistant's field the keyboard right after this (seen 2026-11-17 on the second document opened).
@@ -206,8 +213,15 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         panel.message = L10n.text("importTracks.panel")
         panel.beginSheetModal(for: window) { [weak self] response in
             guard response == .OK, let self else { return }
-            let urls = panel.urls
-            // The user picked these: a project saved with them may read them again.
+            self.importTracks(panel.urls, at: nil)
+        }
+    }
+
+    /// Adds files as tracks: lined up with the others by their sound (Import Tracks…), or, dropped on the timeline,
+    /// starting where they were dropped (`at`; COMFORT 22).
+    func importTracks(_ urls: [URL], at dropped: Frame?) {
+        do {
+            // The user picked these (or dropped them): a project saved with them may read them again.
             ProjectAccess.approve(urls)
             let session = self.session
             Task {
@@ -229,14 +243,15 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
                         // At the document's sample rate: a file at another rate is converted, not played at the wrong speed.
                         let rate = p.sampleRate
                         let r = try await Task.detached { try AudioImporter.importFile(url, sampleRate: rate, mediaFolder: MediaStore.folder) }.value
-                        added.append(p.addTrack(source: r.source, name: url.deletingPathExtension().lastPathComponent).id)
+                        added.append(p.addTrack(source: r.source, name: url.deletingPathExtension().lastPathComponent, start: dropped ?? 0).id)
                         if let w = r.warning { short.append(w) }
                     } catch {
                         session.status = L10n.text("importTracks.failed", url.lastPathComponent, L10n.error(error))
                         return
                     }
                 }
-                guard p.tracks.count > 1 else {
+                // Dropped at a place, or the first tracks: where they are, not lined up.
+                guard p.tracks.count > 1, dropped == nil else {
                     guard let p = landed(p) else { return }
                     session.commit(p, action: L10n.text("importTracks.action"))
                     session.status = ([L10n.count("importTracks.done", added.count)] + short).joined(separator: " ")
@@ -418,7 +433,16 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         let kind = (sender as? NSMenuItem)?.representedObject as? String
         let model = RestoreModel(session: session, kind: kind.flatMap(Restoration.Kind.init(rawValue:)) ?? .dehum)
         let host = NSHostingController(rootView: AnyView(EmptyView()))
+        // Space plays and stops the preview whatever control has focus (a focused segmented picker took it before;
+        // COMFORT 66), except while a text field is being typed in.
+        let space = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak host] e in
+            guard e.keyCode == 49, e.modifierFlags.intersection([.command, .option, .control]).isEmpty,
+                  let sheet = host?.view.window, e.window === sheet, !(sheet.firstResponder is NSText) else { return e }
+            model.togglePreview()
+            return nil
+        }
         host.rootView = AnyView(RestoreSheet(model: model) { [weak host] in
+            if let space { NSEvent.removeMonitor(space) }
             guard let sheet = host?.view.window else { return }
             window.endSheet(sheet)
         })

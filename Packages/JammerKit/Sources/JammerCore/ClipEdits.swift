@@ -12,6 +12,8 @@ public enum ClipEditError: Error, LocalizedError, Equatable, KeyedFailure {
     case beyondSource
     /// A clip keeps at least one frame.
     case empty
+    /// A clip can't start before the timeline does.
+    case beforeStart
 
     public var errorDescription: String? {
         switch self {
@@ -20,6 +22,7 @@ public enum ClipEditError: Error, LocalizedError, Equatable, KeyedFailure {
         case .overlaps: "The clip can't reach over the clip next to it."
         case .beyondSource: "The clip can't reach past the start or end of its file."
         case .empty: "A clip can't be shorter than one sample."
+        case .beforeStart: "A clip can't start before the start of the timeline."
         }
     }
 
@@ -30,6 +33,7 @@ public enum ClipEditError: Error, LocalizedError, Equatable, KeyedFailure {
         case .overlaps: KeyedMessage("error.clip.overlaps")
         case .beyondSource: KeyedMessage("error.clip.beyondSource")
         case .empty: KeyedMessage("error.clip.empty")
+        case .beforeStart: KeyedMessage("error.clip.beforeStart")
         }
     }
 }
@@ -76,6 +80,28 @@ extension Project {
         if let shape { c.fadeShape = shape }
         if let gainDB { c.gainDB = gainDB }
         tracks[t].clips[i] = c
+    }
+
+    /// Moves clips on the timeline, sound and all (their transcripts and fades go with them): to `start`, or by
+    /// `delta`. Refused, with nothing moved, when one would start before the timeline or lie over a clip on its track
+    /// that isn't moved with it.
+    public mutating func moveClips(_ ids: Set<UUID>, by delta: Frame) throws {
+        guard delta != 0 else { return }
+        var p = self
+        for id in ids { guard p.clipLocation(id) != nil else { throw ClipEditError.noClip } }
+        for t in p.tracks.indices {
+            let moving = p.tracks[t].clips.filter { ids.contains($0.id) }
+            guard !moving.isEmpty else { continue }
+            let still = p.tracks[t].clips.filter { !ids.contains($0.id) }
+            for c in moving {
+                let start = c.start + delta
+                guard start >= 0 else { throw ClipEditError.beforeStart }
+                guard !still.contains(where: { $0.start < start + c.length && $0.end > start }) else { throw ClipEditError.overlaps }
+            }
+            for i in p.tracks[t].clips.indices where ids.contains(p.tracks[t].clips[i].id) { p.tracks[t].clips[i].start += delta }
+            p.tracks[t].clips.sort { $0.start < $1.start }
+        }
+        self = p
     }
 
     /// Moves, renames or resizes one marker; the list stays in time order.

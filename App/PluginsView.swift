@@ -125,6 +125,8 @@ struct PluginsSheet: View {
         }
         .padding(20)
         .frame(width: 500)
+        // Esc closes it as Done does (COMFORT 42): it changes nothing that isn't already a step.
+        .onExitCommand { done() }
         .task {
             catalogue = await Task.detached { PluginCatalog.effects() }.value
             failed = HostedPlugins.current().failed

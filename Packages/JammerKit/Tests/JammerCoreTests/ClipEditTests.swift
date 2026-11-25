@@ -73,3 +73,35 @@ struct ClipEditTests {
         #expect(throws: ClipEditError.noMarker) { try p.setMarker(UUID(), name: "x") }
     }
 }
+
+@Suite("Moving clips")
+struct MoveClipTests {
+    func project() -> Project {
+        let info = AudioFileInfo(container: .wav, sampleFormat: .float32, bigEndian: false, channels: 1, sampleRate: 48_000, dataOffset: 0, frames: 480_000)
+        let s = SourceRef(name: "a", path: "/dev/null", info: info)
+        return Project(sampleRate: 48_000, channels: 1, tracks: [
+            Track(name: "A", clips: [Clip(sourceID: s.id, start: 0, length: 48_000), Clip(sourceID: s.id, sourceStart: 48_000, start: 96_000, length: 48_000)]),
+        ], sources: [s])
+    }
+
+    @Test("A clip moves with its sound; several move together; the order on the track stays by time")
+    func moves() throws {
+        var p = project()
+        let a = p.tracks[0].clips[0].id, b = p.tracks[0].clips[1].id
+        try p.moveClips([b], by: -24_000)
+        #expect(p.tracks[0].clips[1].start == 72_000 && p.tracks[0].clips[1].sourceStart == 48_000)
+        try p.moveClips([a, b], by: 480)
+        #expect(p.tracks[0].clips.map(\.start) == [480, 72_480])
+    }
+
+    @Test("Refused, nothing moved: before 0, over a clip that isn't moved, an unknown clip")
+    func refuses() {
+        var p = project()
+        let before = p
+        let a = p.tracks[0].clips[0].id, b = p.tracks[0].clips[1].id
+        #expect(throws: ClipEditError.beforeStart) { try p.moveClips([a], by: -1) }
+        #expect(throws: ClipEditError.overlaps) { try p.moveClips([b], by: -48_001) }
+        #expect(throws: ClipEditError.noClip) { try p.moveClips([UUID()], by: 10) }
+        #expect(p == before)
+    }
+}

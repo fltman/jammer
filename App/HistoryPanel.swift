@@ -24,6 +24,8 @@ enum HistoryPanel {
 
 struct HistoryView: View {
     let session: EditorSession
+    /// The step chosen in the list: a click chooses, a double-click or Return goes there (COMFORT 38, 34).
+    @State private var chosen: UUID?
 
     struct Row: Identifiable {
         var id: UUID
@@ -56,19 +58,20 @@ struct HistoryView: View {
                       systemImage: "info.circle")
                     .font(.caption).foregroundStyle(.secondary).padding(10)
             }
-            List(rows) { r in
-                Button { try? session.jump(to: r.id) } label: {
-                    HStack(spacing: 6) {
-                        Text(r.action).fontWeight(r.current ? .semibold : .regular)
-                        Spacer()
-                        Text(r.time, style: .time).font(.caption).foregroundStyle(.secondary)
-                    }
-                    .padding(.leading, CGFloat(r.depth) * 14)
-                    .foregroundStyle(r.current ? Theme.neonColor : (r.active ? Color.primary : Color.secondary))
-                    .contentShape(.rect)
+            List(rows, selection: $chosen) { r in
+                HStack(spacing: 6) {
+                    Text(r.action).fontWeight(r.current ? .semibold : .regular)
+                    Spacer()
+                    Text(r.time, style: .time).font(.caption).foregroundStyle(.secondary)
                 }
-                .buttonStyle(.plain)
+                .padding(.leading, CGFloat(r.depth) * 14)
+                .foregroundStyle(r.current ? Theme.neonColor : (r.active ? Color.primary : Color.secondary))
+                .contentShape(.rect)
+                .help(L10n.text("history.row.help"))
                 .accessibilityLabel(r.current ? L10n.text("history.ax.current", r.action) : r.active ? r.action : L10n.text("history.ax.otherBranch", r.action))
+            }
+            .contextMenu(forSelectionType: UUID.self) { _ in } primaryAction: { ids in
+                if let id = ids.first { try? session.jump(to: id) }
             }
         }
         .frame(minWidth: 300, minHeight: 300)

@@ -26,7 +26,7 @@
 | ⌘A / ⇧⌘A | Select All / Deselect All |
 | ⌘B | Split at Playhead |
 | ⌘F / ⌘G | Find in Transcript / Find Next |
-| Esc | Cancel a drag; otherwise clear the selection (in the spectrogram: the drawn area first) |
+| Esc | Cancel a drag (an automation point's too: everything goes back); otherwise clear the selection (in the spectrogram: the drawn area first). In a dialog that only says something, Esc closes it as Return does |
 | ⌘K | Omnibar: the keyboard to the field at the bottom of the window |
 
 ## Track
@@ -60,6 +60,8 @@
 | Space or ⌥⌘P | Play / Stop |
 | Return | Go to Start |
 | ← / → | Back / forward one second |
+| ⌥← / ⌥→ | Nudge the clips in the selection (or the one under the playhead) on the current track 10 ms; with ⇧, 100 ms. Holding the key is one step |
+| Tab / ⇧Tab | Select the next / previous clip on the current track |
 | Home / End | Start / end |
 | ⇧⌘M | Add Marker |
 

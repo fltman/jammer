@@ -2,6 +2,7 @@ import AppKit
 import JammerAgent
 import JammerCore
 import MetalKit
+import UniformTypeIdentifiers
 
 /// What part of the timeline is on screen.
 @MainActor
@@ -387,9 +388,50 @@ final class TimelineOverlay: NSView {
         self.session = session
         self.viewport = viewport
         super.init(frame: .zero)
+        // Files dropped from Finder (COMFORT 22, 71): audio as new tracks where it lands, a film as the picture.
+        registerForDraggedTypes([.fileURL])
     }
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+
+    // MARK: Dropped files
+
+    /// Where a drop would land, while files are dragged over: a line is drawn there.
+    private var dropX: CGFloat?
+
+    private func droppedFiles(_ info: NSDraggingInfo) -> (audio: [URL], film: URL?) {
+        let urls = info.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
+        func kind(_ u: URL) -> UTType? { (try? u.resourceValues(forKeys: [.contentTypeKey]))?.contentType }
+        let audio = urls.filter { kind($0)?.conforms(to: .audio) == true }
+        let film = urls.first { kind($0)?.conforms(to: .movie) == true && !audio.contains($0) }
+        return (audio, film)
+    }
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation { draggingUpdated(sender) }
+
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        let files = droppedFiles(sender)
+        guard !files.audio.isEmpty || files.film != nil else { dropX = nil; needsDisplay = true; return [] }
+        dropX = convert(sender.draggingLocation, from: nil).x
+        needsDisplay = true
+        return .copy
+    }
+
+    override func draggingExited(_ sender: NSDraggingInfo?) { dropX = nil; needsDisplay = true }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        defer { dropX = nil; needsDisplay = true }
+        let files = droppedFiles(sender)
+        let at = max(0, frame(at: convert(sender.draggingLocation, from: nil)))
+        if !files.audio.isEmpty {
+            (window?.windowController as? EditorWindowController)?.importTracks(files.audio, at: at)
+        }
+        if let film = files.film {
+            ProjectAccess.approve([film])
+            session.perform("set_video_reference", ["path": .string(film.path), "at": .number(project.seconds(at))])
+        }
+        return !files.audio.isEmpty || files.film != nil
+    }
 
     // VoiceOver: the timeline reads as a slider over the playhead. Its value says where
     // the playhead and the selection are; increment and decrement move 1 s, like the arrows.
@@ -422,6 +464,7 @@ final class TimelineOverlay: NSView {
     /// Leaving with a key down: its nudges go now, as one step (its key-up goes elsewhere).
     override func resignFirstResponder() -> Bool {
         timeline?.automationKeyUp()
+        sendClipNudge()
         return true
     }
 
@@ -616,7 +659,11 @@ final class TimelineOverlay: NSView {
     // MARK: Drawing
 
     override func draw(_ dirtyRect: NSRect) {
-        defer { drawArea(); if !areaMode { drawHandles() } } // the drawn spectrogram area and the handles, on top
+        defer {
+            drawArea(); if !areaMode { drawHandles() } // the drawn spectrogram area and the handles, on top
+            // Where dropped files would start.
+            if let x = dropX { Theme.neon.setFill(); NSRect(x: x - 1, y: 0, width: 2, height: bounds.height).fill() }
+        }
         let rate = project.sampleRate
         let h = TimelineView.rulerHeight
         // Ruler ticks: pick a step that leaves ~90 pt between labels (with a timecode, ~115 pt for its eleven
@@ -1094,7 +1141,49 @@ final class TimelineOverlay: NSView {
 
     override func keyUp(with event: NSEvent) {
         timeline?.automationKeyUp()
+        sendClipNudge()
         super.keyUp(with: event)
+    }
+
+    /// Clips nudged with ⌥←/⌥→ while the key is down, and by how much so far.
+    private var heldClipNudge: (ids: [UUID], frames: Frame)?
+
+    /// The clips a nudge moves: on the current track, those in the selection, else the one under the playhead.
+    private func nudgeTargets() -> [UUID] {
+        let track = project.tracks.first { $0.id == session.currentTrack }
+            ?? project.tracks.first { $0.clips.contains { $0.start <= session.playhead && $0.end > session.playhead } }
+        guard let track else { return [] }
+        if let sel = session.selection { return track.clips.filter { $0.start < sel.upperBound && $0.end > sel.lowerBound }.map(\.id) }
+        return track.clips.filter { $0.start <= session.playhead && $0.end > session.playhead }.map(\.id)
+    }
+
+    private func nudgeClips(_ direction: Int, big: Bool) {
+        if heldClipNudge == nil {
+            let ids = nudgeTargets()
+            guard !ids.isEmpty else { session.say(L10n.text("nudge.none"), .info); return }
+            heldClipNudge = (ids, 0)
+        }
+        heldClipNudge!.frames += Frame((project.sampleRate * (big ? 0.1 : 0.01)).rounded()) * Frame(direction)
+        let ms = Double(heldClipNudge!.frames) / project.sampleRate * 1_000
+        session.status = L10n.text("nudge.status", L10n.count("nudge.clips", heldClipNudge!.ids.count), L10n.number(ms, 0, sign: true))
+    }
+
+    private func sendClipNudge() {
+        guard let n = heldClipNudge else { return }
+        heldClipNudge = nil
+        guard n.frames != 0 else { return }
+        session.perform("move_clip", ["clips": .array(n.ids.map { .string($0.uuidString) }), "by": .number(Double(n.frames) / project.sampleRate)])
+    }
+
+    private func selectNeighbourClip(forward: Bool) {
+        guard let track = project.tracks.first(where: { $0.id == session.currentTrack }) ?? project.tracks.first, !track.clips.isEmpty else { NSSound.beep(); return }
+        let at = session.selection?.lowerBound ?? session.playhead
+        let clips = track.clips.sorted { $0.start < $1.start }
+        let next = forward ? clips.first { $0.start > at } : clips.last { $0.start < at }
+        guard let c = next ?? (forward ? clips.first : clips.last) else { return }
+        session.currentTrack = track.id
+        session.selection = c.range
+        session.seek(c.start)
     }
 
     override func keyDown(with event: NSEvent) {
@@ -1112,6 +1201,11 @@ final class TimelineOverlay: NSView {
                 (window?.windowController as? EditorWindowController)?.chooseTool(t.id)
             }
         case 51, 117: delete(nil) // delete, forward delete
+        // ⌥← ⌥→ nudge clips 10 ms, ⇧⌥ 100 ms; a held key is one step, sent when it comes up (COMFORT 35, 12).
+        case 123, 124 where event.modifierFlags.contains(.option):
+            nudgeClips(event.keyCode == 124 ? 1 : -1, big: event.modifierFlags.contains(.shift))
+        // Tab, ⇧Tab: the next or the previous clip on the current track is selected.
+        case 48: selectNeighbourClip(forward: !event.modifierFlags.contains(.shift))
         case 123: session.seek(session.playhead - Frame(project.sampleRate)) // left: 1 s
         case 124: session.seek(session.playhead + Frame(project.sampleRate))
         case 115: session.seek(0) // home

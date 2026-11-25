@@ -733,6 +733,17 @@ Moves, renames or resizes one marker, by its id (the document's markers list the
 | `name` | string | New name. |
 | `duration` | seconds | Region length in seconds; 0 for a point. |
 
+### `move_clip`
+
+Moves clips on the timeline, sound and all (their words and fades go with them): `clip` to `at`, or `clip` or `clips` by `by` seconds. Refused, with nothing moved, when one would start before 0 or lie over a clip on its track that isn't moved (reason overlaps, before_start). One undo step.
+
+| Param | Type | Description |
+|---|---|---|
+| `clip` | string | Clip id. |
+| `clips` | list | Clip ids, moved together by `by`. |
+| `at` | seconds | The new start of `clip`. |
+| `by` | seconds | How far to move, in seconds; negative is earlier. |
+
 ### `set_clip`
 
 Changes one clip by its id (the tracks' clips list them): trims its start or end on the timeline (the sound stays where it is; a clip can't reach over the next one or past its file), sets its fades and their shape, or its gain. What isn't given stays.

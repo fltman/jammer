@@ -78,6 +78,8 @@ The `echo` operation (for agents and sibling apps; a menu entry comes later) add
 
 ![The History window: a list of steps where two dimmed steps form a side branch and the current step is highlighted](../screens/history.webp)
 
-Undo never throws work away. If you undo a few steps and then do something else, the steps you undid stay in the history as a branch. **View › Show History** (⌥⌘Y) shows the whole tree: the branch you're on is bright, other branches are dim, and clicking any step takes you there. Going to a step is itself one step, so ⌘Z brings you back to where you were.
+Undo never throws work away. If you undo a few steps and then do something else, the steps you undid stay in the history as a branch. **View › Show History** (⌥⌘Y) shows the whole tree: the branch you're on is bright, other branches are dim; click a step to choose it, and double-click it (or press Return) to go there. Going to a step is itself one step, so ⌘Z brings you back to where you were.
+
+A long command, or an agent's steps, that finishes after you've changed the document goes on top of your change when the two touched different things. When they touched the same clip or setting, your change stays, and the result is kept in the history as a branch marked "(late)", so nothing slow or paid has to be done again: choose it there to use it.
 
 The history is saved inside the `.jammer` package, so it's still there when you open the project again. It keeps the last 500 steps; when it has to drop some, it drops old side branches first and says so at the top of the History window.

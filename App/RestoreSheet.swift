@@ -19,6 +19,10 @@ final class RestoreModel {
     /// click doesn't start a second render).
     var rendering: (progress: Double, stop: JobRegistry.StopFlag)?
     func stopRendering() { rendering?.stop.set() }
+    /// What the Preview button does: start the preview, or stop it (or its rendering). Space does the same (COMFORT 66).
+    func togglePreview() {
+        if rendering != nil { stopRendering() } else if previewing { stopPreview() } else { Task { await preview() } }
+    }
     var listeningToRepair = true
     var previewError: String?
     @ObservationIgnored private var previewPlan: RenderPlan?
@@ -186,7 +190,7 @@ struct RestoreSheet: View {
             if let e = model.previewError { StateLine(kind: .error, text: e, font: .callout) }
             HStack {
                 Button(model.rendering != nil || model.previewing ? L10n.text("transport.stop") : L10n.text("restore.preview")) {
-                    if model.rendering != nil { model.stopRendering() } else if model.previewing { model.stopPreview() } else { Task { await model.preview() } }
+                    model.togglePreview()
                 }
                 .help(model.rendering != nil ? L10n.text("job.stop.help", L10n.text("restore.preview.rendering", String(Int((model.rendering?.progress ?? 0) * 100)))) : L10n.text("restore.preview.help"))
                 if let r = model.rendering {
