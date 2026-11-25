@@ -37,6 +37,9 @@ public enum WindowControls {
         c("mixer.solo", "MixerView.swift", "Solo on a strip (listening, never saved)", .route("POST", doc + "/solo")),
         c("mixer.writeMode", "MixerView.swift", "Read, Touch or Latch, and riding a fader while it plays", .none(.pointer)),
         c("mixer.clipLight", "MixerView.swift", "A meter's clip light clicked off", .none(.view)),
+        // The strips' own menus: each item is the step of its own (set_track, duplicate_track, remove_track, remove_bus, remove_vca).
+        c("mixer.trackMenu", "MixerView.swift", "A track strip's menu: mute, solo, lock, duplicate, delete", op("remove_track")),
+        c("mixer.busMenu", "MixerView.swift", "A bus or group strip's menu: delete", op("remove_bus")),
         // The track headers
         c("header.track", "TrackHeaders.swift", "M, the lock, the level and the pan, a double-click to rename", op("set_track")),
         c("header.solo", "TrackHeaders.swift", "S", .route("POST", doc + "/solo")),

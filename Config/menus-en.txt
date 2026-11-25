@@ -67,6 +67,11 @@ View › Automation › Field Front
 View › Automation › Field Side	
 View › Automation › Plugin Parameters	
 View › Automation › Buses, Groups and Master	
+View › Automation › Add Point at Playhead (⌥Return)	
+View › Automation › Previous Point (⌥←)	
+View › Automation › Next Point (⌥→)	
+View › Automation › Previous Lane (⌥↑)	
+View › Automation › Next Lane (⌥↓)	
 View › Zoom In	⌘+
 View › Zoom Out	⌘-
 View › Zoom to Fit	⌘0

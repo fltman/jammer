@@ -174,6 +174,13 @@ public enum Commands {
             add("view.automation." + kind, .view, 1, key(title), agent: .none(.view), submenu: "menu.view.automation", payload: ["kind": .string(kind)])
         }
         add("view.automation.strips", .view, 1, key("menu.view.automation.strips"), agent: .none(.view), submenu: "menu.view.automation")
+        // The lanes' keys as menu items too (COMFORT 36), so they can be found and say why they're off: ⌥Return, ⌥← ⌥→,
+        // ⌥↑ ⌥↓ while the timeline has the keys.
+        add("view.automation.addPoint", .view, 1, key("menu.view.automation.addPoint"), agent: op("set_automation"), submenu: "menu.view.automation")
+        add("view.automation.previousPoint", .view, 1, key("menu.view.automation.previousPoint"), agent: .none(.view), submenu: "menu.view.automation")
+        add("view.automation.nextPoint", .view, 1, key("menu.view.automation.nextPoint"), agent: .none(.view), submenu: "menu.view.automation")
+        add("view.automation.previousLane", .view, 1, key("menu.view.automation.previousLane"), agent: .none(.view), submenu: "menu.view.automation")
+        add("view.automation.nextLane", .view, 1, key("menu.view.automation.nextLane"), agent: .none(.view), submenu: "menu.view.automation")
         add("view.zoomIn", .view, 2, key("view.zoomIn"), key: "+", agent: .none(.view))
         add("view.zoomOut", .view, 2, key("view.zoomOut"), key: "-", agent: .none(.view))
         add("view.zoomToFit", .view, 2, key("view.zoomToFit"), key: "0", agent: .none(.view))

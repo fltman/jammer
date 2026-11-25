@@ -90,6 +90,8 @@ extension EditorWindowController {
         let samples = p.voiceSamples(around: consent)
 
         let name = NSTextField(frame: NSRect(x: 0, y: 0, width: 300, height: 24))
+        // What was typed before a Cancel comes back (COMFORT 8).
+        name.stringValue = session.drafts["clone.name"] ?? ""
         name.placeholderString = L10n.text("overdub.clone.name")
         name.setAccessibilityLabel(L10n.text("overdub.clone.name"))
         name.setAccessibilityIdentifier("overdub.clone.name")
@@ -116,7 +118,8 @@ extension EditorWindowController {
         unknown.gate(alert.buttons[0])
         let answer: NSApplication.ModalResponse
         if let w = window { answer = await alert.beginSheetModal(for: w) } else { answer = alert.runModal() }
-        guard answer == .alertFirstButtonReturn else { return }
+        guard answer == .alertFirstButtonReturn else { session.drafts["clone.name"] = name.stringValue; return }
+        session.drafts["clone.name"] = nil
         unknown.sent()
         let kind: VoiceAttestation.Kind? = whose.indexOfSelectedItem == 1 ? .own : whose.indexOfSelectedItem == 2 ? .ownerConsent : nil
         let who = name.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -155,7 +158,9 @@ extension EditorWindowController {
         model.addItems(withTitles: Overdub.models)
         model.setAccessibilityLabel(L10n.text("overdub.model.ax"))
         let text = NSTextField(frame: NSRect(x: 0, y: 0, width: 380, height: 60))
-        text.stringValue = p.placedWords(in: sel).map(\.word.text).joined(separator: " ")
+        // The words there, or what was typed for this same stretch before a Cancel (COMFORT 8).
+        let draftKey = "overdub.\(sel.lowerBound)-\(sel.upperBound)"
+        text.stringValue = session.drafts[draftKey] ?? p.placedWords(in: sel).map(\.word.text).joined(separator: " ")
         text.setAccessibilityLabel(L10n.text("overdub.text.ax"))
         text.setAccessibilityIdentifier("overdub.text")
         let note = label(L10n.text("overdub.ask.note"))
@@ -170,7 +175,8 @@ extension EditorWindowController {
         unknown.gate(alert.buttons[0])
         let answer: NSApplication.ModalResponse
         if let w = window { answer = await alert.beginSheetModal(for: w) } else { answer = alert.runModal() }
-        guard answer == .alertFirstButtonReturn else { return }
+        guard answer == .alertFirstButtonReturn else { session.drafts[draftKey] = text.stringValue; return }
+        session.drafts[draftKey] = nil
         unknown.sent()
         let voice = voices.indices.contains(pick.indexOfSelectedItem) ? voices[pick.indexOfSelectedItem] : first
         session.say(L10n.text("overdub.working", voice.name), .progress)

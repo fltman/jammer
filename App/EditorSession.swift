@@ -199,6 +199,8 @@ final class EditorSession {
     var tool = "select" { didSet { if let s = SpectralTool(rawValue: tool) { spectralTool = s } } }
     /// The track last clicked in: what the Track menu acts on (view state, not part of the document).
     var currentTrack: UUID?
+    /// Text typed in a dialog that was cancelled, offered again when it opens next (COMFORT 8): per document, while open.
+    @ObservationIgnored var drafts: [String: String] = [:]
     /// The marker whose flag was clicked last: Transport › Rename Marker… and Delete Marker act on it.
     var currentMarker: UUID?
     /// The marker those commands act on: the clicked one while it still exists, else the one at the playhead.

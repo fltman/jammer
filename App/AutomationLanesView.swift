@@ -615,10 +615,21 @@ final class AutomationLanesView: NSView {
         addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self))
     }
     override func mouseExited(with event: NSEvent) { if drag == nil, hover != nil { hover = nil; needsDisplay = true } }
+    /// The pointer over the lanes (COMFORT 1): an open hand over a point that a press would grab, a closed one while
+    /// points are dragged; nil elsewhere (the timeline's own pointer).
+    func pointer(at p: NSPoint) -> NSCursor? {
+        if drag != nil { return .closedHand }
+        guard let shown, let t = track(atY: p.y), t == focus, let own = ownLane else { return nil }
+        let r = area(t)
+        return own.points.contains { hypot(place($0, shown, in: r).x - p.x, place($0, shown, in: r).y - p.y) <= 8 } ? .openHand : nil
+    }
+
     /// The value at the pointer, while it is on the focused lane's line.
     override func mouseMoved(with event: NSEvent) {
+        let at = convert(event.locationInWindow, from: nil)
+        if rows != .tracks { (pointer(at: at) ?? .arrow).set() }
         guard let shown, drag == nil else { return }
-        let p = convert(event.locationInWindow, from: nil)
+        let p = at
         var now: (NSPoint, String)?
         if track(atY: p.y) == focus, let lane = laneToChange(), shown != .mute {
             let frame = min(max(0, Frame(viewport.frame(atX: p.x).rounded())), project.length)

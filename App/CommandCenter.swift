@@ -83,6 +83,8 @@ enum CommandCenter {
         case "view.history": return (#selector(W.showHistory(_:)), nil)
         case "view.spectrogram": return (#selector(W.toggleSpectrogram(_:)), nil)
         case "view.automation.strips": return (#selector(W.toggleStripLanes(_:)), nil)
+        case "view.automation.addPoint", "view.automation.previousPoint", "view.automation.nextPoint",
+             "view.automation.previousLane", "view.automation.nextLane": return (#selector(W.automationKeyCommand(_:)), nil)
         case "view.zoomIn": return (#selector(W.zoomIn(_:)), nil)
         case "view.zoomOut": return (#selector(W.zoomOut(_:)), nil)
         case "view.zoomToFit": return (#selector(W.zoomToFit(_:)), nil)

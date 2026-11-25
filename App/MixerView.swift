@@ -37,6 +37,20 @@ struct MixerSheet: View {
         }
     }
 
+    /// A track strip's menu: mute, solo, lock, duplicate and delete, each the step the Track menu takes; Delete is off,
+    /// with its reason, where the Track menu's is (locked, the last track).
+    @ViewBuilder private func trackMenu(_ t: Track) -> some View {
+        Button(t.isMuted ? L10n.text("mixer.menu.unmute") : L10n.text("track.mute")) { session.perform("set_track", ["track": .string(t.id.uuidString), "muted": .bool(!t.isMuted)]) }
+        Button(session.solo.contains(t.id) ? L10n.text("mixer.menu.unsolo") : L10n.text("track.solo")) { toggleSolo(t.id, !session.solo.contains(t.id)) }
+        Button(t.locked ? L10n.text("mixer.menu.unlock") : L10n.text("track.lock")) { session.perform("set_track", ["track": .string(t.id.uuidString), "locked": .bool(!t.locked)]) }
+        Divider()
+        Button(L10n.text("track.duplicate")) { session.perform("duplicate_track", ["track": .string(t.id.uuidString)]) }
+        let why = t.locked ? L10n.text("reason.trackLocked", t.name) : project.tracks.count < 2 ? L10n.text("error.track.lastTrack") : nil
+        Button(L10n.text("track.delete")) { session.perform("remove_track", ["track": .string(t.id.uuidString)]) }
+            .disabled(why != nil)
+            .help(why ?? "")
+    }
+
     private var content: some View {
         VStack(alignment: .leading, spacing: 12) {
             ScrollView {
@@ -55,6 +69,8 @@ struct MixerSheet: View {
                                    send: { session.perform("set_send", ["from": .string(t.id.uuidString)].merging($0) { $1 }) }, remove: nil,
                                    place: t.position, placeable: project.channels > 2, heights: project.layout == .immersive714 || project.layout.isAmbisonic,
                                    field: project.playsField(t), rotation: t.rotation)
+                        // The strip's own menu (COMFORT 37, 26): what the Track menu does to this track, the same steps.
+                        .contextMenu { trackMenu(t) }
                     }
                     Text(L10n.text("mixer.buses")).font(.headline).padding(.top, 8)
                     if project.buses.isEmpty { Text(L10n.text("mixer.buses.none")).foregroundStyle(.secondary) }
@@ -73,6 +89,11 @@ struct MixerSheet: View {
                                    remove: { session.perform("remove_bus", ["bus": .string(b.id.uuidString), "reroute": .string(b.output?.uuidString ?? "master")]) },
                                    // A bus is turned, not placed: its tracks have placed its channels already.
                                    place: b.azimuth.map { SurroundPosition(azimuth: $0) }, placeable: project.channels > 2 && !project.layout.isAmbisonic)
+                        .contextMenu {
+                            Button(L10n.text("mixer.bus.delete", b.name)) {
+                                session.perform("remove_bus", ["bus": .string(b.id.uuidString), "reroute": .string(b.output?.uuidString ?? "master")])
+                            }
+                        }
                     }
                     Text(L10n.text("mixer.vcas")).font(.headline).padding(.top, 8)
                     if project.vcas.isEmpty { Text(L10n.text("mixer.vcas.none")).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }
@@ -81,6 +102,9 @@ struct MixerSheet: View {
                                  strips: project.tracks.map { ($0.id, $0.name, $0.vca == v.id) } + project.buses.map { ($0.id, L10n.text("strip.bus.named", $0.name), $0.vca == v.id) },
                                  change: { session.perform("set_vca", ["vca": .string(v.id.uuidString)].merging($0) { $1 }) },
                                  remove: { session.perform("remove_vca", ["vca": .string(v.id.uuidString)]) })
+                        .contextMenu {
+                            Button(L10n.text("mixer.vca.delete", v.name)) { session.perform("remove_vca", ["vca": .string(v.id.uuidString)]) }
+                        }
                         // A group's lanes move every member: said here, where the group's level is.
                         if let text = MixerStrip.automationText(project.lanes(of: v.id)) {
                             StateLine(kind: .info, text: L10n.text("mixer.automation.forGroup", text))

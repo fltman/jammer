@@ -453,7 +453,9 @@ public enum FlimmerSend {
             }
         }
 
-        public func remove(upload id: String) async { _ = try? await call("DELETE", "/api/v1/uploads/\(id)") }
+        /// Removes an upload at Flimmer. From a task of its own: it is sent most often because the work was stopped,
+        /// and a request made inside the stopped task would never leave (URLSession refuses it; COMFORT.md b38eab2).
+        public func remove(upload id: String) async { _ = try? await call("DELETE", "/api/v1/uploads/\(id)", uncut: true) }
 
         /// Dry run: Flimmer's answer at once. For real: the finished job's result.
         public func plan(_ body: [String: J], items: [Item]) async throws -> [String: Any] {

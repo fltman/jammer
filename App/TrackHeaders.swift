@@ -127,3 +127,20 @@ private struct TrackHeader: View {
         session.perform("set_track", params.merging(["track": .string(track.id.uuidString)]) { a, _ in a })
     }
 }
+
+/// The header column's host: a right-click on a header gives that track's menu from the registry (Rename, Mute, Solo,
+/// Lock, Duplicate, Move, Delete, Plugins…), named and checked as in the menu bar (COMFORT 37, 4).
+final class TrackHeaderHost: NSHostingView<TrackHeaders> {
+    weak var session: EditorSession?
+
+    override func menu(for event: NSEvent) -> NSMenu? {
+        guard let session, !session.project.tracks.isEmpty else { return nil }
+        let p = convert(event.locationInWindow, from: nil)
+        // From the top (the view isn't flipped): the ruler's height, then one lane per track.
+        let y = bounds.height - p.y - TimelineView.rulerHeight
+        let lane = (bounds.height - TimelineView.rulerHeight) / CGFloat(session.project.tracks.count)
+        guard y >= 0, lane > 0, let t = session.project.tracks[safe: Int(y / lane)] else { return nil }
+        session.currentTrack = t.id
+        return CommandCenter.contextMenu(.track)
+    }
+}

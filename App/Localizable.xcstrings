@@ -16486,6 +16486,24 @@
         }
       }
     },
+    "menu.view.automation.addPoint": {
+      "comment": "View › Automation: a point at the playhead (⌥Return).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add Point at Playhead (⌥Return)"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lägg till punkt vid markören (⌥Retur)"
+          }
+        }
+      }
+    },
     "menu.view.automation.azimuth": {
       "comment": "Menu item in View › Automation: show each track’s place lane (where it is heard from, in a document wider than stereo).",
       "extractionState": "manual",
@@ -16558,6 +16576,42 @@
         }
       }
     },
+    "menu.view.automation.nextLane": {
+      "comment": "View › Automation (⌥↓).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Next Lane (⌥↓)"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nästa bana (⌥↓)"
+          }
+        }
+      }
+    },
+    "menu.view.automation.nextPoint": {
+      "comment": "View › Automation (⌥→).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Next Point (⌥→)"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nästa punkt (⌥→)"
+          }
+        }
+      }
+    },
     "menu.view.automation.none": {
       "comment": "View › Automation.",
       "extractionState": "manual",
@@ -16625,6 +16679,42 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pluginparametrar"
+          }
+        }
+      }
+    },
+    "menu.view.automation.previousLane": {
+      "comment": "View › Automation (⌥↑).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Previous Lane (⌥↑)"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Föregående bana (⌥↑)"
+          }
+        }
+      }
+    },
+    "menu.view.automation.previousPoint": {
+      "comment": "View › Automation (⌥←).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Previous Point (⌥←)"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Föregående punkt (⌥←)"
           }
         }
       }
@@ -17284,6 +17374,24 @@
         }
       }
     },
+    "mixer.bus.delete": {
+      "comment": "A bus strip's context menu. %@ is the bus.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete Bus “%@”"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ta bort bussen ”%@”"
+          }
+        }
+      }
+    },
     "mixer.bus.remove.help": {
       "comment": "Tooltip.",
       "extractionState": "manual",
@@ -17860,6 +17968,60 @@
           "stringUnit": {
             "state": "translated",
             "value": "Limitern kommer efter allt annat. En exporterad fil mäts och hålls under taket; uppspelningen har ett pass och kan gå lite över."
+          }
+        }
+      }
+    },
+    "mixer.menu.unlock": {
+      "comment": "A locked track strip's context menu.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unlock Track"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lås upp spåret"
+          }
+        }
+      }
+    },
+    "mixer.menu.unmute": {
+      "comment": "A muted track strip's context menu.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unmute"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Slå på ljudet"
+          }
+        }
+      }
+    },
+    "mixer.menu.unsolo": {
+      "comment": "A soloed track strip's context menu.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unsolo"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stäng av solo"
           }
         }
       }
@@ -18706,6 +18868,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@, VCA-grupp"
+          }
+        }
+      }
+    },
+    "mixer.vca.delete": {
+      "comment": "A VCA strip's context menu. %@ is the group.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete Group “%@”"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ta bort gruppen ”%@”"
           }
         }
       }
@@ -25112,6 +25292,24 @@
         }
       }
     },
+    "reason.showAutomation": {
+      "comment": "Why the automation point and lane items are off.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show a lane first (View › Automation)."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Visa en bana först (Visa › Automation)."
+          }
+        }
+      }
+    },
     "reason.spectralArea": {
       "comment": "Command registry (comfort block).",
       "extractionState": "manual",
@@ -28742,6 +28940,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fryser… %@ %%"
+          }
+        }
+      }
+    },
+    "status.job.freezing.unknown": {
+      "comment": "Status bar while a freeze renders (it reports no progress).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Freezing…"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fryser…"
           }
         }
       }

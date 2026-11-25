@@ -420,6 +420,30 @@ struct FlimmerSendTests {
         do { _ = try FlimmerSend.returnPreview(mine, mode: .takes) { _ in "" }; Issue.record("not refused") } catch { #expect(error.code == "not_from_flimmer") }
     }
 
+    @Test("A stopped upload is removed at Flimmer: the DELETE leaves from a task of its own, as URLSession refuses one from the stopped task")
+    func removalAfterStop() async throws {
+        actor Log { var calls: [String] = []; func add(_ s: String) { calls.append(s) } }
+        let log = Log()
+        let transport: FlimmerSend.Transport = { r in
+            // As URLSession does: nothing leaves from a cancelled task.
+            if Task.isCancelled { throw URLError(.cancelled) }
+            await log.add("\(r.httpMethod ?? "") \(r.url?.path ?? "")")
+            if r.httpMethod == "PUT" { try await Task.sleep(for: .milliseconds(300)) }
+            let body: [String: Any] = r.httpMethod == "POST" && r.url?.path == "/api/v1/uploads" ? ["upload": ["id": "U1"]] : [:]
+            return (try JSONSerialization.data(withJSONObject: body), HTTPURLResponse(url: r.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+        }
+        let client = FlimmerSend.Client(base: URL(string: "http://127.0.0.1:9002")!, transport: transport, pollInterval: 0.01)
+        let file = FileManager.default.temporaryDirectory.appending(path: "jammer-fs-stop-\(UUID().uuidString).wav")
+        try Data(count: 3_000).write(to: file)
+        defer { try? FileManager.default.removeItem(at: file) }
+        let sending = Task { try await client.upload(file: file, name: "x.wav", limits: .init(bitDepth: 16, maxBytes: 1 << 30, maxChunkBytes: 1_000)) }
+        try await Task.sleep(for: .milliseconds(100))
+        sending.cancel()
+        _ = try? await sending.value
+        let calls = await log.calls
+        #expect(calls.contains("DELETE /api/v1/uploads/U1"), "\(calls)")
+    }
+
     @Test("Takes: changed clips go as files, a dry run first, then one undo step; unchanged clips stay")
     func takes() async throws {
         var (p, pool) = film()

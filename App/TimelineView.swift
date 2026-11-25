@@ -482,7 +482,9 @@ final class TimelineOverlay: NSView {
     /// The timeline laid out in points for HandleZones: each lane's clips with their fades, the selection, the flags.
     private func zoneLayout() -> HandleZones.Layout {
         func x(_ f: Frame) -> Double { Double(viewport.x(of: Double(f))) }
+        // A locked or frozen track offers no handles: what can't be changed isn't offered (COMFORT 47).
         let lanes = project.tracks.map { t in
+            t.locked || project.frozen(t.id) != nil ? [] :
             t.clips.map { c in HandleZones.ClipBox(id: c.id, start: x(c.start), end: x(c.end), fadeInEnd: x(c.start + c.fadeIn), fadeOutStart: x(c.end - c.fadeOut)) }
         }
         let sel = session.selection.map { (start: x($0.lowerBound), end: x($0.upperBound)) }
@@ -553,8 +555,9 @@ final class TimelineOverlay: NSView {
     }
 
     override func mouseMoved(with event: NSEvent) {
-        let z = zone(at: convert(event.locationInWindow, from: nil))
-        cursor(for: z).set()
+        let at = convert(event.locationInWindow, from: nil)
+        let z = zone(at: at)
+        (timeline?.automation.pointer(at: at) ?? cursor(for: z)).set()
         if z != hover { hover = z; needsDisplay = true }
     }
 
@@ -584,12 +587,15 @@ final class TimelineOverlay: NSView {
             MainActor.assumeIsolated {
                 guard let self, let p = self.lastDragPoint else { return }
                 if p.x > self.bounds.width - 4 { self.timeline?.scroll(byPoints: 12) } else if p.x < 4 { self.timeline?.scroll(byPoints: -12) } else { self.stopScrolling(); return }
+                if let e = self.laneDragEvent, self.timeline?.automation.mouseDragged(e, at: p) == true { return }
                 self.drag(to: p, event: nil)
             }
         }
     }
 
-    private func stopScrolling() { autoscroll?.invalidate(); autoscroll = nil }
+    private func stopScrolling() { autoscroll?.invalidate(); autoscroll = nil; laneDragEvent = nil }
+    /// The last drag event of an automation point's drag, replayed while the view scrolls under it.
+    private var laneDragEvent: NSEvent?
 
     /// A handle or the selection followed to `p` (from mouseDragged, or the autoscroll timer with no event).
     private func drag(to p: NSPoint, event: NSEvent?) {
@@ -797,7 +803,7 @@ final class TimelineOverlay: NSView {
             default: return nil
             }
         }()
-        if let lane = hoverLane, handleDrag == nil, let track = project.tracks[safe: lane] {
+        if let lane = hoverLane, handleDrag == nil, let track = project.tracks[safe: lane], !track.locked, project.frozen(track.id) == nil {
             let top = laneTop(lane)
             for c in track.clips where viewport.x(of: Double(c.end)) - viewport.x(of: Double(c.start)) > 3 * HandleZones.fadeHandle {
                 let box = HandleZones.ClipBox(id: c.id, start: Double(viewport.x(of: Double(c.start))), end: Double(viewport.x(of: Double(c.end))),
@@ -990,6 +996,11 @@ final class TimelineOverlay: NSView {
         if let t = project.tracks[safe: laneIndex(at: p.y)] { session.currentTrack = t.id }
         if !areaMode, let lane = project.tracks[safe: laneIndex(at: p.y)] {
             let under = lane.clips.first { $0.range.contains(f) }
+            // The tools that change a clip say at once why they can't on a locked or frozen track, before any drag.
+            if ["split", "fade", "gain", "trim"].contains(tool), under != nil, lane.locked || project.frozen(lane.id) != nil {
+                session.say(lane.locked ? L10n.text("reason.trackLocked", lane.name) : L10n.text("freeze.refused", lane.name), .info)
+                return
+            }
             switch tool {
             case "split":
                 session.perform("split", ["at": .number(project.seconds(f)), "tracks": .array([.string(lane.id.uuidString)])])
@@ -1036,7 +1047,13 @@ final class TimelineOverlay: NSView {
 
     override func mouseDragged(with event: NSEvent) {
         let p = convert(event.locationInWindow, from: nil)
-        if timeline?.automation.mouseDragged(event, at: p) == true { return }
+        if timeline?.automation.mouseDragged(event, at: p) == true {
+            // A point dragged past the edge scrolls the view too, also with the mouse standing still (COMFORT 74).
+            lastDragPoint = p
+            laneDragEvent = event
+            if p.x > bounds.width - 4 || p.x < 4 { keepScrolling() }
+            return
+        }
         if var d = drawing {
             d.points.append(p)
             drawing = d
@@ -1067,7 +1084,7 @@ final class TimelineOverlay: NSView {
     }
 
     override func mouseUp(with event: NSEvent) {
-        if timeline?.automation.mouseUp(event, at: convert(event.locationInWindow, from: nil)) == true { return }
+        if timeline?.automation.mouseUp(event, at: convert(event.locationInWindow, from: nil)) == true { stopScrolling(); return }
         stopScrolling()
         snapX = nil
         lastDragPoint = nil
@@ -1242,6 +1259,11 @@ final class TimelineOverlay: NSView {
         if case .marker(let id) = HandleZones.zone(at: Double(p.x), Double(p.y), in: zoneLayout()) {
             session.currentMarker = id
             return CommandCenter.contextMenu(.marker)
+        }
+        // A clip: it is selected, and its menu has what acts on it (cut, copy, delete, split, fades, gain).
+        if !areaMode, let t = project.tracks[safe: laneIndex(at: p.y)], let c = t.clips.first(where: { $0.range.contains(frame(at: p)) }) {
+            if session.selection.map({ !($0.lowerBound <= c.start && $0.upperBound >= c.end) }) ?? true { session.selection = c.range }
+            return CommandCenter.contextMenu(.clip)
         }
         return CommandCenter.contextMenu(.timeline)
     }

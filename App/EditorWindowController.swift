@@ -59,10 +59,11 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         palette.isHidden = UserDefaults.standard.object(forKey: "toolPalette.visible") as? Bool == false
         toolPaletteView = palette
         // The track headers, beside the lanes and exactly as tall as they are (the strip rows below excluded).
-        let headers = NSHostingView(rootView: TrackHeaders(session: session) { [unowned self] id in
+        let headers = TrackHeaderHost(rootView: TrackHeaders(session: session) { [unowned self] id in
             self.session.currentTrack = id
             self.renameTrack(nil)
         })
+        headers.session = session
         headers.translatesAutoresizingMaskIntoConstraints = false
         // Its height is the lanes', never what SwiftUI would like: with its own size constraints the column pushed
         // the timeline down and left an empty band under the transport (seen 2026-11-25).
@@ -295,7 +296,9 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         let alert = NSAlert()
         alert.messageText = L10n.text("attenuate.title")
         alert.informativeText = L10n.text("attenuate.text")
-        let low = NSTextField(string: "4000"), high = NSTextField(string: "8000"), db = NSTextField(string: "-20")
+        // The values used last time (COMFORT 27), else a start that suits sibilance.
+        let low = NSTextField(string: Remembered.value("attenuate.low", "4000")), high = NSTextField(string: Remembered.value("attenuate.high", "8000")),
+            db = NSTextField(string: Remembered.value("attenuate.db", "-20"))
         for f in [low, high, db] { f.widthAnchor.constraint(equalToConstant: 80).isActive = true }
         low.setAccessibilityLabel(L10n.text("attenuate.from.ax"))
         high.setAccessibilityLabel(L10n.text("attenuate.to.ax"))
@@ -308,10 +311,12 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         alert.addButton(withTitle: L10n.text("button.cancel"))
         alert.beginSheetModal(for: window) { [session] response in
             guard response == .alertFirstButtonReturn else { return }
+            Remembered.keep(["attenuate.low": low.stringValue, "attenuate.high": high.stringValue, "attenuate.db": db.stringValue])
             // The agent's own operation, so the window and the API do the same (one undo step, over the selection).
             let lo = min(low.doubleValue, high.doubleValue), hi = max(low.doubleValue, high.doubleValue)
             session.perform("spectral_attenuate", ["low": .number(lo), "high": .number(hi), "db": .number(max(-80, min(0, db.doubleValue)))])
         }
+        alert.window.makeFirstResponder(low)
     }
 
     // Spectrogram areas (drawn with B, L, P in the spectrogram).
@@ -323,7 +328,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         let alert = NSAlert()
         alert.messageText = L10n.text("spectral.attenuate.action")
         alert.informativeText = session.spectralArea.map { L10n.message($0.shape.summarySaid.keyed) } ?? ""
-        let db = NSTextField(string: "-20")
+        let db = NSTextField(string: Remembered.value("attenuateArea.db", "-20"))
         db.setAccessibilityLabel(L10n.text("attenuate.change.ax"))
         db.frame = NSRect(x: 0, y: 0, width: 80, height: 22)
         alert.accessoryView = db
@@ -331,8 +336,10 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         alert.addButton(withTitle: L10n.text("button.cancel"))
         alert.beginSheetModal(for: window) { [session] r in
             guard r == .alertFirstButtonReturn else { return }
+            Remembered.keep(["attenuateArea.db": db.stringValue])
             session.editArea(.attenuate, db: max(-80, min(0, db.doubleValue)))
         }
+        alert.window.makeFirstResponder(db)
     }
 
     /// For anyone who can't draw: a box by numbers, on a chosen track.
@@ -653,7 +660,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         let alert = NSAlert()
         alert.messageText = L10n.text("limit.title")
         alert.informativeText = session.selection == nil ? L10n.text("limit.text.document") : L10n.text("limit.text.selection")
-        let field = NSTextField(string: "-1")
+        let field = NSTextField(string: Remembered.value("limit.ceiling", "-1"))
         field.alignment = .right
         field.setAccessibilityLabel(L10n.text("limit.ceiling.ax"))
         let unit = NSTextField(labelWithString: L10n.text("limit.ceiling.unit"))
@@ -676,6 +683,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
                     NSSound.beep()
                     return
                 }
+                Remembered.keep(["limit.ceiling": typed])
                 session.perform("limit", ["ceiling": .number(ceiling)])
             }
         }
@@ -818,8 +826,11 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
             split.setPosition(split.frame.width - 320, ofDividerAt: 0)
             UserDefaults.standard.set(true, forKey: "assistant.visible")
         }
+        // What was being written in the assistant's field is kept and put back once the request has gone (COMFORT 8).
+        let draft = assistant.input
         assistant.input = text
         assistant.send()
+        if !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, draft != text { assistant.input = draft }
     }
 
     @objc func transcribeVoiceTracks(_ sender: Any?) { startVoiceTranscription(splitTrack: nil) }
@@ -919,8 +930,14 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.wav, .aiff, UTType("org.xiph.flac") ?? .audio, .mpeg4Audio, UTType(filenameExtension: "opus") ?? .audio, .mp3]
         panel.allowsOtherFileTypes = true
-        panel.nameFieldStringValue = FileNames.safe(session.name, ext: "wav")
         let model = ExportChoices(hasSelection: session.selection != nil, wide: session.project.channels > 2)
+        // The name carries the chosen format's extension from the start, and follows it when the format changes, so
+        // the panel's question about a file of that name is about the file that will be written (COMFORT 16).
+        panel.nameFieldStringValue = FileNames.safe(session.name, ext: model.choice.fileExtension)
+        model.onChoice = { [weak panel] c in
+            guard let panel else { return }
+            panel.nameFieldStringValue = (panel.nameFieldStringValue as NSString).deletingPathExtension + "." + c.fileExtension
+        }
         panel.accessoryView = NSHostingView(rootView: ExportAccessory(model: model))
         panel.beginSheetModal(for: window) { [weak self] response in
             guard response == .OK, let chosen = panel.url, let self else { return }
@@ -1023,6 +1040,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
             return needs(session.selection != nil, selection)
         case "repair.healArea", "repair.attenuateArea":
             return needs(timeline.showsSpectrogram && session.spectralArea != nil, L10n.text("reason.spectralArea"))
+        case "view.automation.addPoint", "view.automation.previousPoint", "view.automation.nextPoint", "view.automation.previousLane", "view.automation.nextLane":
+            return needs(timeline.shownAutomation != nil, L10n.text("reason.showAutomation"))
         case "view.automation.strips":
             item?.state = timeline.showsStripLanes ? .on : .off
             return needs(timeline.shownAutomation != nil, L10n.text("reason.automation"))
@@ -1212,12 +1231,15 @@ struct JobLine: View {
     let jobs: [Job]
     let waits: [EditorSession.Wait]
 
-    private struct Item: Identifiable { let id: String, label: String, kind: String, stop: @MainActor () -> Void }
+    private struct Item: Identifiable { let id: String, label: String, kind: String, unknownProgress: Bool, stop: @MainActor () -> Void }
     private var items: [Item] {
         let s = session
-        return jobs.map { j in Item(id: j.id, label: Self.label(j), kind: j.kind) { JobRegistry.shared.stop(j.id, in: s) } }
-            + waits.map { w in Item(id: w.id.uuidString, label: w.label, kind: "wait", stop: w.stop) }
+        return jobs.map { j in Item(id: j.id, label: Self.label(j), kind: j.kind, unknownProgress: Self.unknownProgress(j)) { JobRegistry.shared.stop(j.id, in: s) } }
+            + waits.map { w in Item(id: w.id.uuidString, label: w.label, kind: "wait", unknownProgress: false, stop: w.stop) }
     }
+
+    /// A job that says nothing of how far it has come (freezing renders in one go): a spinner, never "0 %" (COMFORT 51).
+    static func unknownProgress(_ job: Job) -> Bool { job.kind == "freeze" && job.progress == 0 }
 
     static func label(_ job: Job) -> String {
         let percent = String(Int(job.progress * 100))
@@ -1225,7 +1247,7 @@ struct JobLine: View {
         case "transcribe": L10n.text("status.job.transcribing", percent)
         case "separate": L10n.text("status.job.separating", percent)
         case "diarize": L10n.text("status.job.diarizing", percent)
-        case "freeze": L10n.text("status.job.freezing", percent)
+        case "freeze": unknownProgress(job) ? L10n.text("status.job.freezing.unknown") : L10n.text("status.job.freezing", percent)
         default: L10n.text("status.job.repairing", percent)
         }
     }
@@ -1235,6 +1257,7 @@ struct JobLine: View {
             ForEach(items) { item in
                 let label = item.label
                 HStack(spacing: 5) {
+                    if item.unknownProgress { ProgressView().controlSize(.mini).accessibilityHidden(true) }
                     Text(label).foregroundStyle(Theme.neonColor).lineLimit(1)
                     Button { item.stop() } label: {
                         Image(systemName: "stop.circle.fill").font(.system(size: 13))
@@ -1309,6 +1332,8 @@ struct StatusBar: View {
 @MainActor
 @Observable
 final class ExportChoices {
+    /// The save panel follows the format (its name's extension).
+    @ObservationIgnored var onChoice: ((Choice) -> Void)?
     enum Choice: String, CaseIterable {
         case wav16 = "WAV 16-bit", wav24 = "WAV 24-bit", wavFloat = "WAV 32-bit float", aiff24 = "AIFF 24-bit",
              flac16 = "FLAC 16-bit", flac24 = "FLAC 24-bit", alac24 = "Apple Lossless (ALAC) 24-bit", aac = "AAC 192 kbit/s", opus = "Opus 96 kbit/s (Ogg)", mp3 = "MP3 160 kbit/s",
@@ -1335,7 +1360,7 @@ final class ExportChoices {
     }
     /// The format is remembered between exports.
     var choice: Choice = UserDefaults.standard.string(forKey: "export.format").flatMap(Choice.init(rawValue:)) ?? .wav24 {
-        didSet { UserDefaults.standard.set(choice.rawValue, forKey: "export.format") }
+        didSet { UserDefaults.standard.set(choice.rawValue, forKey: "export.format"); onChoice?(choice) }
     }
     /// MP3 (ID3), AAC and ALAC (a chapter track) and Opus (comments) carry chapters.
     var takesChapters: Bool { [.mp3, .mp3High, .aac, .alac24, .opus].contains(choice) }
@@ -1438,5 +1463,15 @@ final class TimelineFormatChooser: NSObject {
     @objc func chosen(_ sender: NSPopUpButton) {
         let f = formats[sender.indexOfSelectedItem]
         panel.nameFieldStringValue = (panel.nameFieldStringValue as NSString).deletingPathExtension + "." + f.fileExtension
+    }
+}
+
+/// What a dialog was given last time, offered again next time (COMFORT 27). Values as typed; per Mac, not per document.
+enum Remembered {
+    static func value(_ key: String, _ fallback: String) -> String {
+        UserDefaults.standard.string(forKey: "dialog." + key).flatMap { $0.isEmpty ? nil : $0 } ?? fallback
+    }
+    static func keep(_ values: [String: String]) {
+        for (k, v) in values { UserDefaults.standard.set(v, forKey: "dialog." + k) }
     }
 }

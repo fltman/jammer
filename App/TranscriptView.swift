@@ -44,6 +44,9 @@ final class TranscriptPanel: NSView, NSTextViewDelegate {
     private var readerScrolledAt: Date?
     private var scrollingToWord = false
     private var wasPlaying = false
+    /// A paid route is asking its provider or the user (OpenAI's model list, the question): the button waits, with a
+    /// spinner, so a second click doesn't start a second request (COMFORT 52).
+    private var asking = false { didSet { refresh() } }
     /// The panel's height, dragged at its top edge (remembered).
     private(set) lazy var heightConstraint: NSLayoutConstraint = {
         let saved = UserDefaults.standard.double(forKey: "transcript.height")
@@ -189,10 +192,12 @@ final class TranscriptPanel: NSView, NSTextViewDelegate {
         if session.version != shownVersion { rebuild() }
         let job = JobRegistry.shared.latest("transcribe", document: session.agentID)
         let running = job.map { !$0.isFinished } ?? false
-        progress.isHidden = !running
+        progress.isHidden = !running && !asking
+        progress.isIndeterminate = asking && !running
+        if asking && !running { progress.startAnimation(nil) } else { progress.stopAnimation(nil) }
         progress.doubleValue = job?.progress ?? 0
-        // While it runs, the button that started it stops it (COMFORT 7).
-        transcribeButton.isEnabled = true
+        // While it runs, the button that started it stops it (COMFORT 7); while a paid route asks, it waits.
+        transcribeButton.isEnabled = !asking || running
         transcribeButton.title = running ? L10n.text("job.stop") : session.project.transcripts.isEmpty ? L10n.text("transcript.transcribe") : L10n.text("transcript.transcribeAgain")
         transcribeButton.toolTip = running ? L10n.text("job.stop.help", L10n.text("transcript.working")) : nil
         if placed.isEmpty {
@@ -452,9 +457,13 @@ final class TranscriptPanel: NSView, NSTextViewDelegate {
         let locale = Locale(identifier: code)
         switch selectedEngine {
         case .openai:
-            Task { await transcribeAtOpenAI(locale) }
+            guard !asking else { return }
+            asking = true
+            Task { await transcribeAtOpenAI(locale); asking = false }
         case .bergetPianissimo:
-            Task { await transcribeAtBerget(locale) }
+            guard !asking else { return }
+            asking = true
+            Task { await transcribeAtBerget(locale); asking = false }
         default:
             _ = JobRegistry.shared.startTranscription(session, locale: locale, replace: !session.project.transcripts.isEmpty, engine: selectedEngine)
             refresh()

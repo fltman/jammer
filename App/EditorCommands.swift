@@ -42,6 +42,22 @@ extension EditorWindowController {
         field.selectText(nil)
     }
 
+    /// View › Automation's point and lane items: the same as their keys in the timeline (⌥Return, ⌥← ⌥→, ⌥↑ ⌥↓).
+    @objc func automationKeyCommand(_ sender: Any?) {
+        guard let id = (sender as? NSMenuItem)?.identifier?.rawValue, let window else { return }
+        let code: UInt16 = switch id {
+        case "view.automation.addPoint": 36
+        case "view.automation.previousPoint": 123
+        case "view.automation.nextPoint": 124
+        case "view.automation.previousLane": 126
+        default: 125
+        }
+        guard let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [.option], timestamp: 0, windowNumber: window.windowNumber,
+                                           context: nil, characters: "", charactersIgnoringModifiers: "", isARepeat: false, keyCode: code) else { return }
+        window.makeFirstResponder(timeline.firstResponderView)
+        if !timeline.automationKey(event) { NSSound.beep() }
+    }
+
     /// Edit › Remove Filler Words: every eh, ehm, öh… the transcript has, deleted from the audio as one step.
     @objc func removeFillerWords(_ sender: Any?) {
         let fillers = session.project.placedWords().filter {
