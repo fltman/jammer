@@ -15539,6 +15539,24 @@
         }
       }
     },
+    "marker.rename.title": {
+      "comment": "Timeline handles.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rename Marker"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Byt namn på markören"
+          }
+        }
+      }
+    },
     "measure.done.all": {
       "comment": "Status line after Measure Loudness on the whole document. Three values with their units.",
       "extractionState": "manual",
@@ -31609,6 +31627,42 @@
           "stringUnit": {
             "state": "translated",
             "value": "markering %1$@ till %2$@"
+          }
+        }
+      }
+    },
+    "timeline.drag.fade": {
+      "comment": "Timeline handles.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fade %@"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fade %@"
+          }
+        }
+      }
+    },
+    "timeline.drag.length": {
+      "comment": "Timeline handles.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Length %@"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Längd %@"
           }
         }
       }

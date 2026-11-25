@@ -345,6 +345,17 @@ final class TimelineOverlay: NSView {
     private var dragAnchor: Frame?
     private var didDrag = false
 
+    // The handles (the comfort block, step 2): what the pointer is over, a handle being dragged, its value so far,
+    // and what Esc puts back. The zones come from HandleZones, so the pointer and the press can't disagree.
+    private enum HandleDrag { case fadeIn(UUID), fadeOut(UUID), trimStart(UUID), trimEnd(UUID), marker(UUID) }
+    private var hover: HandleZones.Zone = .none
+    private var handleDrag: (kind: HandleDrag, value: Frame)?
+    private var selectionBeforeDrag: Range<Frame>??
+    private var cancelled = false
+    private var snapX: CGFloat?
+    private var lastDragPoint: NSPoint?
+    private var autoscroll: Timer?
+
     init(session: EditorSession, viewport: Viewport) {
         self.session = session
         self.viewport = viewport
@@ -389,10 +400,164 @@ final class TimelineOverlay: NSView {
         Frame(max(0, min(Double(project.length), viewport.frame(atX: p.x)).rounded()))
     }
 
+    // MARK: Handles and the pointer
+
+    private var flagAttributes: [NSAttributedString.Key: Any] { [.font: NSFont.systemFont(ofSize: 10, weight: .medium)] }
+
+    /// The timeline laid out in points for HandleZones: each lane's clips with their fades, the selection, the flags.
+    private func zoneLayout() -> HandleZones.Layout {
+        func x(_ f: Frame) -> Double { Double(viewport.x(of: Double(f))) }
+        let lanes = project.tracks.map { t in
+            t.clips.map { c in HandleZones.ClipBox(id: c.id, start: x(c.start), end: x(c.end), fadeInEnd: x(c.start + c.fadeIn), fadeOutStart: x(c.end - c.fadeOut)) }
+        }
+        let sel = session.selection.map { (start: x($0.lowerBound), end: x($0.upperBound)) }
+        let flags = project.markers.map { m in
+            HandleZones.MarkerFlag(id: m.id, x: x(m.position), width: Double((" \(m.name) " as NSString).size(withAttributes: flagAttributes).width) + 1)
+        }
+        return HandleZones.Layout(rulerHeight: Double(TimelineView.rulerHeight), laneHeight: Double(laneHeight), lanes: lanes, selection: sel, markers: flags)
+    }
+
+    private func zone(at p: NSPoint) -> HandleZones.Zone {
+        areaMode ? (p.y < TimelineView.rulerHeight ? .ruler : .none) : HandleZones.zone(at: Double(p.x), Double(p.y), in: zoneLayout())
+    }
+
+    private func cursor(for z: HandleZones.Zone) -> NSCursor {
+        if areaMode, z != .ruler { return .crosshair }
+        if handleDrag.map({ if case .marker = $0.kind { true } else { false } }) == true { return .closedHand }
+        switch z.pointer {
+        case .arrow: return .arrow
+        case .iBeam: return .iBeam
+        case .resizeLeftRight: return .resizeLeftRight
+        case .openHand: return .openHand
+        case .crosshair: return .crosshair
+        case .pointingHand: return .pointingHand
+        }
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved, .cursorUpdate, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self))
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        let z = zone(at: convert(event.locationInWindow, from: nil))
+        cursor(for: z).set()
+        if z != hover { hover = z; needsDisplay = true }
+    }
+
+    override func cursorUpdate(with event: NSEvent) { cursor(for: zone(at: convert(event.locationInWindow, from: nil))).set() }
+
+    override func mouseExited(with event: NSEvent) {
+        if hover != .none { hover = .none; needsDisplay = true }
+    }
+
+    /// Where a dragged edge may snap: clip edges, markers, the playhead and the selection's edges (⌃ turns it off).
+    private func snapped(_ f: Frame, event: NSEvent?, except: Frame? = nil) -> Frame {
+        snapX = nil
+        if event?.modifierFlags.contains(.control) == true { return f }
+        var frames = project.tracks.flatMap { $0.clips.flatMap { [$0.start, $0.end] } } + project.markers.map(\.position) + [session.playhead]
+        if let s = session.selection { frames += [s.lowerBound, s.upperBound] }
+        frames.removeAll { $0 == except }
+        let xs = frames.map { Double(viewport.x(of: Double($0))) }
+        guard let hit = HandleZones.snap(Double(viewport.x(of: Double(f))), to: xs), let i = xs.firstIndex(of: hit) else { return f }
+        snapX = CGFloat(hit)
+        return frames[i]
+    }
+
+    /// The pointer held past an edge keeps scrolling, also when the mouse stands still.
+    private func keepScrolling() {
+        guard autoscroll == nil else { return }
+        autoscroll = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, let p = self.lastDragPoint else { return }
+                if p.x > self.bounds.width - 4 { self.timeline?.scroll(byPoints: 12) } else if p.x < 4 { self.timeline?.scroll(byPoints: -12) } else { self.stopScrolling(); return }
+                self.drag(to: p, event: nil)
+            }
+        }
+    }
+
+    private func stopScrolling() { autoscroll?.invalidate(); autoscroll = nil }
+
+    /// A handle or the selection followed to `p` (from mouseDragged, or the autoscroll timer with no event).
+    private func drag(to p: NSPoint, event: NSEvent?) {
+        lastDragPoint = p
+        if p.x > bounds.width - 4 || p.x < 4 { keepScrolling() }
+        let f = frame(at: p)
+        if let h = handleDrag {
+            let c: (Clip, Int)? = {
+                switch h.kind {
+                case .fadeIn(let id), .fadeOut(let id), .trimStart(let id), .trimEnd(let id):
+                    return project.clipLocation(id).map { (project.tracks[$0.track].clips[$0.index], $0.track) }
+                case .marker: return nil
+                }
+            }()
+            switch h.kind {
+            case .fadeIn: if let (clip, _) = c { handleDrag!.value = max(0, min(f - clip.start, clip.length - clip.fadeOut)) }
+            case .fadeOut: if let (clip, _) = c { handleDrag!.value = max(0, min(clip.end - f, clip.length - clip.fadeIn)) }
+            case .trimStart: if let (clip, _) = c { handleDrag!.value = min(snapped(f, event: event, except: clip.start), clip.end - 1) }
+            case .trimEnd: if let (clip, _) = c { handleDrag!.value = max(snapped(f, event: event, except: clip.end), clip.start + 1) }
+            case .marker(let id): handleDrag!.value = snapped(f, event: event, except: project.markers.first { $0.id == id }?.position)
+            }
+            didDrag = true
+            needsDisplay = true
+            return
+        }
+        guard let anchor = dragAnchor else { return }
+        let g = snapped(f, event: event, except: anchor)
+        didDrag = true
+        session.selection = min(anchor, g)..<max(anchor, g)
+        needsDisplay = true
+    }
+
+    /// The end of a handle's drag: one undo step, through the same operation the agent uses.
+    private func commit(_ h: (kind: HandleDrag, value: Frame)) {
+        let s = Double(h.value) / project.sampleRate
+        switch h.kind {
+        case .fadeIn(let id): session.perform("set_clip", ["clip": .string(id.uuidString), "fadeIn": .number(s)])
+        case .fadeOut(let id): session.perform("set_clip", ["clip": .string(id.uuidString), "fadeOut": .number(s)])
+        case .trimStart(let id): session.perform("set_clip", ["clip": .string(id.uuidString), "start": .number(s)])
+        case .trimEnd(let id): session.perform("set_clip", ["clip": .string(id.uuidString), "end": .number(s)])
+        case .marker(let id): session.perform("set_marker", ["marker": .string(id.uuidString), "at": .number(s)])
+        }
+    }
+
+    /// Double-click on a flag: its name changed as one step.
+    private func renameMarker(_ id: UUID) {
+        guard let window, let m = project.markers.first(where: { $0.id == id }) else { return }
+        let field = NSTextField(string: m.name)
+        field.frame = NSRect(x: 0, y: 0, width: 260, height: 24)
+        let alert = NSAlert()
+        alert.messageText = L10n.text("marker.rename.title")
+        alert.accessoryView = field
+        alert.addButton(withTitle: L10n.text("button.ok"))
+        alert.addButton(withTitle: L10n.text("button.cancel"))
+        alert.window.initialFirstResponder = field
+        alert.beginSheetModal(for: window) { [weak self] answer in
+            let name = field.stringValue.trimmingCharacters(in: .whitespaces)
+            guard answer == .alertFirstButtonReturn, !name.isEmpty, name != m.name else { return }
+            self?.session.perform("set_marker", ["marker": .string(id.uuidString), "name": .string(name)])
+        }
+    }
+
+    /// Esc during a drag puts back what was there and ends it without a step (COMFORT.md 41).
+    private func cancelDrag() -> Bool {
+        guard handleDrag != nil || (dragAnchor != nil && didDrag) || selectionBeforeDrag != nil else { return false }
+        if let before = selectionBeforeDrag { session.selection = before }
+        handleDrag = nil
+        dragAnchor = nil
+        selectionBeforeDrag = nil
+        snapX = nil
+        cancelled = true
+        stopScrolling()
+        needsDisplay = true
+        return true
+    }
+
     // MARK: Drawing
 
     override func draw(_ dirtyRect: NSRect) {
-        defer { drawArea() } // the drawn spectrogram area, on top
+        defer { drawArea(); if !areaMode { drawHandles() } } // the drawn spectrogram area and the handles, on top
         let rate = project.sampleRate
         let h = TimelineView.rulerHeight
         // Ruler ticks: pick a step that leaves ~90 pt between labels (with a timecode, ~115 pt for its eleven
@@ -439,8 +604,8 @@ final class TimelineOverlay: NSView {
                     NSColor(white: 1, alpha: 0.25).setFill()
                     NSRect(x: x, y: y + 1, width: 1, height: laneHeight - 1).fill()
                 }
-                if c.fadeIn > 0 { drawFade(from: c.start, to: c.start + c.fadeIn, rising: true, y: y, height: laneHeight) }
-                if c.fadeOut > 0 { drawFade(from: c.end - c.fadeOut, to: c.end, rising: false, y: y, height: laneHeight) }
+                if c.fadeIn > 0 { drawFade(from: c.start, to: c.start + c.fadeIn, rising: true, y: y, height: laneHeight, shape: c.fadeShape) }
+                if c.fadeOut > 0 { drawFade(from: c.end - c.fadeOut, to: c.end, rising: false, y: y, height: laneHeight, shape: c.fadeShape) }
             }
             // On a plate: the name lies over the waveform and must be read whatever is under it. A track that plays
             // speech made with a cloned voice says so on its plate (the mark is the file's; SEND-TO-FLIMMER-API.md).
@@ -494,15 +659,105 @@ final class TimelineOverlay: NSView {
         tri.close(); tri.fill()
     }
 
-    private func drawFade(from a: Frame, to b: Frame, rising: Bool, y: CGFloat, height: CGFloat) {
+    /// A fade as it sounds: a straight line for a linear fade, the quarter sine of an equal-power one.
+    private func drawFade(from a: Frame, to b: Frame, rising: Bool, y: CGFloat, height: CGFloat, shape: FadeShape = .linear, colour: NSColor = NSColor(white: 1, alpha: 0.55)) {
         let x0 = viewport.x(of: Double(a)), x1 = viewport.x(of: Double(b))
-        guard x1 > 0, x0 < bounds.width else { return }
+        guard x1 > 0, x0 < bounds.width, x1 > x0 else { return }
         let path = NSBezierPath()
-        path.move(to: NSPoint(x: x0, y: rising ? y + height : y + 2))
-        path.line(to: NSPoint(x: x1, y: rising ? y + 2 : y + height))
+        let steps = shape == .linear ? 1 : 24
+        for i in 0...steps {
+            let r = Double(i) / Double(steps)
+            let gain = shape == .linear ? r : sin(r * .pi / 2)
+            let level = rising ? gain : (shape == .linear ? 1 - r : cos(r * .pi / 2))
+            let pt = NSPoint(x: x0 + (x1 - x0) * CGFloat(r), y: y + 2 + (height - 2) * CGFloat(1 - level))
+            if i == 0 { path.move(to: pt) } else { path.line(to: pt) }
+        }
         path.lineWidth = 1.2
-        NSColor(white: 1, alpha: 0.55).setStroke()
+        colour.setStroke()
         path.stroke()
+    }
+
+    /// The handles: fade squares on the lane under the pointer, grips on the selection's edges, and while a handle
+    /// is dragged, the draft with its value by the pointer and the line it snapped to.
+    private func drawHandles() {
+        let h = TimelineView.rulerHeight
+        let hoverLane: Int? = {
+            switch hover {
+            case .lane(let i): return i
+            case .fadeIn(let id), .fadeOut(let id), .trimStart(let id), .trimEnd(let id): return project.clipLocation(id)?.track
+            default: return nil
+            }
+        }()
+        if let lane = hoverLane, handleDrag == nil, let track = project.tracks[safe: lane] {
+            let top = laneTop(lane)
+            for c in track.clips where viewport.x(of: Double(c.end)) - viewport.x(of: Double(c.start)) > 3 * HandleZones.fadeHandle {
+                let box = HandleZones.ClipBox(id: c.id, start: Double(viewport.x(of: Double(c.start))), end: Double(viewport.x(of: Double(c.end))),
+                                              fadeInEnd: Double(viewport.x(of: Double(c.start + c.fadeIn))), fadeOutStart: Double(viewport.x(of: Double(c.end - c.fadeOut))))
+                for (x, hot) in [(CGFloat(box.fadeInHandle), hover == .fadeIn(clip: c.id)), (CGFloat(box.fadeOutHandle), hover == .fadeOut(clip: c.id))] {
+                    let s = HandleZones.fadeHandle
+                    (hot ? Theme.neon : NSColor(white: 1, alpha: 0.7)).setFill()
+                    NSBezierPath(roundedRect: NSRect(x: x - s / 2, y: top + 2, width: s, height: s), xRadius: 2, yRadius: 2).fill()
+                }
+            }
+        }
+        if let sel = session.selection {
+            for (edge, hot) in [(sel.lowerBound, hover == .selectionStart), (sel.upperBound, hover == .selectionEnd)] {
+                let x = viewport.x(of: Double(edge))
+                (hot ? Theme.neon : Theme.neon.withAlphaComponent(0.7)).setFill()
+                NSBezierPath(roundedRect: NSRect(x: x - 3, y: h, width: 6, height: 12), xRadius: 2, yRadius: 2).fill()
+            }
+        }
+        guard let d = handleDrag else { drawDragValue(); return }
+        switch d.kind {
+        case .fadeIn(let id), .fadeOut(let id):
+            if let l = project.clipLocation(id) {
+                let c = project.tracks[l.track].clips[l.index]
+                if case .fadeIn = d.kind { drawFade(from: c.start, to: c.start + d.value, rising: true, y: laneTop(l.track), height: laneHeight, shape: c.fadeShape, colour: Theme.neon) }
+                else { drawFade(from: c.end - d.value, to: c.end, rising: false, y: laneTop(l.track), height: laneHeight, shape: c.fadeShape, colour: Theme.neon) }
+            }
+        case .trimStart(let id), .trimEnd(let id):
+            if let l = project.clipLocation(id) {
+                let c = project.tracks[l.track].clips[l.index]
+                let x = viewport.x(of: Double(d.value))
+                let old = viewport.x(of: Double({ if case .trimStart = d.kind { c.start } else { c.end } }()))
+                Theme.neon.withAlphaComponent(0.15).setFill()
+                NSRect(x: min(x, old), y: laneTop(l.track), width: abs(x - old), height: laneHeight).fill()
+                Theme.neon.setFill()
+                NSRect(x: x - 1, y: laneTop(l.track), width: 2, height: laneHeight).fill()
+            }
+        case .marker:
+            Theme.marker.setFill()
+            NSRect(x: viewport.x(of: Double(d.value)) - 1, y: h, width: 2, height: bounds.height - h).fill()
+        }
+        drawDragValue()
+    }
+
+    /// The value by the pointer while dragging (COMFORT.md 18): a fade's length, an edge's time, the selection's length.
+    private func drawDragValue() {
+        if let x = snapX {
+            let line = NSBezierPath()
+            line.move(to: NSPoint(x: x, y: TimelineView.rulerHeight)); line.line(to: NSPoint(x: x, y: bounds.height))
+            line.setLineDash([3, 3], count: 2, phase: 0)
+            Theme.neon.setStroke()
+            line.stroke()
+        }
+        guard let p = lastDragPoint else { return }
+        let text: String
+        if let d = handleDrag {
+            let s = project.seconds(d.value)
+            switch d.kind {
+            case .fadeIn, .fadeOut: text = L10n.text("timeline.drag.fade", formatTime(s))
+            case .trimStart, .trimEnd, .marker: text = formatTime(s)
+            }
+        } else if let sel = session.selection, didDrag {
+            text = L10n.text("timeline.drag.length", formatTime(project.seconds(Frame(sel.count))))
+        } else { return }
+        let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium), .foregroundColor: NSColor.white]
+        let size = (text as NSString).size(withAttributes: attrs)
+        let box = NSRect(x: min(p.x + 12, bounds.width - size.width - 12), y: max(TimelineView.rulerHeight, p.y - size.height - 10), width: size.width + 8, height: size.height + 4)
+        NSColor(white: 0, alpha: 0.75).setFill()
+        NSBezierPath(roundedRect: box, xRadius: 4, yRadius: 4).fill()
+        (text as NSString).draw(at: NSPoint(x: box.minX + 4, y: box.minY + 2), withAttributes: attrs)
     }
 
     // MARK: Mouse
@@ -589,6 +844,29 @@ final class TimelineOverlay: NSView {
             dragAnchor = nil
             return
         }
+        cancelled = false
+        // A handle under the pointer is grabbed (the same zone the pointer showed).
+        if !areaMode {
+            let z = zone(at: p)
+            func clip(_ id: UUID) -> Clip? { project.clipLocation(id).map { project.tracks[$0.track].clips[$0.index] } }
+            switch z {
+            case .marker(let id):
+                if event.clickCount == 2 { renameMarker(id); return }
+                if let m = project.markers.first(where: { $0.id == id }) { handleDrag = (.marker(id), m.position); didDrag = false; NSCursor.closedHand.set(); return }
+            case .fadeIn(let id): if let c = clip(id) { handleDrag = (.fadeIn(id), c.fadeIn); didDrag = false; return }
+            case .fadeOut(let id): if let c = clip(id) { handleDrag = (.fadeOut(id), c.fadeOut); didDrag = false; return }
+            case .trimStart(let id): if let c = clip(id) { handleDrag = (.trimStart(id), c.start); didDrag = false; return }
+            case .trimEnd(let id): if let c = clip(id) { handleDrag = (.trimEnd(id), c.end); didDrag = false; return }
+            case .selectionStart, .selectionEnd:
+                if let s = session.selection, event.clickCount == 1 {
+                    selectionBeforeDrag = .some(s)
+                    dragAnchor = z == .selectionStart ? s.upperBound : s.lowerBound
+                    didDrag = false
+                    return
+                }
+            default: break
+            }
+        }
         if p.y < TimelineView.rulerHeight {
             session.seek(f)
             dragAnchor = nil
@@ -608,6 +886,7 @@ final class TimelineOverlay: NSView {
             dragAnchor = anchor
             session.selection = min(anchor, f)..<max(anchor, f)
         } else {
+            selectionBeforeDrag = .some(session.selection)
             dragAnchor = f
             didDrag = false
         }
@@ -623,19 +902,29 @@ final class TimelineOverlay: NSView {
             updateArea(d)
             return
         }
-        if p.y < TimelineView.rulerHeight && dragAnchor == nil {
+        if cancelled { return }
+        if p.y < TimelineView.rulerHeight && dragAnchor == nil && handleDrag == nil {
             session.seek(frame(at: p))
             return
         }
-        guard let anchor = dragAnchor else { return }
-        if p.x > bounds.width - 4 { timeline?.scroll(byPoints: 12) } else if p.x < 4 { timeline?.scroll(byPoints: -12) }
-        let f = frame(at: p)
-        didDrag = true
-        session.selection = min(anchor, f)..<max(anchor, f)
+        guard handleDrag != nil || dragAnchor != nil else { return }
+        drag(to: p, event: event)
     }
 
     override func mouseUp(with event: NSEvent) {
         if timeline?.automation.mouseUp(event, at: convert(event.locationInWindow, from: nil)) == true { return }
+        stopScrolling()
+        snapX = nil
+        lastDragPoint = nil
+        if cancelled { cancelled = false; dragAnchor = nil; handleDrag = nil; needsDisplay = true; return }
+        if let h = handleDrag {
+            handleDrag = nil
+            if didDrag { commit(h) } else if case .marker = h.kind { session.seek(h.value) }
+            needsDisplay = true
+            return
+        }
+        selectionBeforeDrag = nil
+        needsDisplay = true
         if let d = drawing {
             drawing = nil
             if !didDrag {
@@ -681,6 +970,7 @@ final class TimelineOverlay: NSView {
         switch event.keyCode {
         case 49: session.togglePlay() // space
         case 36: session.seek(0) // return
+        case 53 where cancelDrag(): break // escape: a drag in progress first
         case 53 where areaMode && session.spectralArea != nil: session.spectralArea = nil; needsDisplay = true // escape: the area first
         case 53: session.selection = nil // escape
         case 11 where areaMode: session.spectralTool = .box; session.status = L10n.text("spectral.tool.box") // B

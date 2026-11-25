@@ -38,6 +38,11 @@ public enum HandleZones {
         public init(id: UUID, start: Double, end: Double, fadeInEnd: Double, fadeOutStart: Double) {
             self.id = id; self.start = start; self.end = end; self.fadeInEnd = fadeInEnd; self.fadeOutStart = fadeOutStart
         }
+        /// Where the fade handles stand: at the end of each fade, but never closer to the clip's edge than a
+        /// handle's width (a clip at 0 s would otherwise put its handle on the window's edge, where macOS takes the
+        /// press for resizing the window; found trying it, 2026-11-25).
+        public var fadeInHandle: Double { max(fadeInEnd, start + HandleZones.fadeHandle / 2 + 2) }
+        public var fadeOutHandle: Double { min(fadeOutStart, end - HandleZones.fadeHandle / 2 - 2) }
     }
 
     public struct MarkerFlag: Sendable {
@@ -79,8 +84,8 @@ public enum HandleZones {
         // Fade handles: a square at the top of the lane where each fade ends (or at the clip's corner when it has none).
         if y < top + fadeHandle + 4 {
             for c in clips where c.end - c.start > 3 * fadeHandle {
-                if abs(x - c.fadeInEnd) <= fadeHandle / 2 + 1 { return .fadeIn(clip: c.id) }
-                if abs(x - c.fadeOutStart) <= fadeHandle / 2 + 1 { return .fadeOut(clip: c.id) }
+                if abs(x - c.fadeInHandle) <= fadeHandle / 2 + 1 { return .fadeIn(clip: c.id) }
+                if abs(x - c.fadeOutHandle) <= fadeHandle / 2 + 1 { return .fadeOut(clip: c.id) }
             }
         }
         if let s = l.selection {

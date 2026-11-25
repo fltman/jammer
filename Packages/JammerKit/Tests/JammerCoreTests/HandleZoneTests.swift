@@ -20,7 +20,9 @@ struct HandleZoneTests {
         func z(_ x: Double, _ y: Double) -> HandleZones.Zone { HandleZones.zone(at: x, y, in: l) }
         #expect(z(10, 5) == .ruler && z(10, 5).pointer == .arrow)
         #expect(z(510, 30) == .marker(m) && z(510, 30).pointer == .openHand)
-        #expect(z(161, 28) == .fadeIn(clip: a) && z(399, 28) == .fadeOut(clip: a))
+        #expect(z(161, 28) == .fadeIn(clip: a) && z(394, 28) == .fadeOut(clip: a))
+        // A clip with no fade keeps its handles a handle's width inside its edges (never on the window's edge).
+        #expect(z(56, 128) == .fadeIn(clip: b) && z(50, 128) != .fadeIn(clip: b))
         #expect(z(202, 60) == .selectionStart && z(248, 110) == .selectionEnd && z(202, 60).pointer == .resizeLeftRight)
         #expect(z(102, 110) == .trimStart(clip: a) && z(398, 110) == .trimEnd(clip: a))
         // The upper half of a lane keeps its plain selection drag over a clip edge.
