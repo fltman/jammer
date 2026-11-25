@@ -69,3 +69,26 @@ Built 2026-11-16 from OpenAI's documentation as read that day, and tested only a
 - **In the app**: the transcript panel has a choice, "On this Mac" or "OpenAI (your key, paid)". Transcribe with the second reads the provider's model list and then asks, saying what is uploaded (the whole of each file the document plays from, and how long that is, in how many pieces), that OpenAI charges for it by its own price list (Jämmer can't read one without a key and doesn't guess), that the transcript comes back without word times and what that means, and that OpenAI's terms have not been read. Nothing is sent before Send. Seen in the app on 2026-11-16 against a stand-in server on this Mac (never the provider): the choice in the panel, the dialog with the model list (only the models that transcribe files) and its text, Send uploading one piece of 0.8 MB for a 25 s file with `model`, `languages[]` and `file`, the transcript arriving in the panel marked as text only with every word's `start` and `end` null, and a word corrected in it.
 - A debug build can be pointed at a stand-in server on this Mac (`-openaiEndpoint http://127.0.0.1:<port>/v1 -openaiTestKey <anything>`), so the flow can be tried without a key; a release build has neither argument.
 - **Not read:** OpenAI's terms of use (the page answered 403 to the reader). What a user should know of them is to be written where the key is entered, from the page itself.
+
+## Naming voice tracks from introductions (measured 2026-11-25)
+
+Transcribe Voice Tracks names a track from how its speaker introduces themselves (`VoiceTrackTranscription.introducedName`). Until 2026-11-25 it took only "my name is" / "jag heter" at the very start of a sentence. A model test with Anders found an English track left unnamed after "I am Daniel".
+
+- **What it takes now.**
+  - **Strong forms** name any title-cased name that follows: "my name is", "my name's", "I'm called", "jag heter", "mitt namn är" and their kin in ten languages.
+  - **Weak forms** ("I'm", "I am", "jag är", Danish and Norwegian "jeg er") name a word only if it isn't on a short list of capitalised words that aren't names: nationalities, languages, days and months, so "I'm British" names nobody.
+  - **"This is", "it's", "det här är", "det är"** count only after a greeting ("Hi, this is Anna"), since "This is London" names nobody.
+  - **Greetings:** an introduction may follow a greeting even when the transcriber ends it with a comma ("Good morning, I'm Olivia", "God morgon, jag heter Maria"). Otherwise only the start of a sentence counts, which keeps out reported speech ("He said that my name is Bond").
+  - **Undetermined language:** a track heard as `und` is read with every language's phrases.
+- **How it was measured** (`IntroNamingEval`, `JAMMER_BENCH=1`, with the installed multilingual Whisper small, the model the feature requires; nothing downloaded).
+  - Six English macOS voices (Daniel, Moira, Karen, Samantha, Tessa, Rishi) said 8 introduction forms each, and Alva said 8 Swedish forms at three rates. A different name was used each time.
+  - Whisper detected the language and transcribed each clip, as the app does.
+  - Each voice also said 4 lines that name nobody as the speaker: "I'm British and I live in London.", "This is London calling.", "Jag är från Stockholm.", "Jag tror att Erik kommer senare." and the like.
+
+| | Right name before | Right name after | Wrong name after | Named where nobody should be (after) |
+|---|---|---|---|---|
+| English (6 voices × 8) | 5/48 (10 %) | 46/48 (96 %) | 2 (heard "Olivier", "Sirah") | 0/24 |
+| Swedish (Alva × 3 rates × 8) | 8/24 (33 %) | 21/24 (88 %) | 0 | 0/12 |
+
+All the misses left are mishearings: a name Whisper heard as another name, two Swedish lines at 200 words a minute heard as English nonsense, and one at 240 heard as "Jag är ju van". All the voices are synthetic, and there is only one Swedish voice, so these figures say what the rules catch, not how well real speakers are heard. In the app, Swedish tracks are transcribed by Pianissimo when it is installed; it was not part of this measurement.
+

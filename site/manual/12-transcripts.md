@@ -23,7 +23,7 @@ Choose **Pianissimo · Berget AI** for hosted Swedish transcription. Save your B
 
 Choose **Speech › Transcribe Voice Tracks** when each voice already has its own track, or **Speech › Split and Transcribe Speakers** after finding speakers in a shared recording. Install **Whisper small (multilingual)** under **Settings › Models** first. Whisper detects the language directly from the audio. Jämmer uses an installed Pianissimo model for Swedish or Danish and otherwise transcribes the track with multilingual Whisper. Short or ambiguous speech may have no identified language.
 
-Jämmer can name tracks from clear spoken introductions. If a speaker never gives their name, Jämmer looks for a handoff from the preceding speaker. When names repeat, it tries to distinguish them with a role, workplace, or interest said in the introductions, and uses numbers where necessary. You can turn naming off in the confirmation and review the names afterward. The audio stays on your Mac, and the result is one undo step.
+Jämmer can name tracks from clear spoken introductions, such as "My name is Anna", "Hi, I'm Anna", "Jag heter Anna" or "Hej, jag är Anna". "This is Anna" counts after a greeting, and "I'm British" names nobody. If a speaker never gives their name, Jämmer looks for a handoff from the preceding speaker. When names repeat, it tries to distinguish them with a role, workplace, or interest said in the introductions, and uses numbers where necessary. You can turn naming off in the confirmation and review the names afterward. The audio stays on your Mac, and the result is one undo step.
 
 ## Export transcripts
 

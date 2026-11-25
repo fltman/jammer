@@ -44,21 +44,43 @@ public enum VoiceTrackTranscription {
         return names.count == 1 ? names.first : nil
     }
 
+    /// How speakers name themselves, by language. `strong` names whatever title-cased name follows; `weak` ("I'm",
+    /// "jag är") only a word that isn't one of the capitalised non-names (`notNames`: "I'm British"); `greeted` ("this
+    /// is", "det här är") only after a greeting ("Hi, this is Anna"), since "This is London" names nobody.
+    /// Measured on synthetic voices (IntroNamingEval, docs/TRANSCRIPTION.md).
+    private static let selfPhrases: [String: (strong: String, weak: String, greeted: String)] = [
+        "sv": (#"jag heter|mitt namn är"#, #"jag är"#, #"det här är|det är"#),
+        "da": (#"jeg hedder|mit navn er"#, #"jeg er"#, #"det her er|det er"#),
+        "en": (#"my name is|my name['’]s|i am called|i['’]m called"#, #"i['’]m|i am"#, #"this is|it['’]s"#),
+        "de": (#"ich heiße|mein name ist"#, "", ""),
+        "fr": (#"je m['’]appelle|mon nom est"#, "", ""),
+        "es": (#"me llamo|mi nombre es"#, "", ""),
+        "it": (#"mi chiamo|il mio nome è"#, "", ""),
+        "no": (#"jeg heter|eg heiter|mitt namn er|mitt navn er"#, #"jeg er|eg er"#, #"dette er|det er"#),
+        "nl": (#"ik heet|mijn naam is"#, "", ""),
+        "pt": (#"me chamo|o meu nome é|meu nome é"#, "", ""),
+    ]
+
+    /// Capitalised words that follow "I'm" and aren't a name.
+    static let notNames: Set<String> = [
+        "I", "OK", "Okay", "Sorry", "English", "British", "American", "Canadian", "Australian", "Irish", "Scottish", "Welsh",
+        "Swedish", "Danish", "Norwegian", "Finnish", "German", "French", "Spanish", "Italian", "Dutch", "Portuguese", "Polish",
+        "Indian", "Chinese", "Japanese", "Korean", "African", "European", "Asian", "Jewish", "Muslim", "Christian", "Catholic",
+        "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday",
+        "January", "February", "March", "April", "June", "July", "August", "September", "October", "November", "December",
+    ]
+
     private static func selfNames(_ words: [Word], language: String) -> Set<String> {
-        let phrase = switch language {
-        case "sv": #"jag heter|mitt namn är"#
-        case "da": #"jeg hedder|mit navn er"#
-        case "en": #"my name is|i am called"#
-        case "de": #"ich heiße|mein name ist"#
-        case "fr": #"je m['’]appelle|mon nom est"#
-        case "es": #"me llamo|mi nombre es"#
-        case "it": #"mi chiamo|il mio nome è"#
-        case "no", "nb", "nn": #"jeg heter|eg heiter|mitt namn er|mitt navn er"#
-        case "nl": #"ik heet|mijn naam is"#
-        case "pt": #"me chamo|o meu nome é|meu nome é"#
-        default: ""
+        let key = ["nb", "nn"].contains(language) ? "no" : language
+        // A track whose language wasn't made out ("und") is read in every language that has phrases.
+        let sets = selfPhrases[key].map { [$0] } ?? Array(selfPhrases.values)
+        var names: Set<String> = []
+        for p in sets {
+            names.formUnion(extractNames(words, phrase: p.strong))
+            names.formUnion(extractNames(words, phrase: p.weak).subtracting(notNames))
+            names.formUnion(extractNames(words, phrase: p.greeted, greeting: true).subtracting(notNames))
         }
-        return extractNames(words, phrase: phrase)
+        return names
     }
 
     public struct Result: Sendable {
@@ -171,11 +193,16 @@ public enum VoiceTrackTranscription {
         return extractNames(words, phrase: phrase)
     }
 
-    private static func extractNames(_ words: [Word], phrase: String) -> Set<String> {
+    /// A greeting a speaker starts with: "Hi", "Good morning", "Hej allihop", "Hej och välkommen".
+    static let greeting = #"(?:hej|hejsan|hallå|hello|hi|hey|hallo|bonjour|hola|ciao|olá|good\s+(?:morning|afternoon|evening)|god\s*(?:morgon|middag|kväll|dag))"#
+        + #"(?:\s+(?:och\s+välkommen|and\s+welcome|everyone|everybody|all|there|allihop|allihopa|alla|alle))?[!,.]?\s+"#
+
+    private static func extractNames(_ words: [Word], phrase: String, greeting needed: Bool = false) -> Set<String> {
         guard !phrase.isEmpty else { return [] }
         let name = #"\p{Lu}[\p{L}\p{M}]*(?:[’'\-]\p{L}[\p{L}\p{M}]*)*"#
-        // Sentence starts and common greeting lead-ins, excluding embedded reported speech.
-        let pattern = #"(?:^|[.!?]\s+)(?i:(?:hej|hejsan|hello|hi|hallo|bonjour|hola|ciao|olá)[!,.]?\s+)?(?i:"# + phrase
+        // At a sentence's start (a dash the transcriber put there aside), or after a greeting even when a comma
+        // ends it ("Good morning, I'm Olivia"); never inside a sentence, which keeps out reported speech.
+        let pattern = #"(?:^|[.!?]\s+)[-–—]?\s*(?i:"# + greeting + #")"# + (needed ? "" : "?") + #"(?i:"# + phrase
             + #")\s+("# + name + #"(?:\s+"# + name + #"){0,2})(?=\s*(?:[.!?,;]|$)|\s+\p{Ll})"#
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
         let text = words.map(\.text).joined(separator: " ")

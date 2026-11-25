@@ -30,6 +30,40 @@ struct VoiceTrackTranscriptionTests {
         #expect(names[english.track.track.id] == "Beth")
     }
 
+    func named(_ text: String, _ language: String) -> String? {
+        let words = text.split(separator: " ").enumerated().map { i, t in Word(text: String(t), start: Frame(i * 4_800), end: Frame((i + 1) * 4_800)) }
+        return VoiceTrackTranscription.introducedName(words, language: language)
+    }
+
+    @Test("Introductions as people say them: I'm, I am, my name's, this is after a greeting, jag är, after a greeting and a comma")
+    func everydayIntroductions() {
+        #expect(named("Hi, I'm Sarah.", "en") == "Sarah")
+        #expect(named("I am Thomas.", "en") == "Thomas")
+        #expect(named("Hello there, my name's Lucy.", "en") == "Lucy")
+        #expect(named("Good morning, I'm Olivia from the newsroom.", "en") == "Olivia")
+        #expect(named("Hi everyone. This is Lucy.", "en") == "Lucy")
+        #expect(named("- Hello, I am Olivia and I work as a teacher.", "en") == "Olivia")
+        #expect(named("Hej, jag är Karin.", "sv") == "Karin")
+        #expect(named("Jag är Lars och jobbar som lärare.", "sv") == "Lars")
+        #expect(named("Hej allihop, det här är Johan.", "sv") == "Johan")
+        #expect(named("God morgon, jag heter Maria och kommer från Göteborg.", "sv") == "Maria")
+        #expect(named("Hej och välkommen, jag är Henrik!", "sv") == "Henrik")
+        // A track whose language wasn't made out is read in every language that has phrases.
+        #expect(named("Hello there, my name is Emma.", "und") == "Emma")
+    }
+
+    @Test("No name from what only sounds like one: a nationality, a place after this is, a name inside a sentence")
+    func notIntroductions() {
+        for line in ["I'm happy to be here today.", "I'm British and I live in London.", "This is London calling.",
+                     "I am sure that Daniel will join us later.", "He said that my name is Bond.", "I'm Swedish."] {
+            #expect(named(line, "en") == nil, "\(line)")
+        }
+        for line in ["Jag är glad att vara här.", "Jag är från Stockholm.", "Det här är Sverige.", "Jag tror att Erik kommer senare."] {
+            #expect(named(line, "sv") == nil, "\(line)")
+        }
+        #expect(named("Hi, I'm Anna. I'm Swedish.", "en") == "Anna")
+    }
+
     @Test func noGuessFromConflictingNamesOrDistantHandoff() {
         let host = result("Please welcome Sofia.", language: "en", at: 0)
         let conflicting = result("My name is Beth. My name is Anne.", language: "en", at: 1)
