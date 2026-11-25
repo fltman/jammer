@@ -499,11 +499,17 @@ struct MixerStrip: View {
             .frame(width: 150)
             .accessibilityLabel(L10n.text("mixer.level.ax", name))
             .accessibilityValue(Text(Self.levelText(level)))
-            Text(Self.levelText(level)).monospacedDigit().lineLimit(1).frame(width: 72, alignment: .trailing)
-                // A double-click on the value puts the level back to 0 dB, one step (COMFORT 65).
-                .contentShape(.rect)
-                .onTapGesture(count: 2) { if gainDB != 0 { level = 0; change(["gainDB": .number(0)]) } }
-                .help(L10n.text("mixer.level.reset.help"))
+            // Typed into with a click, set back to 0 dB with a double-click (COMFORT 17, 65).
+            EditableValue(text: Self.levelText(level), draftText: L10n.number(gainDB, 1), help: L10n.text("mixer.level.edit.help"),
+                          font: .body.monospacedDigit(), width: 72,
+                          commit: { typed in
+                              guard let v = ValueEntry.decibels(typed) else { return false }
+                              level = v
+                              if v != gainDB { change(["gainDB": .number(v)]) }
+                              return true
+                          },
+                          reset: { if gainDB != 0 { level = 0; change(["gainDB": .number(0)]) } })
+                .frame(width: 72, alignment: .trailing)
             if Operations.automationOn {
                 // How the fader is taken while the sound plays. Not saved; Read again when the window leaves the front.
                 Picker(L10n.text("mixer.mode.label", name), selection: Binding(get: { session.writeMode(id) }, set: { session.writeModes[id] = $0 })) {
@@ -531,12 +537,23 @@ struct MixerStrip: View {
                 .accessibilityLabel(L10n.text("mixer.pan.ax", name))
                 .accessibilityValue(Text(panAutomated ? L10n.text("mixer.pan.automated.help") : Self.panText(position)))
                 .accessibilityIdentifier("mixer.strip.pan")
-                Text(panAutomated ? L10n.text("mixer.pan.automated") : Self.panText(position)).font(.caption).lineLimit(1).frame(width: 72, alignment: .leading)
-                    // A double-click on the value puts the pan back in the middle (COMFORT 65).
-                    .contentShape(.rect)
-                    .onTapGesture(count: 2) { if !panAutomated, pan != 0 { position = 0; change(["pan": .number(0)]) } }
-                    .help(panAutomated ? "" : L10n.text("mixer.pan.reset.help"))
-                    .foregroundStyle(panAutomated ? .secondary : .primary)
+                Group {
+                if panAutomated {
+                    Text(L10n.text("mixer.pan.automated")).font(.caption).lineLimit(1).frame(width: 72, alignment: .leading)
+                } else {
+                    EditableValue(text: Self.panText(position), draftText: String(Int((pan * 100).rounded())), help: L10n.text("mixer.pan.edit.help"),
+                                  font: .caption, width: 72,
+                                  commit: { typed in
+                                      guard let v = ValueEntry.pan(typed) else { return false }
+                                      position = v
+                                      if v != pan { change(["pan": .number(v)]) }
+                                      return true
+                                  },
+                                  reset: { if pan != 0 { position = 0; change(["pan": .number(0)]) } })
+                        .frame(width: 72, alignment: .leading)
+                }
+                }
+                    .foregroundStyle(panAutomated ? Color.secondary : Color.primary)
                     .help(panAutomated ? L10n.text("mixer.pan.automated.help") : "")
             } else if field {
                 // A sound field turned round the listener: the slider turns it (to the left is to the left, as a place),

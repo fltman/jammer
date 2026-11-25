@@ -22,7 +22,7 @@ Jämmer listens for the sentence in the transcript where you selected. If the se
 
 ## Saying new words
 
-Select the words to replace, then choose **Speech › Overdub…**. Pick the voice, write what it should say (the selected words are filled in to start from), and send. The new speech takes the selection's place, and what follows moves with its length, as a cut does. It is one undo step.
+Select the words to replace, then choose **Speech › Overdub…**. Pick the voice, write what it should say (the selected words are filled in to start from; Return makes a new line), and send with **Send** or ⌘Return. If you cancel, what you wrote is still there the next time you open Overdub for the same words. The new speech takes the selection's place, and what follows moves with its length, as a cut does. It is one undo step.
 
 The new clip is marked as made with a cloned voice, and its track shows **Cloned voice**. The mark stays in the document, follows the sound through cuts, mixes and repairs, and an exported WAV (or one sent to Flimmer) says so in its metadata. A file from another app that says it contains speech made with a cloned voice is marked the same way when it comes in. ElevenLabs puts an inaudible watermark in what it makes. Jämmer keeps ElevenLabs' file exactly as it came, watermark included, and plays a decoded copy.
 

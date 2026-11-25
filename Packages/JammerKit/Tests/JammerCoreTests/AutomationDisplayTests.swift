@@ -180,3 +180,19 @@ struct AutomationDisplayTests {
         #expect(long.lane.points.count <= Automation.maxPoints && long.tolerance > Automation.writeTolerance)
     }
 }
+
+@Suite("Copying automation points")
+struct AutomationCopyTests {
+    @Test("Copied points keep their spacing; pasted at a place, they replace what lay in their stretch, in range")
+    func copyPaste() {
+        let lane = AutomationLane(strip: UUID(), param: .gain, shape: .linear,
+                                  points: [.init(frame: 100, value: -3), .init(frame: 200, value: -6), .init(frame: 400, value: 0), .init(frame: 1_000, value: -1)])
+        let copied = lane.copying([0, 1])
+        #expect(copied == [.init(frame: 0, value: -3), .init(frame: 100, value: -6)])
+        let (pasted, at) = lane.pasting(copied, at: 350, limit: 10_000)
+        #expect(pasted.points.map(\.frame) == [100, 200, 350, 450, 1_000], "the point at 400 lay in the pasted stretch")
+        #expect(at.map { pasted.points[$0].frame } == [350, 450])
+        let loud = lane.pasting([.init(frame: 0, value: 99)], at: 0, limit: 10_000).lane
+        #expect(loud.points.first!.value <= Automation.range(of: .gain).upperBound)
+    }
+}

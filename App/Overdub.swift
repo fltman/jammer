@@ -157,10 +157,21 @@ extension EditorWindowController {
         let model = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 300, height: 26))
         model.addItems(withTitles: Overdub.models)
         model.setAccessibilityLabel(L10n.text("overdub.model.ax"))
-        let text = NSTextField(frame: NSRect(x: 0, y: 0, width: 380, height: 60))
+        // A field of several lines (COMFORT 63): Return is a new line in it, ⌘Return sends.
+        let box = NSScrollView(frame: NSRect(x: 0, y: 0, width: 380, height: 72))
+        box.hasVerticalScroller = true
+        box.borderType = .bezelBorder
+        let text = NSTextView(frame: box.bounds)
+        text.isRichText = false
+        text.font = .systemFont(ofSize: NSFont.systemFontSize)
+        text.autoresizingMask = [.width]
+        text.isVerticallyResizable = true
+        text.textContainer?.widthTracksTextView = true
+        text.allowsUndo = true
+        box.documentView = text
         // The words there, or what was typed for this same stretch before a Cancel (COMFORT 8).
         let draftKey = "overdub.\(sel.lowerBound)-\(sel.upperBound)"
-        text.stringValue = session.drafts[draftKey] ?? p.placedWords(in: sel).map(\.word.text).joined(separator: " ")
+        text.string = session.drafts[draftKey] ?? p.placedWords(in: sel).map(\.word.text).joined(separator: " ")
         text.setAccessibilityLabel(L10n.text("overdub.text.ax"))
         text.setAccessibilityIdentifier("overdub.text")
         let note = label(L10n.text("overdub.ask.note"))
@@ -171,16 +182,20 @@ extension EditorWindowController {
         alert.addButton(withTitle: L10n.text("button.send"))
         alert.addButton(withTitle: L10n.text("button.cancel"))
         alert.returnNeverPays()
-        UnknownPriceBox.place([pick, text, model, note, unknown.view], in: alert)
+        // Sending takes ⌘Return, never Return alone, which is a new line in the text (COMFORT 60, 63).
+        alert.buttons[0].keyEquivalent = "\r"
+        alert.buttons[0].keyEquivalentModifierMask = [.command]
+        alert.buttons[0].toolTip = L10n.text("overdub.send.help")
+        UnknownPriceBox.place([pick, box, model, note, unknown.view], in: alert)
         unknown.gate(alert.buttons[0])
         let answer: NSApplication.ModalResponse
         if let w = window { answer = await alert.beginSheetModal(for: w) } else { answer = alert.runModal() }
-        guard answer == .alertFirstButtonReturn else { session.drafts[draftKey] = text.stringValue; return }
+        guard answer == .alertFirstButtonReturn else { session.drafts[draftKey] = text.string; return }
         session.drafts[draftKey] = nil
         unknown.sent()
         let voice = voices.indices.contains(pick.indexOfSelectedItem) ? voices[pick.indexOfSelectedItem] : first
         session.say(L10n.text("overdub.working", voice.name), .progress)
-        let session = self.session, words = text.stringValue, chosenModel = model.titleOfSelectedItem ?? Overdub.models[0]
+        let session = self.session, words = text.string.replacingOccurrences(of: "\n", with: " "), chosenModel = model.titleOfSelectedItem ?? Overdub.models[0]
         let request = Task { try await session.overdub(voice: voice, range: sel, text: words, model: chosenModel, track: track) }
         let wait = session.beginWait(L10n.text("overdub.working", voice.name)) { request.cancel() }
         defer { session.endWait(wait) }

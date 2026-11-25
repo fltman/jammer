@@ -646,6 +646,40 @@ final class AutomationLanesView: NSView {
     }
 
     /// A key in the timeline, offered here first. True: it was about a lane or a point.
+    // MARK: Copying points (COMFORT 33)
+
+    /// Points copied from a lane, with the kind of lane they came from; pasted only into a lane of that kind.
+    static var clipboard: (param: AutomationLane.Param, points: [AutomationPoint])?
+
+    /// Points are selected here: Cut and Copy are theirs.
+    var hasChosenPoints: Bool { isActive && ownLane != nil && !chosen.isEmpty }
+    /// A lane of the copied kind has the keys: Paste is its.
+    var canPastePoints: Bool { isActive && Self.clipboard?.param == shown && laneToChange() != nil }
+
+    func copyPoints(cut: Bool) -> Bool {
+        guard hasChosenPoints, let shown, let lane = ownLane else { return false }
+        let many = chosen
+        Self.clipboard = (shown, lane.copying(many))
+        if cut {
+            var less = lane
+            for i in many.sorted(by: >) where less.points.indices.contains(i) { less.points.remove(at: i) }
+            selected = nil
+            send(less, saying: L10n.count("automation.points.cut", many.count))
+        } else {
+            session.status = L10n.count("automation.points.copied", many.count)
+        }
+        return true
+    }
+
+    func pastePoints() -> Bool {
+        guard canPastePoints, let c = Self.clipboard, let lane = laneToChange() else { return false }
+        let (pasted, at) = lane.pasting(c.points, at: session.playhead, limit: project.length)
+        selected = at.first
+        others = Set(at.dropFirst())
+        send(pasted, saying: L10n.count("automation.points.pasted", at.count))
+        return true
+    }
+
     /// The key came up: the nudges it made go as one step.
     func keyUp() {
         guard let n = heldNudge else { return }

@@ -56,7 +56,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         omnibarRoom.setContentHuggingPriority(.required, for: .vertical)
         // The tool palette in a column of its own beside the timeline (never over the waveform).
         let palette = NSHostingView(rootView: ToolPalette(session: session) { [unowned self] id in self.chooseTool(id) })
-        palette.isHidden = UserDefaults.standard.object(forKey: "toolPalette.visible") as? Bool == false
+        palette.isHidden = !PanelMemory.shown("toolPalette.visible", session, otherwise: true)
         toolPaletteView = palette
         // The track headers, beside the lanes and exactly as tall as they are (the strip rows below excluded).
         let headers = TrackHeaderHost(rootView: TrackHeaders(session: session) { [unowned self] id in
@@ -77,7 +77,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         timelineRow.alignment = .height
         timelineRow.setContentHuggingPriority(.defaultLow, for: .vertical)
         let stack = NSStackView(views: [transport, timelineRow, transcript, omnibarRoom, statusBar])
-        transcript.isHidden = !UserDefaults.standard.bool(forKey: "transcript.visible")
+        transcript.isHidden = !PanelMemory.shown("transcript.visible", session, otherwise: false)
         // Its own height, dragged at its top edge and remembered (TranscriptPanel.heightConstraint).
         transcript.setContentHuggingPriority(.defaultLow, for: .vertical)
         stack.orientation = .vertical
@@ -100,7 +100,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         // Its width is ours (at least 260, preferably 320), not what SwiftUI offers: with the field focused, the
         // field editor of a vertical text field made the panel's least width about 600 pt (seen 2026-11-17).
         assistantHost.sizingOptions = []
-        assistantHost.isHidden = !UserDefaults.standard.bool(forKey: "assistant.visible")
+        assistantHost.isHidden = !PanelMemory.shown("assistant.visible", session, otherwise: false)
         // A split view starts its panes at the sizes of their frames, and a hosting view's first frame is its
         // content's ideal size: the assistant's intro sentence made that about 600 pt, which the panel's holding
         // priority then kept (seen 2026-11-17). Both start at a size of ours: the panel 320 pt.
@@ -400,7 +400,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
             view.isHidden = true
             window?.makeFirstResponder(timeline)
         }
-        UserDefaults.standard.set(!view.isHidden, forKey: "assistant.visible")
+        PanelMemory.keep(!view.isHidden, "assistant.visible", session)
     }
 
     /// From the command palette: always to the field, never away from it.
@@ -410,14 +410,14 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         if view.isHidden {
             view.isHidden = false
             split.setPosition(split.frame.width - 320, ofDividerAt: 0)
-            UserDefaults.standard.set(true, forKey: "assistant.visible")
+            PanelMemory.keep(true, "assistant.visible", session)
         }
         assistant.focusRequest += 1
     }
 
     @objc func toggleTranscript(_ sender: Any?) {
         transcript.isHidden.toggle()
-        UserDefaults.standard.set(!transcript.isHidden, forKey: "transcript.visible")
+        PanelMemory.keep(!transcript.isHidden, "transcript.visible", session)
     }
 
     /// File › Send to Flimmer…: the sound of a film that came from Flimmer goes back to it (docs/PLAN.md).
@@ -824,7 +824,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         if view.isHidden {
             view.isHidden = false
             split.setPosition(split.frame.width - 320, ofDividerAt: 0)
-            UserDefaults.standard.set(true, forKey: "assistant.visible")
+            PanelMemory.keep(true, "assistant.visible", session)
         }
         // What was being written in the assistant's field is kept and put back once the request has gone (COMFORT 8).
         let draft = assistant.input
@@ -1498,5 +1498,34 @@ enum ExportFolders {
     }
     static func keep(_ file: URL, _ kind: String) {
         UserDefaults.standard.set(file.deletingLastPathComponent().path, forKey: "export.folder." + kind)
+    }
+}
+
+/// Which panels a document had open (COMFORT 68): the transcript, the assistant, the tool palette. A saved document
+/// comes back with its own; a new one gets what was chosen last anywhere. Per Mac, by the file's path; the 200 most
+/// recent documents are kept.
+@MainActor
+enum PanelMemory {
+    private static let byDocument = "panels.byDocument"
+
+    static func shown(_ key: String, _ session: EditorSession, otherwise fallback: Bool) -> Bool {
+        if let path = session.document?.fileURL?.path,
+           let mine = (UserDefaults.standard.dictionary(forKey: byDocument)?[path] as? [String: Any])?[key] as? Bool { return mine }
+        return UserDefaults.standard.object(forKey: key) as? Bool ?? fallback
+    }
+
+    static func keep(_ shown: Bool, _ key: String, _ session: EditorSession) {
+        UserDefaults.standard.set(shown, forKey: key)
+        guard let path = session.document?.fileURL?.path else { return }
+        var all = UserDefaults.standard.dictionary(forKey: byDocument) ?? [:]
+        var mine = all[path] as? [String: Any] ?? [:]
+        mine[key] = shown
+        mine["at"] = Date().timeIntervalSince1970
+        all[path] = mine
+        if all.count > 200 {
+            let oldest = all.sorted { (($0.value as? [String: Any])?["at"] as? Double ?? 0) < (($1.value as? [String: Any])?["at"] as? Double ?? 0) }
+            for (k, _) in oldest.prefix(all.count - 200) { all[k] = nil }
+        }
+        UserDefaults.standard.set(all, forKey: byDocument)
     }
 }

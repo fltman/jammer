@@ -103,7 +103,7 @@ extension EditorWindowController {
     @objc func toggleToolPalette(_ sender: Any?) {
         guard let v = toolPaletteView else { return }
         v.isHidden.toggle()
-        UserDefaults.standard.set(!v.isHidden, forKey: "toolPalette.visible")
+        PanelMemory.keep(!v.isHidden, "toolPalette.visible", session)
         (sender as? NSMenuItem)?.title = L10n.text(v.isHidden ? "view.toolPalette" : "view.hideToolPalette")
     }
 

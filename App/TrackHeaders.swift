@@ -70,12 +70,15 @@ private struct TrackHeader: View {
                 .help(lockLabel)
                 .accessibilityLabel(lockLabel)
                 Spacer(minLength: 0)
-                Text(L10n.number(level ?? track.gainDB, 1, sign: true) + " dB").font(.system(size: 10, design: .monospaced))
-                    .foregroundStyle(.secondary).lineLimit(1)
-                    // A double-click on the value puts the level back to 0 dB, one step (COMFORT 65).
-                    .contentShape(.rect)
-                    .onTapGesture(count: 2) { if track.gainDB != 0 { set(["gainDB": .number(0)]) } }
-                    .help(L10n.text("mixer.level.reset.help"))
+                EditableValue(text: L10n.number(level ?? track.gainDB, 1, sign: true) + " dB", draftText: L10n.number(track.gainDB, 1),
+                              help: L10n.text("mixer.level.edit.help"), width: 52,
+                              commit: { typed in
+                                  guard let v = ValueEntry.decibels(typed) else { return false }
+                                  if v != track.gainDB { set(["gainDB": .number(v)]) }
+                                  return true
+                              },
+                              reset: { if track.gainDB != 0 { set(["gainDB": .number(0)]) } })
+                    .foregroundStyle(.secondary)
             }
             MeterBar(level: session.meters.level(track.id)) { session.meters.clearClip(track.id) }.frame(height: 6)
             if height >= 74 {
@@ -149,5 +152,43 @@ final class TrackHeaderHost: NSHostingView<TrackHeaders> {
         guard y >= 0, lane > 0, let t = session.project.tracks[safe: Int(y / lane)] else { return nil }
         session.currentTrack = t.id
         return CommandCenter.contextMenu(.track)
+    }
+}
+
+/// A slider's value as text that can be typed into (COMFORT 17) and reset (COMFORT 65): a click opens a field with the
+/// number, Return applies it as one step (ValueEntry reads it as people write it), Esc or leaving it changes nothing,
+/// a double-click sets the default back.
+struct EditableValue: View {
+    let text: String
+    /// What the field starts with: the number alone.
+    let draftText: String
+    let help: String
+    var font: Font = .system(size: 10, design: .monospaced)
+    var width: CGFloat = 64
+    /// The typed text, applied; false when it isn't a value (a beep, and the field stays).
+    let commit: (String) -> Bool
+    let reset: () -> Void
+    @State private var draft: String?
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        if let d = draft {
+            TextField("", text: Binding(get: { d }, set: { draft = $0 }))
+                .font(font)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: width)
+                .focused($focused)
+                .onAppear { focused = true }
+                .onSubmit { if commit(draft ?? "") { draft = nil } else { NSSound.beep() } }
+                .onExitCommand { draft = nil }
+                .onChange(of: focused) { _, now in if !now { draft = nil } }
+                .accessibilityLabel(help)
+        } else {
+            Text(text).font(font).lineLimit(1)
+                .contentShape(.rect)
+                .onTapGesture(count: 2, perform: reset)
+                .onTapGesture { draft = draftText }
+                .help(help)
+        }
     }
 }

@@ -51,6 +51,9 @@ final class TimelineView: NSView {
         if stripHeight.constant != h { stripHeight.constant = h }
         if !showsStripLanes || n == 0, stripLanes.isActive { stripLanes.isActive = false; automation.isActive = true }
     }
+    /// The lane view that is worked in (the tracks' lanes or the strips' rows).
+    var activeLanes: AutomationLanesView { stripLanes.isActive ? stripLanes : automation }
+
     /// A key came up: nudges held in either lane view go as one step.
     func automationKeyUp() {
         automation.keyUp()
@@ -439,6 +442,51 @@ final class TimelineOverlay: NSView {
     override func accessibilityRole() -> NSAccessibility.Role? { .slider }
     override func accessibilityRoleDescription() -> String? { L10n.text("timeline.ax.role") }
     override func accessibilityLabel() -> String? { L10n.text("timeline.ax.label") }
+    /// The clips, as elements of their own (VoiceOver can reach each, and so can a test): named with their times and
+    /// track, where they are drawn; press selects one, Show Menu gives its menu (COMFORT 37, the coordinator's note).
+    override func accessibilityChildren() -> [Any]? {
+        var out: [ClipAXElement] = []
+        for (t, track) in project.tracks.enumerated() {
+            for c in track.clips {
+                let x0 = viewport.x(of: Double(c.start)), x1 = viewport.x(of: Double(c.end))
+                guard x1 > 0, x0 < bounds.width else { continue }
+                let e = clipElements[c.id] ?? ClipAXElement(overlay: self, clip: c.id)
+                clipElements[c.id] = e
+                let rect = NSRect(x: max(0, x0), y: laneTop(t), width: min(bounds.width, x1) - max(0, x0), height: laneHeight)
+                e.setAccessibilityFrameInParentSpace(rect)
+                e.setAccessibilityLabel(L10n.text("timeline.ax.clip", project.source(c.sourceID)?.name ?? "?", formatTime(project.seconds(c.start)),
+                                                  formatTime(project.seconds(c.end)), track.name))
+                out.append(e)
+            }
+        }
+        let shown = Set(out.map(\.clip))
+        clipElements = clipElements.filter { shown.contains($0.key) }
+        return out
+    }
+    private var clipElements: [UUID: ClipAXElement] = [:]
+
+    /// Press on a clip's element: it is selected, on its track.
+    func selectClip(_ id: UUID) -> Bool {
+        guard let (t, i) = project.clipLocation(id) else { return false }
+        session.currentTrack = project.tracks[t].id
+        session.selection = project.tracks[t].clips[i].range
+        return true
+    }
+
+    /// Show Menu on a clip's element: selected, and its menu where it is drawn.
+    func showClipMenu(_ id: UUID) -> Bool {
+        guard selectClip(id), let (t, i) = project.clipLocation(id) else { return false }
+        let c = project.tracks[t].clips[i]
+        let x = (viewport.x(of: Double(c.start)) + viewport.x(of: Double(c.end))) / 2
+        let at = NSPoint(x: max(4, min(bounds.width - 4, x)), y: laneTop(t) + laneHeight / 2)
+        // Shown right after the action returns: a menu tracked inside it would keep VoiceOver (or any caller) waiting.
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            CommandCenter.contextMenu(.clip).popUp(positioning: nil, at: at, in: self)
+        }
+        return true
+    }
+
     override func accessibilityValue() -> Any? {
         let p = session.project
         var text = L10n.text("timeline.ax.playhead", formatTime(p.seconds(session.playhead)), formatTime(p.duration))
@@ -1236,16 +1284,18 @@ final class TimelineOverlay: NSView {
         }
     }
 
-    @objc func cut(_ sender: Any?) { session.perform("cut") }
-    @objc func copy(_ sender: Any?) { session.perform("copy") }
-    @objc func paste(_ sender: Any?) { session.perform("paste") }
+    // Selected automation points are cut, copied and pasted as points (COMFORT 33); otherwise the selection's audio.
+    @objc func cut(_ sender: Any?) { if timeline?.activeLanes.copyPoints(cut: true) != true { session.perform("cut") } }
+    @objc func copy(_ sender: Any?) { if timeline?.activeLanes.copyPoints(cut: false) != true { session.perform("copy") } }
+    @objc func paste(_ sender: Any?) { if timeline?.activeLanes.pastePoints() != true { session.perform("paste") } }
     @objc func delete(_ sender: Any?) { if session.selection != nil { session.perform("delete") } else { NSSound.beep() } }
     @objc override func selectAll(_ sender: Any?) { session.perform("select_all") }
 
     func validate(_ item: NSMenuItem) -> Bool {
         let (ok, why): (Bool, String?) = switch item.action {
-        case #selector(cut(_:)), #selector(copy(_:)), #selector(delete(_:)): (session.selection != nil, L10n.text("reason.selection"))
-        case #selector(paste(_:)): (AppClipboard.content != nil, L10n.text("reason.clipboardEmpty"))
+        case #selector(cut(_:)), #selector(copy(_:)): (session.selection != nil || timeline?.activeLanes.hasChosenPoints == true, L10n.text("reason.selection"))
+        case #selector(delete(_:)): (session.selection != nil, L10n.text("reason.selection"))
+        case #selector(paste(_:)): (AppClipboard.content != nil || timeline?.activeLanes.canPastePoints == true, L10n.text("reason.clipboardEmpty"))
         default: (true, nil)
         }
         // A command that is off says why (the comfort list), as in the menu bar's other items.
@@ -1280,4 +1330,24 @@ extension TimelineOverlay: NSMenuItemValidation {
 
 extension Array {
     subscript(safe i: Int) -> Element? { indices.contains(i) ? self[i] : nil }
+}
+
+/// One clip on the timeline, as an accessibility element (TimelineOverlay.accessibilityChildren).
+@MainActor
+final class ClipAXElement: NSAccessibilityElement {
+    weak var overlay: TimelineOverlay?
+    let clip: UUID
+
+    init(overlay: TimelineOverlay, clip: UUID) {
+        self.overlay = overlay
+        self.clip = clip
+        super.init()
+        setAccessibilityParent(overlay)
+        setAccessibilityRole(.button)
+        setAccessibilityRoleDescription(L10n.text("timeline.ax.clip.role"))
+        setAccessibilityIdentifier("timeline.clip")
+    }
+
+    override func accessibilityPerformPress() -> Bool { overlay?.selectClip(clip) ?? false }
+    override func accessibilityPerformShowMenu() -> Bool { overlay?.showClipMenu(clip) ?? false }
 }

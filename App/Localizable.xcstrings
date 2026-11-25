@@ -4137,6 +4137,90 @@
         }
       }
     },
+    "automation.points.copied": {
+      "comment": "Status bar: automation points copied.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld point copied"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld points copied"
+                }
+              }
+            }
+          }
+        },
+        "sv": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld punkt kopierad"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld punkter kopierade"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "automation.points.cut": {
+      "comment": "Status bar: automation points cut.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld point cut"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld points cut"
+                }
+              }
+            }
+          }
+        },
+        "sv": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld punkt klippt ut"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld punkter klippta ut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "automation.points.moved": {
       "comment": "Status line: several points were moved together.",
       "extractionState": "manual",
@@ -4172,6 +4256,48 @@
                 "stringUnit": {
                   "state": "translated",
                   "value": "%lld punkter flyttade"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "automation.points.pasted": {
+      "comment": "Status bar: automation points pasted at the playhead.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld point pasted at the playhead"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld points pasted at the playhead"
+                }
+              }
+            }
+          }
+        },
+        "sv": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld punkt inklistrad vid markören"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld punkter inklistrade vid markören"
                 }
               }
             }
@@ -17882,20 +18008,20 @@
         }
       }
     },
-    "mixer.level.reset.help": {
+    "mixer.level.edit.help": {
       "comment": "Tooltip of a level value beside a slider.",
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Double-click to set the level back to 0 dB."
+            "value": "Click to type a level in dB; double-click to set it back to 0 dB."
           }
         },
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Dubbelklicka för att sätta tillbaka nivån till 0 dB."
+            "value": "Klicka för att skriva in en nivå i dB; dubbelklicka för att sätta tillbaka den till 0 dB."
           }
         }
       }
@@ -18296,6 +18422,24 @@
         }
       }
     },
+    "mixer.pan.edit.help": {
+      "comment": "Tooltip of a pan value beside a slider.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Click to type a pan (L 30, R 30, or −100 to 100); double-click to put it back in the middle."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Klicka för att skriva in en panorering (V 30, H 30, eller −100 till 100); dubbelklicka för att lägga den i mitten igen."
+          }
+        }
+      }
+    },
     "mixer.pan.left": {
       "comment": "A pan to the left. %@ is a whole number of percent.",
       "extractionState": "manual",
@@ -18310,24 +18454,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ %% vänster"
-          }
-        }
-      }
-    },
-    "mixer.pan.reset.help": {
-      "comment": "Tooltip of a pan value beside a slider.",
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Double-click to put the pan back in the middle."
-          }
-        },
-        "sv": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Dubbelklicka för att lägga panoreringen i mitten igen."
           }
         }
       }
@@ -22912,6 +23038,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Markera orden som ska sägas igen, på ett spår med tal."
+          }
+        }
+      }
+    },
+    "overdub.send.help": {
+      "comment": "Tooltip of Send in the Overdub dialog.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sends the text to ElevenLabs (⌘Return). Return alone is a new line."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skickar texten till ElevenLabs (⌘Retur). Retur ensam ger en ny rad."
           }
         }
       }
@@ -32929,6 +33073,42 @@
           "stringUnit": {
             "state": "translated",
             "value": "område: %@"
+          }
+        }
+      }
+    },
+    "timeline.ax.clip": {
+      "comment": "VoiceOver: a clip on the timeline. %1$@ its file, %2$@ and %3$@ its start and end, %4$@ its track.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@, %2$@ to %3$@, on %4$@"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@, %2$@ till %3$@, på %4$@"
+          }
+        }
+      }
+    },
+    "timeline.ax.clip.role": {
+      "comment": "VoiceOver's word for a clip element.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "clip"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "klipp"
           }
         }
       }

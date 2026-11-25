@@ -37,6 +37,7 @@ With a lane in focus:
 | ⇧→, ⇧← | Select the next point too, or the one before |
 | ⌥Tab | On a send lane: the strip's next send |
 | Delete | Remove the selected points |
+| ⌘C, ⌘X, ⌘V | Copy or cut the selected points; paste them at the playhead, into a lane of the same kind (what the lane had over their stretch gives way) |
 | Escape | Nothing selected; the keys work the timeline again |
 
 ## Writing with the fader

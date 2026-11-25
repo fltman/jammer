@@ -192,6 +192,32 @@ extension AutomationLane {
         out.points.insert(AutomationPoint(frame: frame, value: v), at: i)
         return (out, i)
     }
+    /// Points copied from a lane: their times from the first of them (COMFORT 33).
+    public func copying(_ chosen: Set<Int>) -> [AutomationPoint] {
+        let picked = chosen.sorted().filter(points.indices.contains).map { points[$0] }
+        guard let first = picked.first?.frame else { return [] }
+        return picked.map { AutomationPoint(frame: $0.frame - first, value: $0.value) }
+    }
+
+    /// Copied points put in at `at`: what the lane had over their stretch goes, values kept in the lane's range, nothing
+    /// past `limit`. The indices of the pasted points come back too (to select them).
+    public func pasting(_ copied: [AutomationPoint], at: Frame, limit: Frame) -> (lane: AutomationLane, pasted: [Int]) {
+        guard let span = copied.map(\.frame).max() else { return (self, []) }
+        let range = Automation.range(of: param)
+        let new = copied.map { p in
+            AutomationPoint(frame: min(limit, max(0, at + p.frame)),
+                            value: param == .mute ? (p.value >= 0.5 ? 1 : 0) : min(range.upperBound, max(range.lowerBound, p.value)))
+        }
+        var out = self
+        out.points.removeAll { $0.frame >= at && $0.frame <= at + span }
+        out.points.append(contentsOf: new)
+        out.points.sort { $0.frame < $1.frame }
+        var seen = Set<Frame>()
+        out.points = out.points.filter { seen.insert($0.frame).inserted }
+        let frames = Set(new.map(\.frame))
+        return (out, out.points.indices.filter { frames.contains(out.points[$0].frame) })
+    }
+
     /// The value the lane has at a frame when it has points, or what a strip without a lane has there:
     /// nothing added, the centre, heard.
     public func valueOrRest(at frame: Frame) -> Double { value(at: frame) ?? 0 }
