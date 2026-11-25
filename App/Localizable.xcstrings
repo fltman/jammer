@@ -8976,6 +8976,24 @@
         }
       }
     },
+    "error.file.recoverNot": {
+      "comment": "A recording left by a crash couldn't be recovered: the file isn't one Jämmer was writing. %@ is the file name.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ isn't a WAV file Jämmer was writing."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ är inte en WAV-fil som Jämmer höll på att skriva."
+          }
+        }
+      }
+    },
     "error.file.riff_file_without_wave": {
       "extractionState": "manual",
       "localizations": {

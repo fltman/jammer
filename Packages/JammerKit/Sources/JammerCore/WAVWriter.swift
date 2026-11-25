@@ -135,7 +135,22 @@ public final class WAVWriter {
         var tail = Data()
         if !options.markers.isEmpty { tail.append(Self.cueChunks(options.markers)) }
         try handle.write(contentsOf: tail)
-        let total = Int64(try handle.offset())
+        try patchSizes(total: Int64(try handle.offset()))
+        try handle.close()
+    }
+
+    /// The sizes so far written into the header and the file flushed to the disk, the writing going on after it: a
+    /// recording cut off by a crash or a power cut then reads to here, and `recover` takes it to its last whole frame.
+    public func checkpoint() throws {
+        precondition(!finished)
+        try patchSizes(total: Int64(try handle.offset()))
+        try handle.synchronize()
+    }
+
+    /// Frames written so far.
+    public var framesWritten: Int64 { dataBytes / Int64(options.encoding.bytes * options.channels) }
+
+    private func patchSizes(total: Int64) throws {
         let riffSize = total - 8
         if options.alwaysRF64 || riffSize > 0xFFFF_FFFF || dataBytes > 0xFFFF_FFFF {
             // RF64: sizes move to ds64, the 32-bit fields become -1.
@@ -149,7 +164,46 @@ public final class WAVWriter {
             try patch(4, Data(le32: UInt32(riffSize)))
             try patch(dataStart - 4, Data(le32: UInt32(dataBytes)))
         }
-        try handle.close()
+    }
+
+    /// A WAV or RF64 that was being written when Jämmer stopped (a recording at a crash): its sizes made right from
+    /// what the file holds, cut to its last whole frame. Returns the frames it holds. Nothing else in it is changed.
+    @discardableResult
+    public static func recover(_ url: URL) throws -> Int64 {
+        let h = try FileHandle(forUpdating: url)
+        defer { try? h.close() }
+        let length = Int64(try h.seekToEnd())
+        try h.seek(toOffset: 0)
+        let head = try h.read(upToCount: 64 * 1024) ?? Data()
+        let b = [UInt8](head)
+        func u16(_ i: Int) -> Int { Int(b[i]) | Int(b[i + 1]) << 8 }
+        func u32(_ i: Int) -> Int64 { Int64(b[i]) | Int64(b[i + 1]) << 8 | Int64(b[i + 2]) << 16 | Int64(b[i + 3]) << 24 }
+        let unreadable = AudioFileError.unreadable(Said("error.file.recoverNot", "%@ isn't a WAV file Jämmer was writing.", "\(url.lastPathComponent)"))
+        guard b.count >= 12, let tag = String(bytes: b[0..<4], encoding: .ascii), ["RIFF", "RF64"].contains(tag) else { throw unreadable }
+        var at = 12, blockAlign = 0, dataStart = 0, ds64At = 0
+        while at + 8 <= b.count {
+            let id = String(bytes: b[at..<at + 4], encoding: .ascii) ?? "", size = u32(at + 4)
+            if id == "fmt ", at + 22 <= b.count { blockAlign = u16(at + 8 + 12) }
+            if id == "ds64" { ds64At = at }
+            if id == "data" { dataStart = at + 8; break }
+            at += 8 + Int(size) + Int(size & 1)
+        }
+        guard blockAlign > 0, dataStart > 0 else { throw unreadable }
+        let bytes = (length - Int64(dataStart)) / Int64(blockAlign) * Int64(blockAlign)
+        try h.truncate(atOffset: UInt64(Int64(dataStart) + bytes))
+        let riff = Int64(dataStart) + bytes - 8
+        if tag == "RF64" || bytes > 0xFFFF_FFFF, ds64At > 0 {
+            var ds64 = Data()
+            ds64.u64le(UInt64(riff)); ds64.u64le(UInt64(bytes)); ds64.u64le(UInt64(bytes / Int64(blockAlign))); ds64.u32le(0)
+            try h.seek(toOffset: 0); try h.write(contentsOf: Data("RF64".utf8) + Data(le32: 0xFFFF_FFFF))
+            try h.seek(toOffset: UInt64(ds64At)); try h.write(contentsOf: Data("ds64".utf8) + Data(le32: 28) + ds64)
+            try h.seek(toOffset: UInt64(dataStart - 4)); try h.write(contentsOf: Data(le32: 0xFFFF_FFFF))
+        } else {
+            try h.seek(toOffset: 4); try h.write(contentsOf: Data(le32: UInt32(riff)))
+            try h.seek(toOffset: UInt64(dataStart - 4)); try h.write(contentsOf: Data(le32: UInt32(bytes)))
+        }
+        try h.synchronize()
+        return bytes / Int64(blockAlign)
     }
 
     private func patch(_ offset: Int64, _ bytes: Data) throws {

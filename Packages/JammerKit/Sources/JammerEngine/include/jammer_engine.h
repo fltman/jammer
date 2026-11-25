@@ -329,6 +329,45 @@ OSStatus jm_engine_au_render(void *_Nonnull ref_con, AudioUnitRenderActionFlags 
                              const AudioTimeStamp *_Nonnull time_stamp, UInt32 bus, UInt32 frames,
                              AudioBufferList *_Nullable io_data) JM_NONBLOCKING;
 
+// MARK: Capture (recording)
+//
+// Recording, the realtime half: the input device's IOProc hands each block to the capture, which copies each armed
+// track's channels into a lock-free ring of its own and notes their peaks; a writer thread drains the rings into files.
+// Nothing allocates, locks or blocks on the device thread. A ring the writer didn't drain in time drops frames and
+// counts them, never silently. Started only from the window (the agent API has no way to start it).
+
+typedef struct jm_capture jm_capture;
+
+/// A capture of `tracks` armed tracks from a device with `device_channels` input channels: track t takes `count[t]`
+/// channels (1 or 2) from input channel `first[t]` on. Each ring holds `ring_seconds` at `rate`. NULL on bad input.
+jm_capture *_Nullable jm_capture_create(int32_t device_channels, int32_t tracks, const int32_t *_Nonnull first,
+                                        const int32_t *_Nonnull count, double rate, double ring_seconds);
+void jm_capture_release(jm_capture *_Nullable capture);
+
+/// The device thread's part: one block of the device's input, `frames` interleaved over `device_channels`.
+void jm_capture_push(jm_capture *_Nonnull capture, const float *_Nonnull interleaved, int32_t frames) JM_NONBLOCKING;
+
+/// The same from a HAL device's input streams (float32, interleaved or not); client_data is the capture.
+OSStatus jm_capture_ioproc(AudioObjectID device, const AudioTimeStamp *_Nonnull now,
+                           const AudioBufferList *_Nonnull input_data, const AudioTimeStamp *_Nonnull input_time,
+                           AudioBufferList *_Nonnull output_data, const AudioTimeStamp *_Nonnull output_time,
+                           void *_Nullable client_data) JM_NONBLOCKING;
+
+/// The writer's part: up to `max_frames` of track t's frames (interleaved over its channels) into `out`. Returns them.
+int32_t jm_capture_pull(jm_capture *_Nonnull capture, int32_t track, float *_Nonnull out, int32_t max_frames);
+
+/// Frames track t lost because its ring was full when the device pushed (the writer fell behind).
+int64_t jm_capture_dropped(const jm_capture *_Nonnull capture, int32_t track);
+
+/// The highest absolute sample of track t's channels since this was last asked, linear (the input meters).
+float jm_capture_take_peak(jm_capture *_Nonnull capture, int32_t track);
+
+/// Frames the device has pushed so far (the recording's length).
+int64_t jm_capture_frames(const jm_capture *_Nonnull capture);
+
+/// Pushes are taken into the rings only while recording; while armed but not recording only the peaks are noted.
+void jm_capture_set_recording(jm_capture *_Nonnull capture, bool recording);
+
 #ifdef __cplusplus
 }
 #endif
