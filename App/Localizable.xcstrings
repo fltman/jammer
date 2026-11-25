@@ -1191,24 +1191,6 @@
         }
       }
     },
-    "assistant.ask": {
-      "comment": "Menu item and palette command.",
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ask the Assistant…"
-          }
-        },
-        "sv": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Fråga assistenten…"
-          }
-        }
-      }
-    },
     "assistant.ax.note": {
       "comment": "Spoken before a note in the conversation.",
       "extractionState": "manual",
@@ -2889,24 +2871,6 @@
         }
       }
     },
-    "audio.gainDown6": {
-      "comment": "Command in the palette.",
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Gain −6 dB"
-          }
-        },
-        "sv": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Gain −6 dB"
-          }
-        }
-      }
-    },
     "audio.gainUp1": {
       "comment": "Menu item in Audio and command in the palette.",
       "extractionState": "manual",
@@ -2921,24 +2885,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Gain +1 dB"
-          }
-        }
-      }
-    },
-    "audio.gainUp6": {
-      "comment": "Command in the palette.",
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Gain +6 dB"
-          }
-        },
-        "sv": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Gain +6 dB"
           }
         }
       }
@@ -5538,6 +5484,24 @@
         }
       }
     },
+    "command.unavailable": {
+      "comment": "Command registry (comfort block).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not available now."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inte tillgängligt nu."
+          }
+        }
+      }
+    },
     "document.untitled": {
       "comment": "A document without a name.",
       "extractionState": "manual",
@@ -5814,6 +5778,60 @@
         }
       }
     },
+    "edit.correctWord": {
+      "comment": "Edit menu and a word's context menu.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Correct Word…"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rätta ord…"
+          }
+        }
+      }
+    },
+    "edit.correctWord.text": {
+      "comment": "Command registry (comfort block).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The word reads “%@”. Type it as it should read."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ordet lyder ”%@”. Skriv det som det ska lyda."
+          }
+        }
+      }
+    },
+    "edit.correctWord.title": {
+      "comment": "Command registry (comfort block).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Correct Word"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rätta ord"
+          }
+        }
+      }
+    },
     "edit.cut": {
       "comment": "Menu item.",
       "extractionState": "manual",
@@ -5846,6 +5864,60 @@
           "stringUnit": {
             "state": "translated",
             "value": "Radera"
+          }
+        }
+      }
+    },
+    "edit.deselectAll": {
+      "comment": "Edit menu.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deselect All"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avmarkera allt"
+          }
+        }
+      }
+    },
+    "edit.findInTranscript": {
+      "comment": "Edit menu.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Find in Transcript…"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sök i transkriptet…"
+          }
+        }
+      }
+    },
+    "edit.findNext": {
+      "comment": "Edit menu.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Find Next"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sök nästa"
           }
         }
       }
@@ -5900,6 +5972,42 @@
           "stringUnit": {
             "state": "translated",
             "value": "Gör om"
+          }
+        }
+      }
+    },
+    "edit.removeFillers": {
+      "comment": "Edit menu.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove Filler Words"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ta bort utfyllnadsord"
+          }
+        }
+      }
+    },
+    "edit.removeFillers.none": {
+      "comment": "Command registry (comfort block).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The transcript has no filler words."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkriptet har inga utfyllnadsord."
           }
         }
       }
@@ -11903,6 +12011,24 @@
         }
       }
     },
+    "file.exportTranscript": {
+      "comment": "File menu.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export Transcript…"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exportera transkript…"
+          }
+        }
+      }
+    },
     "file.importTimeline": {
       "extractionState": "manual",
       "localizations": {
@@ -12006,6 +12132,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Spara…"
+          }
+        }
+      }
+    },
+    "file.saveAs": {
+      "comment": "File menu.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save As…"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spara som…"
           }
         }
       }
@@ -12780,6 +12924,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Öppna agentguiden"
+          }
+        }
+      }
+    },
+    "help.manual": {
+      "comment": "Help menu: opens the manual.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jämmer Help"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jämmer-hjälp"
           }
         }
       }
@@ -13784,24 +13946,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Avbrutet. Förfrågan hade redan gått till %@, som kan ha debiterat för den. Det som ändå skickas tillbaka hämtas inte."
-          }
-        }
-      }
-    },
-    "key.space": {
-      "comment": "The space bar, as a shortcut’s name.",
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Space"
-          }
-        },
-        "sv": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Mellanslag"
           }
         }
       }
@@ -15708,6 +15852,60 @@
           "stringUnit": {
             "state": "translated",
             "value": "Bild…"
+          }
+        }
+      }
+    },
+    "menu.repair": {
+      "comment": "The Repair menu.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Repair"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reparera"
+          }
+        }
+      }
+    },
+    "menu.speech": {
+      "comment": "The Speech menu.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speech"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tal"
+          }
+        }
+      }
+    },
+    "menu.track": {
+      "comment": "The Track menu.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Track"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spår"
           }
         }
       }
@@ -21940,132 +22138,6 @@
         }
       }
     },
-    "palette.assistant.detail": {
-      "comment": "Palette: examples of what to ask the assistant. Keep one Swedish and one English example.",
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "In Swedish or English: \"ta bort alla ehm\", \"normalize to −16 LUFS\""
-          }
-        },
-        "sv": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "På svenska eller engelska: ”ta bort alla ehm”, ”normalize to −16 LUFS”"
-          }
-        }
-      }
-    },
-    "palette.collect.detail": {
-      "comment": "Palette: what the command does, after its menu’s name.",
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "File: copy every file the project plays from into it"
-          }
-        },
-        "sv": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Arkiv: kopiera in varje fil som projektet spelar från"
-          }
-        }
-      }
-    },
-    "palette.group.analysis": {
-      "comment": "A command’s group in the palette.",
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Analysis"
-          }
-        },
-        "sv": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Analys"
-          }
-        }
-      }
-    },
-    "palette.limit.detail": {
-      "comment": "Palette: what the command does, after its menu’s name.",
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Audio: hold the true peak under a ceiling"
-          }
-        },
-        "sv": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ljud: håll true peak under ett tak"
-          }
-        }
-      }
-    },
-    "palette.mixer.detail": {
-      "comment": "Palette: what the command does, after its menu’s name.",
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Audio: levels, pan and buses"
-          }
-        },
-        "sv": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ljud: nivåer, panorering och bussar"
-          }
-        }
-      }
-    },
-    "palette.restore": {
-      "comment": "Palette command.",
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Restore… (hum, clipping, clicks)"
-          }
-        },
-        "sv": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Reparera… (brum, överstyrning, klick)"
-          }
-        }
-      }
-    },
-    "palette.transcript": {
-      "comment": "Palette command.",
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Show or Hide Transcript"
-          }
-        },
-        "sv": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Visa eller göm transkriptionen"
-          }
-        }
-      }
-    },
     "picture.ax.film": {
       "comment": "Accessibility label of the film picture.",
       "extractionState": "manual",
@@ -23734,6 +23806,402 @@
           "stringUnit": {
             "state": "translated",
             "value": "%1$@ VCA-grupper i projektet hade samma id som en annan, eller kom efter de %2$@ ett dokument kan ha, och lämnades utanför."
+          }
+        }
+      }
+    },
+    "reason.automation": {
+      "comment": "Command registry (comfort block).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show automation lanes first."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Visa automationsfälten först."
+          }
+        }
+      }
+    },
+    "reason.binauralFirst": {
+      "comment": "Command registry (comfort block).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn on Listen on Headphones first."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Slå på Lyssna i hörlurar först."
+          }
+        }
+      }
+    },
+    "reason.chooseTrack": {
+      "comment": "Command registry (comfort block).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Click in a track first."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Klicka i ett spår först."
+          }
+        }
+      }
+    },
+    "reason.clipboardEmpty": {
+      "comment": "Why Paste is off.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy or cut something first."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kopiera eller klipp ut något först."
+          }
+        }
+      }
+    },
+    "reason.cloneFirst": {
+      "comment": "Command registry (comfort block).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clone a voice first."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Klona en röst först."
+          }
+        }
+      }
+    },
+    "reason.findSpeakersFirst": {
+      "comment": "Command registry (comfort block).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Find speakers first."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hitta talare först."
+          }
+        }
+      }
+    },
+    "reason.followHeadFirst": {
+      "comment": "Command registry (comfort block).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn on Follow Head Movements first."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Slå på Följ huvudets rörelser först."
+          }
+        }
+      }
+    },
+    "reason.noAudio": {
+      "comment": "Command registry (comfort block).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The document has no audio."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dokumentet har inget ljud."
+          }
+        }
+      }
+    },
+    "reason.noMarkers": {
+      "comment": "Command registry (comfort block).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The document has no markers."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dokumentet har inga markörer."
+          }
+        }
+      }
+    },
+    "reason.noSplittable": {
+      "comment": "Command registry (comfort block).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No track has more than one speaker; find speakers first."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inget spår har mer än en talare; hitta talare först."
+          }
+        }
+      }
+    },
+    "reason.noVoiceTracks": {
+      "comment": "Command registry (comfort block).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No track has speech of its own."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inget spår har eget tal."
+          }
+        }
+      }
+    },
+    "reason.notFromFlimmer": {
+      "comment": "Command registry (comfort block).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Only a document imported from Flimmer can be sent back to it."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bara ett dokument som importerats från Flimmer kan skickas tillbaka dit."
+          }
+        }
+      }
+    },
+    "reason.notInBuild": {
+      "comment": "Command registry (comfort block).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not in this version of Jämmer."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finns inte i den här versionen av Jämmer."
+          }
+        }
+      }
+    },
+    "reason.repairing": {
+      "comment": "Command registry (comfort block).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A repair is running."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En reparation pågår."
+          }
+        }
+      }
+    },
+    "reason.selectTranscribed": {
+      "comment": "Command registry (comfort block).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select a range in a transcribed document."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Markera ett område i ett transkriberat dokument."
+          }
+        }
+      }
+    },
+    "reason.selectWord": {
+      "comment": "Command registry (comfort block).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select a word in the transcript first."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Markera ett ord i transkriptet först."
+          }
+        }
+      }
+    },
+    "reason.selection": {
+      "comment": "Command registry (comfort block).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select a range first."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Markera ett område först."
+          }
+        }
+      }
+    },
+    "reason.showSpectrogram": {
+      "comment": "Command registry (comfort block).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show the spectrogram first."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Visa spektrogrammet först."
+          }
+        }
+      }
+    },
+    "reason.spectralArea": {
+      "comment": "Command registry (comfort block).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show the spectrogram and draw an area first."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Visa spektrogrammet och rita ett område först."
+          }
+        }
+      }
+    },
+    "reason.surround": {
+      "comment": "Command registry (comfort block).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Needs a document with more than two channels."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kräver ett dokument med fler än två kanaler."
+          }
+        }
+      }
+    },
+    "reason.transcribeFirst": {
+      "comment": "Command registry (comfort block).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transcribe the document first."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkribera dokumentet först."
+          }
+        }
+      }
+    },
+    "reason.transcribing": {
+      "comment": "Command registry (comfort block).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A transcription is running."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En transkribering pågår."
           }
         }
       }
@@ -26889,6 +27357,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Redigera spektrum"
+          }
+        }
+      }
+    },
+    "speech.transcribe": {
+      "comment": "Speech menu: transcribes the document with the engine chosen in the transcript panel.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transcribe"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkribera"
           }
         }
       }
@@ -31001,6 +31487,96 @@
         }
       }
     },
+    "track.mute": {
+      "comment": "Track menu.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mute"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tysta"
+          }
+        }
+      }
+    },
+    "track.rename": {
+      "comment": "Track menu.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rename Track…"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Byt namn på spåret…"
+          }
+        }
+      }
+    },
+    "track.rename.named": {
+      "comment": "Command registry (comfort block).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rename “%@”…"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Byt namn på ”%@”…"
+          }
+        }
+      }
+    },
+    "track.rename.title": {
+      "comment": "Command registry (comfort block).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rename Track"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Byt namn på spåret"
+          }
+        }
+      }
+    },
+    "track.solo": {
+      "comment": "Track menu.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Solo"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Solo"
+          }
+        }
+      }
+    },
     "transcript.empty.berget": {
       "extractionState": "manual",
       "localizations": {
@@ -31423,6 +31999,24 @@
         }
       }
     },
+    "transport.goToEnd": {
+      "comment": "Transport menu.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Go to End"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gå till slutet"
+          }
+        }
+      }
+    },
     "transport.goToStart": {
       "comment": "Menu item and palette command.",
       "extractionState": "manual",
@@ -31437,6 +32031,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Gå till början"
+          }
+        }
+      }
+    },
+    "transport.nextMarker": {
+      "comment": "Transport menu.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Next Marker"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nästa markör"
           }
         }
       }
@@ -31527,6 +32139,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Takt.slag.tick vid spelhuvudet"
+          }
+        }
+      }
+    },
+    "transport.previousMarker": {
+      "comment": "Transport menu.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Previous Marker"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Föregående markör"
           }
         }
       }
@@ -31635,6 +32265,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fråga assistenten"
+          }
+        }
+      }
+    },
+    "view.focusMode": {
+      "comment": "View menu: hides the side panels.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Focus Mode"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fokusläge"
           }
         }
       }
@@ -31779,6 +32427,78 @@
           "stringUnit": {
             "state": "translated",
             "value": "Visa vågform"
+          }
+        }
+      }
+    },
+    "view.spectralTool": {
+      "comment": "View menu, a submenu.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spectrogram Tool"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spektrogramverktyg"
+          }
+        }
+      }
+    },
+    "view.spectralTool.box": {
+      "comment": "Spectrogram tool.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Box"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ruta"
+          }
+        }
+      }
+    },
+    "view.spectralTool.brush": {
+      "comment": "Spectrogram tool.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Brush"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pensel"
+          }
+        }
+      }
+    },
+    "view.spectralTool.lasso": {
+      "comment": "Spectrogram tool.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lasso"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lasso"
           }
         }
       }

@@ -5,7 +5,7 @@ A document can be wider than stereo: **5.1**, **7.1** or **7.1.4** for loudspeak
 ## The layout
 
 - A WAV file in 5.1, 7.1 or 7.1.4 opens in its own layout; the status bar names it.
-- **Audio › Layout** changes a document's layout. Nothing is converted: every file keeps its own channels and is heard in the new layout through its loudspeakers. Changing it is one undo step. Playback stops when the layout changes.
+- **Track › Layout** changes a document's layout. Nothing is converted: every file keeps its own channels and is heard in the new layout through its loudspeakers. Changing it is one undo step. Playback stops when the layout changes.
 - A file of 4, 9 or 16 channels opens as stereo, because nothing in a WAV file says it is Ambisonics. Choose **Ambisonics (1st Order)** (or 2nd, 3rd) to hear it as the sound field it is.
 
 ## Where each file is heard
@@ -39,9 +39,9 @@ A track that plays a sound field can be turned round the listener: in the Mixer 
 ## Listening
 
 - On a device with fewer channels than the document, such as the Mac's speakers or headphones, a loudspeaker document is folded down to stereo by the same rules. The document and its exports keep all their channels.
-- **Audio › Listen on Headphones (Binaural)** renders a loudspeaker document for headphones instead, through Apple's spatial mixer. It is a setting for listening only, and every open document follows it.
+- **Transport › Listen on Headphones (Binaural)** renders a loudspeaker document for headphones instead, through Apple's spatial mixer. It is a setting for listening only, and every open document follows it.
 - An Ambisonics document is always heard through Apple's spatial mixer: for headphones when that setting is on, for loudspeakers when it is off.
-- **Audio › Follow Head Movements** (while listening binaurally): with headphones that have motion sensors, such as AirPods Pro, AirPods Max or AirPods (3rd generation and later), the sound stays where it is as you turn your head. macOS asks the first time whether Jämmer may read the headphones' motion; Jämmer reads it only while this is on and keeps nothing. **Audio › Center Head** makes where you look now the front. It is off when Jämmer starts, and turning binaural listening off turns it off too. It changes only what you hear, never the document or an export.
+- **Transport › Follow Head Movements** (while listening binaurally): with headphones that have motion sensors, such as AirPods Pro, AirPods Max or AirPods (3rd generation and later), the sound stays where it is as you turn your head. macOS asks the first time whether Jämmer may read the headphones' motion; Jämmer reads it only while this is on and keeps nothing. **Transport › Center Head** makes where you look now the front. It is off when Jämmer starts, and turning binaural listening off turns it off too. It changes only what you hear, never the document or an export.
 
 ## Loudness
 
@@ -53,7 +53,7 @@ BS.1770 has no loudness for a sound field. In an Ambisonics document loudness is
 
 - **WAV** keeps all the channels, marked with the layout's loudspeakers (an Ambisonics WAV is marked with none, as AmbiX files are). A 5.1, 7.1 or 7.1.4 WAV is also an ADM BWF file: it names each channel's loudspeaker the way broadcast and immersive tools read it (ITU-R BS.2076 metadata, checked with the EBU's ADM renderer). Opening such a file, Jämmer uses those names too, so its channels land on the right loudspeakers even when the file has no channel mask.
 
-A 7.1 or 7.1.4 WAV with no channel mask and no ADM doesn't say whether its sides or its rears come first. Jämmer hears it in ITU-R BS.2051's order, the sides first (L R C LFE Lss Rss Lrs Rrs), as the ITU's own test files and most immersive tools write it, and says so in the status line when it opens. If the file came from a tool that puts the rears first, choose **Audio › Layout › Unmarked File: Rears First (WAV Order)**; it changes only how the file is heard, and ⌘Z takes it back. A file with a channel mask or ADM is always heard by what it says.
+A 7.1 or 7.1.4 WAV with no channel mask and no ADM doesn't say whether its sides or its rears come first. Jämmer hears it in ITU-R BS.2051's order, the sides first (L R C LFE Lss Rss Lrs Rrs), as the ITU's own test files and most immersive tools write it, and says so in the status line when it opens. If the file came from a tool that puts the rears first, choose **Track › Layout › Unmarked File: Rears First (WAV Order)**; it changes only how the file is heard, and ⌘Z takes it back. A file with a channel mask or ADM is always heard by what it says.
 - **APAC (MP4)**, Apple's spatial codec, appears in the export's format list for loudspeaker layouts wider than stereo and for Ambisonics.
 - MP3 and Opus aren't offered for these documents.
 

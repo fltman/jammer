@@ -1,68 +1,68 @@
 {
- "dereverb": [
-  {
-   "file": "site/manual/13-restoration.md",
-   "on": "**Audio › Remove Hum…, Repair Clipping…, Remove Clicks…, Reduce Noise…, Reduce Reverb…**",
-   "off": "**Audio › Remove Hum…, Repair Clipping…, Remove Clicks…, Reduce Noise…**"
-  },
-  {
-   "file": "site/manual/13-restoration.md",
-   "on": "start around half and listen. |\n| **Reduce Reverb** | Takes down the room: the echo that hangs on after each word in a bare or large room. It works out from the recording itself how each sound keeps ringing and removes that part, leaving the direct sound (no model, nothing to download). Amount starts at 70 %; all the way can sound unnaturally dry. It doesn't remove noise, and on a recording that's already dry it changes next to nothing. |\n",
-   "off": "start around half and listen. |\n"
-  },
-  {
-   "file": "site/manual/13-restoration.md",
-   "on": "- **The reverb figure** is roughly how long a sound takes to die away; under 0.3 s there is little to gain from Reduce Reverb.",
-   "off": "- **The reverb figure** is roughly how long a sound takes to die away."
-  }
- ],
- "spectral_freeform": [
-  {
-   "file": "site/manual/13-restoration.md",
-   "on": "Pick a tool with **B** (box), **L** (lasso) or **P** (brush), then drag over the sound on its track;",
-   "off": "Drag a box over the sound on its track;"
-  },
-  {
-   "file": "site/manual/10-keyboard-shortcuts.md",
-   "on": "| B / L / P | In the spectrogram: box, lasso, brush |",
-   "off": "| B | In the spectrogram: the box tool |"
-  },
-  {
-   "file": "site/app.json",
-   "on": "with a box, a lasso or a brush, then heal it",
-   "off": "with a box, then heal it"
-  }
- ],
- "clap": [
-  {
-   "file": "site/manual/15-plugins.md",
-   "on": "![The Plugins sheet with two plugins on a track, each with a switch, Edit and a bin; below them Add Plugin, Scan for CLAP Plugins, a line saying one plugin is switched off after failing with a Switch On button, and the safe mode option](../screens/plugins.webp)",
-   "off": "![The Plugins sheet with Audio Units on a track, each with a switch, Edit and a bin, and the safe mode option](../screens/plugins-au.webp)"
-  },
-  {
-   "file": "site/manual/15-plugins.md",
-   "on": "A track can run through effects after its clips and before its gain: an EQ, a compressor, a de-esser, a limiter. Jämmer takes Audio Units (AUv2 and AUv3) and CLAP plugins.",
-   "off": "A track can run through Audio Unit effects (AUv2 and AUv3) after its clips and before its gain: an EQ, a compressor, a de-esser, a limiter."
-  },
-  {
-   "file": "site/manual/15-plugins.md",
-   "on": "- **Edit…**, which opens the plugin's own window. A CLAP plugin, and an Audio Unit without a window, gets sliders for its parameters instead,",
-   "off": "- **Edit…**, which opens the plugin's own window (or sliders for its parameters when it has no window),"
-  },
-  {
-   "file": "site/manual/15-plugins.md",
-   "on": "## Plugins are someone else's code\n\n**CLAP plugins never run inside Jämmer.** Each one runs in a small helper program of its own, which can't reach the network, can't write files and, of your files, can read only the plugin folders. If a CLAP plugin crashes or stops answering:\n\n- the track plays on without it, still in time with the others,\n- the status bar tells you which plugin it was,\n- the plugin is switched off, so it isn't started again by accident. **Audio › Plugins…** lists it with a **Switch On** button for when you want to try again,\n- your document is untouched.\n\nJämmer finds CLAP plugins in `~/Library/Audio/Plug-Ins/CLAP` and `/Library/Audio/Plug-Ins/CLAP` when it starts; **Scan for CLAP Plugins** looks again. Each plugin is looked at in a helper program too, so one that crashes or hangs while it's loaded is just listed as unusable. At most 64 CLAP plugins run at the same time.\n\nBecause of the confinement, a CLAP plugin that needs to read its own licence or preset files from elsewhere on your disk, or to go online, may not work here.\n\n**Audio Units run inside Jämmer**, and a badly behaved one can crash the app. If that happens, turn on **Safe mode** at the bottom of **Audio › Plugins…**: every Audio Unit then runs in macOS's separate plugin host process instead, which is meant to keep one that crashes from taking Jämmer with it.\n\n",
-   "off": "## Plugins are someone else's code\n\nA plugin runs inside Jämmer, and a badly behaved one can crash the app. If that happens, turn on **Safe mode** at the bottom of **Audio › Plugins…**: every Audio Unit then runs in macOS's separate plugin host process instead, which is meant to keep one that crashes from taking Jämmer with it.\n\n"
-  },
-  {
-   "file": "site/faq.md",
-   "on": "Yes: Audio Unit effects (AUv2 and AUv3) and CLAP plugins can be put on any track. A CLAP plugin runs in a helper program of its own, never inside Jämmer, so one that crashes only goes quiet: its track plays on without it and Jämmer tells you. Audio Units run inside Jämmer; with **Safe mode** on (Audio › Plugins…) they run in macOS's separate plugin host process instead. VST plugins aren't supported yet.",
-   "off": "Yes: Audio Unit effects (AUv2 and AUv3) can be put on any track. They run inside Jämmer; with **Safe mode** on (Audio › Plugins…) they run in macOS's separate plugin host process instead. CLAP and VST plugins aren't supported yet."
-  },
-  {
-   "file": "site/manual/09-settings.md",
-   "on": "| Safe mode for plugins | Audio › Plugins… | Runs every Audio Unit in macOS's separate plugin host process instead of inside Jämmer (CLAP plugins always run outside it) |",
-   "off": "| Safe mode for plugins | Audio › Plugins… | Runs every Audio Unit in macOS's separate plugin host process instead of inside Jämmer |"
-  }
- ]
+  "dereverb": [
+    {
+      "file": "site/manual/13-restoration.md",
+      "on": "**Repair › Remove Hum…, Repair Clipping…, Remove Clicks…, Reduce Noise…, Reduce Reverb…**",
+      "off": "**Repair › Remove Hum…, Repair Clipping…, Remove Clicks…, Reduce Noise…**"
+    },
+    {
+      "file": "site/manual/13-restoration.md",
+      "on": "start around half and listen. |\n| **Reduce Reverb** | Takes down the room: the echo that hangs on after each word in a bare or large room. It works out from the recording itself how each sound keeps ringing and removes that part, leaving the direct sound (no model, nothing to download). Amount starts at 70 %; all the way can sound unnaturally dry. It doesn't remove noise, and on a recording that's already dry it changes next to nothing. |\n",
+      "off": "start around half and listen. |\n"
+    },
+    {
+      "file": "site/manual/13-restoration.md",
+      "on": "- **The reverb figure** is roughly how long a sound takes to die away; under 0.3 s there is little to gain from Reduce Reverb.",
+      "off": "- **The reverb figure** is roughly how long a sound takes to die away."
+    }
+  ],
+  "spectral_freeform": [
+    {
+      "file": "site/manual/13-restoration.md",
+      "on": "Pick a tool with **B** (box), **L** (lasso) or **P** (brush), then drag over the sound on its track;",
+      "off": "Drag a box over the sound on its track;"
+    },
+    {
+      "file": "site/manual/10-keyboard-shortcuts.md",
+      "on": "| B / L / P | In the spectrogram: box, lasso, brush (also **View › Spectrogram Tool**) |",
+      "off": "| B | In the spectrogram: the box tool (also **View › Spectrogram Tool**) |"
+    },
+    {
+      "file": "site/app.json",
+      "on": "with a box, a lasso or a brush, then heal it",
+      "off": "with a box, then heal it"
+    }
+  ],
+  "clap": [
+    {
+      "file": "site/manual/15-plugins.md",
+      "on": "![The Plugins sheet with two plugins on a track, each with a switch, Edit and a bin; below them Add Plugin, Scan for CLAP Plugins, a line saying one plugin is switched off after failing with a Switch On button, and the safe mode option](../screens/plugins.webp)",
+      "off": "![The Plugins sheet with Audio Units on a track, each with a switch, Edit and a bin, and the safe mode option](../screens/plugins-au.webp)"
+    },
+    {
+      "file": "site/manual/15-plugins.md",
+      "on": "A track can run through effects after its clips and before its gain: an EQ, a compressor, a de-esser, a limiter. Jämmer takes Audio Units (AUv2 and AUv3) and CLAP plugins.",
+      "off": "A track can run through Audio Unit effects (AUv2 and AUv3) after its clips and before its gain: an EQ, a compressor, a de-esser, a limiter."
+    },
+    {
+      "file": "site/manual/15-plugins.md",
+      "on": "- **Edit…**, which opens the plugin's own window. A CLAP plugin, and an Audio Unit without a window, gets sliders for its parameters instead,",
+      "off": "- **Edit…**, which opens the plugin's own window (or sliders for its parameters when it has no window),"
+    },
+    {
+      "file": "site/manual/15-plugins.md",
+      "on": "## Plugins are someone else's code\n\n**CLAP plugins never run inside Jämmer.** Each one runs in a small helper program of its own, which can't reach the network, can't write files and, of your files, can read only the plugin folders. If a CLAP plugin crashes or stops answering:\n\n- the track plays on without it, still in time with the others,\n- the status bar tells you which plugin it was,\n- the plugin is switched off, so it isn't started again by accident. **Track › Plugins…** lists it with a **Switch On** button for when you want to try again,\n- your document is untouched.\n\nJämmer finds CLAP plugins in `~/Library/Audio/Plug-Ins/CLAP` and `/Library/Audio/Plug-Ins/CLAP` when it starts; **Scan for CLAP Plugins** looks again. Each plugin is looked at in a helper program too, so one that crashes or hangs while it's loaded is just listed as unusable. At most 64 CLAP plugins run at the same time.\n\nBecause of the confinement, a CLAP plugin that needs to read its own licence or preset files from elsewhere on your disk, or to go online, may not work here.\n\n**Audio Units run inside Jämmer**, and a badly behaved one can crash the app. If that happens, turn on **Safe mode** at the bottom of **Track › Plugins…**: every Audio Unit then runs in macOS's separate plugin host process instead, which is meant to keep one that crashes from taking Jämmer with it.\n\n",
+      "off": "## Plugins are someone else's code\n\nA plugin runs inside Jämmer, and a badly behaved one can crash the app. If that happens, turn on **Safe mode** at the bottom of **Track › Plugins…**: every Audio Unit then runs in macOS's separate plugin host process instead, which is meant to keep one that crashes from taking Jämmer with it.\n\n"
+    },
+    {
+      "file": "site/faq.md",
+      "on": "Yes: Audio Unit effects (AUv2 and AUv3) and CLAP plugins can be put on any track. A CLAP plugin runs in a helper program of its own, never inside Jämmer, so one that crashes only goes quiet: its track plays on without it and Jämmer tells you. Audio Units run inside Jämmer; with **Safe mode** on (Track › Plugins…) they run in macOS's separate plugin host process instead. VST plugins aren't supported yet.",
+      "off": "Yes: Audio Unit effects (AUv2 and AUv3) can be put on any track. They run inside Jämmer; with **Safe mode** on (Track › Plugins…) they run in macOS's separate plugin host process instead. CLAP and VST plugins aren't supported yet."
+    },
+    {
+      "file": "site/manual/09-settings.md",
+      "on": "| Safe mode for plugins | Track › Plugins… | Runs every Audio Unit in macOS's separate plugin host process instead of inside Jämmer (CLAP plugins always run outside it) |",
+      "off": "| Safe mode for plugins | Track › Plugins… | Runs every Audio Unit in macOS's separate plugin host process instead of inside Jämmer |"
+    }
+  ]
 }

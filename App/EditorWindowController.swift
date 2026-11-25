@@ -22,6 +22,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
     let timeline: TimelineView
     let transcript: TranscriptPanel
     let assistant: AssistantModel
+    /// Focus mode: which side panels were shown before it hid them (a view mode, never an undo step).
+    var focusMode: (assistant: Bool, transcript: Bool)?
     private var assistantView: NSView!
     /// The omnibar at the bottom of the window (⌘K), over the timeline's lower edge while it lists commands.
     private(set) var omnibar: OmnibarModel!
@@ -92,7 +94,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         split.setHoldingPriority(.defaultHigh, forSubviewAt: 1)
         window.contentView = split
         omnibar = OmnibarModel(
-            commands: { [unowned self] in CommandPalette.commands(session: self.session, timeline: self.timeline) },
+            commands: { [unowned self] in CommandPalette.commands(controller: self) },
             ask: { [unowned self] text in self.askFromOmnibar(text) },
             leave: { [unowned self] in self.window?.makeFirstResponder(self.timeline) })
         let omnibarHost = NSHostingView(rootView: OmnibarView(model: omnibar))
@@ -902,84 +904,124 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
     }
 
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
-        if item.action == #selector(togglePlayback(_:)) {
-            item.title = session.isPlaying ? L10n.text("transport.stop") : L10n.text("transport.play")
-            return session.project.length > 0
-        }
-        if item.action == #selector(zoomToSelection(_:)) { return session.selection != nil }
-        if item.action == #selector(attenuateFrequencies(_:)) { return session.selection != nil }
-        if item.action == #selector(healArea(_:)) || item.action == #selector(attenuateArea(_:)) {
-            return timeline.showsSpectrogram && session.spectralArea != nil
-        }
-        if item.action == #selector(showAutomation(_:)) {
-            item.state = (item.representedObject as? String) == timeline.shownAutomation?.rawValue ? .on : .off
-            // Place and height are a track's in a document wider than stereo only.
-            return !["azimuth", "elevation"].contains(item.representedObject as? String ?? "") || session.project.channels > 2
-        }
-        if item.action == #selector(toggleStripLanes(_:)) {
-            item.state = timeline.showsStripLanes ? .on : .off
-            return timeline.shownAutomation != nil
-        }
-        if item.action == #selector(toggleSpectrogram(_:)) {
-            item.title = timeline.showsSpectrogram ? L10n.text("view.showWaveform") : L10n.text("view.showSpectrogram")
-            return true
-        }
-        if item.action == #selector(toggleAssistant(_:)) {
+        guard let id = item.identifier?.rawValue, Commands.command(id) != nil else { return true }
+        let (enabled, why) = availability(id, item: item)
+        // A command that is off says why (SIBLINGS comfort list), here as the item's help tag.
+        item.toolTip = enabled ? nil : why
+        return enabled
+    }
+
+    /// Whether a command can run now and, if not, why, in the window's language; also sets the item's title and
+    /// tick where they follow the state (Play/Stop, Show/Hide, the layout). One answer for the menu bar, the
+    /// context menus and ⌘K.
+    func availability(_ id: String, item: NSMenuItem? = nil) -> (Bool, String?) {
+        let p = session.project
+        let hasAudio = p.length > 0
+        func needs(_ ok: Bool, _ reason: @autoclosure () -> String) -> (Bool, String?) { ok ? (true, nil) : (false, reason()) }
+        let selection = L10n.text("reason.selection")
+        let running = { (kind: String) in JobRegistry.shared.latest(kind, document: self.session.agentID).map { !$0.isFinished } ?? false }
+        switch id {
+        case "transport.play":
+            item?.title = session.isPlaying ? L10n.text("transport.stop") : L10n.text("transport.play")
+            return needs(hasAudio, L10n.text("reason.noAudio"))
+        case "edit.cut", "edit.copy", "edit.delete", "audio.fadeIn", "audio.fadeOut", "audio.silence", "audio.crop", "view.zoomToSelection",
+             "repair.attenuateFrequencies", "edit.deselectAll":
+            return needs(session.selection != nil, selection)
+        case "repair.healArea", "repair.attenuateArea":
+            return needs(timeline.showsSpectrogram && session.spectralArea != nil, L10n.text("reason.spectralArea"))
+        case "view.automation.strips":
+            item?.state = timeline.showsStripLanes ? .on : .off
+            return needs(timeline.shownAutomation != nil, L10n.text("reason.automation"))
+        case "view.spectrogram":
+            item?.title = timeline.showsSpectrogram ? L10n.text("view.showWaveform") : L10n.text("view.showSpectrogram")
+            return (true, nil)
+        case "view.assistant":
             let hidden = ((window?.contentView as? NSSplitView)?.arrangedSubviews.last?.isHidden) ?? true
-            item.title = hidden ? L10n.text("view.showAssistant") : assistant.fieldFocused ? L10n.text("view.hideAssistant") : L10n.text("view.askAssistant")
-            return true
+            item?.title = hidden ? L10n.text("view.showAssistant") : assistant.fieldFocused ? L10n.text("view.hideAssistant") : L10n.text("view.askAssistant")
+            return (true, nil)
+        case "view.transcript":
+            item?.title = transcript.isHidden ? L10n.text("view.showTranscript") : L10n.text("view.hideTranscript")
+            return (true, nil)
+        case "view.focusMode":
+            item?.state = focusMode != nil ? .on : .off
+            return (true, nil)
+        case "file.save":
+            item?.title = (session.linkedFile?.fileName ?? session.lostLink?.name).map { L10n.text("file.saveBack", $0) } ?? L10n.text("file.save")
+            return (true, nil)
+        case "file.duplicate":
+            item?.title = session.wasLinked ? L10n.text("link.lost.saveCopy") : L10n.text("file.duplicate")
+            return (true, nil)
+        case "file.sendToFlimmer": return needs(p.imported?.app == "flimmer", L10n.text("reason.notFromFlimmer"))
+        case "speech.saveVoiceProfile": return needs(!session.speakerPrints.isEmpty, L10n.text("reason.findSpeakersFirst"))
+        case "file.exportTranscript", "edit.findInTranscript", "edit.findNext":
+            return needs(!p.placedWords().isEmpty, L10n.text("reason.transcribeFirst"))
+        case "edit.correctWord": return needs(!p.placedWords(in: session.selection).isEmpty, L10n.text("reason.selectWord"))
+        case "edit.removeFillers": return needs(!p.placedWords().isEmpty, L10n.text("reason.transcribeFirst"))
+        case "speech.transcribe": return needs(hasAudio, L10n.text("reason.noAudio")).0 ? needs(!running("transcribe"), L10n.text("reason.transcribing")) : (false, L10n.text("reason.noAudio"))
+        case "speech.transcribeVoiceTracks":
+            if running("transcribe") { return (false, L10n.text("reason.transcribing")) }
+            return needs(!TrackSpeech.tracks(in: p).isEmpty, L10n.text("reason.noVoiceTracks"))
+        case "speech.splitAndTranscribe":
+            if running("transcribe") { return (false, L10n.text("reason.transcribing")) }
+            return needs(splittableTrack != nil, L10n.text("reason.noSplittable"))
+        case "speech.splitSpeakers": return needs(splittableTrack != nil, L10n.text("reason.noSplittable"))
+        case "transport.binaural":
+            item?.state = EditorSession.binaural ? .on : .off
+            return needs(p.channels > 2, L10n.text("reason.surround"))
+        case "transport.followHead":
+            item?.state = EditorSession.followHead ? .on : .off
+            return needs(EditorSession.binaural && p.channels > 2, L10n.text("reason.binauralFirst"))
+        case "transport.centerHead": return needs(EditorSession.followHead, L10n.text("reason.followHeadFirst"))
+        case "speech.cloneVoice": return needs(session.selection != nil && !p.transcripts.isEmpty, L10n.text("reason.selectTranscribed"))
+        case "speech.overdub":
+            if session.selection == nil { return (false, selection) }
+            return needs(p.voices.contains { $0.deleted == nil }, L10n.text("reason.cloneFirst"))
+        case "speech.deleteVoice": return needs(p.voices.contains { $0.deleted == nil }, L10n.text("reason.cloneFirst"))
+        case "transport.previousMarker", "transport.nextMarker": return needs(!p.markers.isEmpty, L10n.text("reason.noMarkers"))
+        case "track.rename", "track.mute", "track.solo":
+            guard let t = currentTrack else { return (false, L10n.text("reason.chooseTrack")) }
+            if id == "track.mute" { item?.state = t.isMuted ? .on : .off }
+            if id == "track.solo" { item?.state = session.solo.contains(t.id) ? .on : .off }
+            if id == "track.rename" { item?.title = L10n.text("track.rename.named", t.name) }
+            return (true, nil)
+        default: break
         }
-        if item.action == #selector(toggleTranscript(_:)) {
-            item.title = transcript.isHidden ? L10n.text("view.showTranscript") : L10n.text("view.hideTranscript")
-            return true
+        if id.hasPrefix("repair."), ["dehum", "declip", "declick", "denoise", "dereverb"].contains(String(id.dropFirst(7))) {
+            if !hasAudio { return (false, L10n.text("reason.noAudio")) }
+            return needs(!running("restore"), L10n.text("reason.repairing"))
         }
-        if item.action == #selector(saveOrSaveBack(_:)) {
-            item.title = (session.linkedFile?.fileName ?? session.lostLink?.name).map { L10n.text("file.saveBack", $0) } ?? L10n.text("file.save")
-            return true
+        if id.hasPrefix("view.automation.") {
+            let kind = String(id.dropFirst("view.automation.".count))
+            item?.state = (kind == "none" ? nil : kind) == timeline.shownAutomation?.rawValue ? .on : .off
+            // Place and height are a track's in a document wider than stereo only.
+            return needs(!["azimuth", "elevation"].contains(kind) || p.channels > 2, L10n.text("reason.surround"))
         }
-        if item.action == #selector(duplicateOrCopy(_:)) {
-            item.title = session.wasLinked ? L10n.text("link.lost.saveCopy") : L10n.text("file.duplicate")
-            return true
+        if id.hasPrefix("view.spectralTool.") {
+            let tool = String(id.dropFirst("view.spectralTool.".count))
+            item?.state = session.spectralTool.rawValue == tool ? .on : .off
+            if tool != "box", !Operations.spectralFreeform { return (false, L10n.text("reason.notInBuild")) }
+            return needs(timeline.showsSpectrogram, L10n.text("reason.showSpectrogram"))
         }
-        if item.action == #selector(sendToFlimmer(_:)) { return session.project.imported?.app == "flimmer" }
-        if item.action == #selector(saveVoiceProfile(_:)) { return !session.speakerPrints.isEmpty }
-        if item.action == #selector(exportTranscript(_:)) { return !session.project.placedWords().isEmpty }
-        if item.action == #selector(transcribeVoiceTracks(_:)) || item.action == #selector(splitAndTranscribeSpeakers(_:)) {
-            if JobRegistry.shared.latest("transcribe", document: session.agentID).map({ !$0.isFinished }) == true { return false }
-            return item.action == #selector(splitAndTranscribeSpeakers(_:)) ? splittableTrack != nil : !TrackSpeech.tracks(in: session.project).isEmpty
+        if id.hasPrefix("track.layout.order.") {
+            // The order of a file that names no loudspeakers: offered only when the document has one.
+            let open = p.unmaskedOrder
+            item?.isHidden = open == nil
+            if let item, let menu = item.menu, let i = menu.items.firstIndex(of: item), i > 0, menu.items[i - 1].isSeparatorItem { menu.items[i - 1].isHidden = open == nil }
+            item?.state = open?.rawValue == String(id.dropFirst("track.layout.order.".count)) ? .on : .off
+            return (open != nil, nil)
         }
-        if item.action == #selector(splitSpeakers(_:)) { return splittableTrack != nil }
-        if item.action == #selector(showRestore(_:)) {
-            return session.project.length > 0 && !(JobRegistry.shared.latest("restore", document: session.agentID).map { !$0.isFinished } ?? false)
+        if id.hasPrefix("track.layout.") {
+            item?.state = String(id.dropFirst("track.layout.".count)) == p.layout.rawValue ? .on : .off
+            return (true, nil)
         }
-        if item.action == #selector(toggleBinaural(_:)) {
-            item.state = EditorSession.binaural ? .on : .off
-            return session.project.channels > 2
-        }
-        if item.action == #selector(toggleFollowHead(_:)) {
-            item.state = EditorSession.followHead ? .on : .off
-            return EditorSession.binaural && session.project.channels > 2
-        }
-        if item.action == #selector(recenterHead(_:)) { return EditorSession.followHead }
-        if item.action == #selector(cloneVoice(_:)) { return session.selection != nil && !session.project.transcripts.isEmpty }
-        if item.action == #selector(overdubSelection(_:)) { return session.selection != nil && session.project.voices.contains { $0.deleted == nil } }
-        if item.action == #selector(deleteClonedVoice(_:)) { return session.project.voices.contains { $0.deleted == nil } }
-        if item.action == #selector(performOperation(_:)), let op = (item.representedObject as? OperationItem)?.op {
-            // The document's layout has its tick.
-            if op == "set_layout", let order = (item.representedObject as? OperationItem)?.params["order"]?.string {
-                // The order of a file that names no loudspeakers: offered only when the document has one, and the
-                // separator above the two with them.
-                let open = session.project.unmaskedOrder
-                item.isHidden = open == nil
-                if let menu = item.menu, let i = menu.items.firstIndex(of: item), i > 0, menu.items[i - 1].isSeparatorItem { menu.items[i - 1].isHidden = open == nil }
-                item.state = open?.rawValue == order ? .on : .off
-                return open != nil
-            }
-            if op == "set_layout" { item.state = (item.representedObject as? OperationItem)?.params["layout"]?.string == session.project.layout.rawValue ? .on : .off }
-            let needsRange: Set<String> = ["delete", "silence", "crop", "fade_in", "fade_out", "cut", "copy"]
-            return !needsRange.contains(op) || session.selection != nil
-        }
-        return true
+        return (true, nil)
+    }
+
+    /// The track the Track menu acts on: the one last clicked in (or the only one).
+    var currentTrack: Track? {
+        let p = session.project
+        if let id = session.currentTrack, let t = p.tracks.first(where: { $0.id == id }) { return t }
+        return p.tracks.count == 1 ? p.tracks.first : nil
     }
 }
 

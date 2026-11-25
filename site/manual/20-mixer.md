@@ -2,7 +2,7 @@
 
 ![The Mixer window: two tracks, each with a mute box, a level slider, a pan slider, where it goes and its sends; a VCA group at −6 dB with both tracks in it, which each track's line under its fader says; under them the master with its level and its limiter box](../screens/mixer.webp)
 
-**Audio › Mixer…** (⌥⌘X) shows every track as a strip: mute, level, pan, and where it goes. It is a window of its own beside the document, so the timeline stays in reach while it is open; Space plays and stops from it, ⌘Z undoes in it as in the document, and it closes with the document. Use it to set the balance between tracks, to place a track to the left or the right, and to gather tracks on a bus.
+**Track › Mixer…** (⌥⌘X) shows every track as a strip: mute, level, pan, and where it goes. It is a window of its own beside the document, so the timeline stays in reach while it is open; Space plays and stops from it, ⌘Z undoes in it as in the document, and it closes with the document. Use it to set the balance between tracks, to place a track to the left or the right, and to gather tracks on a bus.
 
 ## Level, pan and mute
 
@@ -36,7 +36,7 @@ On a strip, open **Sends**, choose the bus, and pick a level. The same menu chan
 
 ## Plugins on a bus
 
-A bus can hold plugins, like a track: one compressor for all the voices, or a reverb on a bus that the tracks send to. In **Audio › Plugins…** the list at the top has the buses after the tracks, marked "(bus)"; choose one and add the plugin. It runs on everything that arrives at the bus, before the bus's level and pan.
+A bus can hold plugins, like a track: one compressor for all the voices, or a reverb on a bus that the tracks send to. In **Track › Plugins…** the list at the top has the buses after the tracks, marked "(bus)"; choose one and add the plugin. It runs on everything that arrives at the bus, before the bus's level and pan.
 
 **Timing.** A plugin with look-ahead makes its bus late. Jämmer delays every other path by as much wherever sounds meet, sends included, and starts that much earlier, so what you hear and what you export is in time, to the sample. Bypassing the plugin or taking it away takes the delay away too. A plugin that is late without saying so to Jämmer can't be made up for; if a bus sounds late with one plugin and not without it, that is the reason.
 
@@ -56,7 +56,7 @@ When to use which: a **bus** when the tracks should share a plugin or be one thi
 
 ## A plugin that listens to another track (sidechain)
 
-A compressor or a gate with a sidechain input can be made to listen to another track or bus than the one it sits on: music that ducks under a voice while it plays, with your own compressor. In **Audio › Plugins…**, a plugin that has such an input gets a **Key** menu; choose the track or bus it should listen to, or None. The plugin hears that strip after its fader, in time with the sound it works on, whatever other plugins are on the way.
+A compressor or a gate with a sidechain input can be made to listen to another track or bus than the one it sits on: music that ducks under a voice while it plays, with your own compressor. In **Track › Plugins…**, a plugin that has such an input gets a **Key** menu; choose the track or bus it should listen to, or None. The plugin hears that strip after its fader, in time with the sound it works on, whatever other plugins are on the way.
 
 - Only a plugin with a sidechain input has the menu. One that has the input but can't be given a key where it runs says why instead.
 - A key that would make a loop (a plugin listening to something that its own strip feeds) is refused.
@@ -89,7 +89,7 @@ Everything goes through the master last. At the bottom of the mixer it has a lev
 - **The level** is one gain on the whole mix.
 - **The limiter** holds the true peak of everything under the ceiling you set (−1 dBTP to begin with). It comes after everything else: every track, every bus, every plugin, and the master's own level. So turning the master up pushes into the limiter, not past it.
 - **What it promises, and for what.** When you export, Jämmer measures the file it wrote and, if a peak is over the ceiling, writes it again with the limiter aiming a little lower, until the file holds. That covers what happens after the limiter too: another sample rate, 16 bits, and MP3 or AAC, whose encoders raise peaks (in a trial an MP3 needed 0.2 dB of margin and an AAC 0.8). If the file can't be held under the ceiling, the export fails and says what the file measured; lower the master's level or raise the ceiling. Playback has only one pass: it aims 0.1 dB under the ceiling and can go a little over. The promise is for exported files.
-- Plugins go on the master like on a bus: in **Audio › Plugins…**, choose **Master** in the list.
+- Plugins go on the master like on a bus: in **Track › Plugins…**, choose **Master** in the list.
 - **Audio › Limit Peaks…** is another tool: it changes the tracks' own sound once, before plugins. The master's limiter changes nothing in the tracks and can be switched off again.
 
 ## What stays the same

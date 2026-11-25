@@ -7,7 +7,7 @@ A Jämmer project (`.jammer`) is a small package. Inside is `project.json`, a re
 - **File › New** (⌘N) makes an empty project.
 - **File › Open…** (⌘O) opens projects and audio files.
 - **File › Save…** (⌘S) saves; Jämmer also saves automatically as you work, like other Mac apps.
-- **File › Duplicate** (⇧⌘S) makes a copy of the project.
+- **File › Save As…** (⇧⌘S) saves the project under a new name; **File › Duplicate** (⌥⇧⌘S) makes a copy of it.
 - **File › Revert to Saved** goes back to the last save.
 - **File › Collect Audio and Save** copies every file the project plays from into the package (see below).
 - **File › Close** (⌘W) closes the window.

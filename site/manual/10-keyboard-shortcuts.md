@@ -8,7 +8,8 @@
 | ⌘O | Open… |
 | ⌘W | Close |
 | ⌘S | Save… (for a clip from Flimmer: Save Back to the clip) |
-| ⇧⌘S | Duplicate (for a clip from Flimmer: Save a Jämmer Copy…) |
+| ⇧⌘S | Save As… |
+| ⌥⇧⌘S | Duplicate (for a clip from Flimmer: Save a Jämmer Copy…) |
 | ⇧⌘I | Import Tracks… |
 | ⇧⌘E | Export Audio… |
 | ⌥⌘B | Batch… |
@@ -22,9 +23,17 @@
 | ⌘Z / ⇧⌘Z | Undo / Redo |
 | ⌘X / ⌘C / ⌘V | Cut / Copy / Paste |
 | Delete | Delete the selection |
-| ⌘A | Select All |
+| ⌘A / ⇧⌘A | Select All / Deselect All |
+| ⌘F / ⌘G | Find in Transcript / Find Next |
 | Esc | Clear the selection (in the spectrogram: the drawn area first) |
 | ⌘K | Omnibar: the keyboard to the field at the bottom of the window |
+
+## Track
+
+| Shortcut | Command |
+|---|---|
+| ⌥⌘X | Mixer… |
+| ⌥⇧⌘P | Plugins… |
 
 ## Audio
 
@@ -36,10 +45,12 @@
 | ⌘T | Crop to Selection |
 | ⌘] / ⌘[ | Gain +1 dB / −1 dB |
 | ⌥⌘L | Measure Loudness |
-| ⌥⌘M | Add Marker |
-| ⌥⌘X | Mixer… |
-| ⌥⇧⌘P | Plugins… |
-| B / L / P | In the spectrogram: box, lasso, brush |
+
+## Repair
+
+| Shortcut | Command |
+|---|---|
+| B / L / P | In the spectrogram: box, lasso, brush (also **View › Spectrogram Tool**) |
 
 ## Transport
 
@@ -49,6 +60,7 @@
 | Return | Go to Start |
 | ← / → | Back / forward one second |
 | Home / End | Start / end |
+| ⇧⌘M | Add Marker |
 
 ## View
 
@@ -56,10 +68,12 @@
 |---|---|
 | ⌘+ / ⌘− | Zoom In / Out |
 | ⌘0 | Zoom to Fit |
-| ⌘E | Zoom to Selection |
+| ⌥⌘E | Zoom to Selection |
 | ⌥⌘T | Show or Hide Transcript |
 | ⌥⌘A | Assistant: show it and put the cursor in its field; from the field, hide it |
 | ⌥⌘S | Spectrogram or Waveform |
+| ⌃⇧⌘F | Focus Mode: hide the side panels |
+| ⌃⌘F | Full Screen |
 | ⌥⌘Y | Show History |
 | ⌃⌘F | Full Screen |
 | ⌘M | Minimize |
@@ -83,3 +97,9 @@ The keys for drawing automation lanes (⌥-click, ⌥→, ⌥Return and the rest
 |---|---|
 | ⇧⌘C | Copy the line for your agent |
 | Return | Close |
+
+## Help
+
+| Shortcut | Command |
+|---|---|
+| ⌘? | Jämmer Help |

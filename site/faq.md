@@ -56,7 +56,7 @@ Yes. Add the music as a track of its own (**File › Import Tracks…**), then *
 
 ## Can I use my plugins?
 
-Yes: Audio Unit effects (AUv2 and AUv3) can be put on any track. They run inside Jämmer; with **Safe mode** on (Audio › Plugins…) they run in macOS's separate plugin host process instead. CLAP and VST plugins aren't supported yet.
+Yes: Audio Unit effects (AUv2 and AUv3) can be put on any track. They run inside Jämmer; with **Safe mode** on (Track › Plugins…) they run in macOS's separate plugin host process instead. CLAP and VST plugins aren't supported yet.
 
 ## How do I let an AI agent use Jämmer?
 

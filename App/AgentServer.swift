@@ -396,6 +396,23 @@ enum AgentRouter {
             case ["undo"], ["redo"]:
                 try only("POST")
                 return try await undoRedo(session, redo: p.last == "redo")
+            case ["save"]:
+                // File › Save for an agent: the same path as the window's. A linked document is saved back into its
+                // file; a document never saved has no file yet, and naming one is the user's (the file panel).
+                try only("POST")
+                session.checkLink()
+                if let link = session.linkedFile {
+                    session.saveBack()
+                    return .json(["saved": link.fileName, "linked": true, "edited": session.document?.isDocumentEdited ?? false])
+                }
+                if let lost = session.lostLink {
+                    throw APIError(409, "link_lost", "\(lost.name) can't be saved back: \(lost.why). The user decides in the window what happens to the changes.")
+                }
+                guard let doc = session.document, let url = doc.fileURL, let type = doc.fileType else {
+                    throw APIError(409, "no_file", "This document has never been saved, so it has no file. The user saves it the first time in the window (File › Save), choosing where.")
+                }
+                try await doc.save(to: url, ofType: type, for: .saveOperation)
+                return .json(["saved": url.lastPathComponent, "linked": false, "edited": doc.isDocumentEdited])
             case ["analysis"]:
                 try only("GET")
                 guard !session.project.layout.isAmbisonic else {

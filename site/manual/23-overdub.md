@@ -15,14 +15,14 @@ It is built from ElevenLabs' documentation and has not yet been tried with a rea
 A voice is cloned only from someone who has agreed to it. Before anything leaves your Mac:
 
 1. The person whose voice it is says this sentence in the recording: “I consent to my voice being cloned with ElevenLabs to edit this recording.” (In a Swedish recording: “Jag samtycker till att min röst klonas med ElevenLabs för att redigera den här inspelningen.”)
-2. Select where it is said, and choose **Audio › Clone Voice…**.
+2. Select where it is said, and choose **Speech › Clone Voice…**.
 3. Say whose voice it is: your own, or someone who has given you explicit, informed consent. Confirm that the person is 18 or older. The window shows ElevenLabs' terms for cloned voices in short.
 
 Jämmer listens for the sentence in the transcript where you selected. If the sentence isn't there, nothing is sent. Then up to two minutes of the same speaker's speech, taken from the recording, go to ElevenLabs, and the voice is kept in the document together with this record: whose it is, by whose word, and where the consent was said.
 
 ## Saying new words
 
-Select the words to replace, then choose **Audio › Overdub…**. Pick the voice, write what it should say (the selected words are filled in to start from), and send. The new speech takes the selection's place, and what follows moves with its length, as a cut does. It is one undo step.
+Select the words to replace, then choose **Speech › Overdub…**. Pick the voice, write what it should say (the selected words are filled in to start from), and send. The new speech takes the selection's place, and what follows moves with its length, as a cut does. It is one undo step.
 
 The new clip is marked as made with a cloned voice, and its track shows **Cloned voice**. The mark stays in the document, follows the sound through cuts, mixes and repairs, and an exported WAV (or one sent to Flimmer) says so in its metadata. A file from another app that says it contains speech made with a cloned voice is marked the same way when it comes in. ElevenLabs puts an inaudible watermark in what it makes. Jämmer keeps ElevenLabs' file exactly as it came, watermark included, and plays a decoded copy.
 
@@ -30,7 +30,7 @@ Once sent, a clone or an Overdub can't be stopped: it runs to its end, and Eleve
 
 ## Deleting a voice
 
-**Audio › Delete Cloned Voice…** deletes the voice at ElevenLabs. The record of consent stays in the document, and speech already made with the voice stays marked.
+**Speech › Delete Cloned Voice…** deletes the voice at ElevenLabs. The record of consent stays in the document, and speech already made with the voice stays marked.
 
 ## For agents
 

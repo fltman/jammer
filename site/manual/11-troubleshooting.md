@@ -45,5 +45,5 @@ Normalizing to a loudness target raises everything by the same amount and doesn'
 
 ## Jämmer quits or stalls with a plugin on a track
 
-Turn on **Safe mode** under **Audio › Plugins…**. Every plugin then runs in macOS's separate plugin host process instead of inside Jämmer, which is meant to keep a plugin that crashes from taking Jämmer with it. If the document crashes Jämmer as soon as it opens, hold off on playing, open **Audio › Plugins…** and switch the plugin off or remove it. See [Plugins](15-plugins.md).
+Turn on **Safe mode** under **Track › Plugins…**. Every plugin then runs in macOS's separate plugin host process instead of inside Jämmer, which is meant to keep a plugin that crashes from taking Jämmer with it. If the document crashes Jämmer as soon as it opens, hold off on playing, open **Track › Plugins…** and switch the plugin off or remove it. See [Plugins](15-plugins.md).
 

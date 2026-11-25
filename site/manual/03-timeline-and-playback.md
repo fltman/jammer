@@ -4,13 +4,15 @@
 
 - **Transport bar** (top): play/stop, the playhead time, the total length, the playhead in bars, beats and ticks, zoom buttons and the playback volume.
 - **Timeline**: a ruler with times, and one lane per track. Stereo tracks show left above right. Clip edges are thin vertical lines; fades are drawn as a slanted line.
+- **Context menus**: right-click (or Control-click) the timeline, a spectral area or a word in the transcript for the commands that apply there, with the same names and checks as the menu bar. A command that can't run says why, there and in the menu bar, as its help tag.
+- **Focus mode** (**View › Focus Mode**, ⌃⇧⌘F) hides the transcript and the assistant and keeps the timeline; choose it again to bring them back. The window's green button, or ⌃⌘F, gives it the whole screen.
 - **Status bar** (bottom): the selection's start, end and length, messages from the last command, missing files, the tempo and time signature at the playhead, and the sample rate and channel layout.
 
 ## Tempo and time signature
 
-Every project has a tempo map. It starts at 120 BPM in 4/4, and for speech you can ignore it. For music, choose **Audio › Set Tempo…** (or click the tempo in the status bar). Enter the tempo in quarter notes per minute and the time signature. Tick **From the playhead** to make it a change at the playhead instead of the tempo for the whole project.
+Every project has a tempo map. It starts at 120 BPM in 4/4, and for speech you can ignore it. For music, choose **Transport › Set Tempo…** (or click the tempo in the status bar). Enter the tempo in quarter notes per minute and the time signature. Tick **From the playhead** to make it a change at the playhead instead of the tempo for the whole project.
 
-**Audio › Detect Tempo** finds the tempo of music for you and sets the ruler's beats on the music's beats. It works on the selection, or on the whole document (it listens to up to two minutes), and Undo brings the old tempo back.
+**Transport › Detect Tempo** finds the tempo of music for you and sets the ruler's beats on the music's beats. It works on the selection, or on the whole document (it listens to up to two minutes), and Undo brings the old tempo back.
 
 - It answers only for music with one steady beat. For speech, noise or silence, and for music whose tempo changes, it says "no steady tempo was found" and changes nothing.
 - A fast tempo can come back at half speed (174 as 87), and a slow one doubled. If the number looks wrong by a factor of two, set it with **Set Tempo…**; an agent can ask for the other one directly.
@@ -65,4 +67,4 @@ Jämmer plays through the Mac's current output device and follows it when you sw
 
 ## Spectrogram
 
-**View › Show Spectrogram** (⌥⌘S) shows each track as a spectrogram instead of a waveform: time across, frequency up (50 Hz to 16 kHz on a log scale), brightness for level. It's computed for what's on screen, so zoom in to ten minutes or less. Selecting works as in the waveform. **Audio › Attenuate Frequencies…** lowers a frequency band (for example a whistle or a hiss) inside the selection by the number of decibels you give; it renders into a new file like the other repairs, so one undo brings back the original.
+**View › Show Spectrogram** (⌥⌘S) shows each track as a spectrogram instead of a waveform: time across, frequency up (50 Hz to 16 kHz on a log scale), brightness for level. It's computed for what's on screen, so zoom in to ten minutes or less. Selecting works as in the waveform. **Repair › Attenuate Frequencies…** lowers a frequency band (for example a whistle or a hiss) inside the selection by the number of decibels you give; it renders into a new file like the other repairs, so one undo brings back the original.

@@ -41,7 +41,7 @@ With a lane in focus:
 
 ## Writing with the fader
 
-In **Audio › Mixer…** each track and bus has a mode: **Read**, **Touch** or **Latch**. Lanes are only written while the sound plays and the Mixer is in front.
+In **Track › Mixer…** each track and bus has a mode: **Read**, **Touch** or **Latch**. Lanes are only written while the sound plays and the Mixer is in front.
 
 - **Read** plays the lanes. If you move a fader you hear the change, but nothing is written.
 - **Touch** writes the fader into the lane while you hold it, and lets go back to the lane when you release it.

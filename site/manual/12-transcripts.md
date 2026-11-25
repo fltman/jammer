@@ -21,13 +21,13 @@ Choose **Pianissimo · Berget AI** for hosted Swedish transcription. Save your B
 
 ## Transcribe voice tracks independently
 
-Choose **Audio › Transcribe Voice Tracks** when each voice already has its own track, or **Audio › Split and Transcribe Speakers** after finding speakers in a shared recording. Install **Whisper small (multilingual)** under **Settings › Models** first. Whisper detects the language directly from the audio. Jämmer uses an installed Pianissimo model for Swedish or Danish and otherwise transcribes the track with multilingual Whisper. Short or ambiguous speech may have no identified language.
+Choose **Speech › Transcribe Voice Tracks** when each voice already has its own track, or **Speech › Split and Transcribe Speakers** after finding speakers in a shared recording. Install **Whisper small (multilingual)** under **Settings › Models** first. Whisper detects the language directly from the audio. Jämmer uses an installed Pianissimo model for Swedish or Danish and otherwise transcribes the track with multilingual Whisper. Short or ambiguous speech may have no identified language.
 
 Jämmer can name tracks from clear spoken introductions. If a speaker never gives their name, Jämmer looks for a handoff from the preceding speaker. When names repeat, it tries to distinguish them with a role, workplace, or interest said in the introductions, and uses numbers where necessary. You can turn naming off in the confirmation and review the names afterward. The audio stays on your Mac, and the result is one undo step.
 
 ## Export transcripts
 
-Choose **File › Export Transcript** and select all audible tracks or a single track. **TXT** is plain text. **JSON** groups words, timing and recognition languages by track. **SRT** and **WebVTT** make subtitles using the timeline’s word timestamps. For text-only transcripts, choose TXT or JSON.
+Choose **File › Export Transcript…** and select all audible tracks or a single track. **TXT** is plain text. **JSON** groups words, timing and recognition languages by track. **SRT** and **WebVTT** make subtitles using the timeline’s word timestamps. For text-only transcripts, choose TXT or JSON.
 
 ## At OpenAI instead (text only)
 
@@ -49,6 +49,10 @@ The transcript always reads what plays now. It's not a copy: cut something on th
 | Delete or Backspace | Remove the selected words from the audio, with the pauses between them (ripple) |
 | Click a word | Move the playhead there |
 | Space | Play or stop |
+| **Edit › Find in Transcript…** (⌘F), **Find Next** (⌘G) | Find a word; case and accents don't matter |
+| **Edit › Correct Word…** | Change how the selected word reads (the audio is unchanged) |
+| **Edit › Remove Filler Words** | Remove every eh, ehm, öh… from the audio, as one step |
+| Right-click a word | The same commands, and Overdub, in a context menu |
 
 While playing, the word you hear is highlighted. Words the recognizer wasn't sure about have a dotted underline, so you can check them. Words cut through by a clip edge are shown dimmed.
 

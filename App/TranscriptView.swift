@@ -94,6 +94,9 @@ final class TranscriptPanel: NSView, NSTextViewDelegate {
         textView.delegate = self
         textView.panel = self
         textView.setAccessibilityLabel(L10n.text("transcript.title"))
+        // Edit › Find in Transcript: the system's find bar over the text, ignoring case and accents.
+        textView.usesFindBar = true
+        textView.isIncrementalSearchingEnabled = true
         scroll.documentView = textView
         scroll.hasVerticalScroller = true
         scroll.drawsBackground = false
@@ -295,6 +298,14 @@ final class TranscriptPanel: NSView, NSTextViewDelegate {
     /// The line under an empty transcript says where it will be transcribed.
     @objc func engineChanged(_ sender: Any?) { refresh() }
 
+    /// The find bar (⌘F), or the next match (⌘G).
+    func showFind(next: Bool) {
+        window?.makeFirstResponder(textView)
+        let action = NSMenuItem()
+        action.tag = (next ? NSTextFinder.Action.nextMatch : NSTextFinder.Action.showFindInterface).rawValue
+        textView.performTextFinderAction(action)
+    }
+
     @objc func transcribe(_ sender: Any?) {
         let code = language.selectedItem?.representedObject as? String ?? "sv-SE"
         UserDefaults.standard.set(code, forKey: "transcript.language")
@@ -417,5 +428,28 @@ final class TranscriptTextView: NSTextView {
             return
         }
         super.keyDown(with: event)
+    }
+
+    /// Edit › Delete and Cut act on the selected words' audio here too (the text view is read-only, so its own
+    /// versions were grey while words were selected). Copy stays the text's.
+    @objc override func delete(_ sender: Any?) { MainActor.assumeIsolated { panel?.deleteSelectedWords() } }
+    @objc override func cut(_ sender: Any?) { MainActor.assumeIsolated { panel?.session.perform("cut") } }
+
+    override func validateMenuItem(_ item: NSMenuItem) -> Bool {
+        if item.action == #selector(delete(_:)) || item.action == #selector(cut(_:)) {
+            let ok = MainActor.assumeIsolated { panel?.session.selection != nil }
+            item.toolTip = ok ? nil : L10n.text("reason.selectWord")
+            return ok
+        }
+        return super.validateMenuItem(item)
+    }
+
+    /// A word's context menu: the registry's word commands (Correct, Delete, Remove Filler Words, Overdub…),
+    /// named and checked as in the menu bar, with Copy for the text.
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let menu = CommandCenter.contextMenu(.word)
+        menu.insertItem(.separator(), at: 0)
+        menu.insertItem(NSMenuItem(title: L10n.text("edit.copy"), action: #selector(NSText.copy(_:)), keyEquivalent: ""), at: 0)
+        return menu
     }
 }

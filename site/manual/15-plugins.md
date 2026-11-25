@@ -6,7 +6,7 @@ A track can run through Audio Unit effects (AUv2 and AUv3) after its clips and b
 
 ## Add one
 
-**Audio › Plugins…** (⌥⇧⌘P). Pick the track (or a bus, when the document has any; see [the mixer](20-mixer.md)), then **Add Plugin** and the effect, grouped by manufacturer. Each plugin in the list has:
+**Track › Plugins…** (⌥⇧⌘P). Pick the track (or a bus, when the document has any; see [the mixer](20-mixer.md)), then **Add Plugin** and the effect, grouped by manufacturer. Each plugin in the list has:
 
 - a switch to turn it **on or off** (off is bypass: the track sounds exactly as without it),
 - **Edit…**, which opens the plugin's own window (or sliders for its parameters when it has no window),
@@ -25,7 +25,7 @@ The original files are never touched; taking a plugin off brings the track back 
 
 ## Plugins are someone else's code
 
-A plugin runs inside Jämmer, and a badly behaved one can crash the app. If that happens, turn on **Safe mode** at the bottom of **Audio › Plugins…**: every Audio Unit then runs in macOS's separate plugin host process instead, which is meant to keep one that crashes from taking Jämmer with it.
+A plugin runs inside Jämmer, and a badly behaved one can crash the app. If that happens, turn on **Safe mode** at the bottom of **Track › Plugins…**: every Audio Unit then runs in macOS's separate plugin host process instead, which is meant to keep one that crashes from taking Jämmer with it.
 
 A plugin that isn't installed on this Mac (a document from another computer) is listed with a warning and passes the audio through unchanged; its settings stay in the document for when it's back.
 

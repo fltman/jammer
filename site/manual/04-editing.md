@@ -32,7 +32,11 @@ Gain at exactly 0 dB leaves the samples bit-exact.
 
 ## Markers
 
-**Audio › Add Marker** (⌥⌘M) adds a marker at the selection start, or at the playhead. Markers appear as yellow flags with their names and are saved in exported WAV files as cue points.
+**Transport › Add Marker** (⇧⌘M) adds a marker at the selection start, or at the playhead. Markers appear as yellow flags with their names and are saved in exported WAV files as cue points. **Transport › Previous Marker** and **Next Marker** move the playhead between them.
+
+## Tracks
+
+Click in a track to make it the one the **Track** menu acts on: **Rename Track…**, **Mute** and **Solo** (solo is a way of listening and is never an undo step). The menu also has the loudspeaker **Layout**, the **Mixer…** and **Plugins…**.
 
 ## Clips
 

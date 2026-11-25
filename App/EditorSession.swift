@@ -157,6 +157,8 @@ final class EditorSession {
     enum SpectralTool: String { case box, lasso, brush }
     struct SpectralArea { var shape: SpectralShape; var track: Int }
     var spectralTool: SpectralTool = .box
+    /// The track last clicked in: what the Track menu acts on (view state, not part of the document).
+    var currentTrack: UUID?
     var spectralArea: SpectralArea? {
         didSet { if let a = spectralArea { status = L10n.text("spectral.area.status", L10n.message(a.shape.summarySaid.keyed), project.tracks[safe: a.track]?.name ?? L10n.text("spectral.area.aTrack")) } }
     }

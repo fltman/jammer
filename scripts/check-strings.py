@@ -145,6 +145,15 @@ def check(root, require=None):
         code = open(os.path.join(app, name), encoding='utf-8').read()
         for m in re.finditer(r'L10n\.(text|count|reply|replyCount)\(\s*"([^"]+)"', code):
             used.setdefault(m.group(2), set()).add({'reply': 'text', 'replyCount': 'count'}.get(m.group(1), m.group(1)))
+    # The command registry's titles (menus, context menus, ⌘K): every literal that is a key, `.count("…")` a count.
+    registry = os.path.join(root, 'Packages', 'JammerKit', 'Sources', 'JammerAgent', 'Commands.swift')
+    if os.path.exists(registry):
+        code = open(registry, encoding='utf-8').read()
+        counted = set(re.findall(r'\.count\(\s*"([^"]+)"', code))
+        for k in counted: used.setdefault(k, set()).add('count')
+        for k in re.findall(r'"([A-Za-z][\w.]*)"', code):
+            if k in strings and k not in counted: used.setdefault(k, set()).add('text')
+        for m in re.finditer(r'key\(\s*"[^"]*\\\(', code): faults.append('Commands.swift: a title key made with interpolation; write it out so it can be checked')
     for key, how in sorted(used.items()):
         if key not in strings: faults.append(f'the code asks for "{key}", which is not in the catalogue'); continue
         if key in counts and how != {'count'}: faults.append(f'{key} is a count and must be asked for with L10n.count')

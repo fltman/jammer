@@ -594,6 +594,7 @@ final class TimelineOverlay: NSView {
             dragAnchor = nil
             return
         }
+        if let t = project.tracks[safe: laneIndex(at: p.y)] { session.currentTrack = t.id }
         if event.clickCount == 2 {
             // Select the clip under the pointer.
             let lane = laneIndex(at: p.y)
@@ -701,11 +702,24 @@ final class TimelineOverlay: NSView {
     @objc override func selectAll(_ sender: Any?) { session.perform("select_all") }
 
     func validate(_ item: NSMenuItem) -> Bool {
-        switch item.action {
-        case #selector(cut(_:)), #selector(copy(_:)), #selector(delete(_:)): session.selection != nil
-        case #selector(paste(_:)): AppClipboard.content != nil
-        default: true
+        let (ok, why): (Bool, String?) = switch item.action {
+        case #selector(cut(_:)), #selector(copy(_:)), #selector(delete(_:)): (session.selection != nil, L10n.text("reason.selection"))
+        case #selector(paste(_:)): (AppClipboard.content != nil, L10n.text("reason.clipboardEmpty"))
+        default: (true, nil)
         }
+        // A command that is off says why (the comfort list), as in the menu bar's other items.
+        item.toolTip = ok ? nil : why
+        return ok
+    }
+
+    /// The timeline's context menu, from the command registry (the menu bar's names and checks): a spectral
+    /// area's commands over an area, otherwise the timeline's.
+    override func menu(for event: NSEvent) -> NSMenu? {
+        window?.makeFirstResponder(self)
+        let p = convert(event.locationInWindow, from: nil)
+        if let t = project.tracks[safe: laneIndex(at: p.y)] { session.currentTrack = t.id }
+        if areaMode, session.spectralArea != nil { return CommandCenter.contextMenu(.area) }
+        return CommandCenter.contextMenu(.timeline)
     }
 }
 

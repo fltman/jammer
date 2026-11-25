@@ -12,24 +12,72 @@ File › Open Recent
 File › Close	⌘W
 File › Close All	⌥⌘W
 File › Save…	⌘S
-File › Duplicate	⇧⌘S
+File › Save As…	⇧⌘S
+File › Duplicate	⌥⇧⌘S
 File › Revert to Saved	
-File › Collect Audio and Save	
 File › Import Tracks…	⇧⌘I
 File › Import Timeline…	
 File › Export Audio…	⇧⌘E
-File › Export Transcript	
+File › Export Transcript…	
 File › Export Timeline…	
+File › Send to Flimmer…	
+File › Collect Audio and Save	
+File › Linked Files Waiting…	
 File › Batch…	⌥⌘B
 File › Storage…	
-File › Linked Files Waiting…	
-File › Send to Flimmer…	
 Edit › Cut	⌘X
 Edit › Copy	⌘C
 Edit › Paste	⌘V
 Edit › Delete	
 Edit › Select All	⌘A
+Edit › Deselect All	⇧⌘A
+Edit › Find in Transcript…	⌘F
+Edit › Find Next	⌘G
+Edit › Correct Word…	
+Edit › Remove Filler Words	
 Edit › Omnibar	⌘K
+View › Show Transcript	⌥⌘T
+View › Show Assistant	⌥⌘A
+View › Show History	⌥⌘Y
+View › Show Spectrogram	⌥⌘S
+View › Spectrogram Tool	
+View › Spectrogram Tool › Box	
+View › Spectrogram Tool › Lasso	
+View › Spectrogram Tool › Brush	
+View › Automation	
+View › Automation › Hide Lanes	
+View › Automation › Level Lanes	
+View › Automation › Pan Lanes	
+View › Automation › Mute Lanes	
+View › Automation › Send Lanes	
+View › Automation › Place	
+View › Automation › Height	
+View › Automation › Field Turn	
+View › Automation › Field Front	
+View › Automation › Field Side	
+View › Automation › Plugin Parameters	
+View › Automation › Buses, Groups and Master	
+View › Zoom In	⌘+
+View › Zoom Out	⌘-
+View › Zoom to Fit	⌘0
+View › Zoom to Selection	⌥⌘E
+View › Focus Mode	⌃⇧⌘F
+Track › Rename Track…	
+Track › Mute	
+Track › Solo	
+Track › Layout	
+Track › Layout › Mono	
+Track › Layout › Stereo	
+Track › Layout › 5.1	
+Track › Layout › 7.1	
+Track › Layout › 7.1.4	
+Track › Layout › Ambisonics (1st Order)	
+Track › Layout › Ambisonics (2nd Order)	
+Track › Layout › Ambisonics (3rd Order)	
+Track › Layout › Unmarked File: Sides First (ITU-R BS.2051)	
+Track › Layout › Unmarked File: Rears First (WAV Order)	
+Track › Mixer…	⌥⌘X
+Track › Plugins…	⌥⇧⌘P
 Audio › Fade In	⌥⌘I
 Audio › Fade Out	⌥⌘O
 Audio › Silence	⇧⌘L
@@ -53,81 +101,57 @@ Audio › Loudness Preset With Limiter › Spotify (−14 LUFS, −1 dBTP)
 Audio › Loudness Preset With Limiter › YouTube (−14 LUFS, −1 dBTP)	
 Audio › Loudness Preset With Limiter › EBU R 128 broadcast (−23 LUFS, −1 dBTP)	
 Audio › Loudness Preset With Limiter › ATSC A/85 broadcast (−24 LUFS, −2 dBTP)	
+Audio › Limit Peaks…	
+Audio › Duck Under Speech…	
 Audio › Level Speakers	
 Audio › Level Speakers › One Gain per Speaker	
 Audio › Level Speakers › Ride Each Speaker’s Level	
-Audio › Remove Bleed	
-Audio › Remove Bleed › Gate Each Track Outside Its Speaker	
-Audio › Remove Bleed › Cancel the Other Tracks’ Leak	
-Audio › Duck Under Speech…	
-Audio › Limit Peaks…	
-Audio › Check Against ACX Requirements…	
 Audio › Measure Loudness	⌥⌘L
-Audio › Add Marker	⌥⌘M
-Audio › Set Tempo…	
-Audio › Detect Tempo	
-Audio › Remove Hum…	
-Audio › Repair Clipping…	
-Audio › Remove Clicks…	
-Audio › Reduce Noise…	
-Audio › Reduce Reverb…	
-Audio › Attenuate Frequencies…	
-Audio › Attenuate Area…	
-Audio › Heal Area	
-Audio › Edit Spectrum Numerically…	
-Audio › Find Speakers	
-Audio › Find Speakers › Automatically	
-Audio › Find Speakers › 2 Speakers	
-Audio › Find Speakers › 3 Speakers	
-Audio › Find Speakers › 4 Speakers	
-Audio › Find Speakers › Save Speaker as Voice Profile…	
-Audio › Split Speakers onto Tracks	
-Audio › Split and Transcribe Speakers	
-Audio › Transcribe Voice Tracks	
+Audio › Check Against ACX Requirements…	
 Audio › Separate Stems	
 Audio › Separate Stems › Vocals, Drums, Bass, Other (music)	
 Audio › Separate Stems › Speech, Music, Effects (soundtrack)	
-Audio › Mixer…	⌥⌘X
-Audio › Plugins…	⌥⇧⌘P
-Audio › Picture…	
-Audio › Listen on Headphones (Binaural)	
-Audio › Follow Head Movements	
-Audio › Center Head	
-Audio › Clone Voice…	
-Audio › Overdub…	
-Audio › Delete Cloned Voice…	
-Audio › Layout	
-Audio › Layout › Mono	
-Audio › Layout › Stereo	
-Audio › Layout › 5.1	
-Audio › Layout › 7.1	
-Audio › Layout › 7.1.4	
-Audio › Layout › Ambisonics (1st Order)	
-Audio › Layout › Ambisonics (2nd Order)	
-Audio › Layout › Ambisonics (3rd Order)	
+Repair › Remove Hum…	
+Repair › Repair Clipping…	
+Repair › Remove Clicks…	
+Repair › Reduce Noise…	
+Repair › Reduce Reverb…	
+Repair › Remove Bleed	
+Repair › Remove Bleed › Gate Each Track Outside Its Speaker	
+Repair › Remove Bleed › Cancel the Other Tracks’ Leak	
+Repair › Attenuate Frequencies…	
+Repair › Attenuate Area…	
+Repair › Heal Area	
+Repair › Edit Spectrum Numerically…	
+Speech › Transcribe	
+Speech › Transcribe Voice Tracks	
+Speech › Find Speakers	
+Speech › Find Speakers › Automatically	
+Speech › Find Speakers › 2 Speakers	
+Speech › Find Speakers › 3 Speakers	
+Speech › Find Speakers › 4 Speakers	
+Speech › Split Speakers onto Tracks	
+Speech › Split and Transcribe Speakers	
+Speech › Save Speaker as Voice Profile…	
+Speech › Clone Voice…	
+Speech › Overdub…	
+Speech › Delete Cloned Voice…	
 Transport › Play	⌥⌘P
 Transport › Go to Start	
-View › Show History	⌥⌘Y
-View › Zoom In	⌘+
-View › Zoom Out	⌘-
-View › Zoom to Fit	⌘0
-View › Zoom to Selection	⌘E
-View › Show Spectrogram	⌥⌘S
-View › Automation	
-View › Automation › Hide Lanes	
-View › Automation › Level Lanes	
-View › Automation › Pan Lanes	
-View › Automation › Mute Lanes	
-View › Automation › Send Lanes	
-View › Automation › Place	
-View › Automation › Height	
-View › Automation › Field Turn	
-View › Automation › Field Front	
-View › Automation › Field Side	
-View › Automation › Plugin Parameters	
-View › Automation › Buses, Groups and Master	
-View › Show Transcript	⌥⌘T
-View › Show Assistant	⌥⌘A
+Transport › Go to End	
+Transport › Previous Marker	
+Transport › Next Marker	
+Transport › Add Marker	⇧⌘M
+Transport › Set Tempo…	
+Transport › Detect Tempo	
+Transport › Listen on Headphones (Binaural)	
+Transport › Follow Head Movements	
+Transport › Center Head	
+Window › Minimize	⌘M
+Window › Zoom	
+Window › Picture…	
+Window › Bring All to Front	
+Help › Jämmer Help	⌘?
 Help › Agent Access…	
 Help › Open the Agent Guide	
 Help › Jämmer Website	

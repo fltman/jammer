@@ -54,7 +54,8 @@ final class OmnibarModel {
         let byId = Dictionary(list.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         let found = CommandSearch.search(text, in: list.map { .init(id: $0.id, title: $0.title, detail: $0.detail) }, usage: usage)
         // A second line that only repeats the title (a preset named as its operation) is left out.
-        var rows = found.compactMap { f in byId[f.entry.id].map { Row(id: $0.id, title: $0.title, detail: $0.detail == $0.title ? "" : $0.detail, shortcut: $0.shortcut, command: $0) } }
+        // A command that can't run now says why in place of its detail (SIBLINGS comfort list: a disabled command says why).
+        var rows = found.compactMap { f in byId[f.entry.id].map { Row(id: $0.id, title: $0.title, detail: $0.unavailable ?? ($0.detail == $0.title ? "" : $0.detail), shortcut: $0.shortcut, command: $0) } }
         if !text.isEmpty {
             rows.append(Row(id: "omnibar.ask", title: L10n.text("omnibar.ask", text), detail: L10n.text("omnibar.ask.detail"), shortcut: "⌘↩", command: nil))
         }
@@ -128,7 +129,7 @@ struct OmnibarView: View {
                                 Image(systemName: row.command == nil ? "sparkles" : "command").foregroundStyle(i == r.selected ? Theme.neonColor : .secondary)
                                     .frame(width: 16).accessibilityHidden(true)
                                 VStack(alignment: .leading, spacing: 1) {
-                                    Text(row.title).foregroundStyle(i == r.selected ? Theme.neonColor : .primary).lineLimit(1)
+                                    Text(row.title).foregroundStyle(row.command?.unavailable != nil ? .secondary : i == r.selected ? Theme.neonColor : .primary).lineLimit(1)
                                     if !row.detail.isEmpty { Text(row.detail).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
                                 }
                                 Spacer(minLength: 8)

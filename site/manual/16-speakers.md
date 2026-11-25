@@ -2,7 +2,7 @@
 
 ![Two tracks, Flo and Daniel, with the transcript below split into paragraphs under each speaker's name](../screens/speakers.webp)
 
-**Audio › Find Speakers › Automatically** works out who speaks when. The transcript then starts a new paragraph with the speaker's name each time someone else talks, and agents can ask who said what.
+**Speech › Find Speakers › Automatically** works out who speaks when. The transcript then starts a new paragraph with the speaker's name each time someone else talks, and agents can ask who said what.
 
 ## Two ways
 
@@ -11,7 +11,7 @@
 
 **Which to use:** for a double-ender, one track per person is the better way by far: it's exact and needs no model. The model is for a mixed recording, where everyone is on the same track.
 
-The model does very well with voices that sound different and take turns of a few seconds. It struggles with voices that sound alike in quick back-and-forth ("ja", "precis", "mm"): in our test with two similar women's voices it heard only one speaker. When you know how many people talk, choose **Audio › Find Speakers › 2 Speakers** (or 3, 4); that helps a lot. If the model finds only one speaker, Jämmer says so in the status bar and suggests exactly that, rather than presenting one speaker as the answer.
+The model does very well with voices that sound different and take turns of a few seconds. It struggles with voices that sound alike in quick back-and-forth ("ja", "precis", "mm"): in our test with two similar women's voices it heard only one speaker. When you know how many people talk, choose **Speech › Find Speakers › 2 Speakers** (or 3, 4); that helps a lot. If the model finds only one speaker, Jämmer says so in the status bar and suggests exactly that, rather than presenting one speaker as the answer.
 
 ## Names
 
@@ -27,7 +27,7 @@ Finding speakers is one undo step. Like transcript words, speaker turns belong t
 
 ## Remove bleed
 
-On a multitrack recording each microphone also hears the others. **Audio › Remove Bleed** has two ways to take that out, for two different situations:
+On a multitrack recording each microphone also hears the others. **Repair › Remove Bleed** has two ways to take that out, for two different situations:
 
 - **Several people in the same room**, each with their own microphone: every mic picks up the others a few milliseconds late. **Gate Each Track Outside Its Speaker** turns each track down (18 dB by default, with soft 20 ms edges) whenever its own speaker isn't talking; their own speech isn't touched at all. It needs speakers found one per track first (Find Speakers on the multitrack recording). This is the best choice whenever people don't talk over each other.
 - **A remote interview** (a double-ender): there's no acoustic bleed between the places, but the other person's voice can leak out of your guest's headphones or speakers into their microphone, coming back 50–500 ms late and sounding like a phone line. **Cancel the Other Tracks' Leak** finds that delay by itself (up to a second), learns what the leak sounds like where the track's own speaker is quiet, and subtracts it everywhere, so it also works while both talk at once. Their own voice is kept.
@@ -53,13 +53,13 @@ Tried on synthetic material with speech at known times (the level under the spee
 
 ## One track per speaker
 
-**Audio › Split Speakers onto Tracks** gives each speaker found on a track a track of their own, named after them. Together the new tracks play exactly what the track did: where two people talk at once, that moment goes to the one whose turn is longer, and a pause between two people is split in the middle. The original track is muted and kept. It is one undo step, and no file is changed.
+**Speech › Split Speakers onto Tracks** gives each speaker found on a track a track of their own, named after them. Together the new tracks play exactly what the track did: where two people talk at once, that moment goes to the one whose turn is longer, and a pause between two people is split in the middle. The original track is muted and kept. It is one undo step, and no file is changed.
 
 ## Voice profiles
 
 A voice profile lets Jämmer recognize a voice it has heard before. When it finds the speakers in a new recording, a speaker whose voice is like a saved profile is named after it.
 
-- **Saving one.** Find the speakers first, then choose **Audio › Find Speakers › Save Speaker as Voice Profile…**. Pick the speaker, give the profile a name, and say whose voice it is: your own, or someone who knows about it and has agreed that their voice is saved for recognition. Nothing is saved before that.
+- **Saving one.** Find the speakers first, then choose **Speech › Save Speaker as Voice Profile…**. Pick the speaker, give the profile a name, and say whose voice it is: your own, or someone who knows about it and has agreed that their voice is saved for recognition. Nothing is saved before that.
 - **What is saved.** A voiceprint: numbers the speaker model works out from the voice, not the recording. It is biometric data. It is kept only on this Mac, in `~/Library/Application Support/Jammer/VoiceProfiles`, one file per profile, and Time Machine may have copies. It never goes into a document, an export, Send to Flimmer or to an agent.
 - **A suggestion, not a fact.** A speaker named after a profile was found to be *like* it. The status bar says how alike (0 to 1), the step is its own undo step, and a name you set yourself is never replaced. Each profile names one speaker at most in a document.
 - **Deleting and switching off.** **Jämmer › Settings… › Voice Profiles** lists the profiles with their dates. Deleting one removes its voiceprint from the Mac for good; documents that already have the name keep it, as it is their content. Recognition can be switched off there too.
