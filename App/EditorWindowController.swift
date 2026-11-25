@@ -1202,6 +1202,15 @@ struct StatusBar: View {
                     .accessibilityIdentifier("status.line")
             }
             Spacer()
+            // The timeline's clip light: where the mix first reaches full scale; a click goes there.
+            if let at = session.meters.clipAt {
+                Button { session.seek(at) } label: {
+                    StateLine(kind: .error, text: L10n.text("meter.timelineClip", formatTime(session.project.seconds(at))), font: .system(size: 11, design: .monospaced))
+                }
+                .buttonStyle(.plain)
+                .help(L10n.text("meter.timelineClip.help"))
+                .accessibilityIdentifier("status.clip")
+            }
             if !session.missingSources.isEmpty {
                 StateLine(kind: .warning, text: L10n.count("status.missing", session.missingSources.count), font: .system(size: 11, design: .monospaced))
                     // Which, and, for one that Jämmer itself moved to the Trash, where to look.

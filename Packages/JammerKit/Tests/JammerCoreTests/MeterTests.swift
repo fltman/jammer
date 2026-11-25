@@ -77,3 +77,26 @@ struct MeterTests {
         #expect(PlanCompiler.compile(p, pool: pool).render(from: 0, frames: Self.n) == before)
     }
 }
+
+/// The timeline's clip light: where the mix first reaches full scale, found without playing.
+@Suite("Meters: the first sample at full scale on the timeline")
+struct FirstOverTests {
+    @Test("Two tracks that only sum over full scale from 0.5 s on: found at the first such sample; under full scale: none")
+    func finds() {
+        let (base, pool) = MeterTests.document([0.6, 0.6])
+        var p = base
+        // The second track starts half a second in: before that the mix is 0.6, after it 1.2.
+        let half = Frame(24_000)
+        p.tracks[1].clips[0].start = half
+        let plan = PlanCompiler.compile(p, pool: pool)
+        #expect(plan.firstOver(0..<p.length) == half)
+        p.tracks[1].isMuted = true
+        #expect(PlanCompiler.compile(p, pool: pool).firstOver(0..<p.length) == nil)
+    }
+
+    @Test("Asked to stop, it stops and says nothing")
+    func cancels() {
+        let (p, pool) = MeterTests.document([0.6, 0.6])
+        #expect(PlanCompiler.compile(p, pool: pool).firstOver(0..<p.length, cancelled: { true }) == nil)
+    }
+}

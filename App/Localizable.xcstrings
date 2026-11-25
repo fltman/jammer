@@ -16753,6 +16753,42 @@
         }
       }
     },
+    "meter.timelineClip": {
+      "comment": "Status bar: the mix reaches full scale at this time. %@ is a time.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "0 dBFS at %@"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "0 dBFS vid %@"
+          }
+        }
+      }
+    },
+    "meter.timelineClip.help": {
+      "comment": "Help tag on the timeline clip light in the status bar.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The mix reaches full scale here and will clip in a file of fixed point. Click to go there."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mixen når full nivå här och klipper i en fil med fast decimal. Klicka för att gå dit."
+          }
+        }
+      }
+    },
     "meter.value": {
       "comment": "VoiceOver value of a meter. %@ is a number.",
       "extractionState": "manual",

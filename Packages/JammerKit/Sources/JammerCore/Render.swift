@@ -150,6 +150,27 @@ public final class RenderPlan: @unchecked Sendable {
         return Array(out.prefix(count))
     }
 
+    /// The first frame in `range` where the mix reaches `threshold` (full scale: |x| ≥ 1), or nil; `cancelled` is asked
+    /// between blocks and ends the search with nil. For the timeline's clip light, with no playback (Flimmer's K5).
+    public func firstOver(_ range: Range<Frame>, threshold: Float = 1, cancelled: () -> Bool = { false }) -> Frame? {
+        struct Found: Error { let frame: Frame }
+        struct Stopped: Error {}
+        var at = range.lowerBound
+        let ch = channels
+        do {
+            try render(range, blockFrames: 16_384) { block in
+                if cancelled() { throw Stopped() }
+                for i in 0..<block.count where abs(block[i]) >= threshold { throw Found(frame: at + Frame(i / ch)) }
+                at += Frame(block.count / ch)
+            }
+        } catch let f as Found {
+            return f.frame
+        } catch {
+            return nil
+        }
+        return nil
+    }
+
     /// Renders a range in blocks, handing each to `body` (offline export, analysis).
     /// The longest path through the mixer, in frames: what the plugins on the buses add, and what every
     /// other path is delayed to match. 0 without plugins on buses. The mix itself comes out on the sample.

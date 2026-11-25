@@ -17,6 +17,13 @@ final class StripMeters {
         var clipped = false
     }
     private(set) var levels: [UUID: Level] = [:]
+    /// Where the mix first reaches full scale on the timeline (the timeline's clip light, Flimmer's K5): found in the
+    /// background 1.5 s after the document last changed, with a plan of its own and never by playing. nil: nowhere.
+    private(set) var clipAt: Frame?
+    @ObservationIgnored private var scannedVersion = -1
+    @ObservationIgnored private var changedVersion = -1
+    @ObservationIgnored private var changedAt = Date()
+    @ObservationIgnored private var scan: Task<Void, Never>?
     @ObservationIgnored private var lastFrame: Frame?
     @ObservationIgnored private var lastTick = Date()
     @ObservationIgnored private var loop: Task<Void, Never>?
@@ -40,10 +47,35 @@ final class StripMeters {
     }
 
     func level(_ id: UUID) -> Level { levels[id] ?? Level() }
+
+    private func scanIfDue(_ session: EditorSession) {
+        if session.version != changedVersion {
+            changedVersion = session.version
+            changedAt = Date()
+            scan?.cancel()
+            scan = nil
+        }
+        guard changedVersion != scannedVersion, scan == nil, !session.isPlaying, Date().timeIntervalSince(changedAt) > 1.5 else { return }
+        let version = changedVersion, project = session.project, pool = session.pool, safe = EditorSession.pluginSafeMode
+        let stop = JobRegistry.StopFlag()
+        scan = Task { [weak self] in
+            let found = await withTaskCancellationHandler {
+                await Task.detached(priority: .utility) { () -> Frame? in
+                    let plan = PlanCompiler.mixBlocking(project, pool: pool, outOfProcess: safe)
+                    return plan.firstOver(0..<project.length, cancelled: { stop.isSet })
+                }.value
+            } onCancel: { stop.set() }
+            guard let self, !Task.isCancelled, self.changedVersion == version else { return }
+            self.clipAt = found
+            self.scannedVersion = version
+            self.scan = nil
+        }
+    }
     func clearClip(_ id: UUID) { levels[id]?.clipped = false }
 
     private func tick() {
         guard let session else { return }
+        scanIfDue(session)
         let now = Date(), dt = now.timeIntervalSince(lastTick)
         lastTick = now
         let p = session.project
