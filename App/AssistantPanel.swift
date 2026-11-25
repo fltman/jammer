@@ -378,6 +378,12 @@ final class AssistantModel {
             messages.append(Message(role: .note, text: L10n.reply("assistant.reply.noTools", replyLanguage, model, provider.name)))
             return false
         }
+        // Text requests (SIBLINGS, "Betalt kräver alltid en fråga", the exception Anders made on 2026-11-25): the
+        // notice at first use, with a tick per service; once a service is ticked, its text requests go without a
+        // question. Taken back in Settings › Paid Services. (Plans with paid steps can't come from here: the
+        // assistant's catalogue has no paid operation.)
+        let service = "text.\(provider.id)"
+        if UnknownPrice.isAccepted(service) { return true }
         let price = choice?.estimate ?? L10n.text("assistant.paid.rate", provider.name)
         let alert = NSAlert()
         alert.messageText = L10n.text("assistant.paid.title", model, provider.name)
@@ -386,14 +392,21 @@ final class AssistantModel {
         alert.addButton(withTitle: L10n.text("button.cancel"))
         // No price on the provider's list for this model: Send stays grey until that is ticked as understood.
         // (A price from the provider's own list counts as known. Asked once per provider, not per model.)
-        let unknown = UnknownPriceBox(service: "text.\(provider.id)", name: provider.name)
+        let unknown = UnknownPriceBox(service: service, name: provider.name)
+        // A known price: the tick is offered, not required (the request may go this once without it).
+        let dontAsk = NSButton(checkboxWithTitle: L10n.text("assistant.paid.dontAsk", provider.name), target: nil, action: nil)
+        dontAsk.setAccessibilityIdentifier("assistant.paid.dontAsk")
+        dontAsk.sizeToFit()
         if choice?.estimate == nil {
             UnknownPriceBox.place([unknown.view], in: alert)
             unknown.gate(alert.buttons[0])
+        } else {
+            UnknownPriceBox.place([dontAsk], in: alert)
         }
         let yes: Bool
         if let window = session.window { yes = await alert.beginSheetModal(for: window) == .alertFirstButtonReturn } else { yes = alert.runModal() == .alertFirstButtonReturn }
         if yes, choice?.estimate == nil { unknown.sent() }
+        if yes, choice?.estimate != nil, dontAsk.state == .on { UnknownPrice.accept(service, name: provider.name) }
         return yes
     }
 }

@@ -1497,6 +1497,24 @@
         }
       }
     },
+    "assistant.paid.dontAsk": {
+      "comment": "Checkbox in the assistant's paid notice. %@ the provider.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Don’t ask again before text requests to %@ (take it back in Settings › Paid Services)"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fråga inte igen före textförfrågningar till %@ (ångra under Inställningar › Betaltjänster)"
+          }
+        }
+      }
+    },
     "assistant.paid.rate": {
       "comment": "First sentence of the question before a paid request, when no estimate is known. %@ is the provider.",
       "extractionState": "manual",
@@ -11885,23 +11903,6 @@
         }
       }
     },
-    "op.export_transcript.title": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Export Transcript"
-          }
-        },
-        "sv": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Exportera transkribering"
-          }
-        }
-      }
-    },
     "file.importTimeline": {
       "extractionState": "manual",
       "localizations": {
@@ -19422,6 +19423,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Exportera tidslinje"
+          }
+        }
+      }
+    },
+    "op.export_transcript.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export Transcript"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exportera transkribering"
           }
         }
       }
