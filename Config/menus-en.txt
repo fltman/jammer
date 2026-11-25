@@ -157,6 +157,8 @@ Transport › Go to End
 Transport › Previous Marker	
 Transport › Next Marker	
 Transport › Add Marker	⇧⌘M
+Transport › Rename Marker…	
+Transport › Delete Marker	
 Transport › Set Tempo…	
 Transport › Detect Tempo	
 Transport › Listen on Headphones (Binaural)	

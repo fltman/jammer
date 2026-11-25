@@ -19,7 +19,9 @@ id=com.brattoo.jammer.debug.guest
 dry=0; [[ "${1:-}" == "--dry" ]] && dry=1
 # For the script's own test: another folder in place of the home folder and the temporary folder.
 home="${JAMMER_GUEST_CLEAN_ROOT:-$HOME}"; tmp="${JAMMER_GUEST_CLEAN_ROOT:+$JAMMER_GUEST_CLEAN_ROOT/tmp/}"; tmp="${tmp:-${TMPDIR:-/tmp/}}"
-if pgrep -f "build/guest/Jammer.app/Contents/MacOS/Jammer" >/dev/null; then echo "guest-clean: the guest copy is running; quit it first. Nothing was removed." >&2; exit 1; fi
+# A running guest stops a real clean. The script's own test works in a stand-in folder that no guest uses, so a
+# guest running for a visit at the same time (as it does during a visitor's run) isn't a reason to stop that.
+if [[ -z "${JAMMER_GUEST_CLEAN_ROOT:-}" ]] && pgrep -f "build/guest/Jammer.app/Contents/MacOS/Jammer" >/dev/null; then echo "guest-clean: the guest copy is running; quit it first. Nothing was removed." >&2; exit 1; fi
 gone=0
 unlink_one() { if (( dry )); then echo "would remove $1"; else rm -f -- "$1" && echo "removed $1"; fi; gone=$((gone + 1)); }
 rmdir_one() { if (( dry )); then echo "would remove the folder $1 (if empty)"; else rmdir -- "$1" 2>/dev/null && echo "removed the folder $1" || echo "left the folder $1 (not empty)"; fi; }

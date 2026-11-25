@@ -121,6 +121,8 @@ enum CommandCenter {
         case "transport.previousMarker": return (#selector(W.previousMarker(_:)), nil)
         case "transport.nextMarker": return (#selector(W.nextMarker(_:)), nil)
         case "transport.addMarker": return (#selector(W.addMarker(_:)), nil)
+        case "transport.renameMarker": return (#selector(W.renameMarker(_:)), nil)
+        case "transport.deleteMarker": return (#selector(W.deleteMarker(_:)), nil)
         case "transport.setTempo": return (#selector(W.setTempo(_:)), nil)
         case "transport.binaural": return (#selector(W.toggleBinaural(_:)), nil)
         case "transport.followHead": return (#selector(W.toggleFollowHead(_:)), nil)

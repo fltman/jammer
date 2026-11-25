@@ -157,6 +157,11 @@ struct BatchTests {
         // Same folder, no suffix, same format: the output would be the input.
         #expect(reason(["files": [dir.appending(path: "in/a.wav").path], "output": dir.appending(path: "in").path, "suffix": "", "overwrite": true]) == "would_overwrite_source")
         #expect(reason(["files": [dir.appending(path: "in/a.wav").path], "output": dir.appending(path: "in").path, "overwrite": true]) == nil)
+        // A suffix never leads out of the output folder: its separators are only characters of the name (FileNames).
+        let sneaky = try BatchRequest.parse(["files": [dir.appending(path: "in/a.wav").path], "output": out, "suffix": "/../../" + outside.lastPathComponent + "/x"], policy: policy)
+        let dest = sneaky.destination(for: dir.appending(path: "in/a.wav"))
+        #expect(dest.deletingLastPathComponent().standardizedFileURL.path == URL(fileURLWithPath: out).standardizedFileURL.path, "\(dest.path)")
+        #expect(dest.lastPathComponent == "a-..-..-\(outside.lastPathComponent)-x.wav")
     }
 
     @Test("Timeline import: the file and the media it names must lie in an allowed folder")

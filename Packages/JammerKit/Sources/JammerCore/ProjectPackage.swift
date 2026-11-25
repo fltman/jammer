@@ -145,12 +145,10 @@ extension ProjectPackage {
     }
 
     static func uniqueName(for original: String, taken: inout Set<String>) -> String {
-        // Keep names portable: no slashes or colons, no leading dot.
-        var base = original.replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: "-")
-        while base.hasPrefix(".") { base.removeFirst() }
-        if base.isEmpty { base = "audio" }
-        let ext = (base as NSString).pathExtension
-        let stem = (base as NSString).deletingPathExtension
+        // Keep names portable (FileNames: no folder separators, control characters or leading dot; NFC; 120 at most).
+        let ext = (original as NSString).pathExtension
+        let stem = (original as NSString).deletingPathExtension
+        let base = FileNames.safe(stem, ext: ext, fallback: "audio")
         var name = base
         var n = 2
         while taken.contains(name.lowercased()) {

@@ -688,6 +688,32 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         }
     }
 
+    /// Transport › Rename Marker…, and a double-click on a flag: its name changed as one step.
+    @objc func renameMarker(_ sender: Any?) {
+        guard let window, let m = session.markerInFocus else { return }
+        let field = NSTextField(string: m.name)
+        field.frame = NSRect(x: 0, y: 0, width: 260, height: 24)
+        let alert = NSAlert()
+        alert.messageText = L10n.text("marker.rename.title")
+        alert.accessoryView = field
+        alert.addButton(withTitle: L10n.text("button.ok"))
+        alert.addButton(withTitle: L10n.text("button.cancel"))
+        alert.beginSheetModal(for: window) { [weak self] answer in
+            let name = field.stringValue.trimmingCharacters(in: .whitespaces)
+            guard answer == .alertFirstButtonReturn, !name.isEmpty, name != m.name else { return }
+            self?.session.perform("set_marker", ["marker": .string(m.id.uuidString), "name": .string(name)])
+        }
+        alert.window.makeFirstResponder(field)
+        field.selectText(nil)
+    }
+
+    /// Transport › Delete Marker: the marker in focus goes, as one step (the agent's remove_marker).
+    @objc func deleteMarker(_ sender: Any?) {
+        guard let m = session.markerInFocus else { return }
+        session.perform("remove_marker", ["marker": .string(m.id.uuidString)])
+        session.currentMarker = nil
+    }
+
     @objc func addMarker(_ sender: Any?) {
         let n = session.project.markers.count + 1
         session.perform("add_marker", ["name": .string(L10n.text("marker.default", String(n)))])
@@ -804,7 +830,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         guard !indices.isEmpty else { return }
 
         let panel = NSSavePanel()
-        panel.nameFieldStringValue = session.name + ".txt"
+        panel.nameFieldStringValue = FileNames.safe(session.name, ext: "txt")
         panel.allowsOtherFileTypes = false
         let formats = NSPopUpButton()
         formats.addItems(withTitles: ["TXT", "JSON", "SRT", "WebVTT"])
@@ -857,7 +883,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.wav, .aiff, UTType("org.xiph.flac") ?? .audio, .mpeg4Audio, UTType(filenameExtension: "opus") ?? .audio, .mp3]
         panel.allowsOtherFileTypes = true
-        panel.nameFieldStringValue = session.name + ".wav"
+        panel.nameFieldStringValue = FileNames.safe(session.name, ext: "wav")
         let model = ExportChoices(hasSelection: session.selection != nil, wide: session.project.channels > 2)
         panel.accessoryView = NSHostingView(rootView: ExportAccessory(model: model))
         panel.beginSheetModal(for: window) { [weak self] response in
@@ -905,7 +931,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         let formats = TimelineFormat.allCases
         let panel = NSSavePanel()
         panel.allowedContentTypes = formats.compactMap { UTType(filenameExtension: $0.fileExtension) }
-        panel.nameFieldStringValue = session.name + ".otio"
+        panel.nameFieldStringValue = FileNames.safe(session.name, ext: "otio")
         let popup = NSPopUpButton(frame: .zero, pullsDown: false)
         let titles: [TimelineFormat: String] = [.edl: L10n.text("export.timeline.edl"), .otio: L10n.text("export.timeline.otio"), .dawproject: L10n.text("export.timeline.dawproject")]
         for f in formats { popup.addItem(withTitle: titles[f] ?? f.rawValue) }
@@ -1010,6 +1036,12 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
             return needs(p.voices.contains { $0.deleted == nil }, L10n.text("reason.cloneFirst"))
         case "speech.deleteVoice": return needs(p.voices.contains { $0.deleted == nil }, L10n.text("reason.cloneFirst"))
         case "transport.previousMarker", "transport.nextMarker": return needs(!p.markers.isEmpty, L10n.text("reason.noMarkers"))
+        case "transport.renameMarker", "transport.deleteMarker":
+            if let m = session.markerInFocus {
+                item?.title = id == "transport.renameMarker" ? L10n.text("transport.renameMarker.named", m.name) : L10n.text("transport.deleteMarker.named", m.name)
+                return (true, nil)
+            }
+            return (false, p.markers.isEmpty ? L10n.text("reason.noMarkers") : L10n.text("reason.chooseMarker"))
         case "track.rename", "track.mute", "track.solo", "track.lock", "track.duplicate", "track.moveUp", "track.moveDown", "track.delete":
             guard let t = currentTrack else { return (false, L10n.text("reason.chooseTrack")) }
             if id == "track.mute" { item?.state = t.isMuted ? .on : .off }

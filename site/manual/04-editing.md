@@ -27,7 +27,7 @@ The pointer shows what a press will grab: an I-beam selects, ↔ grabs an edge, 
 | A selection's edge | Move that edge |
 | A clip's edge, in the lower half of the lane | Trim the clip; the sound under it stays where it is |
 | The small square at a clip's top corner | Set the fade in or out; the curve is drawn as you drag |
-| A marker's flag | Move the marker (double-click it to rename) |
+| A marker's flag | Move the marker (double-click it to rename; right-click it to rename or delete it) |
 
 While you drag, the value shows by the pointer, and edges and markers snap to clip edges, markers and the playhead (a dashed line shows the snap; hold ⌃ to drag freely). Past the window's edge the view keeps scrolling. Esc cancels the drag and puts back what was there. Each drag is one step to undo.
 
@@ -60,7 +60,7 @@ Gain at exactly 0 dB leaves the samples bit-exact.
 
 ## Markers
 
-**Transport › Add Marker** (⇧⌘M) adds a marker at the selection start, or at the playhead. Markers appear as yellow flags with their names and are saved in exported WAV files as cue points. **Transport › Previous Marker** and **Next Marker** move the playhead between them.
+**Transport › Add Marker** (⇧⌘M) adds a marker at the selection start, or at the playhead. **Rename Marker…** and **Delete Marker** act on the marker whose flag you clicked last, or the one at the playhead. Markers appear as yellow flags with their names and are saved in exported WAV files as cue points. **Transport › Previous Marker** and **Next Marker** move the playhead between them.
 
 ## Tracks
 

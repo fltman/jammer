@@ -24584,6 +24584,24 @@
         }
       }
     },
+    "reason.chooseMarker": {
+      "comment": "Why Rename/Delete Marker is off.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Click a marker's flag first."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Klicka först på en markörs flagga."
+          }
+        }
+      }
+    },
     "reason.chooseTrack": {
       "comment": "Command registry (comfort block).",
       "extractionState": "manual",
@@ -33691,6 +33709,42 @@
         }
       }
     },
+    "transport.deleteMarker": {
+      "comment": "Transport menu and a marker's context menu.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete Marker"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ta bort markör"
+          }
+        }
+      }
+    },
+    "transport.deleteMarker.named": {
+      "comment": "Transport menu when a marker is in focus. %@ is its name.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete Marker “%@”"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ta bort markören ”%@”"
+          }
+        }
+      }
+    },
     "transport.goToEnd": {
       "comment": "Transport menu.",
       "extractionState": "manual",
@@ -33849,6 +33903,42 @@
           "stringUnit": {
             "state": "translated",
             "value": "Föregående markör"
+          }
+        }
+      }
+    },
+    "transport.renameMarker": {
+      "comment": "Transport menu and a marker's context menu.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rename Marker…"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Byt namn på markör…"
+          }
+        }
+      }
+    },
+    "transport.renameMarker.named": {
+      "comment": "Transport menu when a marker is in focus. %@ is its name.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rename Marker “%@”…"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Byt namn på markören ”%@”…"
           }
         }
       }

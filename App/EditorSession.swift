@@ -190,6 +190,12 @@ final class EditorSession {
     var tool = "select" { didSet { if let s = SpectralTool(rawValue: tool) { spectralTool = s } } }
     /// The track last clicked in: what the Track menu acts on (view state, not part of the document).
     var currentTrack: UUID?
+    /// The marker whose flag was clicked last: Transport › Rename Marker… and Delete Marker act on it.
+    var currentMarker: UUID?
+    /// The marker those commands act on: the clicked one while it still exists, else the one at the playhead.
+    var markerInFocus: Marker? {
+        project.markers.first { $0.id == currentMarker } ?? project.markers.first { $0.position == playhead }
+    }
     var spectralArea: SpectralArea? {
         didSet { if let a = spectralArea { status = L10n.text("spectral.area.status", L10n.message(a.shape.summarySaid.keyed), project.tracks[safe: a.track]?.name ?? L10n.text("spectral.area.aTrack")) } }
     }

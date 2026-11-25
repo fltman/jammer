@@ -103,9 +103,9 @@ public struct BatchRequest: Sendable {
     public static let audioExtensions: Set<String> = ["wav", "wave", "bwf", "aif", "aiff", "aifc", "flac", "mp3", "m4a", "aac", "caf", "ogg", "opus"]
     public static let jobOps: Set<String> = ["restore", "transcribe", "diarize", "separate"]
 
-    /// Where the result of `input` goes.
+    /// Where the result of `input` goes: always straight inside `output`, whatever the suffix says (FileNames).
     public func destination(for input: URL) -> URL {
-        output.appending(path: input.deletingPathExtension().lastPathComponent + suffix).appendingPathExtension(export.format.fileExtension)
+        output.appending(path: FileNames.safe(input.deletingPathExtension().lastPathComponent + suffix, ext: export.format.fileExtension, fallback: "Jämmer"))
     }
 
     /// Refuses a request whose outputs would land on one of its inputs, whatever `overwrite` says.

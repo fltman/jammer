@@ -261,6 +261,9 @@ public enum Commands {
         add("transport.previousMarker", .transport, 1, key("transport.previousMarker"), agent: op("set_playhead"))
         add("transport.nextMarker", .transport, 1, key("transport.nextMarker"), agent: op("set_playhead"))
         add("transport.addMarker", .transport, 1, key("audio.addMarker"), key: "m", [.shift], agent: op("add_marker"), contexts: [.timeline])
+        // The current marker: the one whose flag was clicked last (or right-clicked), else the one at the playhead.
+        add("transport.renameMarker", .transport, 1, key("transport.renameMarker"), agent: op("set_marker"), contexts: [.marker])
+        add("transport.deleteMarker", .transport, 1, key("transport.deleteMarker"), agent: op("remove_marker"), contexts: [.marker])
         add("transport.setTempo", .transport, 2, key("audio.setTempo"), agent: op("set_tempo"))
         add("transport.detectTempo", .transport, 2, key("audio.detectTempo"), agent: op("detect_tempo"), payload: ["op": .string("detect_tempo")])
         add("transport.binaural", .transport, 3, key("menu.listen.binaural"), agent: .none(.listening))

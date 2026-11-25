@@ -580,22 +580,10 @@ final class TimelineOverlay: NSView {
         }
     }
 
-    /// Double-click on a flag: its name changed as one step.
+    /// Double-click on a flag: Transport › Rename Marker… for it.
     private func renameMarker(_ id: UUID) {
-        guard let window, let m = project.markers.first(where: { $0.id == id }) else { return }
-        let field = NSTextField(string: m.name)
-        field.frame = NSRect(x: 0, y: 0, width: 260, height: 24)
-        let alert = NSAlert()
-        alert.messageText = L10n.text("marker.rename.title")
-        alert.accessoryView = field
-        alert.addButton(withTitle: L10n.text("button.ok"))
-        alert.addButton(withTitle: L10n.text("button.cancel"))
-        alert.window.initialFirstResponder = field
-        alert.beginSheetModal(for: window) { [weak self] answer in
-            let name = field.stringValue.trimmingCharacters(in: .whitespaces)
-            guard answer == .alertFirstButtonReturn, !name.isEmpty, name != m.name else { return }
-            self?.session.perform("set_marker", ["marker": .string(id.uuidString), "name": .string(name)])
-        }
+        session.currentMarker = id
+        (window?.windowController as? EditorWindowController)?.renameMarker(nil)
     }
 
     /// Esc during a drag puts back what was there and ends it without a step (COMFORT.md 41).
@@ -1046,6 +1034,7 @@ final class TimelineOverlay: NSView {
         if handDrag != nil { handDrag = nil; NSCursor.openHand.set(); return }
         if let h = handleDrag {
             handleDrag = nil
+            if case .marker(let id) = h.kind { session.currentMarker = id }
             if didDrag { commit(h) } else if case .marker = h.kind { session.seek(h.value) }
             needsDisplay = true
             return
@@ -1139,6 +1128,11 @@ final class TimelineOverlay: NSView {
         let p = convert(event.locationInWindow, from: nil)
         if let t = project.tracks[safe: laneIndex(at: p.y)] { session.currentTrack = t.id }
         if areaMode, session.spectralArea != nil { return CommandCenter.contextMenu(.area) }
+        // A marker's flag has its own menu (COMFORT 37: one context menu per object): Rename and Delete.
+        if case .marker(let id) = HandleZones.zone(at: Double(p.x), Double(p.y), in: zoneLayout()) {
+            session.currentMarker = id
+            return CommandCenter.contextMenu(.marker)
+        }
         return CommandCenter.contextMenu(.timeline)
     }
 }

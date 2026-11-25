@@ -630,7 +630,7 @@ public enum FlimmerSend {
             }
             for (i, (item, r)) in zip(items, files).enumerated() {
                 try Task.checkCancellation()
-                uploads.append(try await client.upload(file: r.file, name: "\(item.name)-jammer.wav", limits: limits))
+                uploads.append(try await client.upload(file: r.file, name: FileNames.safe(item.name + "-jammer", ext: "wav"), limits: limits))
                 progress(0.5 + 0.5 * Double(i + 1) / Double(items.count + 1))
             }
             let dry = body(project, plan: plan, mode: mode, items: items, uploads: uploads, dryRun: true)
