@@ -70,6 +70,8 @@ enum CommandCenter {
         case "edit.delete": return (#selector(TimelineOverlay.delete(_:)), nil)
         case "edit.selectAll": return (#selector(TimelineOverlay.selectAll(_:)), nil)
         case "edit.deselectAll": return (#selector(W.deselectAllCommand(_:)), nil)
+        case "edit.split": return (#selector(W.splitAtPlayhead(_:)), nil)
+        case "view.toolPalette": return (#selector(W.toggleToolPalette(_:)), nil)
         case "edit.findInTranscript": return (#selector(W.findInTranscript(_:)), nil)
         case "edit.findNext": return (#selector(W.findNextInTranscript(_:)), nil)
         case "edit.correctWord": return (#selector(W.correctWord(_:)), nil)
@@ -128,7 +130,7 @@ enum CommandCenter {
         default: break
         }
         if c.payload["op"] != nil { return (#selector(W.performOperation(_:)), nil) }
-        if c.id.hasPrefix("view.spectralTool.") { return (#selector(W.chooseSpectralTool(_:)), nil) }
+        if c.id.hasPrefix("view.tool.") { return (#selector(W.chooseToolCommand(_:)), nil) }
         if c.id.hasPrefix("view.automation.") { return (#selector(W.showAutomation(_:)), nil) }
         if c.id.hasPrefix("track.layout.") { return (#selector(W.performOperation(_:)), nil) }
         if c.id.hasPrefix("audio.stems.") { return (#selector(W.separateStems(_:)), nil) }

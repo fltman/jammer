@@ -680,6 +680,15 @@ Removes the markers with this name, or the one marker with this id.
 | `name` | string | Marker name. |
 | `marker` | string | Marker id (from the document's markers). |
 
+### `split`
+
+Splits the clips under a point in two, on every track or only on the tracks given. Nothing moves and nothing is heard differently; the halves can then be trimmed, faded or moved on their own.
+
+| Param | Type | Description |
+|---|---|---|
+| `at` | seconds | Where to split, in seconds. Defaults to the playhead. |
+| `tracks` | list | Track ids. Default: every track. |
+
 ### `set_marker`
 
 Moves, renames or resizes one marker, by its id (the document's markers list them). What isn't given stays.

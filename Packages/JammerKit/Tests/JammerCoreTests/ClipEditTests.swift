@@ -16,6 +16,22 @@ struct ClipEditTests {
         return p
     }
 
+    @Test("The Split tool splits only the track it is given; without tracks, every track under the point")
+    func splitOnTracks() {
+        var p = project()
+        var second = p.tracks[0]
+        second.id = UUID()
+        p.tracks.append(second)
+        p.split(at: 96_000, onTracks: [second.id])
+        #expect(p.tracks[0].clips.count == 2 && p.tracks[1].clips.count == 3)
+        #expect(p.tracks[1].clips[0].end == 96_000 && p.tracks[1].clips[1].start == 96_000 && p.tracks[1].clips[1].sourceStart == 96_000)
+        p.split(at: 360_000)
+        #expect(p.tracks[0].clips.count == 3 && p.tracks[1].clips.count == 4)
+        // A point between clips splits nothing.
+        p.split(at: 240_000)
+        #expect(p.tracks[0].clips.count == 3)
+    }
+
     @Test("Trimming moves the edge into the file, never past its start or end, and never over the next clip")
     func trim() throws {
         var p = project()

@@ -24,8 +24,18 @@
     },
     {
       "file": "site/manual/10-keyboard-shortcuts.md",
-      "on": "| B / L / P | In the spectrogram: box, lasso, brush (also **View › Spectrogram Tool**) |",
-      "off": "| B | In the spectrogram: the box tool (also **View › Spectrogram Tool**) |"
+      "on": "| B / L / P | The spectrogram tools: box, lasso, brush (also **View › Tool**) |",
+      "off": "| B | The spectrogram's box tool (also **View › Tool**) |"
+    },
+    {
+      "file": "site/manual/10-keyboard-shortcuts.md",
+      "on": "| B / L / P | Box / Lasso / Brush (the spectrogram) |",
+      "off": "| B | Box (the spectrogram) |"
+    },
+    {
+      "file": "site/manual/04-editing.md",
+      "on": "| Box, Lasso, Brush | B, L, P | Draw an area in the spectrogram",
+      "off": "| Box | B | Draw a box in the spectrogram"
     },
     {
       "file": "site/app.json",

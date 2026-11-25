@@ -157,6 +157,9 @@ final class EditorSession {
     enum SpectralTool: String { case box, lasso, brush }
     struct SpectralArea { var shape: SpectralShape; var track: Int }
     var spectralTool: SpectralTool = .box
+    /// The palette's tool (Commands.tools: select, split, trim, fade, gain, box, lasso, brush, zoom, hand): how the
+    /// timeline answers the mouse. View state, never part of the document. A spectral tool is also `spectralTool`.
+    var tool = "select" { didSet { if let s = SpectralTool(rawValue: tool) { spectralTool = s } } }
     /// The track last clicked in: what the Track menu acts on (view state, not part of the document).
     var currentTrack: UUID?
     var spectralArea: SpectralArea? {

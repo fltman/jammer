@@ -60,6 +60,8 @@ public enum HandleZones {
         public var markers: [MarkerFlag]
         /// A flag's height, under the ruler.
         public var flagHeight: Double = 14
+        /// The Trim tool: a clip's edges are grabbed over the whole height of the lane.
+        public var trimAnywhere = false
         public init(rulerHeight: Double, laneHeight: Double, lanes: [[ClipBox]], selection: (start: Double, end: Double)?, markers: [MarkerFlag]) {
             self.rulerHeight = rulerHeight; self.laneHeight = laneHeight; self.lanes = lanes; self.selection = selection; self.markers = markers
         }
@@ -93,7 +95,7 @@ public enum HandleZones {
             if abs(x - s.end) <= grip { return .selectionEnd }
         }
         // Clip edges, in the lower half of the lane (the upper half keeps its plain selection drag).
-        if y > top + l.laneHeight / 2 {
+        if l.trimAnywhere || y > top + l.laneHeight / 2 {
             for c in clips {
                 if abs(x - c.start) <= grip { return .trimStart(clip: c.id) }
                 if abs(x - c.end) <= grip { return .trimEnd(clip: c.id) }

@@ -126,6 +126,7 @@ public enum Commands {
         add("edit.paste", .edit, 1, key("edit.paste"), key: "v", agent: op("paste"), contexts: [.timeline])
         add("edit.delete", .edit, 1, key("edit.delete"), agent: op("delete"), contexts: [.timeline, .clip, .word])
         add("edit.selectAll", .edit, 1, key("edit.selectAll"), key: "a", agent: op("select_all"))
+        add("edit.split", .edit, 1, key("edit.split"), key: "b", agent: op("split"), contexts: [.timeline, .clip])
         add("edit.deselectAll", .edit, 1, key("edit.deselectAll"), key: "a", [.shift], agent: op("deselect"), contexts: [.timeline])
         add("edit.findInTranscript", .edit, 2, key("edit.findInTranscript"), key: "f", agent: .route("GET", doc + "/transcript"))
         add("edit.findNext", .edit, 2, key("edit.findNext"), key: "g", agent: .route("GET", doc + "/transcript"), palette: false)
@@ -137,10 +138,12 @@ public enum Commands {
         add("view.transcript", .view, 0, key("view.showTranscript"), key: "t", [.option], agent: .none(.view))
         add("view.assistant", .view, 0, key("view.showAssistant"), key: "a", [.option], agent: .none(.assistant))
         add("view.history", .view, 0, key("view.history"), key: "y", [.option], agent: .route("GET", doc + "/history"))
+        add("view.toolPalette", .view, 0, key("view.toolPalette"), agent: .none(.view))
         add("view.spectrogram", .view, 1, key("view.showSpectrogram"), key: "s", [.option], agent: .none(.view))
-        // The single letter works while the timeline has the keys.
-        for (tool, title, k) in [("box", "view.spectralTool.box", "b"), ("lasso", "view.spectralTool.lasso", "l"), ("brush", "view.spectralTool.brush", "p")] {
-            add("view.spectralTool." + tool, .view, 1, key(title), agent: .none(.view), submenu: "view.spectralTool", payload: ["tool": .string(tool), "letter": .string(k)])
+        // The tools (the palette's): the single letter works while the timeline has the keys. A tool is how the
+        // window answers the mouse, never part of the document.
+        for t in Commands.tools {
+            add("view.tool." + t.id, .view, 1, key(t.title), agent: .none(.view), submenu: "view.tool", payload: ["tool": .string(t.id), "letter": .string(t.letter)])
         }
         for (kind, title) in [("none", "menu.view.automation.none"), ("gain", "menu.view.automation.gain"), ("pan", "menu.view.automation.pan"),
                               ("mute", "menu.view.automation.mute"), ("send", "menu.view.automation.send"), ("azimuth", "menu.view.automation.azimuth"),
@@ -252,6 +255,22 @@ public enum Commands {
     }
 
     public static func command(_ id: String) -> Command? { byID[id] }
+
+    /// The tool palette's tools, in its order, with the letter that picks each and its symbol (Anders chose all of
+    /// them, 2026-11-25; Glimmer's pattern).
+    public struct Tool: Sendable { public let id: String, letter: String, title: String, symbol: String, spectral: Bool }
+    public static let tools: [Tool] = [
+        Tool(id: "select", letter: "a", title: "tool.select", symbol: "cursorarrow", spectral: false),
+        Tool(id: "split", letter: "s", title: "tool.split", symbol: "scissors", spectral: false),
+        Tool(id: "trim", letter: "t", title: "tool.trim", symbol: "arrow.left.and.right", spectral: false),
+        Tool(id: "fade", letter: "f", title: "tool.fade", symbol: "line.diagonal", spectral: false),
+        Tool(id: "gain", letter: "g", title: "tool.gain", symbol: "speaker.wave.2", spectral: false),
+        Tool(id: "box", letter: "b", title: "view.spectralTool.box", symbol: "rectangle.dashed", spectral: true),
+        Tool(id: "lasso", letter: "l", title: "view.spectralTool.lasso", symbol: "lasso", spectral: true),
+        Tool(id: "brush", letter: "p", title: "view.spectralTool.brush", symbol: "paintbrush.pointed", spectral: true),
+        Tool(id: "zoom", letter: "z", title: "tool.zoom", symbol: "plus.magnifyingglass", spectral: false),
+        Tool(id: "hand", letter: "h", title: "tool.hand", symbol: "hand.raised", spectral: false),
+    ]
 
     /// Shortcuts macOS keeps for itself, and the one command each may belong to (nil: none of Jämmer's).
     /// "⌃⌘F is Full Screen, ⌘H Hide, ⌘M Minimize" (SIBLINGS, comfort list).

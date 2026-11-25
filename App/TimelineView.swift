@@ -25,6 +25,12 @@ final class TimelineView: NSView {
     let viewport = Viewport()
     private let metal: WaveformMetalView
     private let overlay: TimelineOverlay
+
+    /// After a tool change: the handles and the pointer drawn again.
+    func overlayNeedsDisplay() {
+        overlay.needsDisplay = true
+        window?.invalidateCursorRects(for: overlay)
+    }
     private let spectrogram: SpectrogramLayerView
     let automation: AutomationLanesView
     /// The lanes of the strips that have no waveform (buses, VCA groups, the master), in thin rows under the tracks.
@@ -122,6 +128,14 @@ final class TimelineView: NSView {
         let maxFPP = max(Double(session.project.length), session.project.sampleRate) / 50
         viewport.framesPerPoint = min(maxFPP, max(0.05, viewport.framesPerPoint / factor))
         viewport.start = anchor - Double(anchorX) * viewport.framesPerPoint
+        clampStart()
+        refresh(waveform: true)
+    }
+
+    /// The Zoom tool's dragged range filling the view.
+    func zoom(to range: Range<Frame>) {
+        viewport.framesPerPoint = max(0.05, Double(range.count) / Double(max(100, bounds.width - 40)))
+        viewport.start = Double(range.lowerBound) - 20 * viewport.framesPerPoint
         clampStart()
         refresh(waveform: true)
     }
@@ -355,6 +369,11 @@ final class TimelineOverlay: NSView {
     private var snapX: CGFloat?
     private var lastDragPoint: NSPoint?
     private var autoscroll: Timer?
+    /// The Gain, Zoom and Hand tools' drags: where they began and what they have so far.
+    private var gainDrag: (clip: UUID, startY: CGFloat, startDB: Double, db: Double)?
+    private var zoomDrag: (startX: CGFloat, x: CGFloat)?
+    private var handDrag: CGFloat?
+    private var tool: String { session.tool }
 
     init(session: EditorSession, viewport: Viewport) {
         self.session = session
@@ -418,12 +437,49 @@ final class TimelineOverlay: NSView {
     }
 
     private func zone(at p: NSPoint) -> HandleZones.Zone {
-        areaMode ? (p.y < TimelineView.rulerHeight ? .ruler : .none) : HandleZones.zone(at: Double(p.x), Double(p.y), in: zoneLayout())
+        if areaMode { return p.y < TimelineView.rulerHeight ? .ruler : .none }
+        // Split, Gain, Zoom and Hand grab no handles: the whole lane is theirs.
+        if ["split", "gain", "zoom", "hand"].contains(tool) {
+            if p.y < TimelineView.rulerHeight { return .ruler }
+            let i = laneIndex(at: p.y)
+            return project.tracks.indices.contains(i) ? .lane(i) : .none
+        }
+        var l = zoneLayout()
+        l.trimAnywhere = tool == "trim"
+        return HandleZones.zone(at: Double(p.x), Double(p.y), in: l)
     }
+
+    /// A pointer drawn from an SF Symbol, for the tools macOS has none for (the scissors, the magnifier).
+    private static func symbolCursor(_ name: String) -> NSCursor {
+        guard let image = NSImage(systemSymbolName: name, accessibilityDescription: nil)?
+            .withSymbolConfiguration(.init(pointSize: 15, weight: .medium)) else { return .crosshair }
+        let tinted = NSImage(size: image.size, flipped: false) { r in
+            image.draw(in: r)
+            NSColor.white.set()
+            r.fill(using: .sourceAtop)
+            return true
+        }
+        return NSCursor(image: tinted, hotSpot: NSPoint(x: image.size.width / 2, y: image.size.height / 2))
+    }
+    private static let scissors = symbolCursor("scissors")
+    private static let zoomIn = symbolCursor("plus.magnifyingglass")
+    private static let zoomOut = symbolCursor("minus.magnifyingglass")
+    private static let closedHandCursor = NSCursor.closedHand
 
     private func cursor(for z: HandleZones.Zone) -> NSCursor {
         if areaMode, z != .ruler { return .crosshair }
         if handleDrag.map({ if case .marker = $0.kind { true } else { false } }) == true { return .closedHand }
+        if case .lane = z {
+            switch tool {
+            case "split": return Self.scissors
+            case "trim": return .arrow
+            case "fade": return .crosshair
+            case "gain": return .resizeUpDown
+            case "zoom": return NSEvent.modifierFlags.contains(.option) ? Self.zoomOut : Self.zoomIn
+            case "hand": return handDrag != nil ? .closedHand : .openHand
+            default: break
+            }
+        }
         switch z.pointer {
         case .arrow: return .arrow
         case .iBeam: return .iBeam
@@ -542,7 +598,9 @@ final class TimelineOverlay: NSView {
 
     /// Esc during a drag puts back what was there and ends it without a step (COMFORT.md 41).
     private func cancelDrag() -> Bool {
-        guard handleDrag != nil || (dragAnchor != nil && didDrag) || selectionBeforeDrag != nil else { return false }
+        guard handleDrag != nil || (dragAnchor != nil && didDrag) || selectionBeforeDrag != nil || gainDrag != nil || zoomDrag != nil else { return false }
+        gainDrag = nil
+        zoomDrag = nil
         if let before = selectionBeforeDrag { session.selection = before }
         handleDrag = nil
         dragAnchor = nil
@@ -707,6 +765,10 @@ final class TimelineOverlay: NSView {
                 NSBezierPath(roundedRect: NSRect(x: x - 3, y: h, width: 6, height: 12), xRadius: 2, yRadius: 2).fill()
             }
         }
+        if let z = zoomDrag, abs(z.x - z.startX) >= 4 {
+            Theme.neon.withAlphaComponent(0.15).setFill()
+            NSRect(x: min(z.x, z.startX), y: h, width: abs(z.x - z.startX), height: bounds.height - h).fill()
+        }
         guard let d = handleDrag else { drawDragValue(); return }
         switch d.kind {
         case .fadeIn(let id), .fadeOut(let id):
@@ -743,7 +805,9 @@ final class TimelineOverlay: NSView {
         }
         guard let p = lastDragPoint else { return }
         let text: String
-        if let d = handleDrag {
+        if let g = gainDrag {
+            text = L10n.text("timeline.drag.gain", L10n.number(g.db, 1))
+        } else if let d = handleDrag {
             let s = project.seconds(d.value)
             switch d.kind {
             case .fadeIn, .fadeOut: text = L10n.text("timeline.drag.fade", formatTime(s))
@@ -873,6 +937,33 @@ final class TimelineOverlay: NSView {
             return
         }
         if let t = project.tracks[safe: laneIndex(at: p.y)] { session.currentTrack = t.id }
+        if !areaMode, let lane = project.tracks[safe: laneIndex(at: p.y)] {
+            let under = lane.clips.first { $0.range.contains(f) }
+            switch tool {
+            case "split":
+                session.perform("split", ["at": .number(project.seconds(f)), "tracks": .array([.string(lane.id.uuidString)])])
+                return
+            case "fade":
+                if let c = under {
+                    handleDrag = f - c.start < c.length / 2 ? (.fadeIn(c.id), c.fadeIn) : (.fadeOut(c.id), c.fadeOut)
+                    didDrag = false
+                }
+                return
+            case "gain":
+                if let c = under { gainDrag = (c.id, p.y, c.gainDB, c.gainDB) }
+                return
+            case "zoom":
+                zoomDrag = (p.x, p.x)
+                return
+            case "hand":
+                handDrag = p.x
+                Self.closedHandCursor.set()
+                return
+            case "trim":
+                return
+            default: break
+            }
+        }
         if event.clickCount == 2 {
             // Select the clip under the pointer.
             let lane = laneIndex(at: p.y)
@@ -903,6 +994,19 @@ final class TimelineOverlay: NSView {
             return
         }
         if cancelled { return }
+        if let g = gainDrag {
+            // 1 dB for every 4 points up or down, from where the drag began.
+            gainDrag?.db = max(-96, min(24, ((g.startDB + Double(g.startY - p.y) / 4) * 2).rounded() / 2))
+            lastDragPoint = p
+            needsDisplay = true
+            return
+        }
+        if zoomDrag != nil { zoomDrag?.x = p.x; needsDisplay = true; return }
+        if let start = handDrag {
+            timeline?.scroll(byPoints: start - p.x)
+            handDrag = p.x
+            return
+        }
         if p.y < TimelineView.rulerHeight && dragAnchor == nil && handleDrag == nil {
             session.seek(frame(at: p))
             return
@@ -916,7 +1020,25 @@ final class TimelineOverlay: NSView {
         stopScrolling()
         snapX = nil
         lastDragPoint = nil
-        if cancelled { cancelled = false; dragAnchor = nil; handleDrag = nil; needsDisplay = true; return }
+        if cancelled { cancelled = false; dragAnchor = nil; handleDrag = nil; gainDrag = nil; zoomDrag = nil; handDrag = nil; needsDisplay = true; return }
+        if let g = gainDrag {
+            gainDrag = nil
+            if g.db != g.startDB { session.perform("set_clip", ["clip": .string(g.clip.uuidString), "gainDB": .number(g.db)]) }
+            needsDisplay = true
+            return
+        }
+        if let z = zoomDrag {
+            zoomDrag = nil
+            if abs(z.x - z.startX) < 4 {
+                timeline?.zoom(by: event.modifierFlags.contains(.option) ? 0.5 : 2, around: z.startX)
+            } else {
+                let a = frame(at: NSPoint(x: min(z.x, z.startX), y: 0)), b = frame(at: NSPoint(x: max(z.x, z.startX), y: 0))
+                timeline?.zoom(to: a..<max(b, a + 1))
+            }
+            needsDisplay = true
+            return
+        }
+        if handDrag != nil { handDrag = nil; NSCursor.openHand.set(); return }
         if let h = handleDrag {
             handleDrag = nil
             if didDrag { commit(h) } else if case .marker = h.kind { session.seek(h.value) }
@@ -973,9 +1095,12 @@ final class TimelineOverlay: NSView {
         case 53 where cancelDrag(): break // escape: a drag in progress first
         case 53 where areaMode && session.spectralArea != nil: session.spectralArea = nil; needsDisplay = true // escape: the area first
         case 53: session.selection = nil // escape
-        case 11 where areaMode: session.spectralTool = .box; session.status = L10n.text("spectral.tool.box") // B
-        case 37 where areaMode && Operations.spectralFreeform: session.spectralTool = .lasso; session.status = L10n.text("spectral.tool.lasso") // L
-        case 35 where areaMode && Operations.spectralFreeform: session.spectralTool = .brush; session.status = L10n.text("spectral.tool.brush") // P
+        case _ where event.modifierFlags.intersection([.command, .control, .option]).isEmpty
+            && Commands.tools.contains(where: { $0.letter == event.charactersIgnoringModifiers?.lowercased() }):
+            // A tool's letter (the palette's): A, S, T, F, G, B, L, P, Z, H.
+            if let t = Commands.tools.first(where: { $0.letter == event.charactersIgnoringModifiers?.lowercased() }) {
+                (window?.windowController as? EditorWindowController)?.chooseTool(t.id)
+            }
         case 51, 117: delete(nil) // delete, forward delete
         case 123: session.seek(session.playhead - Frame(project.sampleRate)) // left: 1 s
         case 124: session.seek(session.playhead + Frame(project.sampleRate))

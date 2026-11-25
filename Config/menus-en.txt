@@ -30,6 +30,7 @@ Edit › Copy	⌘C
 Edit › Paste	⌘V
 Edit › Delete	
 Edit › Select All	⌘A
+Edit › Split at Playhead	⌘B
 Edit › Deselect All	⇧⌘A
 Edit › Find in Transcript…	⌘F
 Edit › Find Next	⌘G
@@ -39,11 +40,19 @@ Edit › Omnibar	⌘K
 View › Show Transcript	⌥⌘T
 View › Show Assistant	⌥⌘A
 View › Show History	⌥⌘Y
+View › Show Tool Palette	
 View › Show Spectrogram	⌥⌘S
-View › Spectrogram Tool	
-View › Spectrogram Tool › Box	
-View › Spectrogram Tool › Lasso	
-View › Spectrogram Tool › Brush	
+View › Tool	
+View › Tool › Selection	
+View › Tool › Split	
+View › Tool › Trim	
+View › Tool › Fade	
+View › Tool › Gain	
+View › Tool › Box	
+View › Tool › Lasso	
+View › Tool › Brush	
+View › Tool › Zoom	
+View › Tool › Hand	
 View › Automation	
 View › Automation › Hide Lanes	
 View › Automation › Level Lanes	

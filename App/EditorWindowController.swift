@@ -23,7 +23,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
     let transcript: TranscriptPanel
     let assistant: AssistantModel
     /// Focus mode: which side panels were shown before it hid them (a view mode, never an undo step).
-    var focusMode: (assistant: Bool, transcript: Bool)?
+    var focusMode: (assistant: Bool, transcript: Bool, palette: Bool)?
+    var toolPaletteView: NSView?
     private var assistantView: NSView!
     /// The omnibar at the bottom of the window (⌘K), over the timeline's lower edge while it lists commands.
     private(set) var omnibar: OmnibarModel!
@@ -52,7 +53,16 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         let omnibarRoom = NSView()
         omnibarRoom.heightAnchor.constraint(equalToConstant: 52).isActive = true
         omnibarRoom.setContentHuggingPriority(.required, for: .vertical)
-        let stack = NSStackView(views: [transport, timeline, transcript, omnibarRoom, statusBar])
+        // The tool palette in a column of its own beside the timeline (never over the waveform).
+        let palette = NSHostingView(rootView: ToolPalette(session: session) { [unowned self] id in self.chooseTool(id) })
+        palette.isHidden = UserDefaults.standard.object(forKey: "toolPalette.visible") as? Bool == false
+        toolPaletteView = palette
+        let timelineRow = NSStackView(views: [palette, timeline])
+        timelineRow.orientation = .horizontal
+        timelineRow.spacing = 0
+        timelineRow.alignment = .height
+        timelineRow.setContentHuggingPriority(.defaultLow, for: .vertical)
+        let stack = NSStackView(views: [transport, timelineRow, transcript, omnibarRoom, statusBar])
         transcript.isHidden = !UserDefaults.standard.bool(forKey: "transcript.visible")
         transcript.heightAnchor.constraint(equalTo: timeline.heightAnchor, multiplier: 0.45).isActive = true
         transcript.setContentHuggingPriority(.defaultLow, for: .vertical)
@@ -63,7 +73,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         // The timeline and the transcript the stack's whole width, required: the stack's own alignment gave way after
         // some edits (a fade in) and the transcript panel shrank to its one-line label, against the right edge (seen
         // 2026-11-17). The transport and the status bar keep their own width, centered.
-        for row in [timeline, transcript] as [NSView] { row.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true }
+        for row in [timelineRow, transcript] as [NSView] { row.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true }
         transport.setContentHuggingPriority(.required, for: .vertical)
         statusBar.setContentHuggingPriority(.required, for: .vertical)
         timeline.setContentHuggingPriority(.defaultLow, for: .vertical)
@@ -996,12 +1006,17 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
             // Place and height are a track's in a document wider than stereo only.
             return needs(!["azimuth", "elevation"].contains(kind) || p.channels > 2, L10n.text("reason.surround"))
         }
-        if id.hasPrefix("view.spectralTool.") {
-            let tool = String(id.dropFirst("view.spectralTool.".count))
-            item?.state = session.spectralTool.rawValue == tool ? .on : .off
-            if tool != "box", !Operations.spectralFreeform { return (false, L10n.text("reason.notInBuild")) }
-            return needs(timeline.showsSpectrogram, L10n.text("reason.showSpectrogram"))
+        if id.hasPrefix("view.tool.") {
+            let tool = String(id.dropFirst("view.tool.".count))
+            item?.state = session.tool == tool ? .on : .off
+            if ["lasso", "brush"].contains(tool), !Operations.spectralFreeform { return (false, L10n.text("reason.notInBuild")) }
+            return (true, nil)
         }
+        if id == "view.toolPalette" {
+            item?.title = (toolPaletteView?.isHidden ?? true) ? L10n.text("view.toolPalette") : L10n.text("view.hideToolPalette")
+            return (true, nil)
+        }
+        if id == "edit.split" { return needs(hasAudio, L10n.text("reason.noAudio")) }
         if id.hasPrefix("track.layout.order.") {
             // The order of a file that names no loudspeakers: offered only when the document has one.
             let open = p.unmaskedOrder

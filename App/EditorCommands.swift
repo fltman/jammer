@@ -55,24 +55,40 @@ extension EditorWindowController {
             assistantPanel.isHidden = !before.assistant
             if before.assistant { split.setPosition(split.frame.width - 320, ofDividerAt: 0) }
             transcript.isHidden = !before.transcript
+            toolPaletteView?.isHidden = !before.palette
             focusMode = nil
         } else {
-            focusMode = (!assistantPanel.isHidden, !transcript.isHidden)
+            focusMode = (!assistantPanel.isHidden, !transcript.isHidden, !(toolPaletteView?.isHidden ?? true))
             assistantPanel.isHidden = true
             transcript.isHidden = true
+            toolPaletteView?.isHidden = true
         }
     }
 
-    /// View › Spectrogram Tool: the same as B, L and P on the timeline.
-    @objc func chooseSpectralTool(_ sender: Any?) {
-        guard let raw = (sender as? NSMenuItem)?.representedObject as? String, let tool = EditorSession.SpectralTool(rawValue: raw) else { return }
-        session.spectralTool = tool
-        session.status = switch tool {
-        case .box: L10n.text("spectral.tool.box")
-        case .lasso: L10n.text("spectral.tool.lasso")
-        case .brush: L10n.text("spectral.tool.brush")
-        }
+    /// A tool chosen from the palette, View › Tool or its letter. A spectral tool shows the spectrogram, any other
+    /// the waveform: each tool works where it can act.
+    func chooseTool(_ id: String) {
+        guard let t = Commands.tools.first(where: { $0.id == id }) else { return }
+        if t.spectral, !Operations.spectralFreeform, id != "box" { NSSound.beep(); return }
+        session.tool = id
+        if t.spectral != timeline.showsSpectrogram { toggleSpectrogram(nil) }
+        session.status = L10n.text("tool.help", L10n.text(t.title), t.letter.uppercased())
+        timeline.overlayNeedsDisplay()
     }
+
+    @objc func chooseToolCommand(_ sender: Any?) {
+        if let id = (sender as? NSMenuItem)?.representedObject as? String { chooseTool(id) }
+    }
+
+    @objc func toggleToolPalette(_ sender: Any?) {
+        guard let v = toolPaletteView else { return }
+        v.isHidden.toggle()
+        UserDefaults.standard.set(!v.isHidden, forKey: "toolPalette.visible")
+        (sender as? NSMenuItem)?.title = L10n.text(v.isHidden ? "view.toolPalette" : "view.hideToolPalette")
+    }
+
+    /// Edit › Split at Playhead (⌘B): every track's clip under the playhead in two.
+    @objc func splitAtPlayhead(_ sender: Any?) { session.perform("split") }
 
     @objc func transcribeCommand(_ sender: Any?) {
         if transcript.isHidden { toggleTranscript(nil) }

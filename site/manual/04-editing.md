@@ -18,6 +18,34 @@ You can copy in one project and paste in another.
 
 Markers inside a deleted range are removed; markers after it move with the audio.
 
+## Handles and tools
+
+The pointer shows what a press will grab: an I-beam selects, ↔ grabs an edge, an open hand grabs a marker.
+
+| Drag | To |
+|---|---|
+| A selection's edge | Move that edge |
+| A clip's edge, in the lower half of the lane | Trim the clip; the sound under it stays where it is |
+| The small square at a clip's top corner | Set the fade in or out; the curve is drawn as you drag |
+| A marker's flag | Move the marker (double-click it to rename) |
+
+While you drag, the value shows by the pointer, and edges and markers snap to clip edges, markers and the playhead (a dashed line shows the snap; hold ⌃ to drag freely). Past the window's edge the view keeps scrolling. Esc cancels the drag and puts back what was there. Each drag is one step to undo.
+
+The **tool palette** left of the timeline, **View › Tool**, or a tool's letter while the timeline has the keys picks what a press does:
+
+| Tool | Key | A press or drag in a lane |
+|---|---|---|
+| Selection | A | Selects, and grabs the handles above |
+| Split | S | Splits the clip under the pointer, on that track only |
+| Trim | T | Grabs a clip's edges over the whole height of the lane |
+| Fade | F | Drags the fade of the clip's nearer end to the pointer |
+| Gain | G | Drag up or down to change the clip's gain (1 dB per 4 points) |
+| Box, Lasso, Brush | B, L, P | Draw an area in the spectrogram ([Restoration](13-restoration.md)); choosing one shows the spectrogram |
+| Zoom | Z | Click to zoom in (⌥-click: out); drag across a range to fill the view with it |
+| Hand | H | Drag to move along the timeline |
+
+**Edit › Split at Playhead** (⌘B) splits every track's clip under the playhead. A tool is part of the window, not the project: changing it is never a step to undo.
+
 ## Fades
 
 **Audio › Fade In** (⌥⌘I) and **Audio › Fade Out** (⌥⌘O) fade over the selection. A fade in starts at the selection start, a fade out ends at the selection end, and the clip is split there if needed. The curve is equal-power, which sounds even to the ear.

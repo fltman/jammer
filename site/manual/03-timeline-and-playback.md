@@ -3,9 +3,10 @@
 ## The window
 
 - **Transport bar** (top): play/stop, the playhead time, the total length, the playhead in bars, beats and ticks, zoom buttons and the playback volume.
+- **Tool palette** (left of the timeline): the tools that decide what the mouse does there, with the current one lit. Hover a tool for its name and letter. **View › Show Tool Palette** shows or hides it; see [Editing](04-editing.md#handles-and-tools).
 - **Timeline**: a ruler with times, and one lane per track. Stereo tracks show left above right. Clip edges are thin vertical lines; fades are drawn as a slanted line.
 - **Context menus**: right-click (or Control-click) the timeline, a spectral area or a word in the transcript for the commands that apply there, with the same names and checks as the menu bar. A command that can't run says why, there and in the menu bar, as its help tag.
-- **Focus mode** (**View › Focus Mode**, ⌃⇧⌘F) hides the transcript and the assistant and keeps the timeline; choose it again to bring them back. The window's green button, or ⌃⌘F, gives it the whole screen.
+- **Focus mode** (**View › Focus Mode**, ⌃⇧⌘F) hides the transcript, the assistant and the tool palette and keeps the timeline; choose it again to bring them back. The window's green button, or ⌃⌘F, gives it the whole screen.
 - **Status bar** (bottom): the selection's start, end and length, messages from the last command, missing files, the tempo and time signature at the playhead, and the sample rate and channel layout.
 
 ## Tempo and time signature

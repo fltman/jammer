@@ -24,8 +24,9 @@
 | ⌘X / ⌘C / ⌘V | Cut / Copy / Paste |
 | Delete | Delete the selection |
 | ⌘A / ⇧⌘A | Select All / Deselect All |
+| ⌘B | Split at Playhead |
 | ⌘F / ⌘G | Find in Transcript / Find Next |
-| Esc | Clear the selection (in the spectrogram: the drawn area first) |
+| Esc | Cancel a drag; otherwise clear the selection (in the spectrogram: the drawn area first) |
 | ⌘K | Omnibar: the keyboard to the field at the bottom of the window |
 
 ## Track
@@ -50,7 +51,7 @@
 
 | Shortcut | Command |
 |---|---|
-| B / L / P | In the spectrogram: box, lasso, brush (also **View › Spectrogram Tool**) |
+| B / L / P | The spectrogram tools: box, lasso, brush (also **View › Tool**) |
 
 ## Transport
 
@@ -80,11 +81,27 @@
 
 The keys for drawing automation lanes (⌥-click, ⌥→, ⌥Return and the rest) are in chapter 24, Automation.
 
+## Tools
+
+While the timeline has the keys, a letter picks a tool (also **View › Tool** and the tool palette):
+
+| Key | Tool |
+|---|---|
+| A | Selection |
+| S | Split |
+| T | Trim |
+| F | Fade |
+| G | Gain |
+| B / L / P | Box / Lasso / Brush (the spectrogram) |
+| Z | Zoom |
+| H | Hand |
+
 ## Mouse and trackpad
 
 | Gesture | Action |
 |---|---|
-| Drag in a lane | Select (in the spectrogram: draw an area with the current tool) |
+| Drag in a lane | Select, or what the current tool does (in the spectrogram: draw an area) |
+| Drag an edge, a fade square or a marker | Trim, fade or move it; ⌃ while dragging turns snapping off |
 | Shift-click | Extend the selection |
 | Double-click | Select a clip |
 | Click in the ruler | Move the playhead |

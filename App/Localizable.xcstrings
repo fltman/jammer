@@ -6030,6 +6030,24 @@
         }
       }
     },
+    "edit.split": {
+      "comment": "Tool palette (comfort block step 2).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Split at Playhead"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dela vid spelhuvudet"
+          }
+        }
+      }
+    },
     "edit.undo": {
       "comment": "Menu item.",
       "extractionState": "manual",
@@ -20735,6 +20753,24 @@
         }
       }
     },
+    "op.split.title": {
+      "comment": "Tool palette (comfort block step 2).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Split"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dela"
+          }
+        }
+      }
+    },
     "op.split_speakers.title": {
       "extractionState": "manual",
       "localizations": {
@@ -24260,24 +24296,6 @@
         }
       }
     },
-    "reason.showSpectrogram": {
-      "comment": "Command registry (comfort block).",
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Show the spectrogram first."
-          }
-        },
-        "sv": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Visa spektrogrammet först."
-          }
-        }
-      }
-    },
     "reason.spectralArea": {
       "comment": "Command registry (comfort block).",
       "extractionState": "manual",
@@ -27267,60 +27285,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Lasso (%1$@ hörn), %2$@–%3$@ s, %4$@–%5$@ Hz"
-          }
-        }
-      }
-    },
-    "spectral.tool.box": {
-      "comment": "Status line when the box tool is chosen.",
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Box: drag a rectangle in the spectrogram."
-          }
-        },
-        "sv": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ruta: dra en rektangel i spektrogrammet."
-          }
-        }
-      }
-    },
-    "spectral.tool.brush": {
-      "comment": "Status line when the brush tool is chosen.",
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Brush: paint over the sound."
-          }
-        },
-        "sv": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Pensel: måla över ljudet."
-          }
-        }
-      }
-    },
-    "spectral.tool.lasso": {
-      "comment": "Status line when the lasso tool is chosen.",
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Lasso: draw round the sound."
-          }
-        },
-        "sv": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Lasso: rita runt ljudet."
           }
         }
       }
@@ -31649,6 +31613,24 @@
         }
       }
     },
+    "timeline.drag.gain": {
+      "comment": "Gain tool: the clip's gain while dragging. %@ dB.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gain %@ dB"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nivå %@ dB"
+          }
+        }
+      }
+    },
     "timeline.drag.length": {
       "comment": "Timeline handles.",
       "extractionState": "manual",
@@ -31681,6 +31663,168 @@
           "stringUnit": {
             "state": "translated",
             "value": "Läser vågform… %@ %%"
+          }
+        }
+      }
+    },
+    "tool.fade": {
+      "comment": "Tool palette (comfort block step 2).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fade"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fade"
+          }
+        }
+      }
+    },
+    "tool.gain": {
+      "comment": "Tool palette (comfort block step 2).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gain"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nivå"
+          }
+        }
+      }
+    },
+    "tool.hand": {
+      "comment": "Tool palette (comfort block step 2).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hand"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hand"
+          }
+        }
+      }
+    },
+    "tool.help": {
+      "comment": "Tool palette (comfort block step 2).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ (%2$@)"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ (%2$@)"
+          }
+        }
+      }
+    },
+    "tool.palette.ax": {
+      "comment": "Tool palette (comfort block step 2).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tools"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verktyg"
+          }
+        }
+      }
+    },
+    "tool.select": {
+      "comment": "Tool palette (comfort block step 2).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Selection"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Markering"
+          }
+        }
+      }
+    },
+    "tool.split": {
+      "comment": "Tool palette (comfort block step 2).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Split"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dela"
+          }
+        }
+      }
+    },
+    "tool.trim": {
+      "comment": "Tool palette (comfort block step 2).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trim"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trimma"
+          }
+        }
+      }
+    },
+    "tool.zoom": {
+      "comment": "Tool palette (comfort block step 2).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zoom"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zooma"
           }
         }
       }
@@ -32539,6 +32683,24 @@
         }
       }
     },
+    "view.hideToolPalette": {
+      "comment": "Tool palette (comfort block step 2).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide Tool Palette"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dölj verktygspaletten"
+          }
+        }
+      }
+    },
     "view.hideTranscript": {
       "comment": "Menu item.",
       "extractionState": "manual",
@@ -32647,24 +32809,6 @@
         }
       }
     },
-    "view.spectralTool": {
-      "comment": "View menu, a submenu.",
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Spectrogram Tool"
-          }
-        },
-        "sv": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Spektrogramverktyg"
-          }
-        }
-      }
-    },
     "view.spectralTool.box": {
       "comment": "Spectrogram tool.",
       "extractionState": "manual",
@@ -32715,6 +32859,42 @@
           "stringUnit": {
             "state": "translated",
             "value": "Lasso"
+          }
+        }
+      }
+    },
+    "view.tool": {
+      "comment": "Tool palette (comfort block step 2).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tool"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verktyg"
+          }
+        }
+      }
+    },
+    "view.toolPalette": {
+      "comment": "Tool palette (comfort block step 2).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show Tool Palette"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Visa verktygspaletten"
           }
         }
       }

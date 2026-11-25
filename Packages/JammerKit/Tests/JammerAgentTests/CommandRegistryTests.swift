@@ -72,4 +72,18 @@ struct CommandRegistryTests {
             }
         }
     }
+
+    @Test("The palette's tools: ten, each with its own letter and a View › Tool item, the letters free of the menus' plain keys")
+    func tools() {
+        let tools = Commands.tools
+        #expect(tools.map(\.id) == ["select", "split", "trim", "fade", "gain", "box", "lasso", "brush", "zoom", "hand"])
+        #expect(Set(tools.map(\.letter)).count == tools.count && tools.allSatisfy { $0.letter.count == 1 })
+        for t in tools {
+            let c = Commands.command("view.tool." + t.id)
+            #expect(c?.submenu == "view.tool" && c?.payload["letter"] == .string(t.letter), "view.tool.\(t.id)")
+        }
+        // A letter that picks a tool on the timeline is no menu shortcut without a modifier.
+        let plain = Commands.all.filter { !$0.key.isEmpty && $0.modifiers.isEmpty }.map(\.key)
+        #expect(Set(plain).isDisjoint(with: tools.map(\.letter)), "plain-key shortcuts: \(plain)")
+    }
 }

@@ -374,6 +374,8 @@ public enum Operations {
                        .init("start", .string, "The timecode of the timeline's first frame, as hh:mm:ss:ff (hh:mm:ss;ff for drop-frame). Default 00:00:00:00. A film's sound often starts at 01:00:00:00.")]),
         .init("remove_marker", "Remove Marker", "Removes the markers with this name, or the one marker with this id.",
               params: [.init("name", .string, "Marker name."), .init("marker", .string, "Marker id (from the document's markers).")]),
+        .init("split", "Split", "Splits the clips under a point in two, on every track or only on the tracks given. Nothing moves and nothing is heard differently; the halves can then be trimmed, faded or moved on their own.",
+              params: [.init("at", .seconds, "Where to split, in seconds. Defaults to the playhead."), .init("tracks", .list, "Track ids. Default: every track.")]),
         .init("set_marker", "Change Marker", "Moves, renames or resizes one marker, by its id (the document's markers list them). What isn't given stays.",
               params: [.init("marker", .string, "Marker id.", required: true), .init("at", .seconds, "New position in seconds."),
                        .init("name", .string, "New name."), .init("duration", .seconds, "Region length in seconds; 0 for a point.")]),
@@ -1478,6 +1480,10 @@ public enum StepRunner {
             }
             s.project.timecode = TimecodeSettings(rate: rate, startFrames: start)
             return ["startFrames": Double(start)]
+        case "split":
+            let at = frames("at") ?? s.playhead
+            let ids = p["tracks"]?.strings.map { Set($0.compactMap(UUID.init(uuidString:))) }
+            s.project.split(at: at, onTracks: ids)
         case "set_marker":
             guard let id = p["marker"]?.string.flatMap(UUID.init(uuidString:)) else { throw StepFailure(Said("step.set_marker.id", "set_marker: \"marker\" must be a marker id.")) }
             try s.project.setMarker(id, position: frames("at"), name: p["name"]?.string, length: frames("duration"))

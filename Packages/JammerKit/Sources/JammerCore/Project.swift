@@ -560,8 +560,9 @@ public struct Project: Codable, Equatable, Sendable {
     // MARK: Edits (every track, like a waveform editor)
 
     /// Splits every clip that crosses `t`.
-    public mutating func split(at t: Frame) {
-        for i in tracks.indices {
+    /// Splits the clips under `t`, on every track or only on `onTracks` (the Split tool splits the track clicked).
+    public mutating func split(at t: Frame, onTracks: Set<UUID>? = nil) {
+        for i in tracks.indices where onTracks?.contains(tracks[i].id) ?? true {
             tracks[i].clips = tracks[i].clips.flatMap { c -> [Clip] in
                 guard c.start < t, t < c.end else { return [c] }
                 let (l, r) = c.split(at: t)
