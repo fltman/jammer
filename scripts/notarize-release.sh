@@ -28,7 +28,18 @@ fi
 xcrun stapler staple "$app"
 xcrun stapler validate "$app"
 spctl --assess --type execute --verbose=2 "$app" 2>&1 | tail -2
-final=build/release-signed/Jammer-$version.zip
+# What the user gets is named Jämmer (Anders, 2026-11-25): the app folder Jämmer.app in Jämmer-<version>.zip. The
+# bundle id, the program inside and every path the scripts use stay ASCII (Jammer). Renaming the bundle's folder
+# after signing and stapling leaves the signature whole (the folder's name is not sealed); checked again below.
+# The name is written in NFC, so the web server and Sparkle see one spelling.
+name=$(python3 -c 'import unicodedata; print(unicodedata.normalize("NFC", "Jämmer"))')
+stage=build/release-signed/stage
+rm -rf "$stage"; mkdir -p "$stage"
+ditto "$app" "$stage/$name.app"
+codesign --verify --deep --strict "$stage/$name.app" || { echo "notarize-release: the renamed copy doesn't verify" >&2; exit 1; }
+xcrun stapler validate "$stage/$name.app" >/dev/null || { echo "notarize-release: the renamed copy lost its ticket" >&2; exit 1; }
+app="$stage/$name.app"
+final="build/release-signed/$name-$version.zip"
 rm -f "$final"
 ditto -c -k --keepParent "$app" "$final"
 echo "notarize-release: notarised and stapled: $final (not uploaded anywhere else)"

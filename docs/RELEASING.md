@@ -6,7 +6,7 @@ How a release is built, signed, notarised and published, and what a release buil
 
 1. `scripts/precommit.sh` green (package tests, the app's build, the string catalogue, the manual against the menus, the language switch, the entitlements).
 2. `JAMMER_SIGN_ID="Developer ID Application: …" scripts/sign-release.sh`: a Release build signed with the Developer ID, the hardened runtime and timestamps; Sparkle signed from the inside out; no get-task-allow.
-3. `JAMMER_UPLOAD_ALLOWED=yes JAMMER_NOTARY_PROFILE=<profile> scripts/notarize-release.sh`: notarised by Apple, the ticket stapled, the archive made.
+3. `JAMMER_UPLOAD_ALLOWED=yes JAMMER_NOTARY_PROFILE=<profile> scripts/notarize-release.sh`: notarised by Apple, the ticket stapled, the archive made. What the user gets is named Jämmer: `Jämmer.app` in `Jämmer-<version>.zip` (the bundle id and everything inside stay ASCII; renaming the folder after signing keeps the signature and the ticket, checked by the script). In the appcast and on the site the file's URL is written percent-encoded: `J%C3%A4mmer-<version>.zip`.
 4. Sparkle's `sign_update --account jammer` on the archive; the signature goes into the appcast (`Config/appcast-template.xml`), checked against the app's `SUPublicEDKey`.
 5. The site built with `the-apps/site/build.mjs --prod --strict`; the site, the archive under `releases/`, the release notes (`docs/release-notes/`) and `appcast.xml` go up together.
 

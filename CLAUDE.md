@@ -23,7 +23,7 @@ xcodegen generate && open Jammer.xcodeproj   # the app; the .xcodeproj is genera
 
 ## Series conventions
 
-- Technical identifiers are ASCII (`Jammer`, `com.brattoo.jammer`, `/jammer`). "Jämmer" only in `CFBundleDisplayName` and text.
+- Technical identifiers are ASCII (`Jammer`, `com.brattoo.jammer`, `/jammer`, the build product and every script path). "Jämmer" in `CFBundleDisplayName` and text, and in what is distributed: the app is `Jämmer.app` in `Jämmer-<version>.zip` (Anders, 2026-11-25; renamed when the archive is made, after signing, in NFC).
 - Agent API: 127.0.0.1 only, port 9003, then 9301–9319. Splash and `/api/v1/status` show the real port. POST needs `X-Jammer-Agent: 1`; `Origin` → 403; paid steps need `allowPaid: true` (else 402). Errors `{error:{code,message}}`; a failed step is 422 `step_failed` with `step`.
 - The agent may start playback only in a visible window and never start recording.
 - Domain jammer.brattoo.com (homepage, future appcast, OpenRouter Referer). The site lives in `site/` in English.
