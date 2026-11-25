@@ -16,7 +16,7 @@ Window size and position are remembered too.
 
 **Folders agents may use**: an agent normally works only on the documents you have open. Batch processing reads and writes files by path, and an agent can do that only inside the folders listed here. Add one with **Add Folder…**; remove it to take the permission back. The list starts empty. Batches you start yourself from File › Batch… don't need it.
 
-**Let other apps use Jämmer's transcription** (on unless you turn it off): apps on this Mac, such as Drömmer, can send short turns of speech, up to 15 seconds each, to be transcribed with Jämmer's local models. Nothing is saved or logged, neither the sound nor the text, and while it works every open Jämmer window says "Transcribing for Drömmer…" in its status bar, with a button that stops it.
+**Let other apps use Jämmer's transcription** (on unless you turn it off): apps on this Mac, such as Drömmer, can send short turns of speech, up to 15 seconds each, or a whole file of up to 2 hours (such as the sound of a film), to be transcribed with Jämmer's local models. Nothing is kept or logged, neither the sound nor the text: a file lies in a temporary folder only while it is transcribed, and the words are forgotten once the app has fetched them. While it works every open Jämmer window says "Transcribing for Drömmer…" (or "Transcribing a file for Drömmer…" with how far it has come) in its status bar, with a button that stops it.
 
 ## Models
 

@@ -32,8 +32,16 @@ struct AgentSplashView: View {
                 Text(L10n.text("splash.agent.text"))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                if let who = server.turnFor {
-                    StateLine(kind: .progress, text: L10n.text("turn.working", who), font: .callout)
+                if let work = server.sibling {
+                    HStack(spacing: 6) {
+                        StateLine(kind: .progress, text: work.label, font: .callout)
+                        Button { work.stop() } label: { Image(systemName: "stop.circle.fill") }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(.secondary)
+                            .help(L10n.text("job.stop.help", work.label))
+                            .accessibilityLabel(L10n.text("job.stop.ax", work.label))
+                            .accessibilityIdentifier("job.stop.wait")
+                    }
                 }
                 if let prompt = server.agentPrompt {
                     HStack(alignment: .top, spacing: 8) {

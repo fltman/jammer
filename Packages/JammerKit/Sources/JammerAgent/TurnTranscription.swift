@@ -20,6 +20,12 @@ public enum TurnTranscription {
 
     /// Reads the query and the WAV body. 400 for what isn't one turn of 16 kHz mono PCM16, 413 for more than 15 s.
     public static func parse(query: [String: String], body: Data) throws(AgentAPI.APIError) -> Request {
+        let (language, engine) = try options(query)
+        return Request(samples: try samples(fromWAV: body), language: language, engine: engine)
+    }
+
+    /// `?language=` (BCP 47, sv-SE by default) and `?engine=` (auto by default), as turns and files take them.
+    public static func options(_ query: [String: String]) throws(AgentAPI.APIError) -> (language: String, engine: Engine) {
         let language = query["language"] ?? "sv-SE"
         guard Locale(identifier: language).language.languageCode != nil, !language.isEmpty else {
             throw .badRequest("language must be a BCP 47 tag such as sv-SE.")
@@ -27,7 +33,7 @@ public enum TurnTranscription {
         guard let engine = Engine(rawValue: query["engine"] ?? "auto") else {
             throw .badRequest("engine must be one of: \(Engine.allCases.map(\.rawValue).joined(separator: ", ")).")
         }
-        return Request(samples: try samples(fromWAV: body), language: language, engine: engine)
+        return (language, engine)
     }
 
     /// The samples of a 16 kHz mono 16-bit PCM WAV, as floats in −1…1.
@@ -91,21 +97,26 @@ public enum TurnTranscription {
                 "engine": engine, "model": model, "ms": ms]
     }
 
-    /// One turn at a time: a second while one runs is 409 busy (no queue; the caller sends the next when it has
-    /// the answer).
+    /// One transcription for another app at a time, a turn or a file (they share the models): a second while one
+    /// runs is 409 busy (no queue; the caller sends the next when it has the answer).
     public final class Gate: @unchecked Sendable {
+        public enum Holder: Sendable { case turn, file }
         private let lock = NSLock()
-        private var busy = false
+        private var holder: Holder?
         public init() {}
-        public func enter() throws(AgentAPI.APIError) {
-            let ok = lock.withLock { () -> Bool in
-                if busy { return false }
-                busy = true
-                return true
+        public func enter(_ what: Holder = .turn) throws(AgentAPI.APIError) {
+            let busy = lock.withLock { () -> Holder? in
+                if let holder { return holder }
+                holder = what
+                return nil
             }
-            guard ok else { throw AgentAPI.APIError(409, "busy", "A turn is already being transcribed. Send the next one when it has been answered.") }
+            switch busy {
+            case nil: return
+            case .turn: throw AgentAPI.APIError(409, "busy", "A turn is already being transcribed. Send the next one when it has been answered.")
+            case .file: throw AgentAPI.APIError(409, "busy", "Jämmer is transcribing a file for another app. Try again when that job has finished (GET /api/v1/status lists it).")
+            }
         }
-        public func leave() { lock.withLock { busy = false } }
+        public func leave() { lock.withLock { holder = nil } }
     }
 
     /// Settings › Agents can turn siblings' use of the transcription off; on by default.

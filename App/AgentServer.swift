@@ -129,8 +129,9 @@ final class AgentServer {
 
     private(set) var port: UInt16?
     private(set) var failure: String?
-    /// The app Jämmer is transcribing a short turn for right now (the splash says so).
-    var turnFor: String?
+    /// What Jämmer is doing for another app right now (a short turn or a file), with its Stop: every window's status
+    /// bar and the splash show it, a window opened meanwhile too.
+    var sibling: EditorSession.Wait?
     @ObservationIgnored private var listener: NWListener?
     nonisolated static let queue = DispatchQueue(label: "jammer.agent-server")
 
@@ -292,11 +293,19 @@ enum AgentRouter {
             try only("GET", "DELETE")
             let job = r.method == "GET" ? JobRegistry.shared.job(p[3]) : JobRegistry.shared.cancel(p[3])
             guard let job else { throw APIError.notFound("No job with id \(p[3]).") }
+            // A file transcribed for another app: its words come with the first read of the finished job, then never again.
+            if r.method == "GET", job.kind == FileTranscription.kind, job.status == .done {
+                return .json(["job": FileTranscription.merged(job.json, id: job.id, results: TurnTranscriber.results)])
+            }
             return .json(["job": job.json])
         case ["api", "v1", "transcribe"]:
             // One short turn of speech for an app's live captions: no document, nothing kept (TurnTranscription).
             try only("POST")
             return try await TurnTranscriber.handle(r)
+        case ["api", "v1", "transcribe", "file"]:
+            // A whole file for another app, as a job with no document and no window (FileTranscription).
+            try only("POST")
+            return try await TurnTranscriber.handleFile(r)
         case ["api", "v1", "batch"]:
             try only("POST")
             guard var body = (try? JSONSerialization.jsonObject(with: r.body)) as? [String: Any] else { throw APIError.badRequest("The body isn't a JSON object.") }

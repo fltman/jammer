@@ -1,3 +1,4 @@
+import AVFAudio
 import Foundation
 import JammerAgent
 import JammerCore
@@ -31,16 +32,11 @@ enum TurnTranscriber {
         defer { gate.leave() }
         let locale = Locale(identifier: request.language)
         let pick = try await choose(request.engine, for: locale)
-        let slug = r.headers["x-sibling"]?.lowercased()
-        let who = slug.map { AgentRouter.siblingNames[$0] ?? $0.capitalized } ?? L10n.text("turn.anotherApp")
+        let who = caller(r)
         // Shown while it works; the user can stop it from any window.
         let task = Task { try await pick.run(request.samples, locale) }
-        let waits = AgentRegistry.shared.sessions.map { s in (s, s.beginWait(L10n.text("turn.working", who)) { task.cancel() }) }
-        AgentServer.shared.turnFor = who
-        defer {
-            for (s, w) in waits { s.endWait(w) }
-            AgentServer.shared.turnFor = nil
-        }
+        AgentServer.shared.sibling = .init(label: L10n.text("turn.working", who)) { task.cancel() }
+        defer { AgentServer.shared.sibling = nil }
         let started = Date()
         let runs: [RecognisedRun]
         do {
@@ -60,6 +56,12 @@ enum TurnTranscriber {
         let ms = Int(Date().timeIntervalSince(started) * 1_000)
         let words = runs.map { TurnTranscription.Word(text: $0.text, start: $0.start, end: $0.end, confidence: $0.confidence) }
         return .json(TurnTranscription.json(words: words, engine: pick.engine, model: pick.model, ms: ms))
+    }
+
+    /// The app named by X-Sibling, as the window says it.
+    private static func caller(_ r: AgentAPI.Request) -> String {
+        let slug = r.headers["x-sibling"]?.lowercased()
+        return slug.map { AgentRouter.siblingNames[$0] ?? $0.capitalized } ?? L10n.text("turn.anotherApp")
     }
 
     private static func whisper(_ spec: ModelSpec, language: String?) -> WhisperEngine {
@@ -110,5 +112,145 @@ enum TurnTranscriber {
             throw AgentAPI.APIError.modelMissing(lang == "sv" ? "kb-whisper-small" : ModelSpec.multilingualWhisper.id,
                                                  "No local speech model for \(locale.identifier(.bcp47)) is installed. The user installs one under Jämmer › Settings › Models; the API never installs it.")
         }
+    }
+
+    // MARK: Files (POST /api/v1/transcribe/file)
+
+    /// The finished file jobs' words, given once (FileTranscription.Results).
+    static let results = FileTranscription.Results()
+
+    /// Checks what can be checked at once (the switch, the options, the engine, the audio, its length) and starts the
+    /// job: 202. The audio goes into a private folder of its own that the job removes however it ends.
+    static func handleFile(_ r: AgentAPI.Request) async throws -> AgentAPI.Response {
+        guard allowed else { throw TurnTranscription.off() }
+        let (language, choice) = try TurnTranscription.options(r.query)
+        let body = try FileTranscription.body(contentType: r.headers["content-type"], data: r.body)
+        try gate.enter(.file)
+        var started = false
+        defer { if !started { gate.leave() } }
+        let locale = Locale(identifier: language)
+        let pick = try fileEngine(choice, for: locale)
+        let fm = FileManager.default
+        let folder = fm.temporaryDirectory.appending(path: "jammer-sibling-" + UUID().uuidString.lowercased())
+        do {
+            try fm.createDirectory(at: folder, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
+        } catch {
+            throw AgentAPI.APIError.internalError("Couldn't make a temporary folder: \(error.localizedDescription)")
+        }
+        defer { if !started { try? fm.removeItem(at: folder) } }
+        let url: URL
+        switch body {
+        case .bytes(let data):
+            try UploadStore.checkSpace(for: Int64(data.count), at: folder)
+            url = folder.appending(path: "audio." + AgentRouter.fileExtension(for: data, contentType: r.headers["content-type"] ?? ""))
+            do { try data.write(to: url) } catch { throw AgentAPI.APIError.internalError("Couldn't hold the audio: \(error.localizedDescription)") }
+        case .upload(let id):
+            guard let u = UploadStore.shared.get(id) else { throw AgentAPI.APIError.notFound("No upload with id \(id). They expire after an hour without chunks.") }
+            let head = (try? FileHandle(forReadingFrom: u.url).read(upToCount: 12)) ?? Data()
+            url = folder.appending(path: "audio." + AgentRouter.fileExtension(for: head, contentType: ""))
+            do { try fm.moveItem(at: u.url, to: url) } catch { throw AgentAPI.APIError.internalError("Couldn't take the upload: \(error.localizedDescription)") }
+            UploadStore.shared.remove(id)
+        }
+        let probe = url
+        let seconds = try await Task.detached(priority: .userInitiated) { try FileAudio.seconds(of: probe) }.value
+        try FileTranscription.checkLength(seconds: seconds)
+
+        let who = caller(r)
+        let job = JobRegistry.shared.startSibling(kind: FileTranscription.kind, work: { id, progress in
+            // Compressed audio is decoded once, at 16 kHz (the rate both engines hear), into the same folder.
+            let decoded = try await Task.detached(priority: .userInitiated) { () throws -> SourceRef in
+                try AudioImporter.importFile(url, sampleRate: FileAudio.isPCM(url) ? nil : 16_000, mediaFolder: folder).source
+            }.value
+            try Task.checkCancellation()
+            let transcript = try await pick.engine.transcribe(decoded, pool: SourcePool(), locale: locale) { p in
+                progress(p)
+                Task { @MainActor in
+                    guard JobRegistry.shared.job(id)?.isFinished == false else { return }
+                    AgentServer.shared.sibling?.label = L10n.text("turn.file.working", who, String(Int(p * 100)))
+                }
+            }
+            try Task.checkCancellation()
+            let rate = decoded.info.sampleRate
+            let words = transcript.words.map {
+                TurnTranscription.Word(text: $0.text, start: Double($0.start) / rate, end: Double($0.end) / rate, confidence: $0.confidence)
+            }
+            let lang = transcript.language.isEmpty ? language : transcript.language
+            results.put(id, FileTranscription.json(words: words, engine: pick.name, model: pick.model, language: lang))
+            // The job itself says only how much there is; the words come with the first GET of it.
+            return ["words": .number(Double(words.count)), "seconds": .number((seconds * 1_000).rounded() / 1_000),
+                    "engine": .string(pick.name), "model": .string(pick.model), "language": .string(lang)]
+        }, ended: {
+            try? FileManager.default.removeItem(at: folder)
+            if AgentServer.shared.sibling?.id == jobWait { AgentServer.shared.sibling = nil }
+            gate.leave()
+        })
+        let wait = EditorSession.Wait(label: L10n.text("turn.file.working", who, "0")) { _ = JobRegistry.shared.cancel(job.id); AgentServer.shared.sibling = nil }
+        jobWait = wait.id
+        AgentServer.shared.sibling = wait
+        started = true
+        return .json(["job": job.json], status: 202)
+    }
+    private static var jobWait: UUID?
+
+    private struct FilePick {
+        let name: String
+        let model: String
+        let engine: any TranscriptionEngine
+    }
+
+    /// For a whole file, auto takes local Pianissimo whenever it is installed for the language (its load of some
+    /// 16 s is small beside a file, and it heard Swedish best in Drömmer's bench), else KB-Whisper for Swedish, else
+    /// Whisper small. Only engines on this Mac.
+    private static func fileEngine(_ choice: TurnTranscription.Engine, for locale: Locale) throws -> FilePick {
+        let lang = locale.language.languageCode?.identifier ?? ""
+        func kb() -> FilePick? {
+            guard lang == "sv", let spec = SpeechEngines.installedWhisper else { return nil }
+            return FilePick(name: "whisper", model: spec.id, engine: whisper(spec, language: "sv"))
+        }
+        func small() -> FilePick? {
+            guard SpeechEngines.store.isInstalled(.multilingualWhisper) else { return nil }
+            return FilePick(name: "whisper", model: ModelSpec.multilingualWhisper.id, engine: whisper(.multilingualWhisper, language: nil))
+        }
+        func pianissimo() -> FilePick? {
+            guard let model = PianissimoModel(rawValue: lang), let p = SpeechEngines.pianissimo[model], p.isInstalled else { return nil }
+            return FilePick(name: "pianissimo", model: model.id, engine: p)
+        }
+        let missing = "The user installs it under Jämmer › Settings › Models; the API never installs it."
+        switch choice {
+        case .whisper:
+            if let p = kb() ?? small() { return p }
+            throw AgentAPI.APIError.modelMissing(lang == "sv" ? "kb-whisper-small" : ModelSpec.multilingualWhisper.id, "No Whisper model is installed. " + missing)
+        case .pianissimo:
+            guard let model = PianissimoModel(rawValue: lang) else {
+                throw AgentAPI.APIError.unprocessable("unsupported_language", "Local Pianissimo does Swedish and Danish.")
+            }
+            if let p = pianissimo() { return p }
+            throw AgentAPI.APIError.modelMissing(model.id, "\(model.id) isn't installed. " + missing)
+        case .auto:
+            if let p = pianissimo() ?? kb() ?? small() { return p }
+            throw AgentAPI.APIError.modelMissing(lang == "sv" ? "kb-whisper-small" : ModelSpec.multilingualWhisper.id,
+                                                 "No local speech model for \(locale.identifier(.bcp47)) is installed. " + missing)
+        }
+    }
+}
+
+/// What can be said of a file before it is decoded.
+enum FileAudio {
+    /// A WAV, RF64, BW64 or AIFF by its first bytes: read by Jämmer's own reader, never handed to the system's decoder.
+    nonisolated static func isPCM(_ url: URL) -> Bool {
+        guard let h = try? FileHandle(forReadingFrom: url) else { return false }
+        defer { try? h.close() }
+        return ["RIFF", "RF64", "BW64", "FORM"].contains(String(decoding: (try? h.read(upToCount: 4)) ?? Data(), as: UTF8.self))
+    }
+
+    /// How long it plays, from its header; 400 for what isn't audio Jämmer reads.
+    nonisolated static func seconds(of url: URL) throws(AgentAPI.APIError) -> Double {
+        let unreadable = AgentAPI.APIError.badRequest("That isn't audio Jämmer can read. Send WAV, AIFF, m4a, MP3, FLAC or CAF.")
+        if isPCM(url) {
+            guard let info = try? AudioFileReader.info(at: url), info.sampleRate > 0 else { throw unreadable }
+            return Double(info.frames) / info.sampleRate
+        }
+        guard let file = try? AVAudioFile(forReading: url), file.processingFormat.sampleRate > 0 else { throw unreadable }
+        return Double(file.length) / file.processingFormat.sampleRate
     }
 }

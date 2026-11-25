@@ -1047,7 +1047,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         }
         if id == "edit.split" { return needs(hasAudio, L10n.text("reason.noAudio")) }
         if id == "edit.stopJob" {
-            let label = session.waits.last?.label ?? JobRegistry.shared.running(document: session.agentID).last.map(JobLine.label)
+            let label = session.shownWaits.last?.label ?? JobRegistry.shared.running(document: session.agentID).last.map(JobLine.label)
             item?.title = label.map { L10n.text("edit.stopJob.named", $0) } ?? L10n.text("edit.stopJob")
             return needs(label != nil, L10n.text("reason.noJob"))
         }
@@ -1193,8 +1193,9 @@ struct StatusBar: View {
                 Text(L10n.text("status.noSelection"))
             }
             let jobs = JobRegistry.shared.running(document: session.agentID)
-            if !jobs.isEmpty || !session.waits.isEmpty {
-                JobLine(session: session, jobs: jobs, waits: session.waits)
+            let waits = session.shownWaits
+            if !jobs.isEmpty || !waits.isEmpty {
+                JobLine(session: session, jobs: jobs, waits: waits)
             // What was just done is said whole; the selection's text gives way to it first.
             } else if let status = session.status {
                 StateLine(kind: session.statusKind, text: status, font: .system(size: 11, design: .monospaced))

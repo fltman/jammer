@@ -588,4 +588,38 @@ final class JobRegistry {
         }
         return job
     }
+
+    /// Work for another app with no document (POST /api/v1/transcribe/file): `work` reports 0…1 and leaves its
+    /// result where the caller keeps it (never in the job, which /api/v1/status lists); `ended` runs once the work has
+    /// really stopped, however it ended, to give back what it held.
+    func startSibling(kind: String, work: @escaping @MainActor (_ id: String, _ progress: @escaping @Sendable (Double) -> Void) async throws -> [String: JSONValue],
+                      ended: @escaping @MainActor () -> Void) -> Job {
+        var job = Job(kind: kind)
+        jobs[job.id] = job
+        let id = job.id
+        tasks[id] = Task { [weak self] in
+            defer { ended() }
+            job.status = .running
+            self?.update(job)
+            do {
+                let facts = try await work(id) { p in
+                    Task { @MainActor in
+                        guard var j = self?.jobs[id], !j.isFinished else { return }
+                        j.progress = min(0.99, p)
+                        self?.update(j)
+                    }
+                }
+                guard self?.jobs[id]?.status != .cancelled else { return }
+                job.status = .done
+                job.progress = 1
+                job.result = facts
+            } catch {
+                guard self?.jobs[id]?.status != .cancelled, !(error is CancellationError) else { return }
+                job.status = .failed
+                if let e = error as? AgentAPI.APIError { job.fail(e.code, Said("error.said", "%@", e.message)) } else { job.fail("transcription_failed", error) }
+            }
+            self?.finish(job)
+        }
+        return job
+    }
 }

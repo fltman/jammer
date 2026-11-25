@@ -21346,6 +21346,24 @@
         }
       }
     },
+    "op.transcribe_file.title": {
+      "comment": "Operation title: the agent API's file transcription for another app (no menu item).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transcribe a File for Another App"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkribera en fil åt en annan app"
+          }
+        }
+      }
+    },
     "op.transcribe_turn.title": {
       "comment": "Operation title: the agent API's short-turn transcription (no menu item).",
       "extractionState": "manual",
@@ -27285,13 +27303,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Apps on this Mac, such as Drömmer, can send short turns of speech (up to 15 s) to be transcribed with Jämmer's local models. The audio and the text are never saved or logged, and Jämmer's windows say while it works."
+            "value": "Apps on this Mac, such as Drömmer, can send short turns of speech (up to 15 s), or whole files of up to 2 hours, to be transcribed with Jämmer's local models. The audio and the text are never saved or logged, and Jämmer's windows say while it works."
           }
         },
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Appar på den här Macen, till exempel Drömmer, kan skicka korta turer av tal (upp till 15 s) som transkriberas med Jämmers lokala modeller. Ljudet och texten sparas aldrig och loggas aldrig, och Jämmers fönster visar när det pågår."
+            "value": "Appar på den här Macen, till exempel Drömmer, kan skicka korta turer av tal (upp till 15 s), eller hela filer på upp till 2 timmar, som transkriberas med Jämmers lokala modeller. Ljudet och texten sparas aldrig och loggas aldrig, och Jämmers fönster visar när det pågår."
           }
         }
       }
@@ -33705,6 +33723,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "en annan app"
+          }
+        }
+      }
+    },
+    "turn.file.working": {
+      "comment": "Status bar and splash while Jämmer transcribes a whole file for another app. %1$@ is the app, e.g. \"Drömmer\"; %2$@ the percent done.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transcribing a file for %1$@… %2$@ %%"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkriberar en fil åt %1$@… %2$@ %%"
           }
         }
       }

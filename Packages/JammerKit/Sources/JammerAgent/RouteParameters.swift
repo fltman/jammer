@@ -53,6 +53,8 @@ extension AgentAPI {
         .init("GET", "/api/v1/jobs/{id}"), .init("DELETE", "/api/v1/jobs/{id}"),
         // One short turn of speech: the body is the WAV itself (TurnTranscription).
         .init("POST", "/api/v1/transcribe", query: ["language", "engine"], body: nil),
+        // A whole file for another app: the audio itself, or JSON naming an upload; never a path (FileTranscription).
+        .init("POST", "/api/v1/transcribe/file", query: ["language", "engine"], body: ["upload"]),
         .init("GET", doc), .init("DELETE", doc),
         .init("POST", doc + "/steps", body: ["steps", "allowPaid"]),
         .init("POST", doc + "/undo"),
