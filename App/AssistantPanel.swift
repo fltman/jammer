@@ -390,6 +390,7 @@ final class AssistantModel {
         alert.informativeText = L10n.text("assistant.paid.text", price, provider.name, provider.note)
         alert.addButton(withTitle: L10n.text("button.send"))
         alert.addButton(withTitle: L10n.text("button.cancel"))
+        alert.returnNeverPays()
         // No price on the provider's list for this model: Send stays grey until that is ticked as understood.
         // (A price from the provider's own list counts as known. Asked once per provider, not per model.)
         let unknown = UnknownPriceBox(service: service, name: provider.name)

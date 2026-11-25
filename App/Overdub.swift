@@ -98,6 +98,7 @@ extension EditorWindowController {
         alert.informativeText = L10n.text("overdub.clone.text")
         alert.addButton(withTitle: L10n.text("button.send"))
         alert.addButton(withTitle: L10n.text("button.cancel"))
+        alert.returnNeverPays()
         UnknownPriceBox.place([name, whose, adult, said, sends, terms, unknown.view], in: alert)
         unknown.gate(alert.buttons[0])
         let answer: NSApplication.ModalResponse
@@ -144,6 +145,7 @@ extension EditorWindowController {
         alert.informativeText = L10n.text("overdub.ask.text", L10n.number(p.seconds(sel.lowerBound), 2), L10n.number(p.seconds(sel.upperBound), 2))
         alert.addButton(withTitle: L10n.text("button.send"))
         alert.addButton(withTitle: L10n.text("button.cancel"))
+        alert.returnNeverPays()
         UnknownPriceBox.place([pick, text, model, note, unknown.view], in: alert)
         unknown.gate(alert.buttons[0])
         let answer: NSApplication.ModalResponse
@@ -173,6 +175,7 @@ extension EditorWindowController {
             alert.informativeText = L10n.text("overdub.delete.text")
             alert.addButton(withTitle: L10n.text("overdub.delete.button"))
             alert.addButton(withTitle: L10n.text("button.cancel"))
+            alert.returnNeverPays()
             alert.accessoryView = pick
             let answer: NSApplication.ModalResponse
             if let w = window { answer = await alert.beginSheetModal(for: w) } else { answer = alert.runModal() }

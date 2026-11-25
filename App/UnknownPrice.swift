@@ -170,3 +170,14 @@ struct PaidSettings: View {
         elevenSaved = true
     }
 }
+
+extension NSAlert {
+    /// Return never chooses what costs money or deletes (COMFORT.md 60): the first button (Send, Delete) loses
+    /// Return and needs a click, and Cancel answers Esc in every language (NSAlert gives Esc only to a button
+    /// titled "Cancel" in English).
+    func returnNeverPays() {
+        guard buttons.count >= 2 else { return }
+        buttons[0].keyEquivalent = ""
+        buttons[1].keyEquivalent = "\u{1b}"
+    }
+}

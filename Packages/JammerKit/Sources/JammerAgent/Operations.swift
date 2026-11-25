@@ -372,8 +372,16 @@ public enum Operations {
               params: [.init("rate", .string, "The picture's frame rate. The two ending in df count drop-frame (the clock keeps real time; written with a semicolon before the frames).", required: true,
                              options: Timecode.Rate.allCases.map(\.rawValue) + ["none"]),
                        .init("start", .string, "The timecode of the timeline's first frame, as hh:mm:ss:ff (hh:mm:ss;ff for drop-frame). Default 00:00:00:00. A film's sound often starts at 01:00:00:00.")]),
-        .init("remove_marker", "Remove Marker", "Removes the markers with this name.",
-              params: [.init("name", .string, "Marker name.", required: true)]),
+        .init("remove_marker", "Remove Marker", "Removes the markers with this name, or the one marker with this id.",
+              params: [.init("name", .string, "Marker name."), .init("marker", .string, "Marker id (from the document's markers).")]),
+        .init("set_marker", "Change Marker", "Moves, renames or resizes one marker, by its id (the document's markers list them). What isn't given stays.",
+              params: [.init("marker", .string, "Marker id.", required: true), .init("at", .seconds, "New position in seconds."),
+                       .init("name", .string, "New name."), .init("duration", .seconds, "Region length in seconds; 0 for a point.")]),
+        .init("set_clip", "Change Clip", "Changes one clip by its id (the tracks' clips list them): trims its start or end on the timeline (the sound stays where it is; a clip can't reach over the next one or past its file), sets its fades and their shape, or its gain. What isn't given stays.",
+              params: [.init("clip", .string, "Clip id.", required: true), .init("start", .seconds, "New start of the clip on the timeline."),
+                       .init("end", .seconds, "New end of the clip on the timeline."), .init("fadeIn", .seconds, "Fade-in length in seconds; 0 removes it."),
+                       .init("fadeOut", .seconds, "Fade-out length in seconds; 0 removes it."),
+                       .init("shape", .string, "Fade curve.", options: ["equal_power", "linear"]), .init("gainDB", .number, "The clip's gain in dB (the new value).", range: -96...24)]),
         .init("set_tempo", "Set Tempo", "Sets the tempo, and the time signature when given, from `at` on. Tempo changes move with the audio in ripple edits.",
               params: [.init("bpm", .number, "Quarter notes per minute, 10–999.", required: true),
                        .init("at", .seconds, "Where the tempo starts. Defaults to 0, the start of the document."),
@@ -1470,7 +1478,19 @@ public enum StepRunner {
             }
             s.project.timecode = TimecodeSettings(rate: rate, startFrames: start)
             return ["startFrames": Double(start)]
+        case "set_marker":
+            guard let id = p["marker"]?.string.flatMap(UUID.init(uuidString:)) else { throw StepFailure(Said("step.set_marker.id", "set_marker: \"marker\" must be a marker id.")) }
+            try s.project.setMarker(id, position: frames("at"), name: p["name"]?.string, length: frames("duration"))
+        case "set_clip":
+            guard let id = p["clip"]?.string.flatMap(UUID.init(uuidString:)) else { throw StepFailure(Said("step.set_clip.id", "set_clip: \"clip\" must be a clip id.")) }
+            let shape = p["shape"]?.string.map { $0 == "linear" ? FadeShape.linear : .equalPower }
+            try s.project.setClip(id, start: frames("start"), end: frames("end"), fadeIn: frames("fadeIn"), fadeOut: frames("fadeOut"), shape: shape, gainDB: p["gainDB"]?.double)
         case "remove_marker":
+            if let id = p["marker"]?.string {
+                guard let uuid = UUID(uuidString: id) else { throw StepFailure(Said("step.set_marker.id", "set_marker: \"marker\" must be a marker id.")) }
+                try s.project.removeMarker(uuid)
+                break
+            }
             let name = p["name"]?.string ?? ""
             let before = s.project.markers.count
             s.project.markers.removeAll { $0.name == name }

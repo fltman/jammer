@@ -343,6 +343,7 @@ final class TranscriptPanel: NSView, NSTextViewDelegate {
             + "\n\n" + SpeechEngines.bergetPriceLine(price)
         alert.addButton(withTitle: L10n.text("button.send"))
         alert.addButton(withTitle: L10n.text("button.cancel"))
+        alert.returnNeverPays()
         let answer: NSApplication.ModalResponse
         if let window { answer = await alert.beginSheetModal(for: window) } else { answer = alert.runModal() }
         guard answer == .alertFirstButtonReturn else { return }
@@ -401,6 +402,7 @@ final class TranscriptPanel: NSView, NSTextViewDelegate {
         let unknown = UnknownPriceBox(service: "openai.transcription", name: "OpenAI")
         alert.addButton(withTitle: L10n.text("button.send"))
         alert.addButton(withTitle: L10n.text("button.cancel"))
+        alert.returnNeverPays()
         UnknownPriceBox.place([pick, unknown.view], in: alert)
         unknown.gate(alert.buttons[0])
         let answer: NSApplication.ModalResponse

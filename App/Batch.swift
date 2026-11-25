@@ -173,6 +173,7 @@ final class BatchModel {
         alert.informativeText = details.joined(separator: "\n\n")
         alert.addButton(withTitle: L10n.text("button.send"))
         alert.addButton(withTitle: L10n.text("button.cancel"))
+        alert.returnNeverPays()
         if let unknown {
             UnknownPriceBox.place([unknown.view], in: alert)
             unknown.gate(alert.buttons[0])

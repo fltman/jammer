@@ -673,11 +673,37 @@ Gives the document the picture's timecode (SMPTE): the frame rate, and the timec
 
 ### `remove_marker`
 
-Removes the markers with this name.
+Removes the markers with this name, or the one marker with this id.
 
 | Param | Type | Description |
 |---|---|---|
-| `name` | string | **Required.** Marker name. |
+| `name` | string | Marker name. |
+| `marker` | string | Marker id (from the document's markers). |
+
+### `set_marker`
+
+Moves, renames or resizes one marker, by its id (the document's markers list them). What isn't given stays.
+
+| Param | Type | Description |
+|---|---|---|
+| `marker` | string | **Required.** Marker id. |
+| `at` | seconds | New position in seconds. |
+| `name` | string | New name. |
+| `duration` | seconds | Region length in seconds; 0 for a point. |
+
+### `set_clip`
+
+Changes one clip by its id (the tracks' clips list them): trims its start or end on the timeline (the sound stays where it is; a clip can't reach over the next one or past its file), sets its fades and their shape, or its gain. What isn't given stays.
+
+| Param | Type | Description |
+|---|---|---|
+| `clip` | string | **Required.** Clip id. |
+| `start` | seconds | New start of the clip on the timeline. |
+| `end` | seconds | New end of the clip on the timeline. |
+| `fadeIn` | seconds | Fade-in length in seconds; 0 removes it. |
+| `fadeOut` | seconds | Fade-out length in seconds; 0 removes it. |
+| `shape` | string | Fade curve. One of: `equal_power`, `linear`. |
+| `gainDB` | number | The clip's gain in dB (the new value). |
 
 ### `set_tempo`
 

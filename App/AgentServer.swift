@@ -774,7 +774,7 @@ enum AgentRouter {
         let p = s.project
         d["tracks"] = p.tracks.map { trackJSON(s, $0) }
         d["markers"] = p.markers.map { m -> [String: Any] in
-            var e: [String: Any] = ["name": m.name, "at": seconds(s, m.position), "frame": m.position]
+            var e: [String: Any] = ["id": m.id.uuidString, "name": m.name, "at": seconds(s, m.position), "frame": m.position]
             if m.length > 0 { e["duration"] = seconds(s, m.length) }
             if let k = m.kind { e["kind"] = k.rawValue }
             return e
@@ -904,7 +904,7 @@ enum AgentRouter {
                     return d
                 },
                 "clips": t.clips.map { c -> [String: Any] in
-                    var d: [String: Any] = ["start": seconds(s, c.start), "end": seconds(s, c.end), "startFrame": c.start, "endFrame": c.end,
+                    var d: [String: Any] = ["id": c.id.uuidString, "start": seconds(s, c.start), "end": seconds(s, c.end), "startFrame": c.start, "endFrame": c.end,
                      "source": p.source(c.sourceID)?.name ?? "?", "sourceStart": seconds(s, c.sourceStart),
                      "gainDB": (c.gainDB * 100).rounded() / 100, "fadeIn": seconds(s, c.fadeIn), "fadeOut": seconds(s, c.fadeOut)]
                     // Speech made with a cloned voice: readable here, never removable through the API (no step clears it).

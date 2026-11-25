@@ -7458,6 +7458,96 @@
         }
       }
     },
+    "error.clip.beyondSource": {
+      "comment": "Clip and marker edits.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The clip can't reach past the start or end of its file."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Klippet kan inte nå förbi början eller slutet av sin fil."
+          }
+        }
+      }
+    },
+    "error.clip.empty": {
+      "comment": "Clip and marker edits.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A clip can't be shorter than one sample."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ett klipp kan inte vara kortare än ett sampel."
+          }
+        }
+      }
+    },
+    "error.clip.noClip": {
+      "comment": "Clip and marker edits.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "There's no clip with that id."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Det finns inget klipp med det id:t."
+          }
+        }
+      }
+    },
+    "error.clip.noMarker": {
+      "comment": "Clip and marker edits.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "There's no marker with that id."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Det finns ingen markör med det id:t."
+          }
+        }
+      }
+    },
+    "error.clip.overlaps": {
+      "comment": "Clip and marker edits.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The clip can't reach over the clip next to it."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Klippet kan inte nå över klippet bredvid."
+          }
+        }
+      }
+    },
     "error.debleed.needsTracks": {
       "comment": "An error’s reason, shown in the status line after a step that failed (the agent API says the same in English). Placeholders are names, ids or numbers.",
       "extractionState": "manual",
@@ -20339,6 +20429,24 @@
         }
       }
     },
+    "op.set_clip.title": {
+      "comment": "Clip and marker edits.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Change Clip"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ändra klipp"
+          }
+        }
+      }
+    },
     "op.set_group.title": {
       "comment": "The title of the operation set_group: in the menus, the command palette, the assistant’s plan and as the undo name (“Undo …”). The agent API keeps the English title.",
       "extractionState": "manual",
@@ -20389,6 +20497,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ändra högtalaruppställning"
+          }
+        }
+      }
+    },
+    "op.set_marker.title": {
+      "comment": "Clip and marker edits.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Change Marker"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ändra markör"
           }
         }
       }
@@ -29754,6 +29880,24 @@
         }
       }
     },
+    "step.set_clip.id": {
+      "comment": "Clip and marker edits.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "set_clip: \"clip\" must be a clip id."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "set_clip: \"clip\" måste vara ett klipp-id."
+          }
+        }
+      }
+    },
     "step.set_group.such_group": {
       "extractionState": "manual",
       "localizations": {
@@ -29903,6 +30047,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "set_layout: \"order\" är en av %@."
+          }
+        }
+      }
+    },
+    "step.set_marker.id": {
+      "comment": "Clip and marker edits.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "set_marker: \"marker\" must be a marker id."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "set_marker: \"marker\" måste vara ett markör-id."
           }
         }
       }
