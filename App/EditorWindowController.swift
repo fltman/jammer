@@ -853,11 +853,13 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
             // After a loudness preset, a lossy file is delivered at the preset's target: measured as written, corrected, encoded again.
             options.loudness = self.session.deliveryTarget
             let session = self.session
+            let stop = JobRegistry.StopFlag()
+            let wait = session.beginWait(L10n.text("export.working")) { stop.set() }
             Task {
-                session.status = L10n.text("export.working")
+                defer { session.endWait(wait) }
                 do {
-                    let delivery = try await session.export(to: url, options: options) { p in
-                        Task { @MainActor in session.status = L10n.text("export.working.percent", String(Int(p * 100))) }
+                    let delivery = try await session.export(to: url, options: options, stop: stop) { p in
+                        Task { @MainActor in session.updateWait(wait, L10n.text("export.working.percent", String(Int(p * 100)))) }
                     }
                     if let d = delivery, let l = d.loudness {
                         let name = url.lastPathComponent, loud = L10n.number(l, 1)
@@ -869,6 +871,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
                     } else {
                         session.status = L10n.text("export.done", url.lastPathComponent)
                     }
+                } catch is CancellationError {
+                    session.say(L10n.text("export.stopped"), .info)
                 } catch {
                     session.status = L10n.text("export.failed", L10n.error(error))
                 }
@@ -1018,9 +1022,9 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         }
         if id == "edit.split" { return needs(hasAudio, L10n.text("reason.noAudio")) }
         if id == "edit.stopJob" {
-            let job = JobRegistry.shared.running(document: session.agentID).last
-            item?.title = job.map { L10n.text("edit.stopJob.named", JobLine.label($0)) } ?? L10n.text("edit.stopJob")
-            return needs(job != nil, L10n.text("reason.noJob"))
+            let label = session.waits.last?.label ?? JobRegistry.shared.running(document: session.agentID).last.map(JobLine.label)
+            item?.title = label.map { L10n.text("edit.stopJob.named", $0) } ?? L10n.text("edit.stopJob")
+            return needs(label != nil, L10n.text("reason.noJob"))
         }
         if id.hasPrefix("track.layout.order.") {
             // The order of a file that names no loudspeakers: offered only when the document has one.
@@ -1112,6 +1116,14 @@ struct TransportBar: View {
 struct JobLine: View {
     let session: EditorSession
     let jobs: [Job]
+    let waits: [EditorSession.Wait]
+
+    private struct Item: Identifiable { let id: String, label: String, kind: String, stop: @MainActor () -> Void }
+    private var items: [Item] {
+        let s = session
+        return jobs.map { j in Item(id: j.id, label: Self.label(j), kind: j.kind) { JobRegistry.shared.stop(j.id, in: s) } }
+            + waits.map { w in Item(id: w.id.uuidString, label: w.label, kind: "wait", stop: w.stop) }
+    }
 
     static func label(_ job: Job) -> String {
         let percent = String(Int(job.progress * 100))
@@ -1126,18 +1138,18 @@ struct JobLine: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            ForEach(jobs, id: \.id) { job in
-                let label = Self.label(job)
+            ForEach(items) { item in
+                let label = item.label
                 HStack(spacing: 5) {
                     Text(label).foregroundStyle(Theme.neonColor).lineLimit(1)
-                    Button { JobRegistry.shared.stop(job.id, in: session) } label: {
+                    Button { item.stop() } label: {
                         Image(systemName: "stop.circle.fill").font(.system(size: 13))
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(.secondary)
                     .help(L10n.text("job.stop.help", label))
                     .accessibilityLabel(L10n.text("job.stop.ax", label))
-                    .accessibilityIdentifier("job.stop." + job.kind)
+                    .accessibilityIdentifier("job.stop." + item.kind)
                 }
             }
         }
@@ -1156,8 +1168,8 @@ struct StatusBar: View {
                 Text(L10n.text("status.noSelection"))
             }
             let jobs = JobRegistry.shared.running(document: session.agentID)
-            if !jobs.isEmpty {
-                JobLine(session: session, jobs: jobs)
+            if !jobs.isEmpty || !session.waits.isEmpty {
+                JobLine(session: session, jobs: jobs, waits: session.waits)
             // What was just done is said whole; the selection's text gives way to it first.
             } else if let status = session.status {
                 StateLine(kind: session.statusKind, text: status, font: .system(size: 11, design: .monospaced))

@@ -183,14 +183,20 @@ public final class EncodedWriter {
             return
         }
         if options.format == .opus {
-            try OggOpusWriter.export(plan, range: range, to: url, bitRate: options.bitRate, chapters: options.chapters)
+            try OggOpusWriter.export(plan, range: range, to: url, bitRate: options.bitRate, chapters: options.chapters, progress: progress)
             _ = progress(1)
             return
         }
         if options.format == .mp3 {
             guard let make = mp3Factory else { throw ExportError.unsupported(Said("error.export.mp3_isn_t_available", "MP3 isn't available in this build.")) }
             let w = try make(url, plan.channels, plan.sampleRate, options.bitRate, options.id3)
-            try plan.render(range) { try w.write($0) }
+            // Progress as it goes, and a stop when progress says so (the window's Stop; the caller removes the file).
+            var done: Frame = 0
+            try plan.render(range) { block in
+                try w.write(block)
+                done += Frame(block.count / plan.channels)
+                if !progress(Double(done) / Double(max(1, range.count))) { throw CancellationError() }
+            }
             try w.finish()
             _ = progress(1)
             return

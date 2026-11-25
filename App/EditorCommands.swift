@@ -89,6 +89,7 @@ extension EditorWindowController {
 
     /// Edit › Stop Job: the newest job this document runs; the others go on.
     @objc func stopJob(_ sender: Any?) {
+        if let wait = session.waits.last { wait.stop(); return }
         guard let job = JobRegistry.shared.running(document: session.agentID).last else { return }
         JobRegistry.shared.stop(job.id, in: session)
     }

@@ -249,10 +249,16 @@ public final class OggOpusWriter {
     }
 
     /// Renders `range` of a plan into an .opus file.
-    public static func export(_ plan: RenderPlan, range: Range<Frame>, to url: URL, bitRate: Int = 64_000, chapters: [Chapter] = []) throws {
+    public static func export(_ plan: RenderPlan, range: Range<Frame>, to url: URL, bitRate: Int = 64_000, chapters: [Chapter] = [],
+                              progress: (Double) -> Bool = { _ in true }) throws {
         let w = try OggOpusWriter(url: url, channels: plan.channels, sampleRate: plan.sampleRate, bitRate: bitRate,
                                   comments: chapterComments(chapters))
-        try plan.render(range) { try w.write($0) }
+        var done: Frame = 0
+        try plan.render(range) { block in
+            try w.write(block)
+            done += Frame(block.count / plan.channels)
+            if !progress(Double(done) / Double(max(1, range.count))) { throw CancellationError() }
+        }
         try w.finish()
     }
 }

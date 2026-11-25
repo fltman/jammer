@@ -165,7 +165,7 @@ Errors are JSON: `{"error": {"code": "…", "message": "…"}}`. A failed step a
 | 409 | `not_available` | Not possible right now: nothing to undo, the window isn't visible for playback, the upload offset is wrong. |
 | 413 | `too_large` | A body over 256 MB (use uploads), an upload over 16 GB, or an export over 2 GB (export a range). |
 | 507 | `insufficient_storage` | Not enough free disk space for the upload or export. |
-| 422 | `step_failed` | A step ran and failed. `error.step` is its index; `results` has the status of every step. Some failures add `error.reason` (`ambiguous`, `not_found`) and numbers such as `error.matches`. |
+| 422 | `step_failed` | A step ran and failed. `error.step` is its index; `results` has the status of every step. Some failures add `error.reason` (`ambiguous`, `not_found`) and numbers such as `error.matches`. `stopped`: the user stopped the run in Jämmer's window, and nothing was applied. |
 | 422 | `unprocessable` | The request is fine, but the document doesn't allow it; `error.reason` says why (`no_hum`, `nothing_in_range`). Nothing started. |
 | 500 | `internal` | Jämmer failed unexpectedly. The message has the detail. |
 

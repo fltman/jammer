@@ -11980,6 +11980,24 @@
         }
       }
     },
+    "export.stopped": {
+      "comment": "Status line after an export was stopped.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stopped. No file was written; the folder is as it was."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stoppat. Ingen fil skrevs; mappen är som den var."
+          }
+        }
+      }
+    },
     "export.timeline.dawproject": {
       "extractionState": "manual",
       "localizations": {
@@ -25100,6 +25118,24 @@
         }
       }
     },
+    "restore.preview.rendering": {
+      "comment": "Restore sheet while the preview renders. %@ is a whole number of percent.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rendering the preview… %@ %%"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Renderar förhandslyssningen… %@ %%"
+          }
+        }
+      }
+    },
     "restore.range.selection": {
       "comment": "What the repair applies to: two times.",
       "extractionState": "manual",
@@ -28236,6 +28272,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ har ingen kanalmask: kanalerna hörs i WAV-ordningen, de bakre före sidorna. Ljud › Högtalaruppställning ändrar det."
+          }
+        }
+      }
+    },
+    "status.working": {
+      "comment": "Status bar while a menu command runs longer than half a second, beside its Stop. %@ is the command's name.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@…"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@…"
           }
         }
       }

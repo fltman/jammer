@@ -15,6 +15,10 @@ final class RestoreModel {
     var sensitivity = 1.0
     var findings = L10n.text("restore.looking")
     var previewing = false
+    /// While the preview renders: its progress and what stops it (COMFORT 7: the wait can be stopped, and a second
+    /// click doesn't start a second render).
+    var rendering: (progress: Double, stop: JobRegistry.StopFlag)?
+    func stopRendering() { rendering?.stop.set() }
     var listeningToRepair = true
     var previewError: String?
     @ObservationIgnored private var previewPlan: RenderPlan?
@@ -54,6 +58,7 @@ final class RestoreModel {
 
     /// Renders the repair of up to 30 s (from the selection, else the playhead) and plays it.
     func preview() async {
+        guard rendering == nil else { return }
         stopPreview()
         previewError = nil
         let p = session.project
@@ -63,9 +68,21 @@ final class RestoreModel {
         let r = start..<end
         let dir = FileManager.default.temporaryDirectory.appending(path: "jammer-ab-\(UUID().uuidString)")
         let s = settings, pool = session.pool
-        let result = await Task.detached(priority: .userInitiated) { () -> Result<Project, Error> in
-            Result { try Restoration.apply(s, to: p, range: r, pool: pool, media: dir).0 }
+        let stop = JobRegistry.StopFlag()
+        rendering = (0, stop)
+        let result = await Task.detached(priority: .userInitiated) { [weak self] () -> Result<Project, Error> in
+            Result {
+                try Restoration.apply(s, to: p, range: r, pool: pool, media: dir) { f in
+                    Task { @MainActor in if self?.rendering?.stop === stop { self?.rendering?.progress = f } }
+                    return !stop.isSet
+                }.0
+            }
         }.value
+        rendering = nil
+        if stop.isSet {
+            try? FileManager.default.removeItem(at: dir)
+            return
+        }
         switch result {
         case .success(let repaired):
             previewDir = dir
@@ -168,10 +185,14 @@ struct RestoreSheet: View {
             }
             if let e = model.previewError { StateLine(kind: .error, text: e, font: .callout) }
             HStack {
-                Button(model.previewing ? L10n.text("transport.stop") : L10n.text("restore.preview")) {
-                    if model.previewing { model.stopPreview() } else { Task { await model.preview() } }
+                Button(model.rendering != nil || model.previewing ? L10n.text("transport.stop") : L10n.text("restore.preview")) {
+                    if model.rendering != nil { model.stopRendering() } else if model.previewing { model.stopPreview() } else { Task { await model.preview() } }
                 }
-                .help(L10n.text("restore.preview.help"))
+                .help(model.rendering != nil ? L10n.text("job.stop.help", L10n.text("restore.preview.rendering", String(Int((model.rendering?.progress ?? 0) * 100)))) : L10n.text("restore.preview.help"))
+                if let r = model.rendering {
+                    ProgressView(value: r.progress).frame(width: 80).controlSize(.small)
+                        .accessibilityLabel(L10n.text("restore.preview.rendering", String(Int(r.progress * 100))))
+                }
                 Picker(L10n.text("restore.listen"), selection: Binding(get: { model.listeningToRepair }, set: { model.listen(repaired: $0) })) {
                     Text(L10n.text("restore.listen.original")).tag(false)
                     Text(L10n.text("restore.listen.repaired")).tag(true)

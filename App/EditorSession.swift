@@ -16,6 +16,24 @@ enum AppClipboard {
 @MainActor
 @Observable
 final class EditorSession {
+    /// A wait in this window that isn't a job (an export, a preview, an area edit): the status bar shows it with
+    /// a Stop beside the jobs (COMFORT 7).
+    struct Wait: Identifiable {
+        let id = UUID()
+        var label: String
+        let stop: @MainActor () -> Void
+    }
+    var waits: [Wait] = []
+    func beginWait(_ label: String, stop: @escaping @MainActor () -> Void) -> UUID {
+        let w = Wait(label: label, stop: stop)
+        waits.append(w)
+        return w.id
+    }
+    func updateWait(_ id: UUID, _ label: String) {
+        if let i = waits.firstIndex(where: { $0.id == id }) { waits[i].label = label }
+    }
+    func endWait(_ id: UUID) { waits.removeAll { $0.id == id } }
+
     /// Stable while the window is open; the agent API addresses documents by it.
     let agentID = UUID().uuidString
     private(set) var project: Project
@@ -182,7 +200,9 @@ final class EditorSession {
         let title = action == .heal ? L10n.text("audio.healArea") : L10n.text("spectral.attenuate.action")
         Task {
             let r = await run([Step(op: "spectral_edit", params: params)], action: title)
-            if let f = r.first(where: { $0.status == .failed }) { status = f.error; NSSound.beep() } else { spectralArea = nil; status = L10n.text("status.done", title) }
+            if let f = r.first(where: { $0.status == .failed }) {
+                if f.reason == "stopped" { say(L10n.text("job.stopped"), .info) } else { status = f.error; NSSound.beep() }
+            } else { spectralArea = nil; status = L10n.text("status.done", title) }
         }
     }
 
@@ -537,14 +557,30 @@ final class EditorSession {
                               pool: pool, media: MediaStore.folder)
         let pool = self.pool
         let safe = Self.pluginSafeMode
-        let (results, end) = await Task.detached(priority: .userInitiated) { () -> ([StepResult], EditState) in
+        // A step still running after half a second shows in the status bar with a Stop (COMFORT 7). A stopped run
+        // applies nothing: the steps left are skipped, and what the running one made is not taken in.
+        let stop = JobRegistry.StopFlag()
+        var wait: UUID?
+        let shower = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(500))
+            guard !Task.isCancelled, let self else { return }
+            wait = self.beginWait(L10n.text("status.working", action)) { stop.set() }
+        }
+        var (results, end) = await Task.detached(priority: .userInitiated) { () -> ([StepResult], EditState) in
             var s = start
             // Loudness is measured on the mix as heard, plugins included.
             let r = StepRunner.run(steps, on: &s, measure: { p, range in
                 LoudnessMeter.measure(PlanCompiler.mixBlocking(p, pool: pool, outOfProcess: safe), range)
-            })
+            }, stopped: { stop.isSet })
             return (r, s)
         }.value
+        shower.cancel()
+        if let wait { endWait(wait) }
+        if stop.isSet, results.allSatisfy({ $0.status == .done }), let last = steps.last {
+            // Stopped during the last step: it finished, but nothing of it is taken in.
+            results[results.count - 1] = .stopped(last.op)
+            end = start
+        }
         guard results.allSatisfy({ $0.status == .done }) else { return results }
         let probe1 = Date()
         if end.project != project { commit(end.project, action: action) }
@@ -576,7 +612,9 @@ final class EditorSession {
         let title = L10n.operation(op)
         Task {
             let r = await run([Step(op: op, params: params)], action: title)
-            if let failed = r.first(where: { $0.status == .failed }) {
+            if let failed = r.first(where: { $0.status == .failed }), failed.reason == "stopped" {
+                say(L10n.text("job.stopped"), .info)
+            } else if let failed = r.first(where: { $0.status == .failed }) {
                 // The step's name means nothing in the status bar, and the reason has to fit there.
                 // (A line that says what didn't go: an error, by its symbol and to VoiceOver.)
                 say(op == "detect_tempo" && failed.reason == "no_steady_tempo" ? L10n.text("tempo.none")
@@ -1017,14 +1055,38 @@ final class EditorSession {
     /// Writes the file. With a limiter on the master the file is then measured as written, and written
     /// again with the limiter aiming further under its ceiling until the file holds it: the promise is
     /// about the file, whatever the conversion, the dither or the encoder did after the limiter.
-    func export(to url: URL, options: ExportOptions, progress: @escaping @Sendable (Double) -> Void = { _ in }) async throws -> LoudnessDelivery? {
+    ///
+    /// The file is written beside its place under a hidden name and moved there only when whole: a stopped (`stop`)
+    /// or failed export leaves the folder as it was, an earlier file of that name included (COMFORT 7).
+    func export(to url: URL, options: ExportOptions, stop: JobRegistry.StopFlag = .init(),
+                progress: @escaping @Sendable (Double) -> Void = { _ in }) async throws -> LoudnessDelivery? {
+        let fm = FileManager.default
+        let temp = url.deletingLastPathComponent()
+            .appending(path: ".\(url.deletingPathExtension().lastPathComponent).jammer-\(UUID().uuidString.prefix(8)).\(url.pathExtension)")
+        let chapters = { (u: URL) in u.deletingPathExtension().appendingPathExtension("chapters.json") }
+        do {
+            let delivery = try await exportWhole(to: temp, options: options, stop: stop, progress: progress)
+            if stop.isSet { throw CancellationError() }
+            for (from, to) in [(temp, url), (chapters(temp), chapters(url))] where fm.fileExists(atPath: from.path) {
+                if fm.fileExists(atPath: to.path) { _ = try fm.replaceItemAt(to, withItemAt: from) } else { try fm.moveItem(at: from, to: to) }
+            }
+            return delivery
+        } catch {
+            try? fm.removeItem(at: temp)
+            try? fm.removeItem(at: chapters(temp))
+            throw error
+        }
+    }
+
+    private func exportWhole(to url: URL, options: ExportOptions, stop: JobRegistry.StopFlag, progress: @escaping @Sendable (Double) -> Void) async throws -> LoudnessDelivery? {
         lastExportLimiter = nil
         guard let ceiling = project.master.limiter?.ceilingDB else {
-            return try await exportOnce(to: url, options: options, masterMargin: Mixer.masterMargins[0], progress: progress)
+            return try await exportOnce(to: url, options: options, masterMargin: Mixer.masterMargins[0], stop: stop, progress: progress)
         }
         var peak = Double.infinity
         for margin in Mixer.exportMargins {
-            let delivery = try await exportOnce(to: url, options: options, masterMargin: margin, progress: progress)
+            if stop.isSet { throw CancellationError() }
+            let delivery = try await exportOnce(to: url, options: options, masterMargin: margin, stop: stop, progress: progress)
             let measured = await Task.detached(priority: .userInitiated) {
                 EncodedWriter.measureWritten(url, scratch: FileManager.default.temporaryDirectory)
             }.value
@@ -1051,7 +1113,8 @@ final class EditorSession {
     /// for the last export through a master limiter; nil when there was none.
     var lastExportLimiter: (ceilingDB: Double, truePeakDB: Double, marginDB: Double)?
 
-    private func exportOnce(to url: URL, options: ExportOptions, masterMargin: Double, progress: @escaping @Sendable (Double) -> Void) async throws -> LoudnessDelivery? {
+    private func exportOnce(to url: URL, options: ExportOptions, masterMargin: Double, stop: JobRegistry.StopFlag,
+                            progress: @escaping @Sendable (Double) -> Void) async throws -> LoudnessDelivery? {
         // Units of its own: playback keeps going untouched while this renders.
         let mixed = await PlanCompiler.mix(alone(options.tracks), pool: pool, outOfProcess: Self.pluginSafeMode, masterMargin: masterMargin)
         let asked = options.range ?? 0..<project.length
@@ -1100,13 +1163,13 @@ final class EditorSession {
                         if gain != 0 { try p.changeGain(range, by: gain) }
                         // The first encode uses the plan already made; a corrected one needs its own.
                         let use = gain == 0 ? plan : PlanCompiler.mixBlocking(p, pool: pool, outOfProcess: safe, masterMargin: masterMargin)
-                        try EncodedWriter.export(use, range: range, to: url, options: final) { p in progress(p); return true }
+                        try EncodedWriter.export(use, range: range, to: url, options: final) { p in progress(p); return !stop.isSet }
                     }, measure: { EncodedWriter.measureWritten(url, scratch: FileManager.default.temporaryDirectory) })
                 }.value
             }
             let (thePlan, theRange, final) = (plan, range, encoded)
             try await Task.detached(priority: .userInitiated) {
-                try EncodedWriter.export(thePlan, range: theRange, to: url, options: final) { p in progress(p); return true }
+                try EncodedWriter.export(thePlan, range: theRange, to: url, options: final) { p in progress(p); return !stop.isSet }
             }.value
             return nil
         }
@@ -1138,6 +1201,7 @@ final class EditorSession {
             let total = Double(theRange.count)
             var done = 0.0
             try thePlan.render(theRange) { block in
+                if stop.isSet { throw CancellationError() }
                 try writer.write(block)
                 done += Double(block.count / thePlan.channels)
                 progress(done / total)

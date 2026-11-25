@@ -694,6 +694,11 @@ public struct StepResult: Sendable, Equatable {
     /// Why it failed, by its key in the app's string catalogue (not part of the API's answer): for the
     /// window, which says it in its own language. nil when the words were made where the step failed.
     public var keyed: KeyedMessage?
+
+    /// A step the window's Stop ended: nothing of it is taken in.
+    public static func stopped(_ op: String) -> StepResult {
+        StepResult(op: op, status: .failed, error: "Stopped in Jämmer's window.", reason: "stopped", keyed: KeyedMessage("job.stopped"))
+    }
 }
 
 public struct StepFailure: Error, LocalizedError {
@@ -774,12 +779,19 @@ public enum StepRunner {
     /// Runs steps in order on a copy of `state`; stops at the first failure and
     /// marks the rest skipped. The caller commits `state` (one undo step) only if
     /// something changed.
-    public static func run(_ steps: [Step], on state: inout EditState, measure: Measure) -> [StepResult] {
+    /// `stopped` is asked before each step: once it says yes, the rest are skipped and the first of them fails with
+    /// the reason "stopped" (the window's Stop; the caller then applies nothing).
+    public static func run(_ steps: [Step], on state: inout EditState, measure: Measure, stopped: () -> Bool = { false }) -> [StepResult] {
         var results: [StepResult] = []
         var failed = false
         for step in steps {
             if failed {
                 results.append(StepResult(op: step.op, status: .skipped))
+                continue
+            }
+            if stopped() {
+                results.append(.stopped(step.op))
+                failed = true
                 continue
             }
             do {
