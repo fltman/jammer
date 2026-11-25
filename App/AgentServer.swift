@@ -129,6 +129,8 @@ final class AgentServer {
 
     private(set) var port: UInt16?
     private(set) var failure: String?
+    /// The app Jämmer is transcribing a short turn for right now (the splash says so).
+    var turnFor: String?
     @ObservationIgnored private var listener: NWListener?
     nonisolated static let queue = DispatchQueue(label: "jammer.agent-server")
 
@@ -197,9 +199,15 @@ final class AgentServer {
                     send(.error(refusal), on: connection)
                     return
                 }
-                Task { @MainActor in
+                let work = Task { @MainActor in
                     let response = await AgentRouter.route(request, port: port)
                     send(response, on: connection)
+                }
+                // A short turn stops when its caller hangs up (TurnTranscription); other routes finish what they began.
+                if request.method == "POST", request.segments == ["api", "v1", "transcribe"] {
+                    connection.receive(minimumIncompleteLength: 1, maximumLength: 1) { _, _, isComplete, error in
+                        if isComplete || error != nil { work.cancel() }
+                    }
                 }
             }
         }
@@ -230,7 +238,7 @@ enum AgentRouter {
     }
 
     static let siblingLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "com.brattoo.jammer", category: "siblings")
-    static let siblingNames = ["glimmer": "Glimmer", "flimmer": "Flimmer", "jammer": "Jämmer"]
+    static let siblingNames = ["glimmer": "Glimmer", "flimmer": "Flimmer", "jammer": "Jämmer", "drommer": "Drömmer"]
 
     private static func dispatch(_ r: AgentAPI.Request, port: UInt16) async throws -> Response {
         let s = r.segments
@@ -285,6 +293,10 @@ enum AgentRouter {
             let job = r.method == "GET" ? JobRegistry.shared.job(p[3]) : JobRegistry.shared.cancel(p[3])
             guard let job else { throw APIError.notFound("No job with id \(p[3]).") }
             return .json(["job": job.json])
+        case ["api", "v1", "transcribe"]:
+            // One short turn of speech for an app's live captions: no document, nothing kept (TurnTranscription).
+            try only("POST")
+            return try await TurnTranscriber.handle(r)
         case ["api", "v1", "batch"]:
             try only("POST")
             guard var body = (try? JSONSerialization.jsonObject(with: r.body)) as? [String: Any] else { throw APIError.badRequest("The body isn't a JSON object.") }

@@ -83,6 +83,17 @@ public final class WhisperEngine: TranscriptionEngine, @unchecked Sendable {
         return SourceTranscript(sourceID: source.id, language: locale.identifier(.bcp47), engine: id, words: words)
     }
 
+    /// One short turn already in memory, 16 kHz mono (POST /api/v1/transcribe): nothing is written, and the model
+    /// stays loaded for the next turn. Times in seconds from the turn's start.
+    public func transcribeTurn(_ samples: [Float], locale: Locale) async throws -> [RecognisedRun] {
+        guard await supports(locale) else { throw TranscriptionError.unsupportedLanguage(locale.identifier(.bcp47)) }
+        let code = Self.whisperLanguage(locale)
+        let task = Task.detached(priority: .userInitiated) { [self] () throws -> [RecognisedRun] in
+            try lock.withLock { try run(samples, language: code, progress: { _ in }) }
+        }
+        return try await withTaskCancellationHandler { try await task.value } onCancel: { task.cancel() }
+    }
+
     final class Callbacks: @unchecked Sendable {
         let progress: @Sendable (Double) -> Void
         init(_ p: @escaping @Sendable (Double) -> Void) { progress = p }

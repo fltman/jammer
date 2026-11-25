@@ -21094,6 +21094,24 @@
         }
       }
     },
+    "op.transcribe_turn.title": {
+      "comment": "Operation title: the agent API's short-turn transcription (no menu item).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transcribe a Short Turn"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkribera en kort tur"
+          }
+        }
+      }
+    },
     "op.transcribe_voice_tracks.title": {
       "extractionState": "manual",
       "localizations": {
@@ -26932,6 +26950,42 @@
           "stringUnit": {
             "state": "translated",
             "value": "Agenter får läsa ljud från den här mappen och skriva resultat i den"
+          }
+        }
+      }
+    },
+    "settings.agents.siblingTranscription": {
+      "comment": "Settings › Agents switch.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Let other apps use Jämmer's transcription"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Låt andra appar använda Jämmers transkribering"
+          }
+        }
+      }
+    },
+    "settings.agents.siblingTranscription.text": {
+      "comment": "Settings › Agents, under the switch.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apps on this Mac, such as Drömmer, can send short turns of speech (up to 15 s) to be transcribed with Jämmer's local models. The audio and the text are never saved or logged, and Jämmer's windows say while it works."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Appar på den här Macen, till exempel Drömmer, kan skicka korta turer av tal (upp till 15 s) som transkriberas med Jämmers lokala modeller. Ljudet och texten sparas aldrig och loggas aldrig, och Jämmers fönster visar när det pågår."
           }
         }
       }
@@ -33057,6 +33111,42 @@
           "stringUnit": {
             "state": "translated",
             "value": "Uppspelningsvolym"
+          }
+        }
+      }
+    },
+    "turn.anotherApp": {
+      "comment": "Used in \"Transcribing for %@…\" when the caller doesn't say which app it is.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "another app"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "en annan app"
+          }
+        }
+      }
+    },
+    "turn.working": {
+      "comment": "Status bar and splash while Jämmer transcribes a short turn for another app. %@ is the app, e.g. \"Drömmer\".",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transcribing for %@…"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkriberar åt %@…"
           }
         }
       }

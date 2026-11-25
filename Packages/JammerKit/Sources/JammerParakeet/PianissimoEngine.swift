@@ -67,17 +67,33 @@ public actor PianissimoEngine: TranscriptionEngine {
             throw TranscriptionError.unsupportedLanguage(locale.identifier(.bcp47))
         }
         try Task.checkCancellation()
-        let decoder: AsrManager
-        if let manager {
-            decoder = manager
-        } else {
-            guard isInstalled else { throw TranscriptionError.failed("Install Klang Pianissimo in Settings › Models.") }
-            let models = try AsrModels.loadLocal(from: directory, version: .v3)
-            decoder = AsrManager(config: .default)
-            try await decoder.loadModels(models)
-            manager = decoder
-        }
+        let decoder = try await loaded()
         return try await ParakeetEngine.transcribe(source, pool: pool, locale: locale, language: language,
                                                    id: id, manager: decoder, progress: progress)
+    }
+
+    private func loaded() async throws -> AsrManager {
+        if let manager { return manager }
+        guard isInstalled else { throw TranscriptionError.failed("Install Klang Pianissimo in Settings › Models.") }
+        let models = try AsrModels.loadLocal(from: directory, version: .v3)
+        let decoder = AsrManager(config: .default)
+        try await decoder.loadModels(models)
+        manager = decoder
+        return decoder
+    }
+
+    /// One short turn already in memory, 16 kHz mono (POST /api/v1/transcribe): nothing is written, and the model
+    /// stays loaded for the next turn. Times in seconds from the turn's start.
+    public func transcribeTurn(_ samples: [Float], locale: Locale) async throws -> [RecognisedRun] {
+        guard let language = Language(rawValue: model.rawValue), locale.language.languageCode?.identifier == model.rawValue else {
+            throw TranscriptionError.unsupportedLanguage(locale.identifier(.bcp47))
+        }
+        let decoder = try await loaded()
+        var state = TdtDecoderState.make()
+        let result = try await decoder.transcribe(samples, decoderState: &state, language: language)
+        try Task.checkCancellation()
+        return ParakeetEngine.words(result.tokenTimings ?? [], sampleRate: Double(16_000)).map {
+            RecognisedRun(text: $0.text, start: Double($0.start) / 16_000, end: Double($0.end) / 16_000, confidence: $0.confidence)
+        }
     }
 }

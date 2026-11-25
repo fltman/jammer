@@ -51,6 +51,8 @@ extension AgentAPI {
         .init("GET", "/api/v1/uploads/{id}"), .init("DELETE", "/api/v1/uploads/{id}"),
         .init("PUT", "/api/v1/uploads/{id}", query: ["offset"], body: nil),
         .init("GET", "/api/v1/jobs/{id}"), .init("DELETE", "/api/v1/jobs/{id}"),
+        // One short turn of speech: the body is the WAV itself (TurnTranscription).
+        .init("POST", "/api/v1/transcribe", query: ["language", "engine"], body: nil),
         .init("GET", doc), .init("DELETE", doc),
         .init("POST", doc + "/steps", body: ["steps", "allowPaid"]),
         .init("POST", doc + "/undo"),

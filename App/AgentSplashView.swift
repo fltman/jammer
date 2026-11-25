@@ -32,6 +32,9 @@ struct AgentSplashView: View {
                 Text(L10n.text("splash.agent.text"))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                if let who = server.turnFor {
+                    StateLine(kind: .progress, text: L10n.text("turn.working", who), font: .callout)
+                }
                 if let prompt = server.agentPrompt {
                     HStack(alignment: .top, spacing: 8) {
                         // The name is on the group around the text, never on the selectable text itself:

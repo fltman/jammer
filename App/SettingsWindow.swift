@@ -213,6 +213,7 @@ struct ModelsSettings: View {
 /// Settings › Agents: the folders agents may read from and write to.
 struct AgentSettings: View {
     @State private var folders = AgentFolders.urls
+    @AppStorage(TurnTranscriber.allowedKey) private var siblingTranscription = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -237,6 +238,10 @@ struct AgentSettings: View {
                 p.message = L10n.text("settings.agents.panel")
                 if p.runModal() == .OK, let url = p.url { AgentFolders.add(url); folders = AgentFolders.urls }
             }
+            Divider().padding(.vertical, 4)
+            Toggle(L10n.text("settings.agents.siblingTranscription"), isOn: $siblingTranscription)
+            Text(L10n.text("settings.agents.siblingTranscription.text"))
+                .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }
         .padding(20)
         .frame(width: 560, alignment: .leading)

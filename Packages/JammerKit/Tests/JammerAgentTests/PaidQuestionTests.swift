@@ -53,8 +53,9 @@ struct PaidQuestionTests {
             let route = AgentAPI.routes.first { $0.method == call.method && $0.pattern == AgentAPI.RouteParameters(call.method, call.path).pattern }
             #expect(route?.body?.isSuperset(of: ["allowPaid", "allowUnknownPrice"]) == true, "\(spec.name) \(call.path): \(route?.body ?? [])")
         }
-        // The transcription endpoint's paid engine has the same two.
-        let t = AgentAPI.routes.first { $0.method == "POST" && $0.pattern.last == "transcribe" }
+        // The document transcription endpoint's paid engine has the same two (the short-turn route,
+        // /api/v1/transcribe, is local only and takes no body names).
+        let t = AgentAPI.routes.first { $0.method == "POST" && $0.pattern == ["api", "v1", "documents", "*", "transcribe"] }
         #expect(t?.body?.isSuperset(of: ["allowPaid", "allowUnknownPrice"]) == true)
     }
 
