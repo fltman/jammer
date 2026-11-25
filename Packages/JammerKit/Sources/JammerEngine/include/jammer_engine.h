@@ -273,6 +273,12 @@ void jm_engine_set_live_gain(jm_engine *_Nonnull engine, int32_t kind, int32_t i
 /// What the render thread has put on since the last call, oldest first: for each entry the strip, the
 /// frame of the strip's own timeline, and the level in dB at that frame (it goes straight from one
 /// entry to the next). Returns how many were written, at most `max`.
+/// Peak meters: each strip's highest sample peak after its fader (before its pan), linear, over the blocks heard in
+/// [from, to) on the timeline. kind 0: tracks (count of them), 1: buses, 2: the master (count 1). Main thread, no lock.
+void jm_engine_meter_peaks(const jm_engine *_Nonnull engine, int64_t from, int64_t to, int32_t kind, int32_t count, float *_Nonnull out);
+/// The same peaks measured over a render of [start, start + frames) of a finalized plan, with no device: what the
+/// meters are tested against.
+bool jm_render_peaks(const jm_plan *_Nonnull plan, int64_t start, int64_t frames, int32_t kind, int32_t count, float *_Nonnull out);
 int32_t jm_engine_take_applied(jm_engine *_Nonnull engine, int32_t *_Nonnull kinds, int32_t *_Nonnull indices, int64_t *_Nonnull frames, float *_Nonnull db, int32_t max);
 /// Which plan this is among all that have been made (1, 2, …): what a live trim is tied to.
 uint64_t jm_plan_serial(const jm_plan *_Nonnull plan);

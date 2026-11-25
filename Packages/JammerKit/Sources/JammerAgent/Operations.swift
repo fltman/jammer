@@ -272,10 +272,17 @@ public enum Operations {
                        .init("lookahead", .number, "ms before the speech that it starts going down. Default: the attack, so it is down when the first word comes.", range: 0...2_000),
                        .init("stack", .boolean, "True to duck on top of an earlier ducking instead of replacing it."),
                        start, end]),
+        .init("remove_track", "Delete Track", "Removes a track with its clips and automation; a plugin elsewhere keyed by it loses the key. Its files are not touched. A document keeps at least one track; a locked track can't be removed. One undo step.",
+              params: [.init("track", .string, "Track id.", required: true)]),
+        .init("duplicate_track", "Duplicate Track", "Puts a copy of a track right under it: the same clips, level, pan, plugins, sends and automation, with ids of its own; not locked and not frozen. Returns the copy's id as ids.track. One undo step.",
+              params: [.init("track", .string, "Track id.", required: true), .init("name", .string, "The copy's name. Default: the track's name and \"copy\".")]),
+        .init("move_track", "Move Track", "Moves a track in the order of the lanes and the mixer: to a place (index, 0 the top) or up or down by some places (by, e.g. -1 for up). One undo step.",
+              params: [.init("track", .string, "Track id.", required: true), .init("index", .number, "Its new place, 0 the top."), .init("by", .number, "Places to move: negative up, positive down.")]),
         .init("set_track", "Change Track", "Changes one track: its gain, mute, name, pan, its place in a surround layout, or the bus it goes to.",
               params: [.init("track", .string, "Track id.", required: true),
                        .init("gainDB", .number, "The track's gain in dB: the new value, not a change to the old one.", range: -96...24),
                        .init("muted", .boolean, "True to mute."),
+                       .init("locked", .boolean, "True to lock the track: no step may then change its clips (or remove it) until it is unlocked. Level, pan, mute and the mixer stay free."),
                        .init("name", .string, "A new name."),
                        .init("pan", .number, "−1 (left) to 1 (right), 0 the center. Stereo documents only.", range: -1...1),
                        .init("azimuth", .number, "Documents wider than stereo: where the track's mono or stereo sound comes from, in degrees, positive to the left (0 the center, 90 the left side, ±180 behind; ITU-R BS.2051's convention). Placing a track this way uses the surround panner (pairwise vector base amplitude panning at constant power). A source of more than two channels on the track stays on its own loudspeakers.", range: -180...180),
@@ -455,7 +462,7 @@ public enum Operations {
     static var fixedEndpoints: [OperationSpec] { [
         .init("transcribe_turn", "Transcribe a Short Turn", "Transcribes one short turn of speech on this Mac and answers at once, with no document and no window: for an app's live captions. The body is the WAV itself, 16 kHz mono 16-bit PCM, at most 15 s (else 413). Answers {text, words: [{text, start, end, confidence}], engine, model, ms}. One turn at a time (409 busy; 409 stopped when the user stops it in Jämmer's window). The audio is never written to disk or kept, and neither the audio nor the text is logged; Jämmer's window says while it works. 422 model_missing with requirement when the model isn't installed (the API never installs one), 503 model_unavailable when it is installed but doesn't answer, 403 sibling_transcription_off when the user has turned this off in Settings › Agents. A closed connection cancels the turn. Free.",
               params: [.init("language", .string, "BCP 47, e.g. sv-SE (the default).").at("query"),
-                       .init("engine", .string, "auto (the default): KB-Whisper, then Pianissimo, then Whisper small; or whisper or pianissimo.", options: ["auto", "whisper", "pianissimo"]).at("query")],
+                       .init("engine", .string, "auto (the default): local Pianissimo once its model is loaded (the first auto turn starts loading it, which takes some seconds), meanwhile KB-Whisper, else Whisper small; or whisper or pianissimo.", options: ["auto", "whisper", "pianissimo"]).at("query")],
               call: ("POST", "/api/v1/transcribe")),
         .init("list_voice_profiles", "List Voice Profiles", "The voice profiles saved on this Mac: id, name and createdAt, never the voiceprint; with recognize (on or off) and the threshold. Profiles are made and deleted only in the window, by the user. diarize (mode ml) names a speaker after a profile it is like (matchedProfile, matchScore, threshold in its result): that is a suggestion, so say \"is like Anna\", never \"is Anna\".",
               params: [], call: ("GET", "/api/v1/voice-profiles")),
@@ -825,6 +832,11 @@ public enum StepRunner {
                     state.project = before
                     throw StepFailure(step.op, wrapping: FreezeError.frozen(name), reason: "frozen")
                 }
+                // A locked track keeps its clips: a step that would change them (or remove the track) changes nothing.
+                if let name = state.project.lockedTrackChanged(since: before) {
+                    state.project = before
+                    throw StepFailure(step.op, wrapping: TrackEditError.locked(name), reason: "locked")
+                }
                 var result = StepResult(op: step.op, status: .done, info: info, ids: state.made)
                 result.warnings = state.warnings
                 results.append(result)
@@ -1191,10 +1203,27 @@ public enum StepRunner {
             } catch let e as DuckError {
                 throw StepFailure("duck: \(e.localizedDescription)", reason: e.reason, keyed: e.keyed)
             }
+        case "remove_track", "duplicate_track", "move_track":
+            guard let id = UUID(uuidString: p["track"]?.string ?? ""), let t = project.tracks.firstIndex(where: { $0.id == id }) else {
+                throw StepFailure(Said("step.set_track.such_track", "set_track: no such track."), reason: "not_found")
+            }
+            do {
+                switch step.op {
+                case "remove_track": try s.project.removeTrack(id)
+                case "duplicate_track": s.made["track"] = try s.project.duplicateTrack(id, name: p["name"]?.string ?? project.tracks[t].name + " copy").uuidString
+                default:
+                    guard p["index"] != nil || p["by"] != nil else { throw StepFailure("move_track: give index or by.", reason: "bad_request") }
+                    let to = p["index"]?.double.map { Int($0) } ?? (t + Int(p["by"]?.double ?? 0))
+                    try s.project.moveTrack(id, to: to)
+                }
+            } catch let e as TrackEditError {
+                throw StepFailure(step.op, wrapping: e, reason: e == .lastTrack ? "last_track" : "not_found")
+            }
         case "set_track":
             guard let id = UUID(uuidString: p["track"]?.string ?? ""), let t = project.tracks.firstIndex(where: { $0.id == id }) else {
                 throw StepFailure(Said("step.set_track.such_track", "set_track: no such track."), reason: "not_found")
             }
+            if let l = p["locked"], case .bool(let v) = l { s.project.tracks[t].locked = v }
             if let g = p["gainDB"]?.double { s.project.tracks[t].gainDB = g }
             if let m = p["muted"], case .bool(let v) = m { s.project.tracks[t].isMuted = v }
             if let n = p["name"]?.string, !n.trimmingCharacters(in: .whitespaces).isEmpty { s.project.tracks[t].name = n }

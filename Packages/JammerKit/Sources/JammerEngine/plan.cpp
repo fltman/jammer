@@ -678,4 +678,22 @@ bool jm_render(const jm_plan *plan, int64_t start, int64_t frames, float *interl
     return true;
 }
 
+bool jm_render_peaks(const jm_plan *plan, int64_t start, int64_t frames, int32_t kind, int32_t count, float *out) {
+    if (!plan->ptr->finalized || frames < 0) return false;
+    Renderer r(plan->ptr->channels);
+    auto meters = std::make_unique<LiveMeters>();
+    r.meters = meters.get();
+    for (int32_t i = 0; i < count; ++i) out[i] = 0.0f;
+    // In slices shorter than the meters' ring, taking the highest of each before it is written over.
+    constexpr int64_t slice = 32 * 512;
+    std::vector<float> buffer(size_t(slice * plan->ptr->channels));
+    for (int64_t done = 0; done < frames; done += slice) {
+        const int64_t n = std::min(slice, frames - done);
+        r.render(*plan->ptr, start + done, n, buffer.data());
+        for (int32_t i = 0; i < count; ++i)
+            out[i] = std::max(out[i], meters->peak(LiveTrims::slot(kind, i), INT64_MIN / 2, INT64_MAX / 2));
+    }
+    return true;
+}
+
 } // extern "C"

@@ -16,6 +16,8 @@ enum AppClipboard {
 @MainActor
 @Observable
 final class EditorSession {
+    /// The strips' peak meters (StripMeters), read while the sound plays.
+    let meters = StripMeters()
     /// A wait in this window that isn't a job (an export, a preview, an area edit): the status bar shows it with
     /// a Stop beside the jobs (COMFORT 7).
     struct Wait: Identifiable {

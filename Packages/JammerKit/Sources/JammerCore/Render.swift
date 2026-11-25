@@ -142,6 +142,14 @@ public final class RenderPlan: @unchecked Sendable {
         return out
     }
 
+    /// The meters' peaks over a render of `range`: each strip's highest sample after its fader, before its pan,
+    /// linear (kind 0 tracks, 1 buses, 2 the master). What the live meters are measured against.
+    public func peaks(_ range: Range<Frame>, kind: Int32, count: Int) -> [Float] {
+        var out = [Float](repeating: 0, count: max(1, count))
+        _ = jm_render_peaks(pointer, range.lowerBound, Int64(range.count), kind, Int32(count), &out)
+        return Array(out.prefix(count))
+    }
+
     /// Renders a range in blocks, handing each to `body` (offline export, analysis).
     /// The longest path through the mixer, in frames: what the plugins on the buses add, and what every
     /// other path is delayed to match. 0 without plugins on buses. The mix itself comes out on the sample.

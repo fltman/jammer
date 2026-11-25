@@ -30,7 +30,7 @@ enum TurnTranscriber {
         try gate.enter()
         defer { gate.leave() }
         let locale = Locale(identifier: request.language)
-        let pick = try choose(request.engine, for: locale)
+        let pick = try await choose(request.engine, for: locale)
         let slug = r.headers["x-sibling"]?.lowercased()
         let who = slug.map { AgentRouter.siblingNames[$0] ?? $0.capitalized } ?? L10n.text("turn.anotherApp")
         // Shown while it works; the user can stop it from any window.
@@ -69,8 +69,11 @@ enum TurnTranscriber {
         return w
     }
 
-    /// auto: KB-Whisper for Swedish, then local Pianissimo for its language, then Whisper small (multilingual).
-    private static func choose(_ engine: TurnTranscription.Engine, for locale: Locale) throws -> Pick {
+    /// auto: local Pianissimo once its model is loaded (measured with Drömmer 2026-11-25: about twice as fast as
+    /// KB-Whisper, 1.3 % against 0–2.7 % WER on Swedish turns), else KB-Whisper for Swedish while Pianissimo is
+    /// warmed in the background (its first load takes some 16 s), else Whisper small (multilingual).
+    private static var warming: Task<Void, Never>?
+    private static func choose(_ engine: TurnTranscription.Engine, for locale: Locale) async throws -> Pick {
         let lang = locale.language.languageCode?.identifier ?? ""
         let store = SpeechEngines.store
         func kb() -> Pick? {
@@ -99,6 +102,10 @@ enum TurnTranscriber {
             if let p = pianissimo() { return p }
             throw AgentAPI.APIError.modelMissing(model.id, "\(model.id) isn't installed. The user installs it under Jämmer › Settings › Models; the API never installs it.")
         case .auto:
+            if let model = PianissimoModel(rawValue: lang), let engine = SpeechEngines.pianissimo[model], engine.isInstalled {
+                if await engine.isLoaded, let p = pianissimo() { return p }
+                if warming == nil { warming = Task { try? await engine.warm(); warming = nil } }
+            }
             if let p = kb() ?? pianissimo() ?? small() { return p }
             throw AgentAPI.APIError.modelMissing(lang == "sv" ? "kb-whisper-small" : ModelSpec.multilingualWhisper.id,
                                                  "No local speech model for \(locale.identifier(.bcp47)) is installed. The user installs one under Jämmer › Settings › Models; the API never installs it.")

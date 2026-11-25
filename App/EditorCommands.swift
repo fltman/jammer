@@ -137,6 +137,29 @@ extension EditorWindowController {
         session.perform("set_track", ["track": .string(track.id.uuidString), "muted": .bool(!track.isMuted)])
     }
 
+    @objc func toggleTrackLock(_ sender: Any?) {
+        guard let track = currentTrack else { return }
+        session.perform("set_track", ["track": .string(track.id.uuidString), "locked": .bool(!track.locked)])
+    }
+
+    @objc func duplicateTrack(_ sender: Any?) {
+        guard let track = currentTrack else { return }
+        session.perform("duplicate_track", ["track": .string(track.id.uuidString), "name": .string(L10n.text("track.copyName", track.name))])
+    }
+
+    @objc func moveTrackUp(_ sender: Any?) { moveTrack(by: -1) }
+    @objc func moveTrackDown(_ sender: Any?) { moveTrack(by: 1) }
+    private func moveTrack(by n: Int) {
+        guard let track = currentTrack else { return }
+        session.perform("move_track", ["track": .string(track.id.uuidString), "by": .number(Double(n))])
+    }
+
+    /// Track › Delete Track: one undo step, so it isn't asked about (⌘Z brings it back with everything on it).
+    @objc func deleteTrack(_ sender: Any?) {
+        guard let track = currentTrack else { return }
+        session.perform("remove_track", ["track": .string(track.id.uuidString)], saying: L10n.text("track.deleted", track.name))
+    }
+
     /// Solo is a way of listening, not part of the document: never an undo step.
     @objc func toggleTrackSolo(_ sender: Any?) {
         guard let track = currentTrack else { return }

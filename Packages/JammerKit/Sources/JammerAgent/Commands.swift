@@ -166,6 +166,11 @@ public enum Commands {
         add("track.rename", .track, 0, key("track.rename"), agent: op("set_track"), contexts: [.track, .strip])
         add("track.mute", .track, 1, key("track.mute"), agent: op("set_track"), contexts: [.track, .strip])
         add("track.solo", .track, 1, key("track.solo"), agent: .route("POST", doc + "/solo"), contexts: [.track, .strip])
+        add("track.lock", .track, 1, key("track.lock"), agent: op("set_track"), contexts: [.track])
+        add("track.duplicate", .track, 4, key("track.duplicate"), agent: op("duplicate_track"), contexts: [.track])
+        add("track.moveUp", .track, 4, key("track.moveUp"), agent: op("move_track"), contexts: [.track])
+        add("track.moveDown", .track, 4, key("track.moveDown"), agent: op("move_track"), contexts: [.track])
+        add("track.delete", .track, 4, key("track.delete"), agent: op("remove_track"), contexts: [.track])
         for l in ChannelLayout.allCases {
             add("track.layout.\(l.rawValue)", .track, 2, .layout(l), agent: op("set_layout"), submenu: "menu.layout", payload: ["layout": .string(l.rawValue)])
         }

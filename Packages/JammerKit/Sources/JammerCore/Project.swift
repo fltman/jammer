@@ -215,6 +215,9 @@ public struct Track: Codable, Hashable, Sendable, Identifiable {
     public var position: SurroundPosition?
     /// The track's sound fields turned round the listener (yaw, pitch, roll), fixed; lanes move it.
     public var rotation: FieldRotation?
+    /// Locked: no step may change its clips (StepRunner refuses it, naming the track). Level, pan, mute and the
+    /// mixer stay free: the lock keeps the audio where it is, not how it is heard.
+    public var locked = false
 
     public init(id: UUID = UUID(), name: String, clips: [Clip] = [], gainDB: Double = 0, isMuted: Bool = false, inserts: [Insert] = []) {
         self.id = id
@@ -225,7 +228,7 @@ public struct Track: Codable, Hashable, Sendable, Identifiable {
         self.inserts = inserts
     }
 
-    private enum CodingKeys: String, CodingKey { case id, name, clips, gainDB, isMuted, inserts, group, origin, ducked, pan, output, sends, vca, frozen, position, rotation }
+    private enum CodingKeys: String, CodingKey { case locked, id, name, clips, gainDB, isMuted, inserts, group, origin, ducked, pan, output, sends, vca, frozen, position, rotation }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -247,6 +250,7 @@ public struct Track: Codable, Hashable, Sendable, Identifiable {
         position = (try? c.decodeIfPresent(SurroundPosition.self, forKey: .position)).flatMap { $0 }.flatMap { $0.isValid ? $0 : nil }
         // The same for a field's turn out of range.
         rotation = (try? c.decodeIfPresent(FieldRotation.self, forKey: .rotation)).flatMap { $0 }.flatMap { $0.isValid && !$0.isNone ? $0 : nil }
+        locked = try c.decodeIfPresent(Bool.self, forKey: .locked) ?? false
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -258,6 +262,8 @@ public struct Track: Codable, Hashable, Sendable, Identifiable {
         try c.encodeIfPresent(frozen, forKey: .frozen)
         try c.encodeIfPresent(position, forKey: .position)
         try c.encodeIfPresent(rotation, forKey: .rotation)
+        // Only when locked: a file without locks reads and writes as before.
+        if locked { try c.encode(true, forKey: .locked) }
         try c.encode(gainDB, forKey: .gainDB)
         try c.encode(isMuted, forKey: .isMuted)
         if !inserts.isEmpty { try c.encode(inserts, forKey: .inserts) }

@@ -45,6 +45,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         super.init(window: window)
         window.delegate = self
         session.window = window
+        session.meters.attach(session)
 
         let transport = NSHostingView(rootView: TransportBar(session: session, timeline: timeline))
         let statusBar = NSHostingView(rootView: StatusBar(session: session))
@@ -57,7 +58,19 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         let palette = NSHostingView(rootView: ToolPalette(session: session) { [unowned self] id in self.chooseTool(id) })
         palette.isHidden = UserDefaults.standard.object(forKey: "toolPalette.visible") as? Bool == false
         toolPaletteView = palette
-        let timelineRow = NSStackView(views: [palette, timeline])
+        // The track headers, beside the lanes and exactly as tall as they are (the strip rows below excluded).
+        let headers = NSHostingView(rootView: TrackHeaders(session: session) { [unowned self] id in
+            self.session.currentTrack = id
+            self.renameTrack(nil)
+        })
+        headers.translatesAutoresizingMaskIntoConstraints = false
+        // Its height is the lanes', never what SwiftUI would like: with its own size constraints the column pushed
+        // the timeline down and left an empty band under the transport (seen 2026-11-25).
+        headers.sizingOptions = []
+        let headerColumn = NSView()
+        headerColumn.addSubview(headers)
+        headerColumn.widthAnchor.constraint(equalToConstant: 168).isActive = true
+        let timelineRow = NSStackView(views: [palette, headerColumn, timeline])
         timelineRow.orientation = .horizontal
         timelineRow.spacing = 0
         timelineRow.alignment = .height
@@ -74,6 +87,10 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         // some edits (a fade in) and the transcript panel shrank to its one-line label, against the right edge (seen
         // 2026-11-17). The transport and the status bar keep their own width, centered.
         for row in [timelineRow, transcript] as [NSView] { row.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true }
+        NSLayoutConstraint.activate([
+            headers.leadingAnchor.constraint(equalTo: headerColumn.leadingAnchor), headers.trailingAnchor.constraint(equalTo: headerColumn.trailingAnchor),
+            headers.topAnchor.constraint(equalTo: timeline.tracksArea.topAnchor), headers.bottomAnchor.constraint(equalTo: timeline.tracksArea.bottomAnchor),
+        ])
         transport.setContentHuggingPriority(.required, for: .vertical)
         statusBar.setContentHuggingPriority(.required, for: .vertical)
         timeline.setContentHuggingPriority(.defaultLow, for: .vertical)
@@ -992,11 +1009,19 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
             return needs(p.voices.contains { $0.deleted == nil }, L10n.text("reason.cloneFirst"))
         case "speech.deleteVoice": return needs(p.voices.contains { $0.deleted == nil }, L10n.text("reason.cloneFirst"))
         case "transport.previousMarker", "transport.nextMarker": return needs(!p.markers.isEmpty, L10n.text("reason.noMarkers"))
-        case "track.rename", "track.mute", "track.solo":
+        case "track.rename", "track.mute", "track.solo", "track.lock", "track.duplicate", "track.moveUp", "track.moveDown", "track.delete":
             guard let t = currentTrack else { return (false, L10n.text("reason.chooseTrack")) }
             if id == "track.mute" { item?.state = t.isMuted ? .on : .off }
             if id == "track.solo" { item?.state = session.solo.contains(t.id) ? .on : .off }
+            if id == "track.lock" { item?.state = t.locked ? .on : .off }
             if id == "track.rename" { item?.title = L10n.text("track.rename.named", t.name) }
+            let i = p.tracks.firstIndex { $0.id == t.id } ?? 0
+            if id == "track.moveUp" { return needs(i > 0, L10n.text("reason.trackAtTop")) }
+            if id == "track.moveDown" { return needs(i < p.tracks.count - 1, L10n.text("reason.trackAtBottom")) }
+            if id == "track.delete" {
+                if t.locked { return (false, L10n.text("reason.trackLocked", t.name)) }
+                return needs(p.tracks.count > 1, L10n.text("error.track.lastTrack"))
+            }
             return (true, nil)
         default: break
         }

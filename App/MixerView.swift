@@ -110,7 +110,7 @@ struct MixerSheet: View {
             }
             // Outside the list that scrolls: the master and what its limiter promises are always in view.
             Text(L10n.text("strip.master")).font(.headline)
-            MasterStrip(master: project.master, automation: MixerStrip.automationText(project.lanes(of: Master.id), names: parameterName), change: { session.perform("set_master", $0) })
+            MasterStrip(master: project.master, meters: session.meters, automation: MixerStrip.automationText(project.lanes(of: Master.id), names: parameterName), change: { session.perform("set_master", $0) })
             HStack {
                 TextField(L10n.text("mixer.new.name"), text: $newBus)
                     .accessibilityLabel(L10n.text("mixer.new.name"))
@@ -238,6 +238,7 @@ private struct VCAStrip: View {
 /// The master: everything goes through it last. Its level, and the limiter after everything else.
 private struct MasterStrip: View {
     let master: Master
+    let meters: StripMeters
     /// Said when the master's level is automated (the lane isn't drawn anywhere yet).
     let automation: String?
     let change: ([String: JSONValue]) -> Void
@@ -249,6 +250,7 @@ private struct MasterStrip: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 10) {
                 Text(L10n.text("strip.master")).frame(width: 150, alignment: .leading)
+                MeterBar(level: meters.level(Master.id)) { meters.clearClip(Master.id) }.frame(width: 110, height: 8)
                 Slider(value: $level, in: -60...12, onEditingChanged: { editing in
                     dragging = editing
                     if !editing, level != master.gainDB { change(["gainDB": .number((level * 10).rounded() / 10)]) }
@@ -439,6 +441,7 @@ struct MixerStrip: View {
     private var controls: some View {
         HStack(spacing: 10) {
             Text(name).lineLimit(1).truncationMode(.middle).frame(width: 150, alignment: .leading)
+            MeterBar(level: session.meters.level(id)) { session.meters.clearClip(id) }.frame(width: 110, height: 8)
             Toggle(L10n.text("mixer.mute"), isOn: Binding(get: { muted }, set: { change(["muted": .bool($0)]) }))
                 .toggleStyle(.checkbox)
                 .fixedSize()

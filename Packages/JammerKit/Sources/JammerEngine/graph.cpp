@@ -209,7 +209,9 @@ Graph::Graph(const Plan &plan) : channels_(plan.channels) {
     if (plain_) {
         direct_.assign(size_t(kQuantum * channels_), 0.0f);
         directLine_.assign(size_t(total * channels_), 0.0f);
+        before_.assign(size_t(kQuantum * channels_), 0.0f);
     }
+    plainPeak_.assign(nt, 0.0f);
     strip_.assign(size_t(kQuantum * channels_), 0.0f);
     faded_.assign(size_t(kQuantum * channels_), 0.0f);
     sent_.assign(size_t(kQuantum * channels_), 0.0f);
@@ -376,13 +378,29 @@ void Graph::produce(const Plan &plan, Renderer &renderer) {
         // starts, the track's gain folded into the clip's. Then as late as the longest path.
         std::fill(direct_.begin(), direct_.end(), 0.0f);
         const int64_t end = cursor_ + q;
+        LiveMeters *meters = renderer.meters;
+        if (meters) std::fill(plainPeak_.begin(), plainPeak_.end(), 0.0f);
         for (const Clip &c : plan.clips) {
             if (c.start >= end) break;
             if (c.end() <= cursor_) continue;
             const Track &track = plan.tracks[size_t(c.track)];
             if (track.mute || track.chain || track.automated() || track.live) continue;
+            if (!meters) { renderer.mixClip(plan, c, track.gain, cursor_, q, direct_.data()); continue; }
+            // A track's clips never overlap, so its peak is the highest of what each clip added (to float rounding).
+            const size_t a = size_t(std::max(c.start, cursor_) - cursor_) * size_t(channels_);
+            const size_t b = size_t(std::min(c.end(), end) - cursor_) * size_t(channels_);
+            std::copy(direct_.begin() + std::ptrdiff_t(a), direct_.begin() + std::ptrdiff_t(b), before_.begin() + std::ptrdiff_t(a));
             renderer.mixClip(plan, c, track.gain, cursor_, q, direct_.data());
+            float p = plainPeak_[size_t(c.track)];
+            for (size_t i = a; i < b; ++i) { const float d = direct_[i] - before_[i]; const float m = d < 0 ? -d : d; if (m > p) p = m; }
+            plainPeak_[size_t(c.track)] = p;
         }
+        if (meters)
+            for (size_t t = 0; t < nt; ++t) {
+                const Track &track = plan.tracks[t];
+                if (track.chain || track.automated() || track.live) continue;
+                meters->put(LiveTrims::slot(0, int32_t(t)), cursor_, track.mute ? 0.0f : plainPeak_[t]);
+            }
         if (total == 0) {
             std::memcpy(mix_.data(), direct_.data(), samples * sizeof(float));
         } else {
@@ -430,6 +448,8 @@ void Graph::produce(const Plan &plan, Renderer &renderer) {
                 if (!replaced && !track.curve.empty()) { track.curve.apply(post, faded_.data(), at, q, channels_); post = faded_.data(); }
                 if (!track.panCurve.empty()) { track.panCurve.apply(post, faded_.data(), at, q, channels_); post = faded_.data(); }
             }
+            if (renderer.meters)
+                renderer.meters->put(LiveTrims::slot(0, int32_t(t)), cursor_ - nodeOut_[t], track.mute ? 0.0f : peakOf(post, samples) * track.gain);
             for (Edge &e : trackEdges_[t]) {
                 if (e.main || e.keyNode >= 0) { send(e, post, track.gain * track.panL, track.gain * track.panR, q); continue; }
                 // A send with automation of its own: its level moves on the strip's timeline, like the fader's.
@@ -460,6 +480,8 @@ void Graph::produce(const Plan &plan, Renderer &renderer) {
                 if (!bus.panCurve.empty()) { bus.panCurve.apply(post, faded_.data(), at, q, channels_); post = faded_.data(); }
                 if (!bus.turn.empty()) { turnImage(plan.panLayout, bus.turn, post, turned_.data(), at, q); post = turned_.data(); }
             }
+            if (renderer.meters)
+                renderer.meters->put(LiveTrims::slot(1, int32_t(b)), cursor_ - nodeOut_[size_t(n)], bus.mute ? 0.0f : peakOf(post, samples) * bus.gain);
             for (Edge &e : busEdges_[b]) {
                 if (e.main || e.keyNode >= 0) { send(e, post, bus.gain * bus.panL, bus.gain * bus.panR, q); continue; }
                 const float *from = e.pre ? strip_.data() : post;
@@ -483,6 +505,8 @@ void Graph::produce(const Plan &plan, Renderer &renderer) {
         if (!replaced && !plan.masterCurve.empty()) plan.masterCurve.apply(mix_.data(), mix_.data(), at, q, channels_);
     }
     if (plan.masterLimiter) plan.masterLimiter->stream(mix_.data());
+    // The master's meter: what leaves, after the limiter.
+    if (renderer.meters) renderer.meters->put(LiveTrims::slot(2, 0), cursor_ - total - masterChainLatency_, peakOf(mix_.data(), samples));
     cursor_ += q;
     const int64_t skip = std::min(discard_, q);
     discard_ -= skip;

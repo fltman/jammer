@@ -161,6 +161,8 @@ struct Engine {
     std::atomic<int64_t> continued{0};
     /// Levels under a hand, and what was put on (see LiveTrims).
     LiveTrims live;
+    /// Each strip's peaks as it plays (see LiveMeters).
+    LiveMeters meters;
     std::atomic<float> peaks[kMaxChannels];
     std::atomic<uint64_t> renderedSinceAck{0};
 
@@ -196,6 +198,7 @@ void Engine::run() {
     pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     Renderer renderer(channels);
     renderer.live = &live;
+    renderer.meters = &meters;
     std::vector<float> block(size_t(kBlock * channels));
     std::unique_ptr<Resampler> resampler;
     uint64_t workerSeq = 0;
@@ -443,6 +446,9 @@ int32_t jm_engine_take_applied(jm_engine *engine, int32_t *kinds, int32_t *indic
     }
     live.tail.store(t, std::memory_order_release);
     return n;
+}
+void jm_engine_meter_peaks(const jm_engine *engine, int64_t from, int64_t to, int32_t kind, int32_t count, float *out) {
+    for (int32_t i = 0; i < count; ++i) out[i] = engine->e.meters.peak(LiveTrims::slot(kind, i), from, to);
 }
 int64_t jm_engine_continued(const jm_engine *engine) { return engine->e.continued.load(std::memory_order_relaxed); }
 int64_t jm_engine_buffered(const jm_engine *engine) {

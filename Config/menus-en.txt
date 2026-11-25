@@ -75,6 +75,7 @@ View › Focus Mode	⌃⇧⌘F
 Track › Rename Track…	
 Track › Mute	
 Track › Solo	
+Track › Lock Track	
 Track › Layout	
 Track › Layout › Mono	
 Track › Layout › Stereo	
@@ -88,6 +89,10 @@ Track › Layout › Unmarked File: Sides First (ITU-R BS.2051)
 Track › Layout › Unmarked File: Rears First (WAV Order)	
 Track › Mixer…	⌥⌘X
 Track › Plugins…	⌥⇧⌘P
+Track › Duplicate Track	
+Track › Move Track Up	
+Track › Move Track Down	
+Track › Delete Track	
 Audio › Fade In	⌥⌘I
 Audio › Fade Out	⌥⌘O
 Audio › Silence	⇧⌘L

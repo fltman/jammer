@@ -91,7 +91,7 @@ Opening a document answers `201 Created`. To send the audio inside JSON instead:
 | GET | `/api/v1/documents/{id}/chapters` | The markers as Podcasting 2.0 chapters: `{"version": "1.2.0", "chapters": [{"startTime", "endTime", "title"}]}` (Content-Type `application/json+chapters`), optionally over `?start=&end=`. |
 | GET | `/api/v1/jobs/{id}` | A job's state. |
 | DELETE | `/api/v1/jobs/{id}` | Cancels a job. |
-| POST | `/api/v1/transcribe?language=sv-SE&engine=auto\|whisper\|pianissimo` | One short turn of speech, for an app's live captions: no document, no window, answered at once. The body is the WAV itself, 16 kHz mono 16-bit PCM, at most 15 s (413 for more). → `{"text", "words": [{"text", "start", "end", "confidence"}], "engine", "model", "ms"}` (times in seconds from the turn's start). `auto`: KB-Whisper for Swedish, then local Pianissimo, then Whisper small. One turn at a time: 409 `busy`, and 409 `stopped` when the user stops it in Jämmer's window. A closed connection cancels the turn. 422 `model_missing` with `requirement` (the API never installs a model), 503 `model_unavailable`, 403 `sibling_transcription_off` when the user has turned this off in Settings › Agents. The audio is never written to disk or kept, and neither the audio nor the text is logged; Jämmer's windows say while it works. Send `X-Sibling` with your app's name so they can say for whom. Free. |
+| POST | `/api/v1/transcribe?language=sv-SE&engine=auto\|whisper\|pianissimo` | One short turn of speech, for an app's live captions: no document, no window, answered at once. The body is the WAV itself, 16 kHz mono 16-bit PCM, at most 15 s (413 for more). → `{"text", "words": [{"text", "start", "end", "confidence"}], "engine", "model", "ms"}` (times in seconds from the turn's start). `auto`: local Pianissimo once its model is loaded (the first `auto` turn starts loading it, some seconds), meanwhile KB-Whisper for Swedish, else Whisper small. One turn at a time: 409 `busy`, and 409 `stopped` when the user stops it in Jämmer's window. A closed connection cancels the turn. 422 `model_missing` with `requirement` (the API never installs a model), 503 `model_unavailable`, 403 `sibling_transcription_off` when the user has turned this off in Settings › Agents. The audio is never written to disk or kept, and neither the audio nor the text is logged; Jämmer's windows say while it works. Send `X-Sibling` with your app's name so they can say for whom. Free. |
 | POST | `/api/v1/documents/{id}/play` | Starts playback in the document's window, from `{"at": seconds}` or the playhead. Only works when the window is visible. |
 | GET | `/api/v1/storage` | What takes room in Jämmer's media folder: `{"storage": {"canBeFreed", "inUse", "unknown", "notJammers": each {"bytes", "files": [{"name", "bytes", "kind", "created", "projects"}]}, "inTrash", "register", "note"}}`. `canBeFreed`: files Jämmer made (effects, repairs, frozen strips) that no project that has used them uses any more, now or anywhere in its history. `unknown`: made by Jämmer and last used by a project that can't be read just now. `notJammers`: the user's own audio and anything Jämmer has no record of having made; never touched. Reading only: there is no call that removes anything. The user chooses in File › Storage…, and what is chosen goes to the Trash. |
 | POST | `/api/v1/documents/{id}/freeze` | `{"strip": track or bus id}`. Renders the strip through its plugins into a file and plays it from that, with the plugins idle (a job; one undo step). Its level, pan, mute, sends and route stay live. Until it is unfrozen, a step that would change what it was frozen from fails with 422 `step_failed`, `reason: "frozen"`. `GET …/mixer` says `frozen: {"start", "seconds"}` on the strip. Refused: `already_frozen`, `nothing_to_freeze`. |
@@ -451,6 +451,33 @@ Lowers tracks (music, atmosphere) while there is speech on other tracks and lets
 | `start` | seconds | Range start in seconds. With `end`, overrides the selection. |
 | `end` | seconds | Range end in seconds. |
 
+### `remove_track`
+
+Removes a track with its clips and automation; a plugin elsewhere keyed by it loses the key. Its files are not touched. A document keeps at least one track; a locked track can't be removed. One undo step.
+
+| Param | Type | Description |
+|---|---|---|
+| `track` | string | **Required.** Track id. |
+
+### `duplicate_track`
+
+Puts a copy of a track right under it: the same clips, level, pan, plugins, sends and automation, with ids of its own; not locked and not frozen. Returns the copy's id as ids.track. One undo step.
+
+| Param | Type | Description |
+|---|---|---|
+| `track` | string | **Required.** Track id. |
+| `name` | string | The copy's name. Default: the track's name and "copy". |
+
+### `move_track`
+
+Moves a track in the order of the lanes and the mixer: to a place (index, 0 the top) or up or down by some places (by, e.g. -1 for up). One undo step.
+
+| Param | Type | Description |
+|---|---|---|
+| `track` | string | **Required.** Track id. |
+| `index` | number | Its new place, 0 the top. |
+| `by` | number | Places to move: negative up, positive down. |
+
 ### `set_track`
 
 Changes one track: its gain, mute, name, pan, its place in a surround layout, or the bus it goes to.
@@ -460,6 +487,7 @@ Changes one track: its gain, mute, name, pan, its place in a surround layout, or
 | `track` | string | **Required.** Track id. |
 | `gainDB` | number | The track's gain in dB: the new value, not a change to the old one. |
 | `muted` | boolean | True to mute. |
+| `locked` | boolean | True to lock the track: no step may then change its clips (or remove it) until it is unlocked. Level, pan, mute and the mixer stay free. |
 | `name` | string | A new name. |
 | `pan` | number | −1 (left) to 1 (right), 0 the center. Stereo documents only. |
 | `azimuth` | number | Documents wider than stereo: where the track's mono or stereo sound comes from, in degrees, positive to the left (0 the center, 90 the left side, ±180 behind; ITU-R BS.2051's convention). Placing a track this way uses the surround panner (pairwise vector base amplitude panning at constant power). A source of more than two channels on the track stays on its own loudspeakers. |

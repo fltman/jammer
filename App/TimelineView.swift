@@ -107,6 +107,8 @@ final class TimelineView: NSView {
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
 
     var firstResponderView: NSView { overlay }
+    /// Where the track lanes are (the ruler on top, the strip rows below excluded): the track headers line up with it.
+    var tracksArea: NSView { overlay }
 
     override func layout() {
         super.layout()
@@ -668,13 +670,16 @@ final class TimelineOverlay: NSView {
             // On a plate: the name lies over the waveform and must be read whatever is under it. A track that plays
             // speech made with a cloned voice says so on its plate (the mark is the file's; SEND-TO-FLIMMER-API.md).
             let nameAttrs: [NSAttributedString.Key: Any] = [.font: AutomationLanesView.nameFont, .foregroundColor: NSColor.white]
-            let cloned = track.clips.contains { project.source($0.sourceID)?.synthetic != nil }
-            let plate = cloned ? track.name + "  ·  " + L10n.text("clonedVoice.badge") : track.name
-            let nameSize = (plate as NSString).size(withAttributes: nameAttrs)
-            NSColor(white: 0, alpha: 0.6).setFill()
-            NSBezierPath(roundedRect: NSRect(x: 3, y: y + 20, width: nameSize.width + 10, height: nameSize.height + 4), xRadius: 4, yRadius: 4).fill()
-            // Below the row where marker flags sit, so a marker near the start doesn't cover it.
-            (plate as NSString).draw(at: NSPoint(x: 8, y: y + 22), withAttributes: nameAttrs)
+            // The name is in the track's header; on the lane only what the sound itself is: speech made with a
+            // cloned voice says so on a plate (the mark is the file's; SEND-TO-FLIMMER-API.md).
+            if track.clips.contains(where: { project.source($0.sourceID)?.synthetic != nil }) {
+                let plate = L10n.text("clonedVoice.badge")
+                let nameSize = (plate as NSString).size(withAttributes: nameAttrs)
+                NSColor(white: 0, alpha: 0.6).setFill()
+                NSBezierPath(roundedRect: NSRect(x: 3, y: y + 20, width: nameSize.width + 10, height: nameSize.height + 4), xRadius: 4, yRadius: 4).fill()
+                // Below the row where marker flags sit, so a marker near the start doesn't cover it.
+                (plate as NSString).draw(at: NSPoint(x: 8, y: y + 22), withAttributes: nameAttrs)
+            }
             if session.peaks.isEmpty, !session.peakProgress.isEmpty, session.project.length > Frame(project.sampleRate * 600) {
                 let p = session.peakProgress.values.first ?? 0
                 (L10n.text("timeline.reading", String(Int(p * 100))) as NSString).draw(at: NSPoint(x: 8, y: y + 24), withAttributes: nameAttrs)

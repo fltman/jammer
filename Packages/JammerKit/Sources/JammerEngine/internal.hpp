@@ -321,6 +321,9 @@ private:
     /// Some plugin's parameter is automated in the plan (see reset).
     bool params_ = false;
     std::vector<float> direct_, directLine_;
+    /// For the meters (only when the renderer has them): the plain tracks' peaks in this block, and the sum as it
+    /// was before a clip went in (a clip's part is what it added).
+    std::vector<float> plainPeak_, before_;
     size_t directAt_ = 0;
     bool sameShape(const Graph &o) const;
     void reset(const Plan &plan, int64_t start);
@@ -411,6 +414,52 @@ struct LiveTrims {
     }
 };
 
+/// Peak meters (the comfort block, step 4): each strip's sample peak after its fader (before its pan), block by
+/// block, stamped with the timeline frame where the block is heard. Written by the render thread, read by the main
+/// thread, with no lock: an entry's frame is cleared while it is written and set last, so a reader never takes a
+/// peak with another block's frame. The slots are LiveTrims's (tracks, buses, the master).
+struct LiveMeters {
+    static constexpr int32_t kRing = 128;   // 128 blocks of 512 frames: over a second, read 30 times a second
+    struct Entry {
+        std::atomic<int64_t> frame{INT64_MIN};
+        std::atomic<float> peak{0.0f};
+    };
+    struct Slot {
+        Entry ring[kRing];
+        std::atomic<uint32_t> head{0};
+    };
+    Slot slots[LiveTrims::kSlots];
+    void put(int32_t slot, int64_t frame, float peak) {
+        if (slot < 0) return;
+        Slot &s = slots[slot];
+        const uint32_t h = s.head.load(std::memory_order_relaxed);
+        Entry &e = s.ring[h % kRing];
+        e.frame.store(INT64_MIN, std::memory_order_relaxed);
+        e.peak.store(peak, std::memory_order_relaxed);
+        e.frame.store(frame, std::memory_order_release);
+        s.head.store(h + 1, std::memory_order_release);
+    }
+    /// The highest peak of the blocks heard in [from, to); 0 when none was.
+    float peak(int32_t slot, int64_t from, int64_t to) const {
+        if (slot < 0) return 0.0f;
+        float p = 0.0f;
+        for (const Entry &e : slots[slot].ring) {
+            const int64_t f = e.frame.load(std::memory_order_acquire);
+            if (f == INT64_MIN || f + 512 <= from || f >= to) continue;
+            const float v = e.peak.load(std::memory_order_relaxed);
+            if (e.frame.load(std::memory_order_acquire) == f && v > p) p = v;
+        }
+        return p;
+    }
+};
+
+/// The highest absolute sample of `n` floats.
+inline float peakOf(const float *x, size_t n) {
+    float p = 0.0f;
+    for (size_t i = 0; i < n; ++i) { const float a = x[i] < 0 ? -x[i] : x[i]; if (a > p) p = a; }
+    return p;
+}
+
 /// Renders a plan into interleaved float. Owns its scratch, so reuse one per thread.
 class Renderer {
 public:
@@ -427,6 +476,9 @@ public:
     /// The engine's live trims, for the renderer that plays; null for every other render (an export, a
     /// measurement), which is never trimmed.
     LiveTrims *live = nullptr;
+    /// Where the strips' peaks go: the engine's for the renderer that plays, a measurement's for jm_render_peaks;
+    /// null for every other render, which then measures nothing.
+    LiveMeters *meters = nullptr;
 
 private:
     friend class Graph;

@@ -72,6 +72,11 @@ public actor PianissimoEngine: TranscriptionEngine {
                                                    id: id, manager: decoder, progress: progress)
     }
 
+    /// Whether the model is loaded (its first load takes seconds, while Core ML prepares it).
+    public var isLoaded: Bool { manager != nil }
+    /// Loads the model ahead of the first turn.
+    public func warm() async throws { _ = try await loaded() }
+
     private func loaded() async throws -> AsrManager {
         if let manager { return manager }
         guard isInstalled else { throw TranscriptionError.failed("Install Klang Pianissimo in Settings › Models.") }

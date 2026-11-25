@@ -105,6 +105,14 @@ public final class AudioOutput {
         }
         return out.map { (kind: $0.0, index: $0.1, frame: $0.2, db: $0.3) }
     }
+    /// The meters: each strip's highest sample after its fader over the blocks heard in `from..<to` (timeline
+    /// frames), linear; kind 0 tracks, 1 buses, 2 the master (count 1). Lock-free.
+    public func meterPeaks(from: Frame, to: Frame, kind: Int32, count: Int) -> [Float] {
+        guard count > 0 else { return [] }
+        var out = [Float](repeating: 0, count: count)
+        jm_engine_meter_peaks(engine, from, to, kind, Int32(count), &out)
+        return out
+    }
     /// Seconds rendered and not yet played: how long a change to the plan takes to be heard from now.
     public var buffered: Double { Double(jm_engine_buffered(engine)) / sampleRate }
     /// How many plans have gone on from the one before without a reset since the engine was made.

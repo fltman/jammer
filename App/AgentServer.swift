@@ -907,7 +907,7 @@ enum AgentRouter {
 
     static func trackJSON(_ s: EditorSession, _ t: Track) -> [String: Any] {
         let p = s.project
-        return ["id": t.id.uuidString, "name": t.name, "gainDB": t.gainDB, "muted": t.isMuted, "group": t.group?.uuidString ?? NSNull(),
+        return ["id": t.id.uuidString, "name": t.name, "gainDB": t.gainDB, "muted": t.isMuted, "locked": t.locked, "group": t.group?.uuidString ?? NSNull(),
                 "pan": t.pan, "output": t.output?.uuidString ?? "master",
                 "inserts": t.inserts.map { i -> [String: Any] in
                     var d: [String: Any] = ["id": i.id.uuidString, "plugin": i.plugin.description, "name": i.name, "bypass": i.bypass]

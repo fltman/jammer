@@ -11202,6 +11202,60 @@
         }
       }
     },
+    "error.track.lastTrack": {
+      "comment": "A track edit failed, or why Delete Track is off.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A document keeps at least one track."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ett dokument behåller minst ett spår."
+          }
+        }
+      }
+    },
+    "error.track.locked": {
+      "comment": "A step refused because it would change a locked track. %@ is the track.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ is locked; unlock it to change its clips."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ är låst; lås upp det för att ändra dess klipp."
+          }
+        }
+      }
+    },
+    "error.track.noTrack": {
+      "comment": "A track edit failed.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "There's no track with that id."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Det finns inget spår med det id:t."
+          }
+        }
+      }
+    },
     "error.transcript.exportEmpty": {
       "extractionState": "manual",
       "localizations": {
@@ -16609,6 +16663,114 @@
         }
       }
     },
+    "meter.ax": {
+      "comment": "VoiceOver: a strip's meter.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Peak meter"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Toppmätare"
+          }
+        }
+      }
+    },
+    "meter.clipped": {
+      "comment": "VoiceOver: the clip light is lit.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "clipped"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "klippt"
+          }
+        }
+      }
+    },
+    "meter.clipped.help": {
+      "comment": "Help tag on a lit clip light.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "It reached full scale (0 dBFS). Click to put the light out."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Den nådde full nivå (0 dBFS). Klicka för att släcka lampan."
+          }
+        }
+      }
+    },
+    "meter.light.help": {
+      "comment": "Help tag on an unlit clip light.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lights when the strip reaches full scale (0 dBFS), and stays lit until clicked"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tänds när kanalen når full nivå (0 dBFS) och lyser tills du klickar"
+          }
+        }
+      }
+    },
+    "meter.silent": {
+      "comment": "VoiceOver value of a meter with nothing.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silent"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tyst"
+          }
+        }
+      }
+    },
+    "meter.value": {
+      "comment": "VoiceOver value of a meter. %@ is a number.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ dBFS"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ dBFS"
+          }
+        }
+      }
+    },
     "mixer.addBus": {
       "comment": "Button.",
       "extractionState": "manual",
@@ -19986,6 +20148,24 @@
         }
       }
     },
+    "op.duplicate_track.title": {
+      "comment": "Operation title.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Duplicate Track"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Duplicera spåret"
+          }
+        }
+      }
+    },
     "op.echo.title": {
       "comment": "The title of the operation echo: in the menus, the command palette, the assistant’s plan and as the undo name (“Undo …”). The agent API keeps the English title.",
       "extractionState": "manual",
@@ -20413,6 +20593,24 @@
         }
       }
     },
+    "op.move_track.title": {
+      "comment": "Operation title.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move Track"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flytta spåret"
+          }
+        }
+      }
+    },
     "op.normalize.title": {
       "comment": "The title of the operation normalize: in the menus, the command palette, the assistant’s plan and as the undo name (“Undo …”). The agent API keeps the English title.",
       "extractionState": "manual",
@@ -20534,6 +20732,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ta bort tempoändring"
+          }
+        }
+      }
+    },
+    "op.remove_track.title": {
+      "comment": "Operation title.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete Track"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Radera spåret"
           }
         }
       }
@@ -24670,6 +24886,60 @@
           "stringUnit": {
             "state": "translated",
             "value": "Kräver ett dokument med fler än två kanaler."
+          }
+        }
+      }
+    },
+    "reason.trackAtBottom": {
+      "comment": "Why Move Track Down is off.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The track is at the bottom."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spåret ligger underst."
+          }
+        }
+      }
+    },
+    "reason.trackAtTop": {
+      "comment": "Why Move Track Up is off.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The track is at the top."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spåret ligger överst."
+          }
+        }
+      }
+    },
+    "reason.trackLocked": {
+      "comment": "Why Delete Track is off. %@ is the track.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ is locked."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ är låst."
           }
         }
       }
@@ -32333,6 +32603,24 @@
         }
       }
     },
+    "track.copyName": {
+      "comment": "The name of a duplicated track. %@ is the original name.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ copy"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ kopia"
+          }
+        }
+      }
+    },
     "track.default.first": {
       "comment": "The name of a new document’s first track.",
       "extractionState": "manual",
@@ -32347,6 +32635,114 @@
           "stringUnit": {
             "state": "translated",
             "value": "Spår 1"
+          }
+        }
+      }
+    },
+    "track.delete": {
+      "comment": "Track menu.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete Track"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Radera spåret"
+          }
+        }
+      }
+    },
+    "track.deleted": {
+      "comment": "Status line after Delete Track. %@ is the track.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deleted %@. ⌘Z brings it back."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Raderade %@. ⌘Z tar tillbaka det."
+          }
+        }
+      }
+    },
+    "track.duplicate": {
+      "comment": "Track menu.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Duplicate Track"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Duplicera spåret"
+          }
+        }
+      }
+    },
+    "track.lock": {
+      "comment": "Track menu (a checkmark when locked).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lock Track"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lås spåret"
+          }
+        }
+      }
+    },
+    "track.moveDown": {
+      "comment": "Track menu.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move Track Down"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flytta ned spåret"
+          }
+        }
+      }
+    },
+    "track.moveUp": {
+      "comment": "Track menu.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move Track Up"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flytta upp spåret"
           }
         }
       }
@@ -32437,6 +32833,150 @@
           "stringUnit": {
             "state": "translated",
             "value": "Solo"
+          }
+        }
+      }
+    },
+    "trackHeader.column.ax": {
+      "comment": "VoiceOver: the column of track headers.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Track headers"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spårhuvuden"
+          }
+        }
+      }
+    },
+    "trackHeader.level.ax": {
+      "comment": "VoiceOver: a track header's level slider. %@ is the track.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Level of %@"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nivå för %@"
+          }
+        }
+      }
+    },
+    "trackHeader.level.help": {
+      "comment": "Help tag on a track header's level slider.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The track's level, −60 to +12 dB; one undo step when you let go"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spårets nivå, −60 till +12 dB; ett ångrasteg när du släpper"
+          }
+        }
+      }
+    },
+    "trackHeader.lock": {
+      "comment": "Track header lock button (help and VoiceOver). %@ is the track.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lock %@"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lås %@"
+          }
+        }
+      }
+    },
+    "trackHeader.pan.center": {
+      "comment": "Pan value.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Center"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mitten"
+          }
+        }
+      }
+    },
+    "trackHeader.pan.left": {
+      "comment": "Pan value. %@ is 1–100.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Left %@"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vänster %@"
+          }
+        }
+      }
+    },
+    "trackHeader.pan.right": {
+      "comment": "Pan value. %@ is 1–100.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Right %@"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Höger %@"
+          }
+        }
+      }
+    },
+    "trackHeader.unlock": {
+      "comment": "Track header lock button when locked. %@ is the track.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unlock %@"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lås upp %@"
           }
         }
       }
