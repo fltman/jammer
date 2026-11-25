@@ -24,6 +24,8 @@ final class JobRegistry {
     /// Jobs whose paid request has left the app, and the provider's name: a cancel may come too late to
     /// spare the charge (SIBLINGS.md §2).
     @ObservationIgnored private var paidSent: [String: String] = [:]
+    /// The engine each transcription job was started with: the transcript panel says where it is being done.
+    @ObservationIgnored private(set) var engineOf: [String: SpeechEngines.Choice] = [:]
 
     /// The newest job of `kind` for a document, running or not.
     func latest(_ kind: String, document: String) -> Job? {
@@ -523,6 +525,7 @@ final class JobRegistry {
     func startTranscription(_ session: EditorSession, locale: Locale, replace: Bool, engine choice: SpeechEngines.Choice = .auto, model: String? = nil) -> Job {
         var job = Job(kind: "transcribe", documentID: session.agentID)
         jobs[job.id] = job
+        engineOf[job.id] = choice
         let project = session.project
         let used = Set(project.tracks.flatMap { $0.clips.map(\.sourceID) })
         let todo = project.sources.filter { src in used.contains(src.id) && (replace || !project.transcripts.contains { $0.sourceID == src.id }) }

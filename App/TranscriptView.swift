@@ -3,6 +3,7 @@ import JammerAgent
 import JammerCore
 import JammerSpeech
 import Observation
+import SwiftUI
 
 extension NSAttributedString.Key {
     /// Index into the panel's placed words.
@@ -31,6 +32,25 @@ final class TranscriptPanel: NSView, NSTextViewDelegate {
     private var shownVersion = -1
     private var litWord: Int?
     private var updatingSelection = false
+    /// The line above the text when a transcript has no word times (COMFORT: say what can't be done, before it's tried).
+    private let textOnlyNote = NSHostingView(rootView: StateLine(kind: .warning, text: L10n.text("transcript.textOnly")))
+    /// The text's size, ⌘+ and ⌘− while the transcript has the keys (remembered).
+    private(set) var textSize: CGFloat = {
+        let v = UserDefaults.standard.double(forKey: "transcript.textSize")
+        return v >= 10 && v <= 28 ? CGFloat(v) : 14
+    }()
+    /// When the reader last scrolled the text: following the playing word waits a while after that, so it doesn't
+    /// snap the view back from what they are reading ahead.
+    private var readerScrolledAt: Date?
+    private var scrollingToWord = false
+    private var wasPlaying = false
+    /// The panel's height, dragged at its top edge (remembered).
+    private(set) lazy var heightConstraint: NSLayoutConstraint = {
+        let saved = UserDefaults.standard.double(forKey: "transcript.height")
+        let c = heightAnchor.constraint(equalToConstant: saved >= 110 ? saved : 220)
+        c.priority = .defaultHigh
+        return c
+    }()
 
     static var languages: [(String, String)] { [
         (L10n.text("lang.sv"), "sv-SE"), (L10n.text("lang.da"), "da-DK"), (L10n.text("lang.nb"), "nb-NO"), (L10n.text("lang.enUS"), "en-US"), (L10n.text("lang.enGB"), "en-GB"), (L10n.text("lang.de"), "de-DE"),
@@ -54,10 +74,15 @@ final class TranscriptPanel: NSView, NSTextViewDelegate {
         if let i = Self.languages.firstIndex(where: { $0.1 == preferred || $0.1.hasPrefix(preferred.prefix(2)) }) { language.selectItem(at: i) }
         language.controlSize = .small
         language.setAccessibilityLabel(L10n.text("transcript.language.ax"))
+        language.toolTip = L10n.text("transcript.language.help")
+        language.autoenablesItems = false
+        language.target = self
+        language.action = #selector(languageChanged(_:))
         transcribeButton.target = self
         transcribeButton.action = #selector(transcribe(_:))
         transcribeButton.controlSize = .small
         transcribeButton.bezelStyle = .rounded
+        transcribeButton.toolTip = L10n.text("transcript.transcribe.help")
         progress.style = .bar
         progress.controlSize = .small
         progress.minValue = 0
@@ -77,6 +102,9 @@ final class TranscriptPanel: NSView, NSTextViewDelegate {
             engine.lastItem?.toolTip = help
         }
         engine.toolTip = L10n.text("transcript.engine.help")
+        // The engine chosen last time (paid ones too: choosing one sends nothing; Transcribe asks first).
+        if let saved = UserDefaults.standard.string(forKey: "transcript.engine"),
+           let i = engine.itemArray.firstIndex(where: { $0.representedObject as? String == saved }) { engine.selectItem(at: i) }
         engine.controlSize = .small
         engine.setAccessibilityLabel(L10n.text("transcript.engine.ax"))
         engine.target = self
@@ -90,7 +118,7 @@ final class TranscriptPanel: NSView, NSTextViewDelegate {
         textView.isSelectable = true
         textView.drawsBackground = false
         textView.textContainerInset = NSSize(width: 10, height: 6)
-        textView.font = .systemFont(ofSize: 14)
+        textView.font = .systemFont(ofSize: textSize)
         textView.delegate = self
         textView.panel = self
         textView.setAccessibilityLabel(L10n.text("transcript.title"))
@@ -100,6 +128,8 @@ final class TranscriptPanel: NSView, NSTextViewDelegate {
         scroll.documentView = textView
         scroll.hasVerticalScroller = true
         scroll.drawsBackground = false
+        scroll.contentView.postsBoundsChangedNotifications = true
+        NotificationCenter.default.addObserver(self, selector: #selector(textScrolled(_:)), name: NSView.boundsDidChangeNotification, object: scroll.contentView)
         textView.autoresizingMask = [.width]
         textView.isVerticallyResizable = true
         textView.textContainer?.widthTracksTextView = true
@@ -110,7 +140,17 @@ final class TranscriptPanel: NSView, NSTextViewDelegate {
         // It wraps to the panel's width rather than asking for its text's.
         empty.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
-        let stack = NSStackView(views: [header, scroll, empty])
+        textOnlyNote.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        textOnlyNote.isHidden = true
+        let note = NSStackView(views: [textOnlyNote])
+        note.edgeInsets = NSEdgeInsets(top: 0, left: 14, bottom: 4, right: 14)
+        let grip = ResizeGrip { [weak self] dy in self?.dragHeight(by: dy) } ended: { [weak self] in
+            guard let self else { return }
+            UserDefaults.standard.set(Double(self.heightConstraint.constant), forKey: "transcript.height")
+        }
+        grip.setAccessibilityLabel(L10n.text("transcript.resize.ax"))
+        grip.toolTip = L10n.text("transcript.resize.help")
+        let stack = NSStackView(views: [grip, header, note, scroll, empty])
         stack.orientation = .vertical
         stack.spacing = 0
         stack.alignment = .width
@@ -120,7 +160,10 @@ final class TranscriptPanel: NSView, NSTextViewDelegate {
             stack.leadingAnchor.constraint(equalTo: leadingAnchor), stack.trailingAnchor.constraint(equalTo: trailingAnchor),
             stack.topAnchor.constraint(equalTo: topAnchor), stack.bottomAnchor.constraint(equalTo: bottomAnchor),
             heightAnchor.constraint(greaterThanOrEqualToConstant: 110),
+            grip.heightAnchor.constraint(equalToConstant: 6),
+            heightConstraint,
         ])
+        languageChanged(nil)
         observe()
         refresh()
     }
@@ -156,7 +199,14 @@ final class TranscriptPanel: NSView, NSTextViewDelegate {
             empty.isHidden = false
             scroll.isHidden = true
             if running {
-                empty.stringValue = L10n.text("transcript.working")
+                empty.stringValue = switch job.flatMap({ JobRegistry.shared.engineOf[$0.id] }) {
+                case .openai?: L10n.text("transcript.working.openai")
+                case .bergetPianissimo?: L10n.text("transcript.working.berget")
+                default: L10n.text("transcript.working")
+                }
+            } else if !session.project.transcripts.isEmpty, job.map({ $0.status == .done }) ?? true {
+                // Transcribed, but nothing that plays now has words: cut away, or every such track muted.
+                empty.stringValue = L10n.text("transcript.empty.nothingAudible")
             } else if let job, job.status == .cancelled {
                 empty.stringValue = L10n.text("job.stopped")
             } else if let job, job.status == .failed {
@@ -172,6 +222,9 @@ final class TranscriptPanel: NSView, NSTextViewDelegate {
             empty.isHidden = true
             scroll.isHidden = false
         }
+        textOnlyNote.isHidden = !session.project.transcripts.contains { $0.textOnly == true } || placed.isEmpty
+        if session.isPlaying, !wasPlaying { readerScrolledAt = nil }
+        wasPlaying = session.isPlaying
         lightPlayingWord()
         mirrorSelection()
     }
@@ -201,9 +254,11 @@ final class TranscriptPanel: NSView, NSTextViewDelegate {
         placed = session.project.placedWords()
         let text = NSMutableAttributedString()
         ranges = []
-        let normal: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 14), .foregroundColor: NSColor(white: 1, alpha: 0.88)]
+        let normal: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: textSize), .foregroundColor: NSColor(white: 1, alpha: 0.88)]
         let names = session.project.speakers
-        let label: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 12, weight: .semibold), .foregroundColor: Theme.neon]
+        let label: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: textSize - 2, weight: .semibold), .foregroundColor: Theme.neon]
+        let italic = NSFontManager.shared.convert(NSFont.systemFont(ofSize: textSize), toHaveTrait: .italicFontMask)
+        let untimed = Set(p.transcripts.filter { $0.textOnly == true }.flatMap { $0.words.map(\.id) })
         var speaker: Int?
         for (i, w) in placed.enumerated() {
             // A new speaker starts a paragraph with their name.
@@ -216,10 +271,27 @@ final class TranscriptPanel: NSView, NSTextViewDelegate {
             var attrs = normal
             attrs[.jammerWord] = i
             if w.isPartial { attrs[.foregroundColor] = NSColor(white: 1, alpha: 0.45) }
-            if let c = w.word.confidence, c < 0.6 {
+            let filler = Project.fillerWords.contains(w.word.text.lowercased().trimmingCharacters(in: .punctuationCharacters))
+            if filler {
+                // Filler words dimmed: Edit › Remove Filler Words takes these out.
+                attrs[.foregroundColor] = NSColor(white: 1, alpha: 0.5)
+                attrs[.font] = italic
+            }
+            let unsure = (w.word.confidence ?? 1) < 0.6
+            if unsure {
                 // Unsure words: dotted underline, so they're easy to check.
                 attrs[.underlineStyle] = NSUnderlineStyle.single.rawValue | NSUnderlineStyle.patternDot.rawValue
                 attrs[.underlineColor] = Theme.marker
+            }
+            // On hover: when the word is heard, and how sure the recogniser was (never a time it doesn't know).
+            if w.word.untimed != true, !untimed.contains(w.word.id) {
+                let at = formatTime(p.seconds(w.start))
+                var tip = w.word.confidence.map { c -> String in
+                    let percent = String(Int((c * 100).rounded()))
+                    return unsure ? L10n.text("transcript.word.unsure", at, percent) : L10n.text("transcript.word.sure", at, percent)
+                } ?? L10n.text("transcript.word.at", at)
+                if filler { tip += "\n" + L10n.text("transcript.word.filler") }
+                attrs[.toolTip] = tip
             }
             let start = text.length
             text.append(NSAttributedString(string: w.word.text, attributes: attrs))
@@ -240,7 +312,12 @@ final class TranscriptPanel: NSView, NSTextViewDelegate {
         litWord = i
         if let i, i < ranges.count {
             lm.addTemporaryAttribute(.backgroundColor, value: Theme.neon.withAlphaComponent(0.28), forCharacterRange: ranges[i])
-            textView.scrollRangeToVisible(ranges[i])
+            // Follow the playing word, unless the reader scrolled in the last 5 s (or since playback began).
+            if readerScrolledAt.map({ Date().timeIntervalSince($0) > 5 }) ?? true {
+                scrollingToWord = true
+                textView.scrollRangeToVisible(ranges[i])
+                scrollingToWord = false
+            }
         }
     }
 
@@ -255,9 +332,17 @@ final class TranscriptPanel: NSView, NSTextViewDelegate {
 
     /// A timeline selection shows as selected words.
     private func mirrorSelection() {
-        guard let sel = session.selection, !placed.isEmpty else { return }
+        // No timeline selection, or none over a word: no words stay highlighted (Delete would take them).
+        func clear() {
+            let now = textView.selectedRange()
+            guard now.length > 0 else { return }
+            updatingSelection = true
+            textView.setSelectedRange(NSRange(location: now.location, length: 0))
+            updatingSelection = false
+        }
+        guard let sel = session.selection, !placed.isEmpty else { clear(); return }
         let inside = placed.indices.filter { placed[$0].start < sel.upperBound && placed[$0].end > sel.lowerBound }
-        guard let first = inside.first, let last = inside.last else { return }
+        guard let first = inside.first, let last = inside.last else { clear(); return }
         let r = NSRange(location: ranges[first].location, length: NSMaxRange(ranges[last]) - ranges[first].location)
         guard textView.selectedRange() != r else { return }
         updatingSelection = true
@@ -288,19 +373,66 @@ final class TranscriptPanel: NSView, NSTextViewDelegate {
             return
         }
         let idx = selectedWordIndices()
-        guard let first = idx.first, let last = idx.last else { return }
+        // Only spaces or a speaker's name: no word, so no audio is selected either.
+        guard let first = idx.first, let last = idx.last else { session.selection = nil; return }
         session.selection = placed[first].start..<placed[last].end
     }
 
     /// Delete: the selected words go, with the pauses between them.
     func deleteSelectedWords() {
         let ids = selectedWordIndices().map { JSONValue.string(placed[$0].word.id.uuidString) }
-        guard !ids.isEmpty else { NSSound.beep(); return }
+        guard !ids.isEmpty else { session.say(L10n.text("reason.selectWord"), .info); return }
         session.perform("delete_words", ["words": .array(ids), "bridge": .number(0.3)])
     }
 
-    /// The line under an empty transcript says where it will be transcribed.
-    @objc func engineChanged(_ sender: Any?) { refresh() }
+    /// The line under an empty transcript says where it will be transcribed; the choice is kept for next time, and
+    /// the languages it can't do are greyed out, saying why.
+    @objc func engineChanged(_ sender: Any?) {
+        UserDefaults.standard.set(selectedEngine.rawValue, forKey: "transcript.engine")
+        languageChanged(nil)
+        refresh()
+    }
+
+    @objc func languageChanged(_ sender: Any?) {
+        let allowed = selectedEngine.languages
+        for item in language.itemArray {
+            let code = String((item.representedObject as? String ?? "").prefix(2))
+            let ok = allowed?.contains(code) ?? true
+            item.isEnabled = ok
+            item.toolTip = ok ? nil : L10n.text("transcript.language.notForEngine", engine.titleOfSelectedItem ?? "")
+        }
+        // A language the engine can't do isn't left chosen.
+        if language.selectedItem?.isEnabled == false, let i = language.itemArray.firstIndex(where: \.isEnabled) { language.selectItem(at: i) }
+    }
+
+    @objc private func textScrolled(_ note: Notification) {
+        if !scrollingToWord, !updatingSelection { readerScrolledAt = Date() }
+    }
+
+    /// ⌘+ and ⌘− while the transcript has the keys; ⌘0 back to 14 pt.
+    func changeTextSize(by step: CGFloat?) {
+        let size = step.map { min(28, max(10, textSize + $0)) } ?? 14
+        guard size != textSize else { return }
+        textSize = size
+        UserDefaults.standard.set(Double(size), forKey: "transcript.textSize")
+        shown = nil
+        shownVersion = -1
+        rebuild()
+        lightPlayingWord()
+        mirrorSelection()
+    }
+
+    /// The grip at the top edge: up makes the panel taller, leaving the timeline at least 180 pt.
+    private func dragHeight(by dy: CGFloat) {
+        let room = (superview?.bounds.height ?? 800) - 300
+        heightConstraint.constant = min(max(110, room), max(110, heightConstraint.constant + dy))
+    }
+
+    /// Double-click or Return on a word: Edit › Correct Word for it.
+    func correctSelectedWord() {
+        guard !selectedWordIndices().isEmpty else { return }
+        NSApp.sendAction(#selector(EditorWindowController.correctWord(_:)), to: nil, from: textView)
+    }
 
     /// The find bar (⌘F), or the next match (⌘G).
     func showFind(next: Bool) {
@@ -432,6 +564,11 @@ final class TranscriptTextView: NSTextView {
             MainActor.assumeIsolated { panel?.deleteSelectedWords() }
             return
         }
+        // Return corrects the selected word, as a double-click does.
+        if event.keyCode == 36 || event.keyCode == 76 {
+            MainActor.assumeIsolated { panel?.correctSelectedWord() }
+            return
+        }
         // Space plays and stops, as on the timeline.
         if event.charactersIgnoringModifiers == " " {
             MainActor.assumeIsolated { panel?.session.togglePlay() }
@@ -442,6 +579,16 @@ final class TranscriptTextView: NSTextView {
 
     /// Edit › Delete and Cut act on the selected words' audio here too (the text view is read-only, so its own
     /// versions were grey while words were selected). Copy stays the text's.
+    override func mouseDown(with event: NSEvent) {
+        super.mouseDown(with: event)
+        if event.clickCount == 2 { MainActor.assumeIsolated { panel?.correctSelectedWord() } }
+    }
+
+    /// View › Zoom In, Zoom Out and Zoom to Fit act on what has the keys: here, the text's size.
+    @objc func zoomIn(_ sender: Any?) { MainActor.assumeIsolated { panel?.changeTextSize(by: 2) } }
+    @objc func zoomOut(_ sender: Any?) { MainActor.assumeIsolated { panel?.changeTextSize(by: -2) } }
+    @objc func zoomToFit(_ sender: Any?) { MainActor.assumeIsolated { panel?.changeTextSize(by: nil) } }
+
     @objc override func delete(_ sender: Any?) { MainActor.assumeIsolated { panel?.deleteSelectedWords() } }
     @objc override func cut(_ sender: Any?) { MainActor.assumeIsolated { panel?.session.perform("cut") } }
 
@@ -461,5 +608,42 @@ final class TranscriptTextView: NSTextView {
         menu.insertItem(.separator(), at: 0)
         menu.insertItem(NSMenuItem(title: L10n.text("edit.copy"), action: #selector(NSText.copy(_:)), keyEquivalent: ""), at: 0)
         return menu
+    }
+}
+
+/// The transcript panel's top edge, dragged to make it taller or shorter.
+final class ResizeGrip: NSView {
+    private let drag: (CGFloat) -> Void
+    private let ended: () -> Void
+    private var last: CGFloat?
+
+    init(drag: @escaping (CGFloat) -> Void, ended: @escaping () -> Void) {
+        self.drag = drag
+        self.ended = ended
+        super.init(frame: .zero)
+        setAccessibilityElement(true)
+        setAccessibilityRole(.splitter)
+    }
+
+    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+
+    override func draw(_ dirtyRect: NSRect) {
+        NSColor(white: 1, alpha: 0.08).setFill()
+        NSRect(x: 0, y: bounds.midY - 0.5, width: bounds.width, height: 1).fill()
+    }
+
+    override func resetCursorRects() { addCursorRect(bounds, cursor: .resizeUpDown) }
+
+    override func mouseDown(with event: NSEvent) { last = NSEvent.mouseLocation.y }
+
+    override func mouseDragged(with event: NSEvent) {
+        let y = NSEvent.mouseLocation.y
+        if let last { drag(y - last) }
+        last = y
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        last = nil
+        ended()
     }
 }

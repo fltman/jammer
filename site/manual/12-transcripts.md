@@ -27,7 +27,7 @@ Jämmer can name tracks from clear spoken introductions, such as "My name is Ann
 
 ## Export transcripts
 
-Choose **File › Export Transcript…** and select all audible tracks or a single track. **TXT** is plain text. **JSON** groups words, timing and recognition languages by track. **SRT** and **WebVTT** make subtitles using the timeline’s word timestamps. For text-only transcripts, choose TXT or JSON.
+Choose **File › Export Transcript…** and select all audible tracks or a single track. With part of the timeline selected, **Selection only** exports just its words, with times counted from the start of the selection, so subtitles line up with that stretch exported as audio. The format you chose last is chosen again. **TXT** is plain text. **JSON** groups words, timing and recognition languages by track. **SRT** and **WebVTT** make subtitles using the timeline’s word timestamps. For text-only transcripts, choose TXT or JSON.
 
 ## At OpenAI instead (text only)
 
@@ -50,11 +50,15 @@ The transcript always reads what plays now. It's not a copy: cut something on th
 | Click a word | Move the playhead there |
 | Space | Play or stop |
 | **Edit › Find in Transcript…** (⌘F), **Find Next** (⌘G) | Find a word; case and accents don't matter |
-| **Edit › Correct Word…** | Change how the selected word reads (the audio is unchanged) |
+| **Edit › Correct Word…**, or double-click a word, or Return | Change how the selected word reads (the audio is unchanged) |
 | **Edit › Remove Filler Words** | Remove every eh, ehm, öh… from the audio, as one step |
 | Right-click a word | The same commands, and Overdub, in a context menu |
+| **View › Zoom In** (⌘+), **Zoom Out** (⌘−), **Zoom to Fit** (⌘0) while the transcript has the keys | Make the text bigger or smaller, or back to its usual size (remembered) |
+| Drag the panel's top edge | Make the transcript taller or shorter (remembered) |
 
-While playing, the word you hear is highlighted. Words the recognizer wasn't sure about have a dotted underline, so you can check them. Words cut through by a clip edge are shown dimmed.
+While playing, the word you hear is highlighted and the text follows it, unless you have scrolled in the last few seconds to read ahead. Words the recognizer wasn't sure about have a dotted underline, so you can check them. Point at a word to see when it's heard and how sure the recognizer was. Filler words (eh, ehm, öh…) are dimmed and slanted. Words cut through by a clip edge are dimmed too.
+
+The panel remembers the engine you chose. A language the engine doesn't do is greyed out, with the reason when you point at it. If a transcript came from a service that gives no word times, a line above the text says so: it can be read, searched and corrected, but not cut by word.
 
 Deleting words is an ordinary edit: it's one undo step, and the original file isn't changed.
 

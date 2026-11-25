@@ -540,8 +540,9 @@ enum AgentRouter {
                 }
                 let project = session.project
                 let tracks = try transcriptionTrackIDs(r.query["track"].map { [$0] }, in: project).map(Set.init)
+                let range = try queryRange(r, session)
                 do {
-                    let data = try await Task.detached { try format.data(project: project, tracks: tracks) }.value
+                    let data = try await Task.detached { try format.data(project: project, tracks: tracks, range: range) }.value
                     return Response(status: 200, contentType: format.contentType, body: data, extraHeaders: [
                         "Content-Disposition": "attachment; filename=\"\(asciiName(session.name)).\(format.rawValue)\"",
                     ])

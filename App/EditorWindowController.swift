@@ -77,7 +77,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         timelineRow.setContentHuggingPriority(.defaultLow, for: .vertical)
         let stack = NSStackView(views: [transport, timelineRow, transcript, omnibarRoom, statusBar])
         transcript.isHidden = !UserDefaults.standard.bool(forKey: "transcript.visible")
-        transcript.heightAnchor.constraint(equalTo: timeline.heightAnchor, multiplier: 0.45).isActive = true
+        // Its own height, dragged at its top edge and remembered (TranscriptPanel.heightConstraint).
         transcript.setContentHuggingPriority(.defaultLow, for: .vertical)
         stack.orientation = .vertical
         stack.spacing = 0
@@ -818,10 +818,19 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         panel.allowsOtherFileTypes = false
         let formats = NSPopUpButton()
         formats.addItems(withTitles: ["TXT", "JSON", "SRT", "WebVTT"])
+        // The format chosen last time (COMFORT: a choice is remembered).
+        let last = UserDefaults.standard.string(forKey: "transcript.export.format").flatMap(TranscriptExport.init(rawValue:))
+        if let last, let i = TranscriptExport.allCases.firstIndex(of: last) { formats.selectItem(at: i) }
         let formatChoice = TranscriptSaveFormatChoice(panel: panel)
         formats.target = formatChoice
         formats.action = #selector(TranscriptSaveFormatChoice.changed(_:))
         formatChoice.changed(formats)
+        // Only what is selected, its times from the selection's start (as that stretch exports as audio).
+        let selection = session.selection.flatMap { project.placedWords(in: $0).isEmpty ? nil : $0 }
+        let onlySelection = NSButton(checkboxWithTitle: L10n.text("transcript.export.selectionOnly"), target: nil, action: nil)
+        onlySelection.state = selection != nil ? .on : .off
+        onlySelection.isEnabled = selection != nil
+        onlySelection.toolTip = selection != nil ? L10n.text("transcript.export.selectionOnly.help") : L10n.text("reason.selectWord")
         let tracks = NSPopUpButton()
         tracks.addItem(withTitle: L10n.text("transcript.export.allTracks"))
         for index in indices {
@@ -832,18 +841,20 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         let trackLabel = NSTextField(labelWithString: L10n.text("transcript.export.track"))
         formats.setAccessibilityLabel(formatLabel.stringValue)
         tracks.setAccessibilityLabel(trackLabel.stringValue)
-        let grid = NSGridView(views: [[formatLabel, formats], [trackLabel, tracks]])
-        grid.frame = NSRect(x: 0, y: 0, width: 320, height: 60)
+        let grid = NSGridView(views: [[formatLabel, formats], [trackLabel, tracks], [NSGridCell.emptyContentView, onlySelection]])
+        grid.frame = NSRect(x: 0, y: 0, width: 320, height: 86)
         panel.accessoryView = grid
         panel.beginSheetModal(for: window) { [weak self] response in
             guard response == .OK, let self, let url = panel.url else { return }
             let format = formatChoice.format
+            UserDefaults.standard.set(format.rawValue, forKey: "transcript.export.format")
             let selected = tracks.indexOfSelectedItem
             let ids: Set<UUID>? = selected > 0 ? [project.tracks[indices[selected - 1]].id] : nil
+            let range = onlySelection.state == .on ? selection : nil
             Task {
                 do {
                     try await Task.detached {
-                        try format.data(project: project, tracks: ids).write(to: url, options: .atomic)
+                        try format.data(project: project, tracks: ids, range: range).write(to: url, options: .atomic)
                     }.value
                     session.status = L10n.text("transcript.export.done", url.lastPathComponent)
                 } catch { session.say(L10n.error(error), .error) }

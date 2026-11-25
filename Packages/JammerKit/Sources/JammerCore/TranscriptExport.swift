@@ -49,8 +49,16 @@ public enum TranscriptExport: String, CaseIterable, Sendable {
         var words: [String]
     }
 
-    public func data(project: Project, tracks: Set<UUID>? = nil) throws -> Data {
-        let words = project.placedWords().filter { tracks?.contains(project.tracks[$0.track].id) ?? true }
+    /// - Parameter range: only the words heard in it (the selection), their times from its start, so the file lines
+    ///   up with that stretch exported as audio.
+    public func data(project: Project, tracks: Set<UUID>? = nil, range: Range<Frame>? = nil) throws -> Data {
+        let offset = range?.lowerBound ?? 0
+        let words = project.placedWords(in: range).filter { tracks?.contains(project.tracks[$0.track].id) ?? true }.map { w in
+            var w = w
+            w.start = max(0, w.start - offset)
+            w.end = max(w.start, w.end - offset)
+            return w
+        }
         guard !words.isEmpty else { throw Failure.noWords }
         let byTrack = Dictionary(grouping: words, by: \.track)
         let transcripts = Dictionary(project.transcripts.map { ($0.sourceID, $0) }, uniquingKeysWith: { first, _ in first })

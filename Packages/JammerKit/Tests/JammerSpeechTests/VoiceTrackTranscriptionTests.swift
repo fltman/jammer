@@ -64,6 +64,27 @@ struct VoiceTrackTranscriptionTests {
         #expect(named("Hi, I'm Anna. I'm Swedish.", "en") == "Anna")
     }
 
+    @Test("Export of the selection: only its words, their times from its start")
+    func exportSelection() throws {
+        let rate = 48_000.0
+        let info = AudioFileInfo(container: .wav, sampleFormat: .float32, bigEndian: false, channels: 1, sampleRate: rate, dataOffset: 0, frames: 480_000)
+        let source = SourceRef(name: "Input", path: "", info: info)
+        let track = Track(name: "Voice", clips: [Clip(sourceID: source.id, start: 0, length: 480_000)])
+        var project = Project(sampleRate: rate, channels: 1, tracks: [track], sources: [source])
+        // One word a second: w0 at 0–0.5 s, w1 at 1–1.5 s …
+        let words = (0..<8).map { i in Word(text: "w\(i)", start: Frame(Double(i) * rate), end: Frame((Double(i) + 0.5) * rate)) }
+        project.transcripts = [SourceTranscript(sourceID: source.id, language: "en", engine: "test", words: words)]
+        let range = Frame(2 * rate)..<Frame(4.2 * rate)
+        let txt = String(decoding: try TranscriptExport.txt.data(project: project, range: range), as: UTF8.self)
+        #expect(txt == "w2 w3 w4\n")
+        let srt = String(decoding: try TranscriptExport.srt.data(project: project, range: range), as: UTF8.self)
+        #expect(srt.hasPrefix("1\n00:00:00,000 --> "))
+        let all = String(decoding: try TranscriptExport.txt.data(project: project), as: UTF8.self)
+        // TXT breaks a line where a subtitle cue would end (at most 5 s).
+        #expect(all == "w0 w1 w2 w3 w4\nw5 w6 w7\n")
+        #expect(throws: TranscriptExport.Failure.noWords) { try TranscriptExport.txt.data(project: project, range: Frame(9 * rate)..<Frame(9.5 * rate)) }
+    }
+
     @Test func noGuessFromConflictingNamesOrDistantHandoff() {
         let host = result("Please welcome Sofia.", language: "en", at: 0)
         let conflicting = result("My name is Beth. My name is Anne.", language: "en", at: 1)

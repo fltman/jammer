@@ -36,6 +36,10 @@ extension EditorWindowController {
             guard answer == .alertFirstButtonReturn, !text.isEmpty, text != word.word.text else { return }
             self?.session.perform("correct_word", ["word": .string(word.word.id.uuidString), "text": .string(text)])
         }
+        // The field has the keys at once, with the word selected, so typing replaces it (an alert's own layout
+        // otherwise gives the first button the focus).
+        alert.window.makeFirstResponder(field)
+        field.selectText(nil)
     }
 
     /// Edit › Remove Filler Words: every eh, ehm, öh… the transcript has, deleted from the audio as one step.

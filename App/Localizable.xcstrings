@@ -33070,6 +33070,24 @@
         }
       }
     },
+    "transcript.empty.nothingAudible": {
+      "comment": "The transcript panel when there are transcripts but nothing that plays has words.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nothing that plays now has a transcript: the transcribed audio is cut away or on muted tracks. Click Transcribe Again to transcribe what plays."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inget som spelas nu har ett transkript: det transkriberade ljudet är bortklippt eller ligger på tystade spår. Klicka på Transkribera igen för att transkribera det som spelas."
+          }
+        }
+      }
+    },
     "transcript.empty.openai": {
       "comment": "Shown in the empty panel.",
       "extractionState": "manual",
@@ -33297,6 +33315,42 @@
         }
       }
     },
+    "transcript.export.selectionOnly": {
+      "comment": "Export Transcript: a checkbox, only the selected words.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Selection only"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bara markeringen"
+          }
+        }
+      }
+    },
+    "transcript.export.selectionOnly.help": {
+      "comment": "Tooltip of the Selection only checkbox in Export Transcript.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Only the words in the selection, their times counted from its start, as when the selection is exported as audio."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bara orden i markeringen, med tider räknade från dess början, som när markeringen exporteras som ljud."
+          }
+        }
+      }
+    },
     "transcript.export.track": {
       "extractionState": "manual",
       "localizations": {
@@ -33350,6 +33404,42 @@
         }
       }
     },
+    "transcript.language.help": {
+      "comment": "Tooltip of the transcript panel's language menu.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The language that is spoken. Transcribe uses it for the whole document; Speech › Transcribe Voice Tracks finds each track's own."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Språket som talas. Transkribera använder det för hela dokumentet; Tal › Transkribera röstspår hittar varje spårs eget."
+          }
+        }
+      }
+    },
+    "transcript.language.notForEngine": {
+      "comment": "Tooltip of a greyed-out language. %@ is the engine, e.g. \"Pianissimo (on this Mac)\".",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ doesn't transcribe this language."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ transkriberar inte det här språket."
+          }
+        }
+      }
+    },
     "transcript.noTimes": {
       "comment": "Status line.",
       "extractionState": "manual",
@@ -33364,6 +33454,42 @@
           "stringUnit": {
             "state": "translated",
             "value": "Den här transkriptionen har inga ordtider, så ett klick kan inte hitta ordet i ljudet."
+          }
+        }
+      }
+    },
+    "transcript.resize.ax": {
+      "comment": "VoiceOver name of the grip at the transcript panel's top edge.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transcript height"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkriptets höjd"
+          }
+        }
+      }
+    },
+    "transcript.resize.help": {
+      "comment": "Tooltip of the grip at the transcript panel's top edge.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Drag to make the transcript taller or shorter."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dra för att göra transkriptet högre eller lägre."
           }
         }
       }
@@ -33421,6 +33547,24 @@
         }
       }
     },
+    "transcript.transcribe.help": {
+      "comment": "Tooltip of the transcript panel's Transcribe button.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transcribes every file the document plays from, in the language beside it, as one undo step."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkriberar varje fil som dokumentet spelar från, på språket bredvid, som ett ångrasteg."
+          }
+        }
+      }
+    },
     "transcript.transcribeAgain": {
       "comment": "Button.",
       "extractionState": "manual",
@@ -33439,6 +33583,78 @@
         }
       }
     },
+    "transcript.word.at": {
+      "comment": "Tooltip on a word without a confidence. %@ is the time.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Heard at %@"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hörs vid %@"
+          }
+        }
+      }
+    },
+    "transcript.word.filler": {
+      "comment": "Second line of a filler word's tooltip.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Filler word: Edit › Remove Filler Words takes them all out."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Utfyllnadsord: Redigera › Ta bort utfyllnadsord tar bort alla."
+          }
+        }
+      }
+    },
+    "transcript.word.sure": {
+      "comment": "Tooltip on a word in the transcript. %1$@ is the time, %2$@ the percent.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Heard at %1$@, %2$@ %% certain"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hörs vid %1$@, %2$@ %% säkert"
+          }
+        }
+      }
+    },
+    "transcript.word.unsure": {
+      "comment": "Tooltip on an unsure (dotted) word. %1$@ is the time, %2$@ the percent.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unsure: heard at %1$@, %2$@ %% certain. Check it, and double-click to correct it."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Osäkert: hörs vid %1$@, %2$@ %% säkert. Kontrollera ordet och dubbelklicka för att rätta det."
+          }
+        }
+      }
+    },
     "transcript.working": {
       "comment": "Shown in the empty panel while transcribing.",
       "extractionState": "manual",
@@ -33453,6 +33669,42 @@
           "stringUnit": {
             "state": "translated",
             "value": "Transkriberar på den här Macen…"
+          }
+        }
+      }
+    },
+    "transcript.working.berget": {
+      "comment": "The transcript panel while Berget AI transcribes.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transcribing at Berget AI…"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkriberar hos Berget AI…"
+          }
+        }
+      }
+    },
+    "transcript.working.openai": {
+      "comment": "The transcript panel while OpenAI transcribes.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transcribing at OpenAI…"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkriberar hos OpenAI…"
           }
         }
       }

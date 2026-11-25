@@ -14,6 +14,16 @@ public enum TranscriptionChoice: String, CaseIterable, Sendable {
     }
 
     public var paid: Bool { provider != nil }
+
+    /// The languages (ISO 639-1) this engine transcribes, or nil for any the panel offers: the panel greys out the
+    /// rest, so a choice that can't work is seen before Transcribe, not after.
+    public var languages: Set<String>? {
+        switch self {
+        case .pianissimo: ["sv", "da"]
+        case .bergetPianissimo: ["sv"]
+        default: nil
+        }
+    }
     public var needsUnknownPrice: Bool { paid && price == nil }
 
     public struct Price: Sendable {
