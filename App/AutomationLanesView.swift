@@ -42,12 +42,17 @@ final class AutomationLanesView: NSView {
     private var chosen: Set<Int> { selected.map { others.union([$0]) } ?? [] }
     /// A stretch being dragged out with ⌥⇧ to select the points in it: where it began and where the pointer is.
     private var marquee: (from: CGFloat, to: CGFloat)?
+    /// Esc during a drag or a marquee: everything is as before it, and its mouse-up does nothing (COMFORT 41).
+    private var cancelled = false
     /// A point pressed with ⇧ and not yet moved: let go like that, it joins or leaves the selected ones.
     private var toggleOnUp: Int?
     /// A point being dragged: the lane as it would be, the point's index, and whether it has moved.
     private var drag: (lane: AutomationLane, index: Int, moved: Bool, origin: AutomationLane)?
     /// The lane as just sent, drawn until the document has it (so the line doesn't jump back for a moment).
     private var pending: AutomationLane?
+    /// Arrow-key nudges held back while the key is down: shown at once, sent as one step when it comes up (COMFORT 12:
+    /// holding ↑ is one undo step, not one per repeat).
+    private var heldNudge: (lane: AutomationLane, saying: String?)?
     /// The label at the pointer: where, and what it says.
     private var hover: (at: NSPoint, text: String)?
 
@@ -89,7 +94,7 @@ final class AutomationLanesView: NSView {
     private var margin: CGFloat { rows == .tracks ? 6 : 3 }
 
     func invalidate() {
-        if drag == nil { pending = nil }
+        if drag == nil, heldNudge == nil { pending = nil }
         focus = min(focus, max(0, rowList.count - 1))
         let count = ownLane?.points.count ?? 0
         if let s = selected, s >= count { selected = nil }
@@ -478,6 +483,7 @@ final class AutomationLanesView: NSView {
 
     /// A click in the timeline, offered here first. True: it was about a point, and the timeline leaves it alone.
     func mouseDown(_ event: NSEvent, at p: NSPoint) -> Bool {
+        cancelled = false
         guard let shown, let t = track(atY: p.y) else { return false }
         if !isActive { onActivate() }
         if t != focus { focus = t; selected = nil; needsDisplay = true; elements = nil }
@@ -526,6 +532,7 @@ final class AutomationLanesView: NSView {
         return true
     }
     func mouseDragged(_ event: NSEvent, at p: NSPoint) -> Bool {
+        if cancelled { return true }
         if let m = marquee { marquee = (m.from, p.x); needsDisplay = true; return true }
         guard let shown, var d = drag else { return false }
         let r = area(focus), old = d.origin.points[d.index], flags = event.modifierFlags
@@ -557,6 +564,7 @@ final class AutomationLanesView: NSView {
         return true
     }
     func mouseUp(_ event: NSEvent, at p: NSPoint) -> Bool {
+        if cancelled { cancelled = false; return true }
         if let m = marquee, let shown {
             marquee = nil
             let r = area(focus), lo = min(m.from, m.to), hi = max(m.from, m.to)
@@ -622,7 +630,27 @@ final class AutomationLanesView: NSView {
     }
 
     /// A key in the timeline, offered here first. True: it was about a lane or a point.
+    /// The key came up: the nudges it made go as one step.
+    func keyUp() {
+        guard let n = heldNudge else { return }
+        heldNudge = nil
+        send(n.lane, saying: n.saying)
+    }
+
     func key(_ event: NSEvent) -> Bool {
+        // Escape in the middle of a drag or a marquee: back to how it was, nothing sent.
+        if event.keyCode == 53, drag != nil || marquee != nil {
+            drag = nil
+            marquee = nil
+            pending = nil
+            hover = nil
+            cancelled = true
+            needsDisplay = true
+            elements = nil
+            return true
+        }
+        // Another key than the nudging one: what was nudged goes first, as its own step.
+        if heldNudge != nil, !event.isARepeat { keyUp() }
         let list = rowList
         guard let shown, !list.isEmpty else { return false }
         let flags = event.modifierFlags.intersection([.option, .shift, .command, .control])
@@ -683,8 +711,13 @@ final class AutomationLanesView: NSView {
             // Several selected: all of them by what this one would move, as one piece.
             let moved = many.count > 1 ? lane.moving(many, byFrames: frame - p.frame, byValue: shown == .mute ? 0 : value - p.value, limit: project.length)
                 : lane.moving(k, frame: frame, value: value, limit: project.length)
-            guard moved != lane else { NSSound.beep(); return }
-            send(moved, saying: many.count > 1 ? L10n.count("automation.points.moved", many.count) : describe(moved, k))
+            guard moved != lane else { if !event.isARepeat { NSSound.beep() }; return }
+            let saying = many.count > 1 ? L10n.count("automation.points.moved", many.count) : describe(moved, k)
+            pending = moved
+            heldNudge = (moved, saying)
+            session.status = saying
+            needsDisplay = true
+            elements = nil
         }
         let up = event.keyCode == 126
         switch (event.keyCode, flags) {

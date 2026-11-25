@@ -314,7 +314,10 @@ enum AgentRouter {
             body[AgentAPI.rationale] = nil   // accepted everywhere, used for nothing
             do {
                 // Paths from an agent must lie in a folder the user allowed in Settings › Agents.
-                let request = try BatchRequest.parse(body, policy: AgentFolders.policy)
+                // The schema, then what each job needs, then the price (CallChecks), before anything runs.
+                var request: BatchRequest?
+                try CallChecks.run("batch", [(.schema, { request = try BatchRequest.parse(body, policy: AgentFolders.policy) { jobs in try jobs.forEach(jobRequirement) } })])
+                guard let request else { throw APIError.internalError("The batch wasn't read.") }
                 return .json(["job": JobRegistry.shared.startBatch(request).json, "files": request.inputs.count], status: 202)
             } catch let e as BatchError {
                 if e.reason == "bad_request" { throw APIError.badRequest(e.message) }
@@ -515,27 +518,33 @@ enum AgentRouter {
             case ["transcribe"]:
                 try only("POST")
                 let body = try json(r)
-                if JobRegistry.shared.latest("transcribe", document: session.agentID)?.isFinished == false {
-                    throw APIError.unprocessable("transcription_running", "A transcription is already running for this document.")
-                }
                 let lang = (body["language"] as? String) ?? Locale.current.identifier(.bcp47)
                 let name = (body["engine"] as? String) ?? "auto"
-                guard let choice = SpeechEngines.Choice(rawValue: name) else {
-                    throw APIError.badRequest("engine must be one of \(SpeechEngines.Choice.allCases.map(\.rawValue).joined(separator: ", ")).")
-                }
-                // A paid engine sends the audio to its provider and costs money: only on an explicit yes.
-                if choice.paid, body["allowPaid"] as? Bool != true {
-                    throw APIError.paidNotAllowed("engine \(name) sends the audio to its provider and is paid for by the user. Pass \"allowPaid\": true to run it.")
-                }
-                // Allowing a paid request is not allowing any price: Jämmer has no price for this one.
-                if choice.needsUnknownPrice, body["allowUnknownPrice"] as? Bool != true {
-                    throw APIError.unprocessable("unknown_price", "Jämmer doesn't know what engine \(name) costs: its provider charges by its own price list, which Jämmer can't read. Pass \"allowUnknownPrice\": true beside \"allowPaid\": true to run it anyway.")
-                }
                 let model = body["model"] as? String
-                do { _ = try SpeechEngines.engine(choice, for: Locale(identifier: lang), model: model) } catch let e as SpeechEngines.Unavailable {
-                    if let requirement = e.requirement { throw APIError.modelMissing(requirement, e.message) }
-                    throw APIError.unprocessable(e.reason, e.message)
-                }
+                var choice = SpeechEngines.Choice.auto
+                try CallChecks.run("transcribe", [
+                    (.schema, {
+                        if JobRegistry.shared.latest("transcribe", document: session.agentID)?.isFinished == false {
+                            throw APIError.unprocessable("transcription_running", "A transcription is already running for this document.")
+                        }
+                        guard let c = SpeechEngines.Choice(rawValue: name) else {
+                            throw APIError.badRequest("engine must be one of \(SpeechEngines.Choice.allCases.map(\.rawValue).joined(separator: ", ")).")
+                        }
+                        choice = c
+                    }),
+                    // The model, or the provider's key: said before any price is asked for.
+                    (.requirements, { try transcriptionRequirement(choice, language: lang, model: model) }),
+                    (.price, {
+                        // A paid engine sends the audio to its provider and costs money: only on an explicit yes.
+                        if choice.paid, body["allowPaid"] as? Bool != true {
+                            throw APIError.paidNotAllowed("engine \(name) sends the audio to its provider and is paid for by the user. Pass \"allowPaid\": true to run it.")
+                        }
+                        // Allowing a paid request is not allowing any price: Jämmer has no price for this one.
+                        if choice.needsUnknownPrice, body["allowUnknownPrice"] as? Bool != true {
+                            throw APIError.unprocessable("unknown_price", "Jämmer doesn't know what engine \(name) costs: its provider charges by its own price list, which Jämmer can't read. Pass \"allowUnknownPrice\": true beside \"allowPaid\": true to run it anyway.")
+                        }
+                    }),
+                ])
                 let job = JobRegistry.shared.startTranscription(session, locale: Locale(identifier: lang),
                                                                 replace: body["replace"] as? Bool ?? false, engine: choice, model: model)
                 return .json(["job": job.json], status: 202)
@@ -617,10 +626,17 @@ enum AgentRouter {
                         return id
                     }
                 }
-                guard Stems.isInstalled(model) else { throw APIError.modelMissing(model == "dialog" ? "mrx" : "spleeter-4stems", StemError.modelMissing.localizedDescription) }
-                if let t = session.project.tracks.first(where: { (ids?.contains($0.id) ?? true) && !$0.inserts.isEmpty && !$0.clips.isEmpty }) {
-                    throw APIError.unprocessable("has_inserts", StemError.hasInserts(t.name).localizedDescription)
-                }
+                let chosen = ids
+                try CallChecks.run("separate", [
+                    (.schema, {
+                        if let t = session.project.tracks.first(where: { (chosen?.contains($0.id) ?? true) && !$0.inserts.isEmpty && !$0.clips.isEmpty }) {
+                            throw APIError.unprocessable("has_inserts", StemError.hasInserts(t.name).localizedDescription)
+                        }
+                    }),
+                    (.requirements, {
+                        guard Stems.isInstalled(model) else { throw APIError.modelMissing(model == "dialog" ? "mrx" : "spleeter-4stems", StemError.modelMissing.localizedDescription) }
+                    }),
+                ])
                 return .json(["job": JobRegistry.shared.startSeparation(session, tracks: ids, model: model).json], status: 202)
             case ["diarize"]:
                 try only("POST")
@@ -1211,6 +1227,31 @@ enum AgentRouter {
         }
     }
 
+    /// What a transcription engine needs here: its model, or its provider's key (CallChecks' requirements stage).
+    private static func transcriptionRequirement(_ choice: SpeechEngines.Choice, language: String, model: String?) throws {
+        do { _ = try SpeechEngines.engine(choice, for: Locale(identifier: language), model: model) } catch let e as SpeechEngines.Unavailable {
+            if let requirement = e.requirement { throw APIError.modelMissing(requirement, e.message) }
+            throw APIError.unprocessable(e.reason, e.message)
+        }
+    }
+
+    /// What one of a batch's jobs needs installed or configured (the same as the job's own route).
+    private static func jobRequirement(_ job: BatchRequest.JobStep) throws {
+        switch job.op {
+        case "transcribe":
+            try transcriptionRequirement(job.transcriptionChoice ?? .auto, language: job.params["language"]?.string ?? Locale.current.identifier(.bcp47),
+                                         model: job.params["model"]?.string)
+        case "separate":
+            let model = job.params["model"]?.string ?? "music4"
+            guard Stems.isInstalled(model) else { throw APIError.modelMissing(model == "dialog" ? "mrx" : "spleeter-4stems", StemError.modelMissing.localizedDescription) }
+        case "diarize" where job.params["mode"]?.string != "by_track":
+            if let d = Diarization.engine as? FluidDiarizer, !d.isInstalled {
+                throw APIError.modelMissing("diarisation", "The diarisation model isn't on this Mac. The user downloads it in Settings › Models.")
+            }
+        default: break
+        }
+    }
+
     private static func flimmerMode(_ r: AgentAPI.Request) throws -> FlimmerSend.Mode {
         guard let mode = FlimmerSend.Mode(rawValue: r.query["mode"] ?? "takes") else { throw APIError.badRequest("mode is takes or mix.") }
         return mode
@@ -1601,6 +1642,11 @@ extension AgentRouter {
 
     /// Both gates of a paid call, as for a paid transcription: allowPaid, and allowUnknownPrice (Jämmer
     /// doesn't know the price on the user's plan).
+    /// The user's ElevenLabs key in the Keychain: a requirement, said before the price is asked for (CallChecks).
+    private static func elevenLabsKey() throws {
+        guard Keychain.get("elevenlabs") != nil else { throw APIError.unprocessable("key_missing", ElevenLabs.NoKey().localizedDescription) }
+    }
+
     private static func paidGates(_ body: [String: Any]) throws {
         if body["allowPaid"] as? Bool != true {
             throw APIError.paidNotAllowed("This sends audio or text to ElevenLabs and the user's account pays. Pass \"allowPaid\": true to run it.")
@@ -1642,7 +1688,7 @@ extension AgentRouter {
         let prepared: (VoiceAttestation, [Data])
         do { prepared = try OverdubService.prepareClone(session.project, plan: session.plan, kind: kind, adult: body["adult"] as? Bool == true, consent: consent, samples: samples) }
         catch { throw provider(error) }
-        try paidGates(body)
+        try CallChecks.run("clone_voice", [(.requirements, elevenLabsKey), (.price, { try paidGates(body) })])
         _ = prepared
         let made: (ClonedVoice, needsVerification: Bool)
         do { made = try await session.cloneVoice(name: name, kind: kind, adult: true, consent: consent, samples: samples) } catch { throw provider(error) }
@@ -1678,7 +1724,7 @@ extension AgentRouter {
             guard let i = p0.tracks.firstIndex(where: { $0.clips.contains { $0.start <= range.lowerBound && $0.end > range.lowerBound } }) else { throw provider(OverdubError.noTrack) }
             track = i
         }
-        try paidGates(body)
+        try CallChecks.run("overdub", [(.requirements, elevenLabsKey), (.price, { try paidGates(body) })])
         let source: SourceRef
         do { source = try await session.overdub(voice: voice, range: range, text: text, model: model, track: track) } catch { throw provider(error) }
         let p = session.project

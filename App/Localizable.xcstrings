@@ -11077,6 +11077,42 @@
         }
       }
     },
+    "error.step.changedMeanwhile": {
+      "comment": "Status bar: a command or an agent's steps met an edit made meanwhile, and the result couldn't be kept.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The document changed in the same place while this ran, so it wasn't put in. Run it again on the document as it is now."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dokumentet ändrades på samma ställe medan det här kördes, så det lades inte in. Kör det igen på dokumentet som det är nu."
+          }
+        }
+      }
+    },
+    "error.step.changedMeanwhile.kept": {
+      "comment": "Status bar: a late result met an edit made meanwhile and is kept in History as a branch marked (late).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The document changed in the same place while this ran, so it wasn't put in. The result is kept in History, marked (late): choose it there to use it."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dokumentet ändrades på samma ställe medan det här kördes, så det lades inte in. Resultatet finns kvar i Historik, märkt (sent): välj det där för att använda det."
+          }
+        }
+      }
+    },
     "error.storage.notFreeable": {
       "extractionState": "manual",
       "localizations": {
@@ -13356,6 +13392,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Gå till %@"
+          }
+        }
+      }
+    },
+    "history.lateResult": {
+      "comment": "The name in History of a late result kept as a branch. %@ is the action, e.g. \"Normalize\".",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ (late)"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ (sent)"
           }
         }
       }
@@ -22376,6 +22430,24 @@
         }
       }
     },
+    "overdub.keptAsTake": {
+      "comment": "Status bar: the place an Overdub was meant for changed while the speech was made.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The track changed where the speech was to go while it was made, so it is on a new muted track at the same place, “Overdub (take)”. Nothing else changed."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spåret ändrades där talet skulle in medan det gjordes, så det ligger på ett nytt tystat spår på samma ställe, ”Overdub (tagning)”. Inget annat ändrades."
+          }
+        }
+      }
+    },
     "overdub.keyRejected": {
       "extractionState": "manual",
       "localizations": {
@@ -22474,6 +22546,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Markera orden som ska sägas igen, på ett spår med tal."
+          }
+        }
+      }
+    },
+    "overdub.take": {
+      "comment": "The name of the muted track a late Overdub is put on as a take.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overdub (take)"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overdub (tagning)"
           }
         }
       }
@@ -25048,24 +25138,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ procent"
-          }
-        }
-      }
-    },
-    "restore.changed": {
-      "comment": "Status line.",
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The audio changed while repairing; nothing was applied."
-          }
-        },
-        "sv": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ljudet ändrades under reparationen; inget tillämpades."
           }
         }
       }

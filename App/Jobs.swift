@@ -108,6 +108,7 @@ final class JobRegistry {
         var job = Job(kind: "restore", documentID: session.agentID)
         jobs[job.id] = job
         let project = session.project
+        let node = session.history?.current
         let pool = session.pool
         let media = MediaStore.folder
         let id = job.id
@@ -129,7 +130,7 @@ final class JobRegistry {
             guard self?.jobs[id]?.status != .cancelled else { return }
             switch outcome {
             case .success(let (newProject, report)):
-                session?.commitRestoration(newProject, basedOn: project, action: action)
+                session?.commitRestoration(newProject, basedOn: project, action: action, under: node)
                 job.status = .done
                 job.progress = 1
                 var result: [String: JSONValue] = ["clips": .number(Double(report.clips))]
@@ -527,6 +528,7 @@ final class JobRegistry {
         jobs[job.id] = job
         engineOf[job.id] = choice
         let project = session.project
+        let node = session.history?.current
         let used = Set(project.tracks.flatMap { $0.clips.map(\.sourceID) })
         let todo = project.sources.filter { src in used.contains(src.id) && (replace || !project.transcripts.contains { $0.sourceID == src.id }) }
         let pool = session.pool
@@ -580,7 +582,7 @@ final class JobRegistry {
                 return
             }
             guard self?.jobs[id]?.status != .cancelled else { return }
-            session?.applyTranscripts(results)
+            session?.applyTranscripts(results, basedOn: project, under: node)
             job.status = .done
             job.progress = 1
             job.result = ["sources": .number(Double(results.count)),

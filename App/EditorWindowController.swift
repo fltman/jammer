@@ -212,7 +212,17 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
             let session = self.session
             Task {
                 session.status = L10n.count("importTracks.working", urls.count)
-                var p = session.project
+                let base = session.project, startNode = session.history?.current
+                var p = base
+                // Edited meanwhile: the new tracks go on top of that edit (COMFORT 77); where they meet it (the
+                // alignment moved a track that was edited meanwhile), the import is kept in History as a branch.
+                @MainActor func landed(_ result: Project) -> Project? {
+                    guard session.project != base else { return result }
+                    if case .merged(let m) = ProjectMerge.merge(base: base, ours: result, theirs: session.project) { return m }
+                    _ = session.keepLate(result, action: L10n.text("importTracks.action"), under: startNode)
+                    session.say(L10n.text("error.step.changedMeanwhile.kept"), .warning)
+                    return nil
+                }
                 var added: [UUID] = [], short: [String] = []
                 for url in urls {
                     do {
@@ -227,6 +237,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
                     }
                 }
                 guard p.tracks.count > 1 else {
+                    guard let p = landed(p) else { return }
                     session.commit(p, action: L10n.text("importTracks.action"))
                     session.status = ([L10n.count("importTracks.done", added.count)] + short).joined(separator: " ")
                     return
@@ -256,6 +267,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
                     }
                     return (q, notes)
                 }.value
+                guard let aligned = landed(aligned) else { return }
                 session.commit(aligned, action: L10n.text("importTracks.action"))
                 session.status = (short + [L10n.text("importTracks.aligned", notes.joined(separator: "; "))]).joined(separator: " ")
             }

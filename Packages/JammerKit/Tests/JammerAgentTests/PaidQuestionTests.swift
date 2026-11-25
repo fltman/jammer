@@ -26,6 +26,19 @@ struct PaidQuestionTests {
         #expect(try BatchRequest.parse(body([["op": "transcribe", "params": ["engine": "parakeet"]]]), policy: nil).jobs.first?.paidAllowed == false)
     }
 
+    @Test("A batch's checks in the series' order: a schema error before the price, what a job needs before the price (SIBLINGS 0e3ae19)")
+    func batchOrder() throws {
+        struct Missing: Error {}
+        // A wrong export field with a paid job and no allowPaid: the field is what is said.
+        do { _ = try BatchRequest.parse(body([openai], ["export": ["format": "nope"]]), policy: nil); Issue.record("parsed") }
+        catch let e as BatchError { #expect(e.reason == "bad_request") }
+        // A job that needs what isn't here, with a paid job and no allowPaid: the requirement is what is said.
+        #expect(throws: Missing.self) { _ = try BatchRequest.parse(body([openai]), policy: nil) { _ in throw Missing() } }
+        // All there: then the price.
+        do { _ = try BatchRequest.parse(body([openai]), policy: nil) { _ in }; Issue.record("parsed") }
+        catch let e as BatchError { #expect(e.reason == "paid_not_allowed") }
+    }
+
     @Test("Berget requires payment consent and a mixed batch also requires consent to OpenAI's unknown price")
     func bergetBatch() throws {
         let berget: [String: Any] = ["op": "transcribe", "params": ["engine": "berget_pianissimo", "language": "sv"]]

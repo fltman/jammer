@@ -208,7 +208,10 @@ final class PluginWindowController: NSWindowController, NSWindowDelegate {
     /// The Audio Unit, when it is one (its own view and parameter observer); nil for VST 3 and CLAP.
     private var audioUnit: PluginInstance? { unit as? PluginInstance }
     private var token: AUParameterObserverToken?
-    private var pending: Task<Void, Never>?
+    /// Something changed since the last commit. It is committed when the mouse comes up in this window, and when the
+    /// window stops being key or closes: a drag with a pause in it is still one step (COMFORT 9), never a timer.
+    private var dirty = false
+    private var mouseUp: Any?
 
     init(session: EditorSession, track: UUID, insert: UUID, unit: any InsertUnit, title: String) {
         self.session = session
@@ -222,6 +225,10 @@ final class PluginWindowController: NSWindowController, NSWindowDelegate {
         super.init(window: w)
         w.delegate = self
         w.center()
+        mouseUp = NSEvent.addLocalMonitorForEvents(matching: .leftMouseUp) { [weak self] event in
+            if let self, event.window === self.window { DispatchQueue.main.async { self.commitIfChanged() } }
+            return event
+        }
         if let au = audioUnit {
             au.au.requestViewController { [weak self] vc in
                 DispatchQueue.main.async { self?.install(vc) }
@@ -254,21 +261,23 @@ final class PluginWindowController: NSWindowController, NSWindowDelegate {
     }
 
     private func schedule() {
-        pending?.cancel()
-        pending = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .milliseconds(600))
-            guard !Task.isCancelled else { return }
-            self?.commit()
-        }
+        dirty = true
+        // A change made with no mouse button held (a value typed in the plugin's own field): it goes when the window
+        // stops being key or closes.
     }
 
-    private func commit() {
+    private func commitIfChanged() {
+        guard dirty else { return }
+        dirty = false
         session?.commitPluginState(track: track, insert: insert, state: unit.captureState())
     }
 
+    func windowDidResignKey(_ notification: Notification) { commitIfChanged() }
+
     func windowWillClose(_ notification: Notification) {
-        pending?.cancel()
-        commit()
+        commitIfChanged()
+        if let mouseUp { NSEvent.removeMonitor(mouseUp) }
+        mouseUp = nil
         if let token { audioUnit?.au.parameterTree?.removeParameterObserver(token) }
         PluginWindows.open[insert] = nil
     }

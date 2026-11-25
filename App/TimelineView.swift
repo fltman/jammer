@@ -50,6 +50,12 @@ final class TimelineView: NSView {
         if stripHeight.constant != h { stripHeight.constant = h }
         if !showsStripLanes || n == 0, stripLanes.isActive { stripLanes.isActive = false; automation.isActive = true }
     }
+    /// A key came up: nudges held in either lane view go as one step.
+    func automationKeyUp() {
+        automation.keyUp()
+        stripLanes.keyUp()
+    }
+
     /// A key, offered to the lane view that is worked in; ⌥↓ and ⌥↑ past its last or first row go on into the other.
     func automationKey(_ event: NSEvent) -> Bool {
         guard shownAutomation != nil else { return false }
@@ -413,6 +419,11 @@ final class TimelineOverlay: NSView {
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { true }
     override func becomeFirstResponder() -> Bool { true }
+    /// Leaving with a key down: its nudges go now, as one step (its key-up goes elsewhere).
+    override func resignFirstResponder() -> Bool {
+        timeline?.automationKeyUp()
+        return true
+    }
 
     private var timeline: TimelineView? { superview as? TimelineView }
     private var project: Project { session.project }
@@ -1080,6 +1091,11 @@ final class TimelineOverlay: NSView {
     }
 
     // MARK: Keys and edit commands
+
+    override func keyUp(with event: NSEvent) {
+        timeline?.automationKeyUp()
+        super.keyUp(with: event)
+    }
 
     override func keyDown(with event: NSEvent) {
         if timeline?.automationKey(event) == true { return }

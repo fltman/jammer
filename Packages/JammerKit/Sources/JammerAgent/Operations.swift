@@ -714,6 +714,21 @@ public struct StepResult: Sendable, Equatable {
     public static func stopped(_ op: String) -> StepResult {
         StepResult(op: op, status: .failed, error: "Stopped in Jämmer's window.", reason: "stopped", keyed: KeyedMessage("job.stopped"))
     }
+
+    /// The document changed in the same place while the steps ran (the user's edit, or another run's): the result
+    /// isn't laid over it (COMFORT 77). It is kept in the history as a branch (`kept`, its node), to be chosen there.
+    public static func changedMeanwhile(_ op: String, kept: UUID?) -> StepResult {
+        let said: Said
+        if kept != nil {
+            said = Said("error.step.changedMeanwhile.kept", "The document changed in the same place while this ran, so it wasn't put in. The result is kept in History, marked (late): choose it there to use it.")
+        } else {
+            said = Said("error.step.changedMeanwhile", "The document changed in the same place while this ran, so it wasn't put in. Run it again on the document as it is now.")
+        }
+        var r = StepResult(op: op, status: .failed, error: said.text, reason: "changed_meanwhile", keyed: said.keyed)
+        // For an agent: the kept result's node, which POST …/history/{node} uses.
+        if let kept { r.ids["keptAs"] = kept.uuidString }
+        return r
+    }
 }
 
 public struct StepFailure: Error, LocalizedError {

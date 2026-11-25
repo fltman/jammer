@@ -25,6 +25,7 @@ extension EditorSession {
     /// Says `text` in `voice` and puts it in place of `range` on `track`: one undo step.
     func overdub(voice: ClonedVoice, range: Range<Frame>, text: String, model: String, track: Int) async throws -> SourceRef {
         let p0 = project
+        let trackID = p0.tracks[track].id
         let before = p0.placedWords(in: max(0, range.lowerBound - p0.frames(10))..<range.lowerBound).map(\.word.text).joined(separator: " ")
         let after = p0.placedWords(in: range.upperBound..<min(p0.length, range.upperBound + p0.frames(10))).map(\.word.text).joined(separator: " ")
         let source = try await OverdubService(provider: Self.elevenLabs()).speak(voice, text: text, model: model, previous: before, next: after,
@@ -32,7 +33,15 @@ extension EditorSession {
         // Stopped while the answer came: the speech is not put in (it was paid for; the caller says so).
         try Task.checkCancellation()
         var p = project
-        try p.overdub(range, track: track, with: source, words: text, language: p.transcripts.first?.language ?? "en")
+        // The place changed while the speech was made (paid): it goes on a new muted track there as a take, and nothing
+        // made meanwhile is touched (COMFORT 59, 77).
+        guard p.unchanged(range, track: trackID, since: p0), let i = p.tracks.firstIndex(where: { $0.id == trackID }) else {
+            p.addTake(source, at: range.lowerBound, name: L10n.text("overdub.take"))
+            commit(p, action: L10n.text("overdub.undo.overdub"))
+            say(L10n.text("overdub.keptAsTake"), .warning)
+            return source
+        }
+        try p.overdub(range, track: i, with: source, words: text, language: p.transcripts.first?.language ?? "en")
         commit(p, action: L10n.text("overdub.undo.overdub"))
         return source
     }

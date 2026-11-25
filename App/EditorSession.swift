@@ -36,6 +36,15 @@ final class EditorSession {
     }
     func endWait(_ id: UUID) { waits.removeAll { $0.id == id } }
 
+    /// A late result that met an edit made meanwhile: kept in History as a branch from where the work began, and said
+    /// so (COMFORT 59, 77). Returns its node.
+    func keepLate(_ result: Project, action: String, under node: UUID?) -> UUID? {
+        guard let id = try? history?.keep(result, action: L10n.text("history.lateResult", action), under: node) else { return nil }
+        historyVersion += 1
+        document?.updateChangeCount(.changeDone)
+        return id
+    }
+
     /// Unfreezing a strip, the one way for the mixer, the assistant and the agent: one undo step.
     func unfreeze(_ id: UUID) throws {
         let name = project.strip(id)?.name ?? ""
@@ -456,15 +465,22 @@ final class EditorSession {
         commit(p, action: L10n.text("audio.findSpeakers"))
     }
 
-    func applyTranscripts(_ ts: [SourceTranscript]) {
+    /// A finished transcription (paid or long), on the document as it is now: a transcript corrected meanwhile isn't
+    /// written over; the new one is kept in History as a branch instead (COMFORT 59, 77).
+    func applyTranscripts(_ ts: [SourceTranscript], basedOn base: Project, under node: UUID?) {
         var p = project
-        for t in ts where p.source(t.sourceID) != nil { p.setTranscript(t) }
+        let held = p.setTranscripts(ts, basedOn: base)
         commit(p, action: L10n.text("transcript.transcribe"))
+        guard !held.isEmpty else { return }
+        var all = base
+        for t in ts where all.source(t.sourceID) != nil { all.setTranscript(t) }
+        _ = keepLate(all, action: L10n.text("transcript.transcribe"), under: node)
+        say(L10n.text("error.step.changedMeanwhile.kept"), .warning)
     }
 
     /// A finished repair. If the user edited meanwhile, the repaired clips are carried
     /// over by id onto the current project, so neither the edit nor the repair is lost.
-    func commitRestoration(_ repaired: Project, basedOn base: Project, action: String) {
+    func commitRestoration(_ repaired: Project, basedOn base: Project, action: String, under node: UUID? = nil) {
         guard project != base else { commit(repaired, action: action); return }
         var p = project
         let byID = Dictionary(repaired.tracks.flatMap(\.clips).map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
@@ -482,7 +498,12 @@ final class EditorSession {
                 touched = true
             }
         }
-        guard touched else { status = L10n.text("restore.changed"); return }
+        // Nothing of it fits the document as it is now: the repair took long, so it is kept in History, not dropped.
+        guard touched else {
+            _ = keepLate(repaired, action: action, under: node)
+            say(L10n.text("error.step.changedMeanwhile.kept"), .warning)
+            return
+        }
         for s in repaired.sources where p.source(s.id) == nil { p.sources.append(s) }
         for t in repaired.transcripts where !p.transcripts.contains(where: { $0.sourceID == t.sourceID }) { p.transcripts.append(t) }
         p.pruneSources()
@@ -576,6 +597,7 @@ final class EditorSession {
         // A step still running after half a second shows in the status bar with a Stop (COMFORT 7). A stopped run
         // applies nothing: the steps left are skipped, and what the running one made is not taken in.
         let stop = JobRegistry.StopFlag()
+        let startNode = history?.current
         var wait: UUID?
         let shower = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(500))
@@ -600,8 +622,22 @@ final class EditorSession {
             end = start
         }
         guard results.allSatisfy({ $0.status == .done }) else { return results }
+        // Someone edited the document while this ran (a hand, another run, an agent): the result was worked out from
+        // the document as it was. It goes on top as its own step when they changed different things; when they met,
+        // it is kept as a branch in History instead, and nothing made meanwhile is undone (COMFORT 77, Glimmer's form).
+        var final = end.project
+        if project != start.project, let last = steps.last {
+            switch ProjectMerge.merge(base: start.project, ours: end.project, theirs: project) {
+            case .merged(let m):
+                final = m
+            case .conflict:
+                let kept = keepLate(end.project, action: action, under: startNode)
+                results[results.count - 1] = .changedMeanwhile(last.op, kept: kept)
+                return results
+            }
+        }
         let probe1 = Date()
-        if end.project != project { commit(end.project, action: action) }
+        if final != project { commit(final, action: action) }
         #if DEBUG
         if UserDefaults.standard.bool(forKey: "stepProbe") {
             let probe2 = Date()
@@ -614,8 +650,9 @@ final class EditorSession {
         if let last = steps.last, last.op == "loudness_preset", let preset = LoudnessPreset(rawValue: last.params["preset"]?.string ?? "") {
             presetTarget = (.init(integrated: preset.integrated, ceiling: preset.truePeakCeiling), end.project)
         }
-        selection = end.selection
-        playhead = end.playhead
+        // The selection and the playhead are the run's only if nobody moved them meanwhile.
+        if selection == start.selection { selection = end.selection }
+        if playhead == start.playhead { playhead = end.playhead }
         AppClipboard.content = end.clipboard
         if isPlaying, end.playhead != start.playhead { try? output.play(from: playhead) }
         // What a step wants said with its result (automation that stayed where it was under a moved track):

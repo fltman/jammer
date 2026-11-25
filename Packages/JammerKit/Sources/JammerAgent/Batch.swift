@@ -63,7 +63,7 @@ public struct BatchRequest: Sendable {
             self.params = params
         }
         /// A job that sends audio to a paid service: transcribe with a paid engine.
-        var transcriptionChoice: TranscriptionChoice? {
+        public var transcriptionChoice: TranscriptionChoice? {
             guard op == "transcribe" else { return nil }
             return TranscriptionChoice(rawValue: params["engine"]?.string ?? "auto")
         }
@@ -119,7 +119,9 @@ public struct BatchRequest: Sendable {
     /// From an API body. With `policy`, every path must lie in a folder the user allowed.
     static let fields: Set<String> = ["files", "folder", "steps", "jobs", "export", "output", "suffix", "overwrite", "allowPaid", "allowUnknownPrice"]
 
-    public static func parse(_ body: [String: Any], policy: FolderPolicy?) throws -> BatchRequest {
+    /// - Parameter requirements: what the jobs need installed or configured, checked after the schema and before the
+    ///   price (the app's models and keys; CallChecks).
+    public static func parse(_ body: [String: Any], policy: FolderPolicy?, requirements: ([JobStep]) throws -> Void = { _ in }) throws -> BatchRequest {
         let known = fields
         if let k = body.keys.first(where: { !known.contains($0) && $0 != AgentAPI.rationale }) { throw BatchError("bad_request", Said("error.batch.unknown_field_1_batch", "Unknown field \"%1$@\". batch takes: %2$@.", "\(k)", "\(known.sorted().joined(separator: ", "))")) }
         func checked(_ path: String, _ what: String) throws -> URL {
@@ -161,18 +163,6 @@ public struct BatchRequest: Sendable {
                 if k != AgentAPI.rationale { params[k] = j }
             }
             jobs.append(JobStep(op: op, params: params))
-        }
-        // Check every paid job before the batch runs. Unknown prices need their own permission.
-        if let paid = jobs.first(where: \.isPaid) {
-            let engine = paid.params["engine"]?.string ?? ""
-            guard body["allowPaid"] as? Bool == true else {
-                throw BatchError("paid_not_allowed", Said("error.batch.paidNotAllowed", "The job transcribe with engine %@ uploads the audio to its provider, which charges the user's account. Pass \"allowPaid\": true to run it.", engine))
-            }
-            if let unknown = jobs.first(where: { $0.transcriptionChoice?.needsUnknownPrice == true }), body["allowUnknownPrice"] as? Bool != true {
-                let engine = unknown.params["engine"]?.string ?? ""
-                throw BatchError("unknown_price", Said("error.batch.unknownPrice", "Jämmer doesn't know what engine %@ costs (its provider charges by its own price list). Pass \"allowUnknownPrice\": true as well to run it.", engine))
-            }
-            for i in jobs.indices where jobs[i].isPaid { jobs[i].paidAllowed = true }
         }
         if let given = body["export"], !(given is [String: Any]) { throw BatchError("bad_request", Said("error.batch.export_object", "export must be an object.")) }
         let e = (body["export"] as? [String: Any]) ?? [:]
@@ -216,6 +206,20 @@ public struct BatchRequest: Sendable {
             request.sampleRate = n.doubleValue
         }
         try request.checkSources()
+        try requirements(request.jobs)
+        // The price last, after the schema and what the jobs need (the CallChecks order, SIBLINGS 0e3ae19): every paid
+        // job before the batch runs. Unknown prices need their own permission.
+        if let paid = request.jobs.first(where: \.isPaid) {
+            let engine = paid.params["engine"]?.string ?? ""
+            guard body["allowPaid"] as? Bool == true else {
+                throw BatchError("paid_not_allowed", Said("error.batch.paidNotAllowed", "The job transcribe with engine %@ uploads the audio to its provider, which charges the user's account. Pass \"allowPaid\": true to run it.", engine))
+            }
+            if let unknown = request.jobs.first(where: { $0.transcriptionChoice?.needsUnknownPrice == true }), body["allowUnknownPrice"] as? Bool != true {
+                let engine = unknown.params["engine"]?.string ?? ""
+                throw BatchError("unknown_price", Said("error.batch.unknownPrice", "Jämmer doesn't know what engine %@ costs (its provider charges by its own price list). Pass \"allowUnknownPrice\": true as well to run it.", engine))
+            }
+            for i in request.jobs.indices where request.jobs[i].isPaid { request.jobs[i].paidAllowed = true }
+        }
         return request
     }
     static let exportKeys: Set<String> = ["format", "bitDepth", "bitRate", "chapters", "targetLUFS", "compensate", "sampleRate"]

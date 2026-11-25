@@ -69,6 +69,17 @@ public struct History: Codable, Sendable, Equatable {
         prune()
     }
 
+    /// Keeps a result beside the branch you're on: a node under `parent` (where the work began), without moving there.
+    /// A late result that met an edit made meanwhile is kept so (COMFORT 59 and 77): nothing paid or slow is lost,
+    /// and choosing it in History uses it. Returns its id.
+    @discardableResult
+    public mutating func keep(_ project: Project, action: String, under parent: UUID?) throws -> UUID {
+        let node = try makeNode(project, parent: parent.flatMap { self.node($0)?.id } ?? current, action: action)
+        nodes.append(node)
+        prune()
+        return node.id
+    }
+
     /// Makes `id` current (undo, redo, or a jump) and returns its project.
     @discardableResult
     public mutating func move(to id: UUID) throws -> Project {
