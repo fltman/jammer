@@ -132,6 +132,9 @@ public enum Commands {
         add("edit.findNext", .edit, 2, key("edit.findNext"), key: "g", agent: .route("GET", doc + "/transcript"), palette: false)
         add("edit.correctWord", .edit, 3, key("edit.correctWord"), agent: op("correct_word"), contexts: [.word])
         add("edit.removeFillers", .edit, 3, key("edit.removeFillers"), agent: op("delete_words"), contexts: [.word])
+        // The newest job this document runs; the status bar has a Stop per job. No shortcut: ⌘. is the system's
+        // cancel in sheets and dialogs (Commands.reserved), and a menu key would take it from them.
+        add("edit.stopJob", .edit, 0, key("edit.stopJob"), agent: .route("DELETE", "/api/v1/jobs/{id}"))
         add("edit.omnibar", .edit, 4, key("edit.palette"), key: "k", agent: .none(.assistant), palette: false)
 
         // View

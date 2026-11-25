@@ -1017,6 +1017,11 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
             return (true, nil)
         }
         if id == "edit.split" { return needs(hasAudio, L10n.text("reason.noAudio")) }
+        if id == "edit.stopJob" {
+            let job = JobRegistry.shared.running(document: session.agentID).last
+            item?.title = job.map { L10n.text("edit.stopJob.named", JobLine.label($0)) } ?? L10n.text("edit.stopJob")
+            return needs(job != nil, L10n.text("reason.noJob"))
+        }
         if id.hasPrefix("track.layout.order.") {
             // The order of a file that names no loudspeakers: offered only when the document has one.
             let open = p.unmaskedOrder
@@ -1102,6 +1107,44 @@ struct TransportBar: View {
     }
 }
 
+/// The document's running jobs in the status bar, each with its progress and a Stop that stops only that job
+/// (COMFORT 7; Glimmer b8695e6): what it did is not applied, and the line says "Stopped. Nothing changed.".
+struct JobLine: View {
+    let session: EditorSession
+    let jobs: [Job]
+
+    static func label(_ job: Job) -> String {
+        let percent = String(Int(job.progress * 100))
+        return switch job.kind {
+        case "transcribe": L10n.text("status.job.transcribing", percent)
+        case "separate": L10n.text("status.job.separating", percent)
+        case "diarize": L10n.text("status.job.diarizing", percent)
+        case "freeze": L10n.text("status.job.freezing", percent)
+        default: L10n.text("status.job.repairing", percent)
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            ForEach(jobs, id: \.id) { job in
+                let label = Self.label(job)
+                HStack(spacing: 5) {
+                    Text(label).foregroundStyle(Theme.neonColor).lineLimit(1)
+                    Button { JobRegistry.shared.stop(job.id, in: session) } label: {
+                        Image(systemName: "stop.circle.fill").font(.system(size: 13))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                    .help(L10n.text("job.stop.help", label))
+                    .accessibilityLabel(L10n.text("job.stop.ax", label))
+                    .accessibilityIdentifier("job.stop." + job.kind)
+                }
+            }
+        }
+        .layoutPriority(2)
+    }
+}
+
 struct StatusBar: View {
     let session: EditorSession
 
@@ -1112,9 +1155,9 @@ struct StatusBar: View {
             } else {
                 Text(L10n.text("status.noSelection"))
             }
-            if let job = JobRegistry.shared.running.first(where: { $0.documentID == session.agentID }) {
-                Text(job.kind == "transcribe" ? L10n.text("status.job.transcribing", String(Int(job.progress * 100))) : L10n.text("status.job.repairing", String(Int(job.progress * 100))))
-                    .foregroundStyle(Theme.neonColor)
+            let jobs = JobRegistry.shared.running(document: session.agentID)
+            if !jobs.isEmpty {
+                JobLine(session: session, jobs: jobs)
             // What was just done is said whole; the selection's text gives way to it first.
             } else if let status = session.status {
                 StateLine(kind: session.statusKind, text: status, font: .system(size: 11, design: .monospaced))

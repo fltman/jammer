@@ -5,7 +5,7 @@ Jämmer can write down what's said and let you edit the audio by editing the tex
 ## Transcribe
 
 1. Choose **View › Show Transcript** (⌥⌘T). The transcript panel opens under the timeline.
-2. Pick the language and click **Transcribe**. The status bar shows the progress.
+2. Pick the language and click **Transcribe**. The status bar shows the progress; while it runs the button says **Stop**, and stopping keeps nothing of it.
 
 Every track is transcribed. A track of music gets "words" too (the recognizer hears speech where there is none), so don't be surprised by a few stray words there; they do no harm, and you can ignore them.
 

@@ -87,6 +87,12 @@ extension EditorWindowController {
         (sender as? NSMenuItem)?.title = L10n.text(v.isHidden ? "view.toolPalette" : "view.hideToolPalette")
     }
 
+    /// Edit › Stop Job: the newest job this document runs; the others go on.
+    @objc func stopJob(_ sender: Any?) {
+        guard let job = JobRegistry.shared.running(document: session.agentID).last else { return }
+        JobRegistry.shared.stop(job.id, in: session)
+    }
+
     /// Edit › Split at Playhead (⌘B): every track's clip under the playhead in two.
     @objc func splitAtPlayhead(_ sender: Any?) { session.perform("split") }
 

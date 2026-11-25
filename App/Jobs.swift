@@ -19,6 +19,8 @@ final class JobRegistry {
     /// Finished jobs stay readable for this long.
     @ObservationIgnored private let keep: TimeInterval = 3_600
     @ObservationIgnored private var finishedAt: [String: Date] = [:]
+    /// When each job began running: ⌘. stops the newest.
+    @ObservationIgnored private var startedAt: [String: Date] = [:]
     /// Jobs whose paid request has left the app, and the provider's name: a cancel may come too late to
     /// spare the charge (SIBLINGS.md §2).
     @ObservationIgnored private var paidSent: [String: String] = [:]
@@ -32,6 +34,27 @@ final class JobRegistry {
     }
 
     var running: [Job] { jobs.values.filter { !$0.isFinished }.sorted { $0.id < $1.id } }
+
+    /// A document's running jobs, oldest first (the status bar's order; ⌘. stops the last).
+    func running(document: String) -> [Job] {
+        jobs.values.filter { !$0.isFinished && $0.documentID == document }
+            .sorted { (startedAt[$0.id] ?? .distantFuture, $0.id) < (startedAt[$1.id] ?? .distantFuture, $1.id) }
+    }
+
+    /// Stops one job from the window (COMFORT 7: Stop stops only what it concerns). Nothing it did is applied; a
+    /// job whose paid request had left says so instead (`cancel`), since then something may have been charged.
+    func stop(_ id: String, in session: EditorSession) {
+        guard let job = cancel(id), job.status == .cancelled else { return }
+        if job.result?["mayHaveBeenCharged"] == nil { session.say(L10n.text("job.stopped"), .info) }
+    }
+
+    /// Detached work that stops when the job's task is cancelled: a detached task doesn't inherit the
+    /// cancellation, so `Task.isCancelled` inside it stays false; the flag carries the stop across (as freezing does).
+    nonisolated static func stoppable<T: Sendable>(_ work: @escaping @Sendable (StopFlag) -> T) async -> T {
+        let stop = StopFlag()
+        let task = Task.detached(priority: .userInitiated) { work(stop) }
+        return await withTaskCancellationHandler { await task.value } onCancel: { stop.set() }
+    }
 
     func job(_ id: String) -> Job? {
         prune()
@@ -57,6 +80,7 @@ final class JobRegistry {
     private func update(_ job: Job) {
         // A cancelled job stays cancelled whatever the worker reports afterwards.
         if jobs[job.id]?.status == .cancelled { return }
+        if job.status == .running, startedAt[job.id] == nil { startedAt[job.id] = Date() }
         jobs[job.id] = job
     }
 
@@ -64,6 +88,7 @@ final class JobRegistry {
         jobs[job.id] = job
         tasks[job.id] = nil
         finishedAt[job.id] = Date()
+        startedAt[job.id] = nil
         paidSent[job.id] = nil
     }
 
@@ -87,7 +112,7 @@ final class JobRegistry {
         tasks[id] = Task { [weak self, weak session] in
             job.status = .running
             self?.update(job)
-            let outcome = await Task.detached(priority: .userInitiated) { () -> Result<(Project, Restoration.ApplyReport), Error> in
+            let outcome = await Self.stoppable { stop -> Result<(Project, Restoration.ApplyReport), Error> in
                 Result {
                     try Restoration.apply(settings, to: project, range: range, tracks: tracks, pool: pool, media: media) { p in
                         Task { @MainActor in
@@ -95,10 +120,10 @@ final class JobRegistry {
                             j.progress = min(0.99, p)
                             self?.update(j)
                         }
-                        return !Task.isCancelled
+                        return !stop.isSet
                     }
                 }
-            }.value
+            }
             guard self?.jobs[id]?.status != .cancelled else { return }
             switch outcome {
             case .success(let (newProject, report)):
@@ -260,7 +285,7 @@ final class JobRegistry {
         tasks[id] = Task { [weak self, weak session] in
             job.status = .running
             self?.update(job)
-            let result = await Task.detached(priority: .userInitiated) { () -> Result<(Project, StemReport), Error> in
+            let result = await Self.stoppable { stop -> Result<(Project, StemReport), Error> in
                 Result {
                     let engine = try Stems.engine(model)
                     return try project.separatingStems(tracks: tracks, engine: engine, pool: pool, media: MediaStore.folder) { p in
@@ -269,10 +294,10 @@ final class JobRegistry {
                             j.progress = min(0.99, p)
                             self?.update(j)
                         }
-                        return !Task.isCancelled && true
+                        return !stop.isSet
                     }
                 }
-            }.value
+            }
             guard self?.jobs[id]?.status != .cancelled else { return }
             switch result {
             case .success(let (separated, report)):

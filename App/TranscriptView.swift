@@ -148,13 +148,17 @@ final class TranscriptPanel: NSView, NSTextViewDelegate {
         let running = job.map { !$0.isFinished } ?? false
         progress.isHidden = !running
         progress.doubleValue = job?.progress ?? 0
-        transcribeButton.isEnabled = !running
-        transcribeButton.title = session.project.transcripts.isEmpty ? L10n.text("transcript.transcribe") : L10n.text("transcript.transcribeAgain")
+        // While it runs, the button that started it stops it (COMFORT 7).
+        transcribeButton.isEnabled = true
+        transcribeButton.title = running ? L10n.text("job.stop") : session.project.transcripts.isEmpty ? L10n.text("transcript.transcribe") : L10n.text("transcript.transcribeAgain")
+        transcribeButton.toolTip = running ? L10n.text("job.stop.help", L10n.text("transcript.working")) : nil
         if placed.isEmpty {
             empty.isHidden = false
             scroll.isHidden = true
             if running {
                 empty.stringValue = L10n.text("transcript.working")
+            } else if let job, job.status == .cancelled {
+                empty.stringValue = L10n.text("job.stopped")
             } else if let job, job.status == .failed {
                 empty.stringValue = job.errorKeyed.map(L10n.message) ?? job.error?.message ?? L10n.text("transcript.failed")
             } else {
@@ -307,6 +311,10 @@ final class TranscriptPanel: NSView, NSTextViewDelegate {
     }
 
     @objc func transcribe(_ sender: Any?) {
+        if let job = JobRegistry.shared.latest("transcribe", document: session.agentID), !job.isFinished {
+            JobRegistry.shared.stop(job.id, in: session)
+            return
+        }
         let code = language.selectedItem?.representedObject as? String ?? "sv-SE"
         UserDefaults.standard.set(code, forKey: "transcript.language")
         let locale = Locale(identifier: code)

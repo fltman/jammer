@@ -25,6 +25,7 @@ File › Collect Audio and Save
 File › Linked Files Waiting…	
 File › Batch…	⌥⌘B
 File › Storage…	
+Edit › Stop Job	
 Edit › Cut	⌘X
 Edit › Copy	⌘C
 Edit › Paste	⌘V

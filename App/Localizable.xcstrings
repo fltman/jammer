@@ -5087,6 +5087,60 @@
         }
       }
     },
+    "batch.stop.help": {
+      "comment": "Help tag on the batch window's Stop.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stop after the file it is on (⌘.)"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stoppa efter filen den håller på med (⌘.)"
+          }
+        }
+      }
+    },
+    "batch.stopped": {
+      "comment": "Batch window after Stop. %@ is a count.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stopped. %@ files were done; they are in the folder, the rest was left."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stoppat. %@ filer blev klara; de ligger i mappen, resten lämnades."
+          }
+        }
+      }
+    },
+    "batch.stopping": {
+      "comment": "Batch window right after Stop.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stopping after the file it is on…"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stoppar efter filen den håller på med…"
+          }
+        }
+      }
+    },
     "batch.text": {
       "comment": "Explanation in the batch window.",
       "extractionState": "manual",
@@ -6044,6 +6098,42 @@
           "stringUnit": {
             "state": "translated",
             "value": "Dela vid spelhuvudet"
+          }
+        }
+      }
+    },
+    "edit.stopJob": {
+      "comment": "Edit menu: stops the newest running job (⌘.).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stop Job"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stoppa jobbet"
+          }
+        }
+      }
+    },
+    "edit.stopJob.named": {
+      "comment": "Edit menu while a job runs. %@ is the job as the status bar shows it, e.g. \"Repairing… 34 %\".",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stop %@"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stoppa %@"
           }
         }
       }
@@ -14054,6 +14144,78 @@
           "stringUnit": {
             "state": "translated",
             "value": "Avbrutet. Förfrågan hade redan gått till %@, som kan ha debiterat för den. Det som ändå skickas tillbaka hämtas inte."
+          }
+        }
+      }
+    },
+    "job.stop": {
+      "comment": "Button that stops a running job.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stop"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stoppa"
+          }
+        }
+      }
+    },
+    "job.stop.ax": {
+      "comment": "VoiceOver label of a job's Stop button.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stop %@"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stoppa %@"
+          }
+        }
+      }
+    },
+    "job.stop.help": {
+      "comment": "Help tag on a job's Stop button. %@ is the job, e.g. \"Repairing… 34 %\".",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stop: %@ (nothing it did is kept)"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stoppa: %@ (inget av det sparas)"
+          }
+        }
+      }
+    },
+    "job.stopped": {
+      "comment": "Status line after Stop (the series' wording, Glimmer b8695e6).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stopped. Nothing changed."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stoppat. Inget ändrades."
           }
         }
       }
@@ -24134,6 +24296,24 @@
         }
       }
     },
+    "reason.noJob": {
+      "comment": "Why Stop Job is off.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nothing is running in this document."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inget pågår i det här dokumentet."
+          }
+        }
+      }
+    },
     "reason.noMarkers": {
       "comment": "Command registry (comfort block).",
       "extractionState": "manual",
@@ -27768,6 +27948,42 @@
         }
       }
     },
+    "status.job.diarizing": {
+      "comment": "In the status bar. %@ is a whole number of percent.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finding speakers… %@ %%"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hittar talare… %@ %%"
+          }
+        }
+      }
+    },
+    "status.job.freezing": {
+      "comment": "In the status bar. %@ is a whole number of percent.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Freezing… %@ %%"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fryser… %@ %%"
+          }
+        }
+      }
+    },
     "status.job.repairing": {
       "comment": "In the status bar. %@ is a whole number of percent.",
       "extractionState": "manual",
@@ -27782,6 +27998,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Reparerar… %@ %%"
+          }
+        }
+      }
+    },
+    "status.job.separating": {
+      "comment": "In the status bar. %@ is a whole number of percent.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Separating… %@ %%"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delar upp… %@ %%"
           }
         }
       }

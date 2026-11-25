@@ -7,7 +7,7 @@
 - **Timeline**: a ruler with times, and one lane per track. Stereo tracks show left above right. Clip edges are thin vertical lines; fades are drawn as a slanted line.
 - **Context menus**: right-click (or Control-click) the timeline, a spectral area or a word in the transcript for the commands that apply there, with the same names and checks as the menu bar. A command that can't run says why, there and in the menu bar, as its help tag.
 - **Focus mode** (**View › Focus Mode**, ⌃⇧⌘F) hides the transcript, the assistant and the tool palette and keeps the timeline; choose it again to bring them back. The window's green button, or ⌃⌘F, gives it the whole screen.
-- **Status bar** (bottom): the selection's start, end and length, messages from the last command, missing files, the tempo and time signature at the playhead, and the sample rate and channel layout.
+- **Status bar** (bottom): the selection's start, end and length, each running job with its progress and a stop button (**Edit › Stop Job** stops the newest; a stopped job changes nothing), messages from the last command, missing files, the tempo and time signature at the playhead, and the sample rate and channel layout.
 
 ## Tempo and time signature
 

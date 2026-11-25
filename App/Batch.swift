@@ -141,7 +141,15 @@ final class BatchModel {
     var format = ExportFormat.mp3
     var status = ""
     var running = false
+    private var jobID: String?
     let recipes = BatchRecipe.all
+
+    /// Stops the batch after the file it is on (COMFORT 7).
+    func stop() {
+        guard let jobID else { return }
+        _ = JobRegistry.shared.cancel(jobID)
+        status = L10n.text("batch.stopping")
+    }
 
     func chooseFiles() {
         let p = NSOpenPanel()
@@ -214,8 +222,15 @@ final class BatchModel {
             let request = try BatchRequest.parse(body, policy: nil)
             running = true
             status = L10n.text("batch.starting")
+            var started: String?
             let job = JobRegistry.shared.startBatch(request) { [weak self] result in
                 self?.running = false
+                self?.jobID = nil
+                // Stopped: the files done so far stay in the folder, and the line says how many.
+                if let started, JobRegistry.shared.job(started)?.status == .cancelled {
+                    self?.status = L10n.text("batch.stopped", String(result.outputs.count))
+                    return
+                }
                 var parts = [L10n.text("batch.result.done", String(result.outputs.count))]
                 let short = zip(result.outputs, zip(result.loudness, result.limitedByPeak)).filter { $0.1.1 }
                 if !short.isEmpty {
@@ -225,7 +240,8 @@ final class BatchModel {
                 if !result.failed.isEmpty { parts.append(L10n.text("batch.result.failed", String(result.failed.count), result.failed.map { "\(($0.file as NSString).lastPathComponent) (\($0.message))" }.joined(separator: "; "))) }
                 self?.status = parts.joined(separator: ", ") + "."
             }
-            _ = job
+            started = job.id
+            jobID = job.id
         } catch {
             status = L10n.error(error)
         }
@@ -256,7 +272,10 @@ struct BatchView: View {
             if !model.status.isEmpty { Text(model.status).font(.callout).foregroundStyle(Theme.neonColor).fixedSize(horizontal: false, vertical: true) }
             HStack {
                 Spacer()
-                if model.running { ProgressView().controlSize(.small) }
+                if model.running {
+                    ProgressView().controlSize(.small)
+                    Button(L10n.text("job.stop")) { model.stop() }.keyboardShortcut(".", modifiers: .command).help(L10n.text("batch.stop.help"))
+                }
                 Button(L10n.text("batch.run")) { model.run() }.keyboardShortcut(.defaultAction).disabled(model.files.isEmpty || model.output == nil || model.running)
             }
         }

@@ -10,7 +10,7 @@
 2. **Recipe**: what to do with each file. Jämmer comes with a few (remove hum and set Spotify loudness; Apple Podcasts or EBU R 128 loudness; reduce noise and normalize; convert only).
 3. **Format**: what to save as (WAV, AIFF, FLAC, ALAC, AAC, Opus or MP3). Markers in a file become chapters where the format has them.
 4. **Save in**: the folder the results go in.
-5. **Run.**
+5. **Run.** **Stop** (⌘.) stops after the file it is on; the files already done stay in the folder.
 
 Each file is saved as "name (Jämmer)" in that folder. Your files are never changed. A result that's already there is skipped, so you can run the same batch again after adding files. If one file can't be read or a step fails on it, the others still finish, and the window says which failed and why. If a loudness recipe couldn't reach its target on some file because of its peaks (the recipes use one gain and no limiter), the window lists those files with the level they did reach. MP3, AAC and Opus files are read back after encoding and corrected so that the file itself meets a loudness recipe's target, not just the mix it was made from (see [Exporting](06-exporting.md)); agents get each file's loudness as written and how much was added.
 

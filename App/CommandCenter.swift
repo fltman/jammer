@@ -71,6 +71,7 @@ enum CommandCenter {
         case "edit.selectAll": return (#selector(TimelineOverlay.selectAll(_:)), nil)
         case "edit.deselectAll": return (#selector(W.deselectAllCommand(_:)), nil)
         case "edit.split": return (#selector(W.splitAtPlayhead(_:)), nil)
+        case "edit.stopJob": return (#selector(W.stopJob(_:)), nil)
         case "view.toolPalette": return (#selector(W.toggleToolPalette(_:)), nil)
         case "edit.findInTranscript": return (#selector(W.findInTranscript(_:)), nil)
         case "edit.findNext": return (#selector(W.findNextInTranscript(_:)), nil)
