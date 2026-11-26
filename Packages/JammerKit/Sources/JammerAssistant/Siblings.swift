@@ -28,7 +28,12 @@ public enum SiblingDirectory {
             for entry in table {
                 group.addTask {
                     for (i, port) in ([entry.first] + Array(entry.rest)).enumerated() {
-                        guard let status = await get("http://127.0.0.1:\(port)/api/v1/status", timeout: i == 0 ? 1 : 0.3, session: session),
+                        // Refused: passed at once; busy: once more with 3 s; another app: not again (SIBLINGS da5b9d2).
+                        guard let status = await SiblingProbe.status(at: URL(string: "http://127.0.0.1:\(port)")!, timeout: i == 0 ? 1 : 0.3, header: ("X-Sibling", "jammer"),
+                                                                     fetch: { r in
+                                                                         let (data, resp) = try await KeyedRequest.data(for: r, session: session)
+                                                                         return (data, resp as? HTTPURLResponse ?? HTTPURLResponse())
+                                                                     }),
                               (status["app"] as? [String: Any])?["name"] as? String == entry.name else { continue }
                         // Only a sibling of exactly this copy's kind (SIBLINGS §5): release, debug or guest.
                         guard AgentAPI.acceptsSibling((status["app"] as? [String: Any])?["bundleID"] as? String, own: ownKind) else { continue }

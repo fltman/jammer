@@ -522,13 +522,19 @@ public enum FlimmerSend {
     /// Finds the running Flimmer: 9002 first, then 9201–9219; `app.name` must be exactly Flimmer,
     /// and only a Flimmer of exactly this copy's kind counts: release, debug or guest (SIBLINGS §5).
     public static func find(transport: @escaping Transport, own: AgentAPI.BuildKind) async -> URL? {
-        for port in [9002] + Array(9201...9219) {
-            var r = URLRequest(url: URL(string: "http://127.0.0.1:\(port)/api/v1/status")!)
-            r.timeoutInterval = port == 9002 ? 1 : 0.3
-            guard let (data, response) = try? await transport(r), response.statusCode == 200,
-                  let app = ((try? JSONSerialization.jsonObject(with: data)) as? [String: Any])?["app"] as? [String: Any],
+        await find(ports: [9002] + Array(9201...9219), transport: transport, own: own)
+    }
+
+    /// The same over `ports`, with `first` on the first port and `rest` on the others (tests give a port outside
+    /// the siblings' ranges, and their own limits). A refused port is passed at once, a busy one (the time up after
+    /// the connection was taken) asked once more with 3 s, another app's not again (SIBLINGS da5b9d2).
+    public static func find(ports: [Int], first: TimeInterval = 1, rest: TimeInterval = 0.3,
+                            transport: @escaping Transport, own: AgentAPI.BuildKind) async -> URL? {
+        for (i, port) in ports.enumerated() {
+            let base = URL(string: "http://127.0.0.1:\(port)")!
+            guard let app = await SiblingProbe.status(at: base, timeout: i == 0 ? first : rest, fetch: transport)?["app"] as? [String: Any],
                   app["name"] as? String == "Flimmer" else { continue }
-            if AgentAPI.acceptsSibling(app["bundleID"] as? String, own: own) { return URL(string: "http://127.0.0.1:\(port)") }
+            if AgentAPI.acceptsSibling(app["bundleID"] as? String, own: own) { return base }
         }
         return nil
     }
