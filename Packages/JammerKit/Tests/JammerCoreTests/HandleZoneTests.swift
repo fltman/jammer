@@ -31,6 +31,25 @@ struct HandleZoneTests {
         #expect(z(10, 300) == .none)
     }
 
+    @Test("A narrow clip keeps its middle: the trim grips reach outside it, each still 8 pt wide (COMFORT 75)")
+    func narrowClip() {
+        let n = UUID()
+        // A clip 8 pt wide in lane 1 (100–108), lower half.
+        var l = layout
+        l.lanes[1] = [.init(id: n, start: 100, end: 108, fadeInEnd: 100, fadeOutStart: 108)]
+        func z(_ x: Double) -> HandleZones.Zone { HandleZones.zone(at: x, 190, in: l) }
+        // Its middle half (102–106) is the lane, not a trim.
+        for x in stride(from: 102.5, through: 105.5, by: 0.5) { #expect(z(x) == .lane(1)) }
+        // Each grip: 8 pt or more, from outside the clip to a quarter in.
+        let starts = stride(from: 90.0, through: 110, by: 0.25).filter { z($0) == .trimStart(clip: n) }
+        let ends = stride(from: 95.0, through: 120, by: 0.25).filter { z($0) == .trimEnd(clip: n) }
+        #expect((starts.last ?? 0) - (starts.first ?? 0) >= 8 && (starts.last ?? 0) <= 102)
+        #expect((ends.last ?? 0) - (ends.first ?? 0) >= 8 && (ends.first ?? 200) >= 106)
+        // A wide clip is as before: 4 pt each side of its edge.
+        #expect(HandleZones.zone(at: 52, 190, in: layout) == .trimStart(clip: b) && HandleZones.zone(at: 46, 190, in: layout) == .trimStart(clip: b))
+        #expect(HandleZones.zone(at: 55, 190, in: layout) == .lane(1))
+    }
+
     @Test("Scrolled lanes: a press finds the lane drawn under it, and the edge rows and what is scrolled away grab nothing")
     func scrolled() {
         var l = layout

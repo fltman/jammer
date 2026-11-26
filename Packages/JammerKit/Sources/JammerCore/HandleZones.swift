@@ -102,11 +102,14 @@ public enum HandleZones {
             if abs(x - s.start) <= grip { return .selectionStart }
             if abs(x - s.end) <= grip { return .selectionEnd }
         }
-        // Clip edges, in the lower half of the lane (the upper half keeps its plain selection drag).
+        // Clip edges, in the lower half of the lane (the upper half keeps its plain selection drag). On a narrow clip
+        // the grips give its middle half room (COMFORT 75): they reach inside at most a quarter of its width and make
+        // up the rest outside, so each is still 8 pt wide and the middle stays the clip's own.
         if l.trimAnywhere || y > top + l.laneHeight / 2 {
             for c in clips {
-                if abs(x - c.start) <= grip { return .trimStart(clip: c.id) }
-                if abs(x - c.end) <= grip { return .trimEnd(clip: c.id) }
+                let inside = min(grip, (c.end - c.start) / 4)
+                if x >= c.start - grip - (grip - inside), x <= c.start + inside { return .trimStart(clip: c.id) }
+                if x >= c.end - inside, x <= c.end + grip + (grip - inside) { return .trimEnd(clip: c.id) }
             }
         }
         return .lane(lane)
