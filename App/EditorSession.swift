@@ -1253,7 +1253,8 @@ final class EditorSession {
             let from = project.sampleRate, channels = project.channels
             try UploadStore.checkSpace(for: Int64(Double(asked.count) * to / from) * Int64(channels) * 4, at: dir)
             let converted = try await Task.detached(priority: .userInitiated) {
-                try SampleRateConversion.render(mixed, range: asked, to: to, into: file) { progress($0 * 0.5) }
+                // The stop reaches the conversion at its next block (before, it ran to its end first).
+                try SampleRateConversion.render(mixed, range: asked, to: to, into: file, progress: { progress($0 * 0.5) }, cancelled: { stop.isSet })
             }.value
             project = Project(source: converted)
             pool = SourcePool()

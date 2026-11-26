@@ -219,6 +219,26 @@ struct ResamplerTests {
         #expect(SourcePool().read(same.source, from: 0, count: n) == x)
     }
 
+    @Test("An export's conversion to another rate stops at the next block when stopped, instead of running to its end first", .serialized)
+    func conversionStops() throws {
+        let dir = FileManager.default.temporaryDirectory.appending(path: "jammer-convert-stop-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir); SampleRateConversion.factory = nil }
+        let file = dir.appending(path: "long.wav")
+        let w = try WAVWriter(url: file, options: .init(encoding: .float32, channels: 1, sampleRate: 48_000))
+        for _ in 0..<60 { try w.write(Self.sine(440, rate: 48_000, seconds: 1)) }
+        try w.finish()
+        let project = Project(source: SourceRef(name: "long", path: file.path, info: try AudioFileReader.info(at: file)))
+        let plan = PlanCompiler.compile(project, pool: SourcePool())
+        Resampler.register()
+        var seen = 0.0
+        #expect(throws: CancellationError.self) {
+            try SampleRateConversion.render(plan, range: 0..<project.length, to: 44_100, into: dir.appending(path: "out.wav"),
+                                            progress: { seen = $0 }, cancelled: { seen > 0.05 })
+        }
+        #expect(seen > 0.05 && seen < 0.2, "stopped at \(Int(seen * 100)) %, not at the end")
+    }
+
     @Test("Batch export at another sample rate: the same field and the same refusals as a single export", .serialized)
     func batch() async throws {
         let dir = FileManager.default.temporaryDirectory.appending(path: "jammer-batch-rate-\(UUID().uuidString)").resolvingSymlinksInPath()

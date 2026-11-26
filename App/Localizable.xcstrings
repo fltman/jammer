@@ -20749,23 +20749,6 @@
         }
       }
     },
-    "op.delete_voice.title": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Delete Cloned Voice"
-          }
-        },
-        "sv": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Radera klonad röst"
-          }
-        }
-      }
-    },
     "op.delete_words.title": {
       "comment": "The title of the operation delete_words: in the menus, the command palette, the assistant’s plan and as the undo name (“Undo …”). The agent API keeps the English title.",
       "extractionState": "manual",

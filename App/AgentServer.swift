@@ -208,9 +208,9 @@ final class AgentServer {
                 // coordinator, 2026-11-25: an agent can stop what it is waiting for). A stopped run applies nothing and a
                 // stopped export leaves nothing behind. Other routes finish what they began.
                 if AgentAPI.stopsOnHangUp(method: request.method, segments: request.segments) {
-                    connection.receive(minimumIncompleteLength: 1, maximumLength: 1) { _, _, isComplete, error in
-                        if isComplete || error != nil { work.cancel() }
-                    }
+                    AgentAPI.watchForHangUp(receive: { answer in
+                        connection.receive(minimumIncompleteLength: 1, maximumLength: 4_096) { data, _, isComplete, error in answer(data, isComplete, error) }
+                    }, gone: { work.cancel() })
                 }
             }
         }
@@ -658,8 +658,10 @@ enum AgentRouter {
                 try only("POST")
                 return try await cloneVoice(session, r)
             case let v where v.count == 2 && v[0] == "voices":
+                // Deleting a cloned voice is the person's own, in the window (2026-11-26): it can only be made again
+                // by paying again. The agent lists the voices and can suggest one.
                 try only("DELETE")
-                return try await deleteVoice(session, id: v[1])
+                throw APIError(404, "route_gone", AgentAPI.deleteVoiceGone)
             case ["overdub"]:
                 try only("POST")
                 return try await overdub(session, r)
@@ -1712,13 +1714,6 @@ extension AgentRouter {
         let made: (ClonedVoice, needsVerification: Bool)
         do { made = try await session.cloneVoice(name: name, kind: kind, adult: true, consent: consent, samples: samples) } catch { throw provider(error) }
         return .json(["voice": voiceJSON(made.0), "needsVerification": made.needsVerification], status: 201)
-    }
-
-    private static func deleteVoice(_ session: EditorSession, id: String) async throws -> Response {
-        guard let vid = UUID(uuidString: id), let v = session.project.voices.first(where: { $0.id == vid }) else { throw APIError.notFound("No cloned voice \(id) in this document.") }
-        guard v.deleted == nil else { return .json(["voice": voiceJSON(v)]) }
-        do { try await session.deleteVoice(vid) } catch { throw provider(error) }
-        return .json(["voice": voiceJSON(session.project.voices.first { $0.id == vid }!)])
     }
 
     private static func overdub(_ session: EditorSession, _ r: AgentAPI.Request) async throws -> Response {

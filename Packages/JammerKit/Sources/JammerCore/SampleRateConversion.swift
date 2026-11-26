@@ -17,15 +17,17 @@ public enum SampleRateConversion {
     }
 
     /// `range` of `plan` at `rate`, written as a 32-bit float WAV at `url`: what an export at another rate
-    /// than the document's is then made from. `progress` gets 0…1.
+    /// than the document's is then made from. `progress` gets 0…1. `cancelled` is asked at every block: a stop ends
+    /// it there, with CancellationError (the caller removes the half-written file).
     public static func render(_ plan: RenderPlan, range: Range<Frame>, to rate: Double, into url: URL,
-                              progress: (Double) -> Void = { _ in }) throws -> SourceRef {
+                              progress: (Double) -> Void = { _ in }, cancelled: () -> Bool = { false }) throws -> SourceRef {
         guard let factory else { throw Unavailable() }
         let stream = try factory(plan.sampleRate, rate, plan.channels)
         let writer = try WAVWriter(url: url, options: .init(encoding: .float32, channels: plan.channels, sampleRate: rate))
         let total = Double(max(1, range.count))
         var done = 0.0
         try plan.render(range) { block in
+            if cancelled() { throw CancellationError() }
             try writer.write(stream.process(Array(block)))
             done += Double(block.count / plan.channels)
             progress(done / total)

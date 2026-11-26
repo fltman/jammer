@@ -7,6 +7,7 @@ Jämmer 0.1.1 is a native macOS audio editor (speech, restoration, post). This p
 - Don't send an `Origin` header: requests that look like they come from a web page are refused.
 - Audio travels in request and response bodies. The API never reads or writes file paths.
 - Edits land in document windows the user can see, and can be undone. One `steps` request is one undo step. The source files are never changed.
+- Closing the connection stops a `transcribe`, `export` or `steps` call. The end of your sending side counts as closing it (as with most servers), so don't half-close the socket while you wait for the answer. Bytes you send after the request are ignored.
 - Times are in **seconds** (decimals allowed). Jämmer rounds them to the nearest sample; replies give both seconds and frames.
 - Steps that cost money are refused unless you pass `"allowPaid": true`. Where Jämmer doesn't know the price it also wants `"allowUnknownPrice": true`, and answers 422 with reason `unknown_price` without it. For transcription, `openai` and `berget_pianissimo` are paid. `GET /api/v1/operations` lists their pricing under `pricesByEngine`.
 
@@ -212,6 +213,8 @@ Plugins are third-party code that runs inside Jämmer. If one crashes or misbeha
 Glimmer and Flimmer call Jämmer the same way you do (see their own guides). They add `X-Sibling: <slug>`; Jämmer logs it and shows "Requested by …" in the window, and it gives no extra rights. `GET /api/v1/operations` lists every op with `params` as a JSON Schema, plus `paid`, `undoable` and `startsJob`, so an assistant can turn them into tools named `jammer.<op>`. `tier` is `"core"` for the 15 most useful ones and `"advanced"` for the rest: start from core when tools are scarce.
 
 ## Changes
+
+- 2026-11-26: `delete_voice` (`DELETE /api/v1/documents/{id}/voices/{voice}`) is gone: it answers 404 `route_gone`. Deleting a cloned voice is the person's own, in the window (Speech › Delete Cloned Voice…): it can only be made again by paying again, and deleting it protects the person whose voice it is. List the voices with `GET …/voices` and suggest which one to delete.
 
 - 2026-11-19 (0.1.1): a batch job that transcribes with a paid engine (`openai`) now needs `"allowPaid": true` and `"allowUnknownPrice": true`, as the other paid calls do. In 0.1.0 a batch ran it without them.
 - 2026-11-19: `diarize` with `"mode": "ml"` (an API call or a batch) no longer downloads the diarisation model the first time. It answers `422 model_missing` with `"requirement": "diarisation"` instead; the user downloads the model in Settings › Models, where a sheet shows its size, publisher, source and license first. `"mode": "by_track"` needs no model. New: `GET /api/v1/requirements` and `POST /api/v1/settings/open`.

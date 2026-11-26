@@ -85,13 +85,6 @@ Multichannel up to 7.1.4, ADM BWF, Ambisonics, APAC/ASAF export, binaural monito
 
 As of 2026-11-17 (`docs/IMMERSIVE.md`): built are documents in 5.1, 7.1 and 7.1.4 with fold-downs and BS.1770-5 weighting (checked against the ITU's BS.2217 files), the surround panner and its lanes, Ambisonics (AmbiX, first to third order) with an AllRAD decoder to loudspeakers and a field's turn, ADM BWF beds (checked with the EBU's renderer), binaural listening through Apple's spatial mixer with the head followed, and APAC export. Overdub is built (ElevenLabs, the user's own key, consent first), not yet tried with a real request. Not possible for a third party: ASAF authoring (no public interface). Not built: ADM objects, a turn of a whole Ambisonics bus.
 
-## Later (known, not yet done)
-
-From the review of every Stop (2026-11-26), approved for later:
-
-- **Hang-up detection in the agent API** (`AgentServer.swift`, `stopsOnHangUp`): a single 1-byte receive decides that the client went away. Extra bytes after the request turn the watch off, and a client that closes only its sending side has its export or steps stopped at once. It needs a watch that tells "closed" from "sent more".
-- **Stop during sample-rate conversion in an export** (`SampleRateConversion.render`): the conversion runs to its end before a Stop is seen. It needs a cancellation check per block.
-
 ## Deliberately out of scope
 
 Clip launcher, large instrument libraries, generative session musicians, Windows, an own Dolby Atmos renderer without an agreement, models with non-commercial licences.

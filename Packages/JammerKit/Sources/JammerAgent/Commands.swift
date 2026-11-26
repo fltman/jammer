@@ -51,6 +51,11 @@ public struct Command: Sendable, Identifiable {
         /// Reaches another app: the agent fetches the content here (export, transcript, takes) and delivers it through
         /// that app's own API (Send to Flimmer; the coordinator, 2026-11-25).
         case anotherApp
+        /// Removes paid work that can only be got back by paying again (consent and safety in SIBLINGS): a cloned voice
+        /// deleted at its provider. Deleting a voice protects the person whose voice it is, which is why it is that
+        /// person's own act in the window and never an agent's by mistake (the coordinator, 2026-11-26). The agent lists
+        /// the voices (GET …/voices) and can suggest one to delete.
+        case paidWork
         /// Opens the microphone, or decides what becomes of what it recorded: arming, recording, deleting a take and
         /// putting back an unfinished recording are the person's in the window, never an agent's (SIBLINGS §5,
         /// whatever reaches an audience or a device needs a visible choice in the window). Choosing among the takes
@@ -265,7 +270,7 @@ public enum Commands {
         add("speech.saveVoiceProfile", .speech, 1, key("voiceProfiles.menu.save"), agent: op("request_voice_profile"))
         add("speech.cloneVoice", .speech, 2, key("menu.overdub.clone"), agent: op("clone_voice"))
         add("speech.overdub", .speech, 2, key("menu.overdub"), agent: op("overdub"), contexts: [.word])
-        add("speech.deleteVoice", .speech, 2, key("menu.overdub.delete"), agent: op("delete_voice"))
+        add("speech.deleteVoice", .speech, 2, key("menu.overdub.delete"), agent: .none(.paidWork))
 
         // Transport
         add("transport.play", .transport, 0, key("transport.play"), key: "p", [.option], agent: .route("POST", doc + "/play"))

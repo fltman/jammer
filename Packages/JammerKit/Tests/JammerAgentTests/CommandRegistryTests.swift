@@ -63,7 +63,7 @@ struct CommandRegistryTests {
         // Every operation today's menus reach is still reached.
         for name in ["fade_in", "fade_out", "silence", "crop", "insert_silence", "gain", "normalize", "loudness_preset", "level_speakers", "debleed",
                      "detect_tempo", "set_layout", "duck", "limit", "restore", "spectral_attenuate", "spectral_edit", "diarize", "split_speakers",
-                     "transcribe_voice_tracks", "separate", "clone_voice", "overdub", "delete_voice", "add_marker", "set_tempo"] {
+                     "transcribe_voice_tracks", "separate", "clone_voice", "overdub", "add_marker", "set_tempo"] {
             #expect(Commands.all.contains { $0.agent == .operation(name) }, "\(name)")
         }
         // The kept list of the app's menus (Config/menus-en.txt) holds no item the registry doesn't.
@@ -118,5 +118,33 @@ struct CommandRegistryTests {
         let routes = AgentAPI.routes.filter { $0.path.hasSuffix("/recording") }
         #expect(routes.map(\.method) == ["GET"])
         #expect(WindowControls.all.first { $0.id == "clip.takes" }?.agent == .operation("set_take"), "choosing among takes is a step")
+    }
+
+    /// The sweep of the window's controls (SIBLINGS, "Agenten når allt som fönstret gör"; the coordinator,
+    /// 2026-11-26): every labeled control found is covered by a control the table lists or by a registry command,
+    /// its key still stands in its file, and none drops out (150 found; more may come).
+    @Test("Every labeled control in the window is covered, by a listed control or a command; none drops out")
+    func theWindowActionsFoundAreAllListed() throws {
+        let controls = Set(WindowControls.all.map(\.id)), commands = Set(Commands.all.map(\.id))
+        #expect(WindowControls.found.count >= 150, "a control dropped out of the table: \(WindowControls.found.count)")
+        for (control, covered) in WindowControls.found.sorted(by: { $0.key < $1.key }) {
+            #expect(controls.contains(covered) || commands.contains(covered), "\(control) → \(covered), which is neither a control nor a command")
+            let parts = control.split(separator: ":", maxSplits: 1).map(String.init)
+            let file = Self.repo.appending(path: "App/\(parts[0]).swift")
+            let text = try String(contentsOf: file, encoding: .utf8)
+            #expect(text.contains("\"\(parts[1])\""), "\(control): the key is no longer in \(parts[0]).swift")
+        }
+    }
+
+    /// Deleting a cloned voice removes paid work that can only be got back by paying again: the person's own, in
+    /// the window (the coordinator, 2026-11-26). The agent lists the voices and can suggest one; it can't delete.
+    @Test("The agent can't delete a cloned voice: no operation, the menu item the window's alone, the old call gone with a pointer to the window")
+    func deletingAVoiceIsThePersons() {
+        let every = Operations.all + Operations.endpoints
+        #expect(!every.contains { $0.name == "delete_voice" })
+        #expect(!every.contains { $0.call?.method == "DELETE" && $0.call?.path.contains("/voices/") == true })
+        #expect(Commands.all.first { $0.id == "speech.deleteVoice" }?.agent == .none(.paidWork))
+        #expect(AgentAPI.deleteVoiceGone.contains("Speech › Delete Cloned Voice"))
+        #expect(every.contains { $0.name == "list_voices" }, "the agent still sees the voices")
     }
 }

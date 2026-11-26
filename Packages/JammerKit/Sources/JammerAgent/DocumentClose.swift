@@ -8,6 +8,26 @@ extension AgentAPI {
         guard method == "POST" else { return false }
         return s == ["api", "v1", "transcribe"] || (s.count == 5 && Array(s.prefix(3)) == ["api", "v1", "documents"] && ["export", "steps"].contains(s[4]))
     }
+
+    /// What `DELETE …/voices/{voice}` answers since it went (404 `route_gone`).
+    public static let deleteVoiceGone = "Deleting a cloned voice is the user's own, in the window: Speech › Delete Cloned Voice…. It can only be made again by paying again. GET …/voices lists them; suggest which one to delete."
+
+    /// Watches a connection while its call runs, and says when the caller has gone: the connection's end, or an
+    /// error. Bytes the caller sends after its request (a pipelined request, a stray newline) are read and dropped,
+    /// and the watch goes on: before 2026-11-26 one receive decided, so any such byte ended the watch for good and
+    /// a hang-up after it went unseen. The end of the caller's sending side counts as the caller gone (TCP can't tell
+    /// it from a close until something is written; nginx's 499 takes it the same way): the guide says not to
+    /// half-close while waiting.
+    /// - Parameter receive: one read of at most a few bytes, answering (data, the end, an error).
+    public static func watchForHangUp(receive: @escaping @Sendable (@escaping @Sendable (Data?, Bool, Error?) -> Void) -> Void,
+                                      gone: @escaping @Sendable () -> Void) {
+        receive { data, isComplete, error in
+            if isComplete || error != nil { gone(); return }
+            // Something more came: dropped, and the watch goes on.
+            _ = data
+            watchForHangUp(receive: receive, gone: gone)
+        }
+    }
 }
 
 /// DELETE /api/v1/documents/{id}: File › Close for an agent (the coordinator, 2026-11-25). A document with no unsaved

@@ -34,4 +34,4 @@ While a clone or an Overdub is out, the status bar shows it with a stop button. 
 
 ## For agents
 
-`list_voices`, `clone_voice`, `overdub` and `delete_voice` work the same way. `clone_voice` needs `attest` (`own` or `owner_consent`), `adult`, where the consent sentence is said (`consent`) and the speaker's pieces (`samples`). Like every paid step, it needs `allowPaid` and `allowUnknownPrice`. An agent should never clone a voice without its owner's consent.
+`list_voices`, `clone_voice` and `overdub` work the same way. Deleting a voice is yours alone, in the window: it can only be made again by paying again, so an agent can suggest which voice to delete but can't delete it. `clone_voice` needs `attest` (`own` or `owner_consent`), `adult`, where the consent sentence is said (`consent`) and the speaker's pieces (`samples`). Like every paid step, it needs `allowPaid` and `allowUnknownPrice`. An agent should never clone a voice without its owner's consent.
