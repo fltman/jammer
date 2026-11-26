@@ -262,10 +262,12 @@ final class AutomationLanesView: NSView {
     // MARK: Drawing
 
     override func draw(_ dirtyRect: NSRect) {
+        Perf.count(rows == .strips ? "timeline.strips.draw" : "timeline.lanes.draw")
         guard let shown else { return }
         let all = lanes, list = rowList
         if rows == .strips {
-            // Rows of their own: a ground, a line between them, each strip's name, and the playhead carried on down.
+            // Rows of their own: a ground, a line between them and each strip's name (the playhead is the timeline's
+            // own layer over them, PlayheadView).
             Theme.lane.setFill()
             bounds.fill()
             for (i, row) in list.enumerated() {
@@ -274,8 +276,6 @@ final class AutomationLanesView: NSView {
                 NSRect(x: 0, y: top, width: bounds.width, height: 1).fill()
                 (row.name as NSString).draw(at: NSPoint(x: 8, y: top + 3), withAttributes: [.font: Self.nameFont, .foregroundColor: NSColor.white])
             }
-            Theme.playhead.setFill()
-            NSRect(x: viewport.x(of: Double(session.playhead)), y: 0, width: 1.5, height: bounds.height).fill()
         }
         // The focused row: a bar at its left edge, and where a first point would go when it has no lane.
         if isActive, list.indices.contains(focus) {

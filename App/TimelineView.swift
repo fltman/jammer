@@ -17,7 +17,7 @@ final class Viewport {
 }
 
 /// The timeline: Metal waveform lanes under an AppKit overlay that draws the
-/// ruler, selection, playhead and markers and handles all input.
+/// ruler, selection and markers and handles all input; the playhead is a layer of its own over both (PlayheadView).
 @MainActor
 final class TimelineView: NSView {
     static let rulerHeight: CGFloat = 26
@@ -26,6 +26,8 @@ final class TimelineView: NSView {
     let viewport = Viewport()
     private let metal: WaveformMetalView
     private let overlay: TimelineOverlay
+    /// The playhead, a layer of its own over everything: moved, never drawn (TimelineRedraw).
+    private let playheadView = PlayheadView()
 
     /// After a tool change: the handles and the pointer drawn again.
     func overlayNeedsDisplay() {
@@ -103,6 +105,15 @@ final class TimelineView: NSView {
                 v.topAnchor.constraint(equalTo: topAnchor), v.bottomAnchor.constraint(equalTo: stripLanes.topAnchor),
             ])
         }
+        // Over the waveform, the automation lanes and the strips' rows, as the line drawn in them used to be; under the
+        // overlay, which paints nothing opaque, so its handles, the drawn area and the drop line stay on top and take
+        // the clicks, as before.
+        playheadView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(playheadView, positioned: .below, relativeTo: overlay)
+        NSLayoutConstraint.activate([
+            playheadView.leadingAnchor.constraint(equalTo: leadingAnchor), playheadView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            playheadView.topAnchor.constraint(equalTo: topAnchor), playheadView.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ])
         automation.onActivate = { [weak self] in self?.stripLanes.isActive = false; self?.automation.isActive = true }
         stripLanes.onActivate = { [weak self] in
             guard let self else { return }
@@ -112,6 +123,7 @@ final class TimelineView: NSView {
         }
         overlay.onChange = { [weak self] in self?.refresh(waveform: true) }
         observe()
+        observePlayhead()
     }
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
@@ -174,12 +186,14 @@ final class TimelineView: NSView {
     /// Keeps the playhead on screen while playing, a page at a time. A page replaces the whole picture, so at most
     /// two a second, one with Reduce Motion (the flashing rule, FollowPolicy); zoomed in so far that following
     /// would need more, the view stays where it is and a steady chip says so, until it is zoomed out or playing stops.
-    private func follow() {
+    /// The page it turned, if it did; the caller draws the timeline again (once, TimelineRedraw).
+    @discardableResult
+    private func follow() -> FollowPolicy.Decision {
         // While recording the playhead moves even where nothing plays (past the end): followed the same way.
         guard session.isPlaying || session.recording != nil else {
             lastPageAt = nil
             showFollowPaused(false)
-            return
+            return .stay
         }
         let reduce = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         let now = ProcessInfo.processInfo.systemUptime
@@ -189,10 +203,10 @@ final class TimelineView: NSView {
         if case .page(let start) = decision {
             viewport.start = start
             lastPageAt = now
-            refresh(waveform: true)
         }
         let tooClose = FollowPolicy.pagesPerSecond(width: width, framesPerPoint: fpp, sampleRate: rate) > FollowPolicy.limit(reduceMotion: reduce)
         showFollowPaused(tooClose && (decision == .paused || !followChip.isHidden))
+        return decision
     }
     private var lastPageAt: Double?
 
@@ -220,26 +234,51 @@ final class TimelineView: NSView {
 
     func refresh(waveform: Bool) {
         if waveform { metal.invalidate(); spectrogram.refresh() }
+        placePlayhead()
         overlay.needsDisplay = true
         automation.invalidate()
         stripLanes.invalidate()
         sizeStripLanes()
     }
 
+    /// The project, the selection or playing changed: the timeline is drawn again (once, a page turned with it included).
     private func observe() {
         withObservationTracking {
             _ = session.version
             _ = session.selection
-            _ = session.playhead
             _ = session.isPlaying
         } onChange: { [weak self] in
             Task { @MainActor in
                 guard let self else { return }
-                self.follow()
-                self.refresh(waveform: true)
+                self.changed(.content)
                 self.observe()
             }
         }
+    }
+
+    /// Only the playhead moved (60 times a second while playing): its layer is moved; the timeline is drawn again
+    /// only when following turns a page.
+    private func observePlayhead() {
+        withObservationTracking {
+            _ = session.playhead
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                guard let self else { return }
+                self.changed(.playhead)
+                self.observePlayhead()
+            }
+        }
+    }
+
+    private func changed(_ change: TimelineRedraw.Change) {
+        let plan = TimelineRedraw.plan(change, follow: follow())
+        if plan.refreshes > 0 { refresh(waveform: true) } else if plan.movePlayhead { placePlayhead() }
+    }
+
+    /// The playhead's layer where the playhead is now (the view's VoiceOver value is asked for when it is read, so
+    /// nothing is announced as it moves).
+    private func placePlayhead() {
+        playheadView.place(x: viewport.x(of: Double(session.playhead)))
     }
 }
 
@@ -783,6 +822,7 @@ final class TimelineOverlay: NSView {
     // MARK: Drawing
 
     override func draw(_ dirtyRect: NSRect) {
+        Perf.count("timeline.overlay.draw")
         defer {
             drawArea(); if !areaMode { drawHandles() } // the drawn spectrogram area and the handles, on top
             // Where dropped files would start.
@@ -882,14 +922,7 @@ final class TimelineOverlay: NSView {
                                                        .foregroundColor: NSColor.black, .backgroundColor: Theme.marker]
             (" \(m.name) " as NSString).draw(at: NSPoint(x: x + 1, y: h + 2), withAttributes: flag)
         }
-
-        // Playhead.
-        let px = viewport.x(of: Double(session.playhead))
-        Theme.playhead.setFill()
-        NSRect(x: px, y: 0, width: 1.5, height: bounds.height).fill()
-        let tri = NSBezierPath()
-        tri.move(to: NSPoint(x: px - 5, y: 0)); tri.line(to: NSPoint(x: px + 6.5, y: 0)); tri.line(to: NSPoint(x: px + 0.75, y: 7))
-        tri.close(); tri.fill()
+        // The playhead is not drawn here: it is a layer of its own (PlayheadView), moved as it plays.
     }
 
     /// A fade as it sounds: a straight line for a linear fade, the quarter sine of an equal-power one.
@@ -1418,4 +1451,56 @@ final class ClipAXElement: NSAccessibilityElement {
 
     override func accessibilityPerformPress() -> Bool { overlay?.selectClip(clip) ?? false }
     override func accessibilityPerformShowMenu() -> Bool { overlay?.showClipMenu(clip) ?? false }
+}
+
+/// The playhead: a line down the whole timeline and a small triangle in the ruler, as layers that are moved, never
+/// drawn (TimelineRedraw: drawing the timeline again to move a line 1.5 points wide cost about a core while playing).
+/// It lies under the overlay and takes no clicks.
+@MainActor
+final class PlayheadView: NSView {
+    private let line = CALayer()
+    private let head = CAShapeLayer()
+    private var x: CGFloat = -100
+
+    init() {
+        super.init(frame: .zero)
+        wantsLayer = true
+        line.backgroundColor = Theme.playhead.cgColor
+        head.fillColor = Theme.playhead.cgColor
+        let tri = CGMutablePath()
+        tri.move(to: CGPoint(x: -5, y: 0)); tri.addLine(to: CGPoint(x: 6.5, y: 0)); tri.addLine(to: CGPoint(x: 0.75, y: -7))
+        tri.closeSubpath()
+        head.path = tri
+        for l in [line, head] { layer?.addSublayer(l) }
+        setAccessibilityElement(false)   // the timeline itself says where the playhead is
+    }
+
+    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    override var isOpaque: Bool { false }
+    override var wantsUpdateLayer: Bool { true }
+
+    override func layout() {
+        super.layout()
+        place(x: x)
+    }
+
+    override func viewDidChangeBackingProperties() {
+        super.viewDidChangeBackingProperties()
+        let scale = window?.backingScaleFactor ?? 2
+        for l in [line, head] { l.contentsScale = scale }
+    }
+
+    /// Moved to `x` points from the left, at once (no implicit animation: a gliding line would lag the sound).
+    func place(x: CGFloat) {
+        self.x = x
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        // Not flipped: y counts from the bottom, so the ruler's triangle hangs from the top edge.
+        line.frame = CGRect(x: x, y: 0, width: 1.5, height: bounds.height)
+        head.position = CGPoint(x: x, y: bounds.height)
+        CATransaction.commit()
+        Perf.count("timeline.playhead.move")
+    }
 }

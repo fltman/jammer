@@ -20,6 +20,26 @@ enum Perf {
         return try work()
     }
 
+    #if DEBUG
+    @MainActor private static var counts: [String: Int] = [:]
+    @MainActor private static var countedSince = ProcessInfo.processInfo.systemUptime
+    #endif
+
+    /// How often something happens (a view drawn, say): counted, and said in the log at most once a second while it
+    /// happens, "perf count <name> <n> in <s> s".
+    @MainActor static func count(_ name: String) {
+        #if DEBUG
+        counts[name, default: 0] += 1
+        let now = ProcessInfo.processInfo.systemUptime
+        guard now - countedSince >= 1 else { return }
+        for (what, n) in counts.sorted(by: { $0.key < $1.key }) {
+            log.notice("perf count \(what, privacy: .public) \(n) in \(now - countedSince, format: .fixed(precision: 2), privacy: .public) s")
+        }
+        counts = [:]
+        countedSince = now
+        #endif
+    }
+
     /// A step that ends somewhere else (an async job).
     struct Span: @unchecked Sendable {
         #if DEBUG
