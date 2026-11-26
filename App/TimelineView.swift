@@ -333,8 +333,10 @@ final class WaveformMetalView: MTKView, MTKViewDelegate {
         guard let (key, job) = wantedExact else { return }
         wantedExact = nil
         exactInFlight = true
+        let span = Perf.Span("waveform.exact")
         Task.detached(priority: .userInitiated) { [weak self] in
             let values = job()
+            span.end()
             await MainActor.run {
                 guard let self else { return }
                 self.exactInFlight = false
@@ -351,6 +353,8 @@ final class WaveformMetalView: MTKView, MTKViewDelegate {
     func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) { needsDisplay = true }
 
     func draw(in view: MTKView) {
+        let span = Perf.Span("waveform.draw")
+        defer { span.end() }
         guard let pipeline, let queue, let pass = currentRenderPassDescriptor, let drawable = currentDrawable else { return }
         let scale = Double(window?.backingScaleFactor ?? 2)
         let columns = max(1, Int(drawableSize.width))

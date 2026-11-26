@@ -996,6 +996,8 @@ final class EditorSession {
     @ObservationIgnored private var underrunsAtStart: Int64 = 0
 
     func play(from frame: Frame? = nil) {
+        let span = Perf.Span("play.start")
+        defer { span.end() }
         var start = frame ?? (selection?.lowerBound ?? playhead)
         // From the end, playing starts again from the start; recording there goes on from where it is.
         if start >= project.length, recording == nil { start = 0 }
@@ -1060,6 +1062,8 @@ final class EditorSession {
             let info = ref.info
             let id = ref.id
             peakProgress[id] = 0
+            let span = Perf.Span("peaks")
+            let name = ref.name
             peakTasks[id] = Task { [weak self] in
                 let index = await Task.detached(priority: .utility) { () -> PeakIndex? in
                     if let cached = PeakIndex.read(from: cacheURL), cached.frames == info.frames { return cached }
@@ -1077,6 +1081,7 @@ final class EditorSession {
                     try? built?.write(to: cacheURL)
                     return built
                 }.value
+                span.end(name)
                 guard let self else { return }
                 self.peakTasks[id] = nil
                 self.peakProgress[id] = nil

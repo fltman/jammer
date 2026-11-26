@@ -232,6 +232,8 @@ final class JammerDocument: NSDocument {
     }
 
     override func read(from fileWrapper: FileWrapper, ofType typeName: String) throws {
+        let span = Perf.Span("open.read")
+        defer { span.end(fileURL?.lastPathComponent ?? "") }
         guard typeName == UTType.jammerProject.identifier || UTType(typeName)?.conforms(to: .jammerProject) == true else {
             throw CocoaError(.fileReadUnsupportedScheme)
         }
@@ -312,6 +314,8 @@ final class JammerDocument: NSDocument {
 
     // (Not held to the main thread: an autosave calls it from its own. What it does there touches only the snapshot.)
     nonisolated override func fileWrapper(ofType typeName: String) throws -> FileWrapper {
+        let span = Perf.Span("save.write")
+        defer { span.end(Thread.isMainThread ? "save" : "autosave") }
         if !Thread.isMainThread {
             // An autosave on its own thread: from the snapshot, never from the session.
             guard let snap = snapshot else { throw CocoaError(.fileWriteUnknown) }

@@ -6,9 +6,11 @@
 # graph. with-app.sh calls it when a check ends; scripts/test-gui-warnings.sh tries it.
 set -u
 applog="$1" pid="$2" started="$3" found="$4"
+# /usr/bin/log by its path: in zsh, `log` is a builtin of its own (it lists logins), and `log show` ran that, silently
+# reading nothing from the system log until 2026-11-26.
 pattern='reentrant|reentrancy|Publishing changes from within view updates|Modifying state during view update|Unable to simultaneously satisfy constraints|Will attempt to recover by breaking constraint|Main Thread Checker|AttributeGraph: cycle detected'
 { grep -E -i "$pattern" "$applog" 2>/dev/null
-  [[ "$pid" == 0 ]] || log show --predicate "processID == $pid" --start "$started" --style compact 2>/dev/null | grep -E -i "$pattern"
+  [[ "$pid" == 0 ]] || /usr/bin/log show --predicate "processID == $pid" --start "$started" --style compact 2>/dev/null | grep -E -i "$pattern"
 } | sort -u > "$found"
 n=$(wc -l < "$found" | tr -d ' ')
 if (( n == 0 )); then
