@@ -201,6 +201,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         session.armed = [:]
         session.recorder?.disarm()
         session.recorder = nil
+        session.stopPeaks()
         closeMixer(); session.stop()
     }
 

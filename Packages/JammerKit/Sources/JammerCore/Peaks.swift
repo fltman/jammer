@@ -140,10 +140,14 @@ public final class PeakIndex: @unchecked Sendable {
         func u64(_ o: Int) -> UInt64 { d.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: o, as: UInt64.self) } }
         guard u32(0) == magic, u32(4) == 1 else { return nil }
         let channels = Int(u32(8)), frames = Int64(u64(12)), count = Int(u64(20))
-        guard channels > 0, d.count == 28 + count * 4 else { return nil }
+        // Never trusted further than it holds together: the count has to be what the frames and channels it names
+        // give (one min and max per block of 256 per channel), and every value a number. Otherwise it is built again.
+        let blocks = max(1, Int((frames + Int64(baseBlock) - 1) / Int64(baseBlock)))
+        guard (1...64).contains(channels), frames >= 0, count == blocks * channels * 2, d.count == 28 + count * 4 else { return nil }
         let level0 = d.withUnsafeBytes { raw in
             Array(UnsafeBufferPointer(start: raw.baseAddress!.advanced(by: 28).assumingMemoryBound(to: Float.self), count: count))
         }
+        guard level0.allSatisfy(\.isFinite) else { return nil }
         return PeakIndex(channels: channels, frames: frames, level0: level0)
     }
 }

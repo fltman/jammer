@@ -42,3 +42,35 @@ public enum StopChoice {
         return candidates.first { $0.kind == .otherApp }
     }
 }
+
+
+/// At most `limit` of a kind of work at once (the waveforms' peaks, 2026-11-26: eight sources built all together at a
+/// document's opening crowded each other and the main actor). The rest wait their turn, in order.
+public actor TaskLimit {
+    private let limit: Int
+    private var running = 0
+    private var waiting: [CheckedContinuation<Void, Never>] = []
+    public init(_ limit: Int) { self.limit = max(1, limit) }
+
+    public func run<T: Sendable>(_ work: @Sendable () async -> T) async -> T {
+        if running >= limit { await withCheckedContinuation { waiting.append($0) } } else { running += 1 }
+        defer { if waiting.isEmpty { running -= 1 } else { waiting.removeFirst().resume() } }
+        return await work()
+    }
+}
+
+/// Says whether enough time has passed since it last said yes: progress sent on at most so many times a second, not
+/// for every chunk of work (each one a hop to the main actor).
+public final class Throttle: @unchecked Sendable {
+    private let interval: TimeInterval
+    private let lock = NSLock()
+    private var last = Date.distantPast
+    public init(perSecond: Double) { interval = 1 / perSecond }
+    public func ready(now: Date = Date()) -> Bool {
+        lock.withLock {
+            guard now.timeIntervalSince(last) >= interval else { return false }
+            last = now
+            return true
+        }
+    }
+}

@@ -53,3 +53,91 @@ struct StopChoiceTests {
         #expect(StopChoice.pick([]) == nil)
     }
 }
+
+@Suite("Peaks built in turn, stoppable, and a cache never trusted further than it holds together")
+struct PeakWorkTests {
+    func folder() throws -> URL {
+        let d = FileManager.default.temporaryDirectory.appending(path: "jammer-peaks-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
+        return d
+    }
+
+    @Test("A cached index reads back; one whose count doesn't fit its frames, with a value that isn't a number, or cut short is built again")
+    func cacheRead() throws {
+        let dir = try folder(); defer { try? FileManager.default.removeItem(at: dir) }
+        let samples = (0..<10_000).map { Float(sin(Double($0) * 0.01)) }
+        let index = try #require(PeakIndex.build(reading: { at, n in Array(samples[Int(at)..<min(samples.count, Int(at) + n)]) }, channels: 1, frames: 10_000))
+        let good = dir.appending(path: "good.peaks")
+        try index.write(to: good)
+        #expect(PeakIndex.read(from: good)?.frames == 10_000)
+        var data = try Data(contentsOf: good)
+        // Frames that call for another count than the file holds (the header at 12…19).
+        var bad = data
+        bad.replaceSubrange(12..<20, with: withUnsafeBytes(of: UInt64(100_000).littleEndian) { Data($0) })
+        try bad.write(to: dir.appending(path: "count.peaks"))
+        #expect(PeakIndex.read(from: dir.appending(path: "count.peaks")) == nil)
+        // A value that isn't a number.
+        data.replaceSubrange(28..<32, with: withUnsafeBytes(of: Float.nan.bitPattern.littleEndian) { Data($0) })
+        try data.write(to: dir.appending(path: "nan.peaks"))
+        #expect(PeakIndex.read(from: dir.appending(path: "nan.peaks")) == nil)
+        try Data(try Data(contentsOf: good).prefix(40)).write(to: dir.appending(path: "short.peaks"))
+        #expect(PeakIndex.read(from: dir.appending(path: "short.peaks")) == nil)
+    }
+
+    @Test("The cache's key changes when the file does (its size or its date)")
+    func cacheKey() throws {
+        let dir = try folder(); defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appending(path: "a.wav")
+        let w = try WAVWriter(url: url, options: .init(encoding: .int16, channels: 1, sampleRate: 48_000))
+        try w.write([Float](repeating: 0.1, count: 4_800)); try w.finish()
+        let info = try AudioFileReader.info(at: url)
+        let before = PeakIndex.cacheKey(for: url, info: info)
+        #expect(PeakIndex.cacheKey(for: url, info: info) == before, "the same file, the same key")
+        try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSinceNow: 60)], ofItemAtPath: url.path)
+        #expect(PeakIndex.cacheKey(for: url, info: info) != before, "touched: another key")
+    }
+
+    @Test("A build stopped half way gives no index")
+    func stoppedBuild() {
+        var asked = 0
+        let index = PeakIndex.build(reading: { _, n in [Float](repeating: 0.2, count: n) }, channels: 1, frames: 48_000 * 600, progress: { _ in
+            asked += 1
+            return asked < 3
+        })
+        #expect(index == nil && asked == 3)
+    }
+
+    @Test("At most two at a time, every one run, in order of arrival")
+    func limit() async {
+        let limit = TaskLimit(2)
+        let counter = Counter2()
+        await withTaskGroup(of: Void.self) { group in
+            for _ in 0..<8 {
+                group.addTask {
+                    await limit.run {
+                        counter.enter()
+                        try? await Task.sleep(for: .milliseconds(20))
+                        counter.leave()
+                    }
+                }
+            }
+        }
+        #expect(counter.most == 2 && counter.done == 8)
+    }
+
+    @Test("Progress at most four times a second")
+    func throttle() {
+        let t = Throttle(perSecond: 4)
+        let t0 = Date()
+        let passed = (0..<1_000).filter { t.ready(now: t0.addingTimeInterval(Double($0) / 1_000)) }.count
+        #expect(passed == 4, "\(passed) in one second")
+    }
+}
+
+final class Counter2: @unchecked Sendable {
+    private let lock = NSLock()
+    private var now = 0
+    private(set) var most = 0, done = 0
+    func enter() { lock.withLock { now += 1; most = max(most, now) } }
+    func leave() { lock.withLock { now -= 1; done += 1 } }
+}

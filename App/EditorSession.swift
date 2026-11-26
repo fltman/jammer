@@ -1054,6 +1054,17 @@ final class EditorSession {
         FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appending(path: "\(Bundle.main.bundleIdentifier ?? "com.brattoo.jammer")/Peaks")
     }
 
+    /// The window is closing: its peaks that are still being built are stopped (each at its next chunk; nothing half
+    /// built is cached).
+    func stopPeaks() {
+        for task in peakTasks.values { task.cancel() }
+        peakTasks = [:]
+        peakProgress = [:]
+    }
+
+    /// The waveforms' peaks are built two sources at a time, whatever documents ask for them.
+    static let peakLimit = TaskLimit(2)
+
     private func loadPeaks() {
         for ref in project.sources where peaks[ref.id] == nil && peakTasks[ref.id] == nil {
             let url = SourcePool.resolve(ref)
@@ -1064,8 +1075,12 @@ final class EditorSession {
             peakProgress[id] = 0
             let span = Perf.Span("peaks")
             let name = ref.name
+            let report: @Sendable (Double) -> Void = { [weak self] p in Task { @MainActor in self?.peakProgress[id] = p } }
             peakTasks[id] = Task { [weak self] in
-                let index = await Task.detached(priority: .utility) { () -> PeakIndex? in
+                // Two sources at a time, stoppable (a window that closes stops its builds: Stoppable reaches the
+                // detached work, where Task.isCancelled is always false), progress at most four times a second.
+                let throttle = Throttle(perSecond: 4)
+                let index = await Self.peakLimit.run { await Stoppable.run(priority: .utility) { stopped -> PeakIndex? in
                     if let cached = PeakIndex.read(from: cacheURL), cached.frames == info.frames { return cached }
                     guard let src = AudioFileReader.openSource(info, at: url) else { return nil }
                     defer { jm_source_release(src) }
@@ -1075,12 +1090,13 @@ final class EditorSession {
                         if got < n { out.removeLast((n - got) * info.channels) }
                         return out
                     }, channels: info.channels, frames: info.frames, progress: { p in
-                        Task { @MainActor [weak self] in self?.peakProgress[id] = p }
-                        return !Task.isCancelled
+                        if throttle.ready() { report(p) }
+                        return !stopped()
                     })
-                    try? built?.write(to: cacheURL)
-                    return built
-                }.value
+                    // A build that was stopped half way is no index, and nothing is cached for it.
+                    if !stopped() { try? built?.write(to: cacheURL) }
+                    return stopped() ? nil : built
+                }.value }
                 span.end(name)
                 guard let self else { return }
                 self.peakTasks[id] = nil
