@@ -108,8 +108,9 @@ public final class Recorder: @unchecked Sendable {
         }
     }
 
-    /// Frames recorded so far.
-    public var recordedFrames: Int64 { lock.withLock { capture.map { jm_capture_frames($0) } ?? 0 } }
+    /// Frames recorded so far in this recording (the capture counts every recording since the tracks were armed).
+    public var recordedFrames: Int64 { lock.withLock { capture.map { jm_capture_frames($0) - framesBefore } ?? 0 } }
+    private var framesBefore: Int64 = 0
 
     /// Starts writing every armed track to a file of its own, `name(track)` in `folder`.
     public func record(into folder: URL, name: (UUID) -> String, freeSpace: @escaping @Sendable () -> Int64?, reserve: Int64 = 2 << 30,
@@ -120,7 +121,7 @@ public final class Recorder: @unchecked Sendable {
         let w = try CaptureWriter(capture: c, tracks: zip(arms, urls).map { .init(url: $1, channels: $0.channels) }, sampleRate: sampleRate,
                                   freeSpace: freeSpace, reserve: reserve)
         w.endedByItself = endedByItself
-        lock.withLock { writer = w; self.urls = urls }
+        lock.withLock { writer = w; self.urls = urls; framesBefore = jm_capture_frames(c) }
         w.start()
         jm_capture_set_recording(c, true)
     }

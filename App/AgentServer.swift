@@ -983,6 +983,14 @@ enum AgentRouter {
                                             "madeBy": m.label == nil ? "overdub" : "file"] as [String: Any]
                     }
                     return d
+                },
+                // Stretches recorded more than once: every take kept, one chosen (set_take plays another).
+                "takes": t.takes.map { g -> [String: Any] in
+                    ["id": g.id.uuidString, "start": seconds(s, g.start), "end": seconds(s, g.end), "chosen": g.chosen.uuidString,
+                     "takes": g.takes.sorted { $0.number < $1.number }.map { k -> [String: Any] in
+                         ["id": k.id.uuidString, "number": k.number, "source": p.source(k.sourceID)?.name ?? "?",
+                          "start": seconds(s, k.start), "end": seconds(s, k.end)]
+                     }]
                 }]
     }
 

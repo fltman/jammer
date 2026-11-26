@@ -49,6 +49,7 @@ public enum WindowControls {
         c("clip.takes", "Recording.swift", "A recorded clip's menu lists its takes; one chosen plays", op("set_take")),
         c("clip.deleteTake", "Recording.swift", "Delete Take in a recorded clip's menu", .none(.microphone)),
         c("recording.recover", "Recording.swift", "Put Back a recording that didn't finish, when its document opens", .none(.microphone)),
+        c("recording.recovered", "RecoveredRecordings.swift", "Recovered Recordings at launch: open one as a new document, or forget it", .none(.microphone)),
         // The palette, the transport and the status bar
         c("palette.tool", "ToolPalette.swift", "A tool chosen", .none(.view)),
         c("transport.playButton", "EditorWindowController.swift", "The Play and Stop button", .route("POST", doc + "/play")),

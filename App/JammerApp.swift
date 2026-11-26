@@ -112,6 +112,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Linked documents with changes that were never saved back come back from Jämmer's own journal,
         // whatever the system does with its saved windows (after it has done it).
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { LinkJournalStore.recover() }
+        // Recordings whose document isn't open once the saved windows are back (one never saved, one whose file is
+        // gone): offered in a window of their own, never an alert that holds up the launch (COMFORT).
+        RecoveredRecordings.checkAfterLaunch()
         #if JAMMER_CLAP
         // CLAP: found by a scan in a helper process, run in helper processes. A build can leave it
         // out (Config/Features.xcconfig), and releases do until it has been tried in a signed build.

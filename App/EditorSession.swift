@@ -572,13 +572,16 @@ final class EditorSession {
     func reloadAudio() { replace(with: project) }
 
     /// The document's own id, given the first time it records (the recording's journal is kept under it): not an
-    /// undo step, and never taken away by one; written with the next autosave.
+    /// undo step, and never taken away by one. The document counts as changed, so the autosave a second later
+    /// writes it, an untitled document's too, and a crash while recording finds the journal again.
     func documentIdentity() -> UUID {
         if let id = project.documentID { return id }
         var p = project
         let id = UUID()
         p.documentID = id
         replace(with: p)
+        document?.updateChangeCount(.changeDone)
+        autosaveSoon()
         return id
     }
 

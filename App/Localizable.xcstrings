@@ -26438,6 +26438,192 @@
         }
       }
     },
+    "recovered.docName": {
+      "comment": "Name of the new document with recovered takes.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recovered Recording"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Återfunnen inspelning"
+          }
+        }
+      }
+    },
+    "recovered.forget.help": {
+      "comment": "Tooltip of Forget in the window.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Don't offer it again. The files stay in the media folder."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erbjud den inte igen. Filerna finns kvar i mediemappen."
+          }
+        }
+      }
+    },
+    "recovered.nothing": {
+      "comment": "Alert: nothing could be read from the files.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "None of this recording's files could be read."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ingen av inspelningens filer gick att läsa."
+          }
+        }
+      }
+    },
+    "recovered.open": {
+      "comment": "Button: open the takes as a new document.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open in New Document"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Öppna i nytt dokument"
+          }
+        }
+      }
+    },
+    "recovered.row.saved": {
+      "comment": "A row: the document it was recorded in. %@ its file name.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recorded in %@"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inspelad i %@"
+          }
+        }
+      }
+    },
+    "recovered.row.takes": {
+      "comment": "A row: how many takes.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld take"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld takes"
+                }
+              }
+            }
+          }
+        },
+        "sv": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld tagning"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld tagningar"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "recovered.row.untitled": {
+      "comment": "A row: recorded in a document never saved.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recorded in a document that was never saved"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inspelad i ett dokument som aldrig sparades"
+          }
+        }
+      }
+    },
+    "recovered.text": {
+      "comment": "The window's explanation.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "These recordings didn't finish: Jämmer or the Mac stopped while they ran, in a document that isn't open (one never saved, or one whose file is gone). Their takes are kept up to the last second."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "De här inspelningarna blev inte klara: Jämmer eller Macen stannade medan de pågick, i ett dokument som inte är öppet (ett som aldrig sparades, eller vars fil är borta). Tagningarna finns kvar fram till sista sekunden."
+          }
+        }
+      }
+    },
+    "recovered.window": {
+      "comment": "Window title: recordings that didn't finish, found at launch.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recovered Recordings"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Återfunna inspelningar"
+          }
+        }
+      }
+    },
     "restore.amount": {
       "comment": "Label of the amount slider.",
       "extractionState": "manual",

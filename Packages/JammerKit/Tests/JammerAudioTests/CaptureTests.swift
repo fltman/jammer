@@ -158,6 +158,25 @@ struct RecorderTests {
         #expect(Recorder.deviceRequests == before, "no microphone question, no device input")
     }
 
+    @Test("Two recordings without disarming: each counts its frames from its own start (a punch's end is found in each)")
+    func secondRecordingCountsFromItsStart() throws {
+        let dir = FileManager.default.temporaryDirectory.appending(path: "jammer-rec-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let t = UUID()
+        let r = Recorder(source: .sine, deviceChannels: 1, sampleRate: 48_000)
+        try r.arm([.init(track: t, first: 0, channels: 1)])
+        defer { r.disarm() }
+        try r.record(into: dir, name: { _ in "one.wav" }, freeSpace: { .max }) { _ in }
+        Thread.sleep(forTimeInterval: 0.4)
+        let first = try #require(r.stopRecording()).takes[0].frames
+        try r.record(into: dir, name: { _ in "two.wav" }, freeSpace: { .max }) { _ in }
+        #expect(r.recordedFrames < 4_800, "the second starts from nothing, not from where the first ended")
+        Thread.sleep(forTimeInterval: 0.2)
+        let second = try #require(r.stopRecording()).takes[0].frames
+        #expect(first > 14_000 && second > 4_800 && second < first)
+    }
+
     @Test("The silence test input: a take of digital silence, and still no device")
     func silence() throws {
         let before = Recorder.deviceRequests
@@ -187,6 +206,32 @@ struct RecorderTests {
 
 @Suite("The recording's journal: found under the document's id, the takes made whole")
 struct RecordingJournalTests {
+    @Test("A crash before the document was ever saved: the journal is found among those left, and a new document gets the takes back")
+    func untitled() throws {
+        let dir = FileManager.default.temporaryDirectory.appending(path: "jammer-journal-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appending(path: "Voice 2026-11-26 10.00.00.wav")
+        do {
+            // The recording as the writer leaves it at a crash: checkpointed, then more, never finished.
+            let w = try WAVWriter(url: url, options: .init(encoding: .float32, channels: 1, sampleRate: 48_000))
+            try w.write([Float](repeating: 0.25, count: 48_000))
+            try w.checkpoint()
+            try w.write([Float](repeating: 0.25, count: 24_000))
+        }
+        // An untitled document: no path, an id no saved file carries.
+        let j = RecordingJournal(documentID: UUID(), documentPath: nil, takes: [.init(track: UUID(), path: url.path, channels: 1)],
+                                 at: 480_000, sourceStart: 1_000, length: nil, sampleRate: 48_000, started: Date(timeIntervalSince1970: 1_800_000_000))
+        try j.write(in: dir)
+        let left = RecordingJournal.all(in: dir)
+        #expect(left == [j])
+        let p = try #require(left[0].recoveredProject())
+        #expect(p.sampleRate == 48_000 && p.tracks.count == 1 && p.tracks[0].name == "Voice 2026-11-26 10.00.00")
+        let c = try #require(p.tracks[0].clips.first)
+        #expect(c.start == 0 && c.sourceStart == 1_000 && c.length == 72_000 - 1_000, "all of it, the part after the checkpoint too")
+        #expect(p.tracks[0].takes.count == 1, "kept as a take")
+    }
+
     @Test("Written, found again by the id alone, the files recovered to what goes on the timeline, removed")
     func roundTrip() throws {
         let dir = FileManager.default.temporaryDirectory.appending(path: "jammer-journal-\(UUID().uuidString)")

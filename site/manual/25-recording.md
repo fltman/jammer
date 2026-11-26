@@ -29,3 +29,5 @@ An agent can see the takes in the document and choose among them (`set_take`), b
 ## After a crash
 
 If Jämmer or the Mac stops while recording, the takes are kept up to their last second. The next time the document opens, Jämmer offers to put them back where they were recorded. This works even if the document was moved or renamed in the meantime. **Later** asks again next time; **Forget** stops asking, and the files stay in the media folder.
+
+A recording in a new document that was never saved isn't lost either. Jämmer autosaves the document as soon as it starts recording, so macOS brings it back with the rest of your windows. If the document doesn't come back, Jämmer opens a **Recovered Recordings** window after launch. It lists each recording that no open document claims. **Open in New Document** puts its takes on tracks of their own; **Forget** stops offering it.
