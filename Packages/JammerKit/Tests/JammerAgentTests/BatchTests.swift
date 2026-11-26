@@ -285,3 +285,76 @@ struct BatchTests {
         #expect(daw.data.prefix(2) == Data("PK".utf8) && daw.contentType == "application/zip")
     }
 }
+
+final class StopSwitch: @unchecked Sendable {
+    private let lock = NSLock()
+    private var on = false
+    func set() { lock.withLock { on = true } }
+    var isSet: Bool { lock.withLock { on } }
+}
+
+@Suite("A batch stopped in the middle of a file")
+struct BatchStopTests {
+    func folder() throws -> URL {
+        let d = FileManager.default.temporaryDirectory.appending(path: "jammer-batchstop-\(UUID().uuidString)").resolvingSymlinksInPath()
+        try FileManager.default.createDirectory(at: d.appending(path: "in"), withIntermediateDirectories: true)
+        return d
+    }
+    func tone(_ url: URL) throws {
+        let w = try WAVWriter(url: url, options: .init(encoding: .int24, channels: 1, sampleRate: 48_000))
+        try w.write((0..<48_000).map { Float(0.1 * sin(Double($0) * 0.05)) }); try w.finish()
+    }
+
+    @Test("Stopped after a paid transcription came back: nothing is written to the output, and the transcript, paid for, is kept beside it as charged")
+    func paidKept() async throws {
+        let dir = try folder()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let a = dir.appending(path: "in/chapter.wav")
+        try tone(a)
+        let body: [String: Any] = ["files": [a.path], "output": dir.appending(path: "out").path, "export": ["format": "wav"],
+                                   "jobs": [["op": "transcribe", "params": ["engine": "openai", "language": "sv-SE"]]], "allowPaid": true, "allowUnknownPrice": true]
+        let request = try BatchRequest.parse(body, policy: FolderPolicy(allowed: [dir]))
+        let stop = StopSwitch()
+        // The provider answered, and then the stop came.
+        let result = await BatchRunner.run(request, media: dir.appending(path: "media"), job: { _, project, _ in
+            var p = project
+            p.setTranscript(SourceTranscript(sourceID: p.sources[0].id, language: "sv-SE", engine: "openai", words: [Word(text: "betalt", start: 0, end: 4_800)]))
+            stop.set()
+            return p
+        }, cancelled: { stop.isSet })
+        #expect(result.outputs.isEmpty && !FileManager.default.fileExists(atPath: request.destination(for: a).path), "nothing written to the output")
+        let kept = try #require(result.stoppedWithPaid.first)
+        #expect(kept.file == a.path && kept.kept.contains("(stopped, charged)"))
+        #expect(try String(contentsOf: URL(fileURLWithPath: kept.kept), encoding: .utf8).contains("betalt"), "the paid words are in it")
+        #expect(result.json["stoppedWithPaid"] != nil)
+    }
+
+    @Test("Stopped during free work (a repair): nothing is written and nothing kept; the files after it aren't started")
+    func freeDropped() async throws {
+        let dir = try folder()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let a = dir.appending(path: "in/one.wav"), b = dir.appending(path: "in/two.wav")
+        try tone(a); try tone(b)
+        let body: [String: Any] = ["files": [a.path, b.path], "output": dir.appending(path: "out").path, "export": ["format": "wav"],
+                                   "jobs": [["op": "restore", "params": ["kind": "dehum"]]]]
+        let request = try BatchRequest.parse(body, policy: FolderPolicy(allowed: [dir]))
+        let stop = StopSwitch()
+        let calls = StopCount()
+        let result = await BatchRunner.run(request, media: dir.appending(path: "media"), job: { _, project, _ in
+            calls.add()
+            stop.set()
+            throw CancellationError()
+        }, cancelled: { stop.isSet })
+        #expect(result.outputs.isEmpty && result.stoppedWithPaid.isEmpty && result.failed.isEmpty, "\(result.failed)")
+        #expect(calls.value == 1, "the second file wasn't started")
+        let written = (try? FileManager.default.contentsOfDirectory(atPath: dir.appending(path: "out").path)) ?? []
+        #expect(written.isEmpty, "\(written)")
+    }
+}
+
+final class StopCount: @unchecked Sendable {
+    private let lock = NSLock()
+    private var n = 0
+    func add() { lock.withLock { n += 1 } }
+    var value: Int { lock.withLock { n } }
+}

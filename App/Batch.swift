@@ -48,10 +48,14 @@ enum BatchJobs {
             if kind == .dereverb, Restoration.dereverber == nil { throw BatchError("not_available", Said("error.batch.reverb_reduction_isn_t", "Reverb reduction isn't available in this build.")) }
             let settings = Restoration.Settings(kind: kind, amount: Float(step.params["amount"]?.double ?? Double(kind.defaultAmount)), humFrequency: step.params["humFrequency"]?.double,
                                                 sensitivity: step.params["sensitivity"]?.double ?? 1)
-            do { return try Restoration.apply(settings, to: project, pool: pool, media: MediaStore.folder).0 } catch {
-                // Nothing to repair (no hum found, say) isn't a failure for a batch.
-                return project
-            }
+            // A stop reaches the repair at its next block (free work: what it made is thrown away).
+            let stop = Stoppable.Signal()
+            let repaired = await withTaskCancellationHandler {
+                Result { try Restoration.apply(settings, to: project, pool: pool, media: MediaStore.folder) { _ in !stop.isSet }.0 }
+            } onCancel: { stop.stop() }
+            if stop.isSet { throw CancellationError() }
+            // Nothing to repair (no hum found, say) isn't a failure for a batch.
+            return (try? repaired.get()) ?? project
         case "transcribe":
             let locale = Locale(identifier: step.params["language"]?.string ?? Locale.current.identifier(.bcp47))
             guard let choice = SpeechEngines.Choice(rawValue: step.params["engine"]?.string ?? "auto") else {
@@ -68,7 +72,15 @@ enum BatchJobs {
             for src in p.sources where used.contains(src.id) {
                 // From here the audio leaves for the provider: a stop now may have been charged, and says so.
                 if let provider = choice.provider { await MainActor.run { JobRegistry.shared.notePaidBatchRequest(provider) } }
-                p.setTranscript(try await engine.transcribe(src, pool: pool, locale: locale) { _ in })
+                do {
+                    p.setTranscript(try await engine.transcribe(src, pool: pool, locale: locale) { _ in })
+                } catch let stopped as TranscriptionStopped {
+                    // Stopped with answers already in: they are paid for, so they go back with what is done; the batch
+                    // runner sees the stop and keeps them beside the output instead of writing the output.
+                    p.setTranscript(stopped.partial)
+                    return p
+                }
+                if Task.isCancelled { return p }
             }
             return p
         case "diarize":
@@ -90,7 +102,12 @@ enum BatchJobs {
         case "separate":
             let model = step.params["model"]?.string ?? "music4"
             guard Stems.isInstalled(model) else { throw BatchError("model_missing", wrapping: StemError.modelMissing) }
-            do { return try project.separatingStems(engine: try Stems.engine(model), pool: pool, media: MediaStore.folder).0 } catch let e as StemError {
+            let stop = Stoppable.Signal()
+            let separated = await withTaskCancellationHandler {
+                Result { try project.separatingStems(engine: try Stems.engine(model), pool: pool, media: MediaStore.folder) { _ in !stop.isSet }.0 }
+            } onCancel: { stop.stop() }
+            if stop.isSet { throw CancellationError() }
+            do { return try separated.get() } catch let e as StemError {
                 throw BatchError(e.reason, wrapping: e)
             }
         default:

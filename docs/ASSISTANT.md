@@ -388,3 +388,21 @@ Still not runnable with the retry: "make Erik 4 dB quieter" (a `gain` whose end 
 
 `split_speakers` (2026-11-19) joined the actions: for the on-device model only when the request names it (`onDeviceWhenNamed`: split, dela upp, own track, eget spår, …), so its list stays the 28 it was measured at; the full catalogue for other models grew to about 6 110 characters (the check is now under 6 200). The evaluation run again with it: 17/18, 21/24, 18/23, 21/29, 7/9, 12/15 and 5/10 plans right; no request planned `split_speakers`. Set 6 was 5/10 instead of 6/10 because the Swedish duck request got a question back ("Vilket spår ska jag sänka…?") instead of a wrong track: the run-to-run variation noted above, not the new action.
 
+
+## Match ACX Requirements given to the assistant (2026-11-26)
+
+`acx_match` was added to the assistant's actions. The on-device model is told about it only when the request names it ("acx", "audible", "audiobook", "ljudbok"), so its list of 28 is otherwise unchanged. The whole catalogue went from under 6 200 characters to 6 491.
+
+The seven sets were run on the on-device model twice the same day, without the action and then with it (`scripts/eval-assistant.sh`, under the model lock):
+
+| On-device, 2026-11-26 | Standard | Hold-out 1 | Hold-out 2 | Hold-out 3 | Hold-out 4 | Hold-out 5 | Hold-out 6 | All |
+|---|---|---|---|---|---|---|---|---|
+| Without `acx_match` | 13/18 | 17/24 | 20/23 | 22/29 | 8/9 | 10/15 | 4/10 | 94/128 |
+| With it | 13/18 | 17/24 | 20/23 | 22/29 | 8/9 | 10/15 | 4/10 | 94/128 |
+
+The other figures moved by one each way:
+- Hold-out 3 had 19/29 plans runnable as planned, where it had 18/29.
+- Hold-out 6 had two replies in the wrong language (replaced before the user saw them), where it had one.
+- The average time per request went from 2.9 s to 3.0 s.
+
+The standard set's 13/18 is lower than the 17/18 measured on 2026-11-16 with the same model; both runs today are, which is why the comparison is made on the same day.

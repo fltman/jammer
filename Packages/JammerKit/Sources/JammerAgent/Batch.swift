@@ -242,6 +242,13 @@ public struct BatchResult: Sendable, Equatable {
     public var compensatedDB: [Double] = []
     public var loudnessFrom: [String] = []
     public var failed: [Failure] = []
+    /// The file a stop came in the middle of, when it had a paid result already: nothing was written to the
+    /// output, and what was paid for (a transcript) was kept beside it, at `kept` (LateResults: never thrown away).
+    public struct Stopped: Sendable, Equatable {
+        public var file: String
+        public var kept: String
+    }
+    public var stoppedWithPaid: [Stopped] = []
     public var skipped: [String] = []
     /// What went in short: files that were cut off and opened with what was there.
     public var warnings: [String] = []
@@ -251,7 +258,9 @@ public struct BatchResult: Sendable, Equatable {
          "loudness": .array(loudness.map { $0.map { .number(($0 * 10).rounded() / 10) } ?? .null }), "limitedByPeak": .array(limitedByPeak.map { .bool($0) }),
          "compensatedDB": .array(compensatedDB.map { .number($0) }), "loudnessFrom": .array(loudnessFrom.map { .string($0) }),
          "warnings": .array(warnings.map { .string($0) }),
-         "failed": .array(failed.map { .string("\($0.file): \($0.reason): \($0.message)") })]
+         "failed": .array(failed.map { .string("\($0.file): \($0.reason): \($0.message)") }),
+         // Stopped in the middle of a file with a paid result already in: nothing written, the paid part kept here.
+         "stoppedWithPaid": .array(stoppedWithPaid.map { .string("\($0.file): stopped; the paid transcript kept at \($0.kept) (charged)") })]
     }
 }
 
@@ -284,11 +293,29 @@ public enum BatchRunner {
                 let results = StepRunner.run(request.steps, on: &state) { p, r in LoudnessMeter.measure(PlanCompiler.mixBlocking(p, pool: pool), r) }
                 if let f = results.first(where: { $0.status == .failed }) { throw BatchError(f.reason ?? "step_failed", f.error ?? "A step failed.") }
                 var project = state.project
+                let before = project
+                var paidRan = false
+                // Stopped part way through this file: nothing goes to the output. Free work (a repair, stems) is just
+                // dropped; a paid transcript that came back is kept beside the output, marked charged.
+                func stopHere() {
+                    if paidRan, let kept = keepPaid(project, since: before, beside: dest) { result.stoppedWithPaid.append(.init(file: input.path, kept: kept.path)) }
+                }
+                var stopped = false
                 for j in request.jobs {
                     guard let job else { throw BatchError("not_available", Said("error.batch.isn_t_available_here", "%@ isn't available here.", "\(j.op)")) }
-                    project = try await job(j, project, pool)
+                    if cancelled() { stopped = true; break }
+                    if j.isPaid { paidRan = true }
+                    do { project = try await job(j, project, pool) } catch is CancellationError { stopped = true; break }
+                    if cancelled() { stopped = true; break }
                 }
+                if stopped || cancelled() { stopHere(); break }
                 let delivery = try deliver(project, pool: pool, to: dest, request: request, media: media)
+                // Stopped while the file was written: it isn't kept (it was made after the stop).
+                if cancelled() {
+                    try? FileManager.default.removeItem(at: dest)
+                    stopHere()
+                    break
+                }
                 result.outputs.append(dest.path)
                 result.loudness.append(delivery.loudness ?? LoudnessMeter.measure(PlanCompiler.mixBlocking(project, pool: pool), 0..<project.length).integrated)
                 result.loudnessFrom.append(delivery.loudness != nil ? "file" : "mix")
@@ -301,6 +328,18 @@ public enum BatchRunner {
             progress(Double(i + 1) / Double(request.inputs.count))
         }
         return result
+    }
+
+    /// What a stopped file had paid for: its transcripts that weren't there when it was opened, as the transcript
+    /// export's JSON beside where the output would have gone, "(stopped, charged)" in its name. nil: nothing paid.
+    static func keepPaid(_ project: Project, since before: Project, beside dest: URL) -> URL? {
+        let new = project.transcripts.filter { t in !before.transcripts.contains(t) }
+        guard !new.isEmpty else { return nil }
+        var p = before
+        for t in new { p.setTranscript(t) }
+        guard let data = try? TranscriptExport.json.data(project: p) else { return nil }
+        let url = dest.deletingLastPathComponent().appending(path: FileNames.safe(dest.deletingPathExtension().lastPathComponent + " (stopped, charged) transcript", ext: "json"))
+        return (try? data.write(to: url)).map { url }
     }
 
     /// Writes the file and reads it back: a lossy encoder can change the loudness, so the

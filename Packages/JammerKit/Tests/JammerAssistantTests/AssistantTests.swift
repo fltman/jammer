@@ -62,7 +62,9 @@ struct AssistantTests {
         #expect(text.contains("- gain(db*, start, end):"))
         #expect(text.contains("kind*=dehum|declip|declick|denoise"))
         // 6 000 until split_speakers (2026-11-19) took it to about 6 110; the evaluation was run again with it.
-        #expect(text.count < 6_200)
+        // acx_match (2026-11-26) took it to 6 491: the on-device evaluation, run the same day without and with it, gave
+        // 94/128 both times (docs/ASSISTANT.md).
+        #expect(text.count < 6_550, "\(text.count)")
     }
 
     @Test("Values are typed by the registry; invalid steps are dropped, not run")
