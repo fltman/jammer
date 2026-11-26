@@ -25,8 +25,19 @@ if [[ -x "$idle" && -z "${JAMMER_IDLE_SKIP:-}" ]]; then
 fi
 # JAMMER_APP_BUNDLE: another copy of the debug app to start (e.g. one re-signed with the
 # hardened runtime, to see what a release build will refuse).
-app="${JAMMER_APP_BUNDLE:-$root/build/dd/Build/Products/Debug/Jammer.app}/Contents/MacOS/Jammer"
-[[ -x "$app" ]] || { echo "with-app: build the app first (xcodebuild … -derivedDataPath build/dd)." >&2; exit 1; }
+source_app="${JAMMER_APP_BUNDLE:-$root/build/dd/Build/Products/Debug/Jammer.app}"
+[[ -x "$source_app/Contents/MacOS/Jammer" ]] || { echo "with-app: build the app first (xcodebuild … -derivedDataPath build/dd)." >&2; exit 1; }
+# A check runs a guest copy of the build, never the plain Debug app (the series' rule): its own bundle id
+# (com.brattoo.jammer.debug.guest), so its settings, saved windows and data folder are its own, and nothing of
+# com.brattoo.jammer.debug is touched. One copy per build folder (build/test-guest/<folder>/Jammer.app), made again
+# when the build is newer (scripts/guest-copy.sh: ad hoc, the Debug build's own entitlements and nothing added).
+guest_dir="$root/build/test-guest/$(basename "${source_app%%/Build/Products/*}")"
+guest_app="$guest_dir/Jammer.app"
+if [[ ! -x "$guest_app/Contents/MacOS/Jammer" || "$source_app/Contents/MacOS/Jammer" -nt "$guest_app/Contents/MacOS/Jammer" ]]; then
+  "$root/scripts/guest-copy.sh" "$source_app" "$guest_app" >/dev/null || { echo "with-app: the guest copy couldn't be made." >&2; exit 1; }
+  rm -rf "$guest_dir"/old-*.app(N)   # the copy it replaced, its own
+fi
+app="$guest_app/Contents/MacOS/Jammer"
 # JAMMER_ARGS: extra launch arguments, e.g. "-linkAnyOpen Flimmer" (debug builds).
 # JAMMER_LOG: a file for the app's output (default: discarded).
 # JAMMER_WRAP: a command to run the app under, e.g. "sandbox-exec -f scripts/no-network.sb"
@@ -70,7 +81,7 @@ cleanup() {
   for _ in {1..20}; do kill -0 $pid 2>/dev/null || break; sleep 0.25; done
   kill -9 $pid 2>/dev/null
   wait $pid 2>/dev/null
-  [[ -n "${JAMMER_RESTORE:-}" ]] || rm -rf "${TMPDIR:-/tmp/}com.brattoo.jammer.debug.savedState"
+  [[ -n "${JAMMER_RESTORE:-}" ]] || rm -rf "${TMPDIR:-/tmp/}com.brattoo.jammer.debug.guest.savedState"
   report_warnings
 }
 # AppKit's and SwiftUI's warnings in what the test copy wrote and logged (see above): counted by kind in the report.

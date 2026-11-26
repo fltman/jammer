@@ -2,7 +2,9 @@
 # A copy of the Debug build for a visiting test (another app's session trying its round trip against
 # Jämmer): the same program under a bundle id of its own, com.brattoo.jammer.debug.guest (SIBLINGS.md §1).
 #
-#   scripts/guest-copy.sh        → prints the copy's path (build/guest/Jammer.app)
+#   scripts/guest-copy.sh                  → prints the copy's path (build/guest/Jammer.app)
+#   scripts/guest-copy.sh <src.app> <out.app>   another build, another place, both inside build/ (with-app.sh's
+#                                          test copies: build/test-guest/<the build's folder>/Jammer.app)
 #
 # Jämmer is not sandboxed, so the id alone doesn't keep a visitor out of our files. What follows the id
 # by itself: settings (the defaults domain), saved windows, caches, Keychain items (none: a guest has no
@@ -19,12 +21,13 @@
 # so a visitor can see that it is talking to the copy it started.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-SRC="$PWD/build/dd/Build/Products/Debug/Jammer.app"
-OUT="$PWD/build/guest/Jammer.app"
+SRC="${1:-$PWD/build/dd/Build/Products/Debug/Jammer.app}"
+OUT="${2:-$PWD/build/guest/Jammer.app}"
 [[ -d "$SRC" ]] || { echo "Build the app first (xcodebuild … -derivedDataPath build/dd)." >&2; exit 1; }
-[[ "$OUT" == */build/guest/Jammer.app ]] || exit 1
-mkdir -p "$PWD/build/guest"
-if [[ -d "$OUT" ]]; then mv "$OUT" "$PWD/build/guest/old-$$.app"; fi   # replaced, not deleted in place
+# Both inside this repository's build folder, and the copy named Jammer.app: nothing else is ever written over.
+[[ "$SRC" == "$PWD"/build/*/Jammer.app && "$OUT" == "$PWD"/build/*/Jammer.app ]] || { echo "guest-copy: both have to be a Jammer.app inside build/." >&2; exit 1; }
+mkdir -p "$(dirname "$OUT")"
+if [[ -d "$OUT" ]]; then mv "$OUT" "$(dirname "$OUT")/old-$$.app"; fi   # replaced, not deleted in place
 cp -R "$SRC" "$OUT"
 /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.brattoo.jammer.debug.guest" "$OUT/Contents/Info.plist"
 ENT="$PWD/build/guest/guest.entitlements"
