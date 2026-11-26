@@ -162,9 +162,13 @@ extension EditorSession {
         }
     }
 
-    /// Four times a second while recording: the punch-out, and the disk's last ten minutes said once.
+    /// Four times a second while recording: the punch-out, the disk's last ten minutes said once, and the playhead
+    /// where nothing plays.
     private func recordingTick() {
         guard let rec = recording, let r = recorder else { recordTimer?.invalidate(); recordTimer = nil; return }
+        // Past the document's end, or in a new document, there is nothing to play and playback stops at once: the
+        // playhead follows what has been recorded instead, so the take is seen to grow where it will lie.
+        if !isPlaying { playhead = rec.start + max(0, Frame(r.recordedFrames) - rec.sourceStart) }
         if let length = rec.length, r.recordedFrames >= Int64(rec.sourceStart + length + Frame(0.2 * project.sampleRate)) {
             stopRecording()
             return

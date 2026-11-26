@@ -80,6 +80,31 @@ struct FlashingTests {
         }
     }
 
+    @Test("Recording past the end, where the playhead follows the take four times a second: over ten minutes at every zoom, at most two pages a second (one with Reduce Motion), paused where that can't keep up",
+          arguments: [false, true])
+    func followsARecording(reduceMotion: Bool) {
+        let limit = reduceMotion ? 1 : 2, rate = 48_000.0
+        for width in [400.0, 1_000, 3_000] {
+            for fpp in [0.05, 1, 20, 40, 60, 500] {
+                var start = 0.0, last: Double?, pages: [Double] = [], paused = false
+                // The recording's tick: every 0.25 s the playhead jumps to what has been recorded.
+                for tick in 0..<(4 * 600) {
+                    let now = Double(tick) / 4, playhead = now * rate
+                    switch FollowPolicy.next(start: start, playhead: playhead, width: width, framesPerPoint: fpp, sampleRate: rate,
+                                             lastPage: last, now: now, reduceMotion: reduceMotion) {
+                    case .page(let s): start = s; last = now; pages.append(now)
+                    case .paused: paused = true
+                    case .stay: break
+                    }
+                }
+                #expect(mostInASecond(pages) <= limit, "width \(width), fpp \(fpp): \(mostInASecond(pages)) pages in a second")
+                if FollowPolicy.pagesPerSecond(width: width, framesPerPoint: fpp, sampleRate: rate) > Double(limit) {
+                    #expect(paused && pages.isEmpty, "width \(width), fpp \(fpp): paused at a zoom this close")
+                }
+            }
+        }
+    }
+
     /// Pages `pagesPerSecond` for 3 s; each new view's exact picture comes `delay` s after it is asked for, one at a
     /// time, the latest view only. Returns the timeline's brightness at 120 Hz: the block envelope is filled and
     /// bright, the exact line thin.

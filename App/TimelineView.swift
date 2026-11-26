@@ -175,7 +175,8 @@ final class TimelineView: NSView {
     /// two a second, one with Reduce Motion (the flashing rule, FollowPolicy); zoomed in so far that following
     /// would need more, the view stays where it is and a steady chip says so, until it is zoomed out or playing stops.
     private func follow() {
-        guard session.isPlaying else {
+        // While recording the playhead moves even where nothing plays (past the end): followed the same way.
+        guard session.isPlaying || session.recording != nil else {
             lastPageAt = nil
             showFollowPaused(false)
             return

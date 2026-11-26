@@ -11,7 +11,9 @@ root="$(cd "$(dirname "$0")/.." && pwd)"
 # A check that takes the foreground starts only when Anders isn't using the Mac (the series' rule): his
 # typing makes a check fail, and a check steals his window. Idle for 90 s or more: go. Otherwise wait
 # (JAMMER_IDLE_WAIT seconds, 600 by default) and, if he is still at it, give up with exit 76: "postponed,
-# Anders at the Mac", which is not a run against a budget. The seconds are printed beside the run.
+# Anders at the Mac", which is not a run against a budget. The seconds are printed beside the run. A locked screen
+# (after a long idle) gives exit 78, "postponed, the screen is locked", also not a try; 77 is a real failure to
+# come to the front (another app keeps it).
 idle="$root/../the-apps/tools/user-idle.sh"
 if [[ -x "$idle" && -z "${JAMMER_IDLE_SKIP:-}" ]]; then
   waited=0
@@ -94,6 +96,13 @@ done
 if [[ -z "${JAMMER_NO_FRONT:-}" ]]; then
   front="$root/build/tools/front"
   [[ -x "$front" && ! "$root/scripts/gui/front.swift" -nt "$front" ]] || { echo "with-app: build the GUI tools first, under the build lock (not this GUI lock): scripts/build-gui-tools.sh" >&2; exit 1; }
-  "$front" $pid 5 >&2 || { echo "with-app: stopped before the check: the test copy couldn't come to the front." >&2; exit 77; }
+  "$front" $pid 5 >&2
+  case $? in
+    0) ;;
+    # Locked or asleep: not a failed try. Postponed, as when Anders is at the Mac; run it again once it is unlocked
+    # (the lock and screen-saver settings are his, never changed).
+    3) echo "with-app: postponed, the screen is locked; not a try." >&2; exit 78 ;;
+    *) echo "with-app: stopped before the check: the test copy couldn't come to the front." >&2; exit 77 ;;
+  esac
 fi
 "$@"

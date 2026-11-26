@@ -1,6 +1,6 @@
 // front <pid> [seconds]: asks the app with that pid to become the frontmost app, through AppKit (no AppleScript, no
 // System Events), and waits until it is. Exit 0 when it is; 1, saying which app holds the front, when it isn't in
-// time. A GUI check calls it before its first click or key, so it stops at once with a reason instead of failing a
+// time; 3 when the Mac is locked or its screen asleep (not a failed try: the check waits for someone to unlock it). A GUI check calls it before its first click or key, so it stops at once with a reason instead of failing a
 // minute later because another app (a Terminal, a sheet elsewhere) kept the focus. Built by scripts/build-gui-tools.sh.
 import AppKit
 
@@ -19,7 +19,7 @@ while Date() < deadline {
 let holder = NSWorkspace.shared.frontmostApplication
 if holder?.bundleIdentifier == "com.apple.loginwindow" {
     print("front: the Mac is locked or its screen is asleep (loginwindow is in front): no GUI check can run until someone unlocks it.")
-    exit(1)
+    exit(3)
 }
 print("front: \(app.localizedName ?? "pid \(pid)") didn't come to the front in \(Int(limit)) s: \(holder?.localizedName ?? "another app") (pid \(holder?.processIdentifier ?? 0)) keeps it. macOS lets the app in front refuse; bring the test copy forward or leave the Mac alone, and run the check again.")
 exit(1)
