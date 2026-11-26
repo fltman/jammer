@@ -25,7 +25,6 @@ File › Collect Audio and Save
 File › Linked Files Waiting…	
 File › Batch…	⌥⌘B
 File › Storage…	
-Edit › Stop Job	
 Edit › Cut	⌘X
 Edit › Copy	⌘C
 Edit › Paste	⌘V
@@ -37,6 +36,7 @@ Edit › Find in Transcript…	⌘F
 Edit › Find Next	⌘G
 Edit › Correct Word…	
 Edit › Remove Filler Words	
+Edit › Stop Job	
 Edit › Omnibar	⌘K
 View › Show Transcript	⌥⌘T
 View › Show Assistant	⌥⌘A
@@ -82,6 +82,10 @@ Track › Mute
 Track › Solo	
 Track › Arm to Record	
 Track › Lock Track	
+Track › Duplicate Track	
+Track › Move Track Up	
+Track › Move Track Down	
+Track › Delete Track	
 Track › Layout	
 Track › Layout › Mono	
 Track › Layout › Stereo	
@@ -95,10 +99,6 @@ Track › Layout › Unmarked File: Sides First (ITU-R BS.2051)
 Track › Layout › Unmarked File: Rears First (WAV Order)	
 Track › Mixer…	⌥⌘X
 Track › Plugins…	⌥⇧⌘P
-Track › Duplicate Track	
-Track › Move Track Up	
-Track › Move Track Down	
-Track › Delete Track	
 Audio › Fade In	⌥⌘I
 Audio › Fade Out	⌥⌘O
 Audio › Silence	⇧⌘L
@@ -173,7 +173,9 @@ Transport › Listen on Headphones (Binaural)
 Transport › Follow Head Movements	
 Transport › Center Head	
 Window › Minimize	⌘M
+Window › Minimize All	⌥⌘M
 Window › Zoom	
+Window › Zoom All	
 Window › Picture…	
 Window › Bring All to Front	
 Help › Jämmer Help	⌘?

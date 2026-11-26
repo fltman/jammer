@@ -143,10 +143,10 @@ if [[ -f "$speech" && -f "$music" ]]; then
   [[ -x "$root/build/winshot" ]] && "$root/build/winshot" --pid $P --only Reading "$out/assistant.png" >/dev/null 2>&1
   echo "         playing: $(curl -s "$B/documents/$DOC" | json "print(d['document']['playing'])")"
 
-  menu menu.audio audio.dehum; sleep 4
+  menu menu.repair audio.dehum; sleep 4
   audit "Repair sheet with what it found" restore.mains
   key code 53
-  menu menu.audio audio.plugins; sleep 1.5
+  menu menu.track audio.plugins; sleep 1.5
   audit "Plugins sheet with a plugin on the track" "AULowpass"
   key code 36; key code 53
   menu menu.audio audio.duck; sleep 1
