@@ -22,6 +22,9 @@ enum RecoveredRecordings {
 
     /// After the system's saved windows: when they are restored, or a few seconds in if there were none.
     static func checkAfterLaunch() {
+        #if DEBUG
+        plantTestFixture()
+        #endif
         let token = NotificationCenter.default.addObserver(forName: NSApplication.didFinishRestoringWindowsNotification, object: nil, queue: .main) { _ in
             MainActor.assumeIsolated { DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { check() } }
         }
@@ -30,6 +33,35 @@ enum RecoveredRecordings {
             check()
         }
     }
+
+    #if DEBUG
+    /// `-testRecoveryFixture YES` (Debug only, and only in a copy with a data folder of its own: a guest, or one
+    /// given `-dataFolder`): before the check, a made-up recording as a crash leaves it, so the window can be tried
+    /// without a crash. Three seconds of a 440 Hz sine at −12 dBFS, checkpointed at two and never finished, in a
+    /// document that was never saved.
+    private static func plantTestFixture() {
+        guard UserDefaults.standard.bool(forKey: "testRecoveryFixture") else { return }
+        let ownFolder = UserDefaults.standard.string(forKey: "dataFolder")?.hasPrefix("/") == true
+            || (Bundle.main.bundleIdentifier ?? "").hasSuffix(".guest")
+        guard ownFolder else { NSLog("Jammer: -testRecoveryFixture needs a guest copy or -dataFolder; nothing planted"); return }
+        let rate = 48_000.0
+        let url = MediaStore.folder.appending(path: "Recovery fixture \(UUID().uuidString.prefix(8)).wav")
+        let sine = (0..<Int(rate)).map { Float(0.25 * sin(2 * .pi * 440 * Double($0) / rate)) }
+        do {
+            let w = try WAVWriter(url: url, options: .init(encoding: .float32, channels: 1, sampleRate: rate))
+            try w.write(sine); try w.write(sine)
+            try w.checkpoint()
+            try w.write(sine)
+            // Not finished: the header says two seconds, the file holds three, as a crash leaves it.
+        } catch {
+            NSLog("Jammer: the recovery fixture couldn't be written: %@", error.localizedDescription)
+            return
+        }
+        let journal = RecordingJournal(documentID: UUID(), documentPath: nil, takes: [.init(track: UUID(), path: url.path, channels: 1)],
+                                       at: 0, sourceStart: 0, length: nil, sampleRate: rate, started: Date())
+        try? journal.write(in: EditorSession.journalFolder)
+    }
+    #endif
 
     /// The journals left that no open document has, and none recording now.
     static func unclaimed() -> [RecordingJournal] {
