@@ -34590,6 +34590,132 @@
         }
       }
     },
+    "timeline.hidden.above": {
+      "comment": "The selection reaches tracks scrolled out of view above; a click scrolls to the nearest.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "▲ %lld track above"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "▲ %lld tracks above"
+                }
+              }
+            }
+          }
+        },
+        "sv": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "▲ %lld spår ovanför"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "▲ %lld spår ovanför"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "timeline.hidden.ax": {
+      "comment": "VoiceOver, part of the timeline's value.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "The selection also takes %lld track out of view"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "The selection also takes %lld tracks out of view"
+                }
+              }
+            }
+          }
+        },
+        "sv": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Markeringen tar också %lld spår utanför vyn"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Markeringen tar också %lld spår utanför vyn"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "timeline.hidden.below": {
+      "comment": "The selection reaches tracks scrolled out of view below; a click scrolls to the nearest.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "▼ %lld track below"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "▼ %lld tracks below"
+                }
+              }
+            }
+          }
+        },
+        "sv": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "▼ %lld spår nedanför"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "▼ %lld spår nedanför"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "timeline.reading": {
       "comment": "Drawn on a track while its waveform is read. %@ is a whole number of percent.",
       "extractionState": "manual",
@@ -34604,6 +34730,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Läser vågform… %@ %%"
+          }
+        }
+      }
+    },
+    "timeline.scroller.tracks.ax": {
+      "comment": "VoiceOver label of the vertical scroller.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tracks"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spår"
           }
         }
       }
@@ -36580,6 +36724,60 @@
           "stringUnit": {
             "state": "translated",
             "value": "Visa verktygspaletten"
+          }
+        }
+      }
+    },
+    "view.tracksFit": {
+      "comment": "Menu item and palette command: every track in view.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fit Tracks"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anpassa spår"
+          }
+        }
+      }
+    },
+    "view.tracksShorter": {
+      "comment": "Menu item and palette command.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shorter Tracks"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lägre spår"
+          }
+        }
+      }
+    },
+    "view.tracksTaller": {
+      "comment": "Menu item and palette command.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Taller Tracks"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Högre spår"
           }
         }
       }

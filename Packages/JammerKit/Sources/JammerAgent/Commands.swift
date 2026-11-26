@@ -195,6 +195,10 @@ public enum Commands {
         add("view.zoomOut", .view, 2, key("view.zoomOut"), key: "-", agent: .none(.view))
         add("view.zoomToFit", .view, 2, key("view.zoomToFit"), key: "0", agent: .none(.view))
         add("view.zoomToSelection", .view, 2, key("view.zoomToSelection"), key: "e", [.option], agent: .none(.view), contexts: [.timeline])
+        // Track height (vertical scrolling, 2026-11-26): ⌃⌘, since ⌥⌘= and ⌥⌘- are the system's Zoom (Accessibility).
+        add("view.tracksTaller", .view, 2, key("view.tracksTaller"), key: "+", [.control], agent: .none(.view))
+        add("view.tracksShorter", .view, 2, key("view.tracksShorter"), key: "-", [.control], agent: .none(.view))
+        add("view.tracksFit", .view, 2, key("view.tracksFit"), key: "0", [.control], agent: .none(.view))
         add("view.focusMode", .view, 3, key("view.focusMode"), key: "f", [.control, .shift], agent: .none(.view))
         add("view.fullScreen", .view, 3, key("view.fullScreen"), key: "f", [.control], agent: .none(.system))
 
@@ -332,5 +336,7 @@ public enum Commands {
         "⌘E": nil, "⌘F": "edit.findInTranscript", "⌘G": "edit.findNext", "⌘P": nil, "⌘.": nil, "⌘Z": "edit.undo", "⇧⌘Z": "edit.redo",
         "⌘X": "edit.cut", "⌘C": "edit.copy", "⌘V": "edit.paste", "⌘A": "edit.selectAll", "⌘N": "file.new", "⌘O": "file.open", "⌘S": "file.save",
         "⇧⌘S": "file.saveAs", "⇧⌘A": "edit.deselectAll",
+        // The system's Zoom, when it is turned on in Accessibility.
+        "⌥⌘=": nil, "⌥⌘+": nil, "⌥⌘-": nil, "⌥⌘8": nil,
     ]
 }

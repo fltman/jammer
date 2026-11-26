@@ -134,7 +134,10 @@ final class AutomationLanesView: NSView {
         return (name ?? lane.parameter ?? "", insert?.name ?? "")
     }
     /// The row an area belongs to.
-    private func row(of r: NSRect) -> Int { Int(((r.midY - topInset) / laneHeight).rounded(.down)) }
+    private func row(of r: NSRect) -> Int {
+        if rows == .tracks { return viewport.lanes.lane(atY: Double(r.midY)) ?? -1 }
+        return Int(((r.midY - topInset) / laneHeight).rounded(.down))
+    }
     /// Where a value sits in a row's height: a plugin's parameter by its own range, every other kind by its scale.
     private func height(_ value: Double, _ param: AutomationLane.Param, in r: NSRect) -> Double {
         guard param == .plugin else { return Automation.height(of: value, param) }
@@ -180,10 +183,16 @@ final class AutomationLanesView: NSView {
     }
 
     private var project: Project { session.project }
-    private var laneHeight: CGFloat { (bounds.height - topInset) / CGFloat(max(1, rowList.count)) }
+    /// The tracks' rows lie where their lanes do, scrolled (LaneLayout); the strips' rows share their own height.
+    private var laneHeight: CGFloat {
+        rows == .tracks ? CGFloat(viewport.lanes.laneHeight) : (bounds.height - topInset) / CGFloat(max(1, rowList.count))
+    }
+    private func rowTop(_ i: Int) -> CGFloat {
+        rows == .tracks ? CGFloat(viewport.lanes.laneTop(i)) : topInset + CGFloat(i) * laneHeight
+    }
     /// The part of a track's row the values are drawn in: its whole height but a margin.
     private func area(_ track: Int) -> NSRect {
-        NSRect(x: 0, y: topInset + CGFloat(track) * laneHeight + margin, width: bounds.width, height: max(1, laneHeight - 2 * margin))
+        NSRect(x: 0, y: rowTop(track) + margin, width: bounds.width, height: max(1, laneHeight - 2 * margin))
     }
     private func y(_ value: Double, _ param: AutomationLane.Param, in r: NSRect) -> CGFloat {
         r.maxY - CGFloat(height(value, param, in: r)) * r.height
@@ -264,6 +273,10 @@ final class AutomationLanesView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         Perf.count(rows == .strips ? "timeline.strips.draw" : "timeline.lanes.draw")
         guard let shown else { return }
+        // The tracks' rows: only in the lanes that are seen, cut off at the edge rows.
+        if rows == .tracks {
+            NSRect(x: 0, y: viewport.lanes.lanesTop, width: bounds.width, height: viewport.lanes.visibleHeight).clip()
+        }
         let all = lanes, list = rowList
         if rows == .strips {
             // Rows of their own: a ground, a line between them and each strip's name (the playhead is the timeline's
@@ -393,7 +406,7 @@ final class AutomationLanesView: NSView {
     static let nameFont = NSFont.systemFont(ofSize: 11, weight: .semibold)
     /// The caption has a place of its own: on a plate, on the line of the track's name and after it.
     private func drawCaption(_ text: String, track: Int, colour: NSColor) {
-        let top = topInset + CGFloat(track) * laneHeight
+        let top = rowTop(track)
         let name = (rowList[track].name as NSString).size(withAttributes: [.font: Self.nameFont]).width
         let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 10, weight: .medium), .foregroundColor: colour]
         let size = (text as NSString).size(withAttributes: attrs)
@@ -414,6 +427,7 @@ final class AutomationLanesView: NSView {
 
     private func track(atY py: CGFloat) -> Int? {
         let n = rowList.count
+        if rows == .tracks { return viewport.lanes.lane(atY: Double(py)).map { min(n - 1, $0) } }
         guard py >= topInset, n > 0 else { return nil }
         return min(n - 1, Int((py - topInset) / laneHeight))
     }

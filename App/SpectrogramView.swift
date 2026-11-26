@@ -32,7 +32,9 @@ final class SpectrogramLayerView: NSView {
         guard !isHidden, bounds.width > 10 else { return }
         let scale = window?.backingScaleFactor ?? 2
         let columns = Int(bounds.width * scale), height = Int(bounds.height * scale)
-        let key = [Double(session.version), viewport.start, viewport.framesPerPoint, Double(columns), Double(height)]
+        let lanes = viewport.lanes
+        let key = [Double(session.version), viewport.start, viewport.framesPerPoint, Double(columns), Double(height),
+                   lanes.laneHeight, lanes.scrollY, lanes.lanesTop]
         guard key != shownKey else { return }
         shownKey = key
         let p = session.project, pool = session.pool
@@ -40,10 +42,9 @@ final class SpectrogramLayerView: NSView {
         message.isHidden = span <= p.sampleRate * 600
         guard message.isHidden else { layer?.contents = nil; return }
         let start = viewport.start
-        let ruler = Int(TimelineView.rulerHeight * scale)
         task?.cancel()
         task = Task.detached(priority: .userInitiated) { [weak self] in
-            let image = Self.render(p, pool: pool, start: start, span: span, columns: columns, height: height, ruler: ruler)
+            let image = Self.render(p, pool: pool, start: start, span: span, columns: columns, height: height, lanes: lanes, scale: Double(scale))
             await MainActor.run {
                 guard let self, !Task.isCancelled, self.shownKey == key else { return }
                 self.layer?.contents = image
@@ -51,9 +52,11 @@ final class SpectrogramLayerView: NSView {
         }
     }
 
-    nonisolated static func render(_ p: Project, pool: SourcePool, start: Double, span: Double, columns: Int, height: Int, ruler: Int) -> CGImage? {
-        let lanes = max(1, p.tracks.count)
-        let laneHeight = max(1, (height - ruler) / lanes)
+    /// Only the lanes that are seen (LaneLayout), each where it is drawn, cut off at the edge rows.
+    nonisolated static func render(_ p: Project, pool: SourcePool, start: Double, span: Double, columns: Int, height: Int,
+                                   lanes layout: LaneLayout, scale: Double) -> CGImage? {
+        let laneHeight = max(1, Int(layout.laneHeight * scale))
+        let top = Int(layout.lanesTop * scale), bottom = min(height, Int(layout.lanesBottom * scale))
         let size = 2_048
         let nyquist = p.sampleRate / 2
         let fLo = 50.0, fHi = min(16_000, nyquist)
@@ -64,7 +67,8 @@ final class SpectrogramLayerView: NSView {
             let f = fLo * pow(fHi / fLo, 1 - Double(r) / Double(max(1, laneHeight - 1)))
             return min(size / 2 - 1, max(1, Int(f / binHz)))
         }
-        for t in p.tracks.indices {
+        for t in p.tracks.indices where layout.visibleLanes.contains(t) {
+            let laneY = Int(layout.laneTop(t) * scale)
             var solo = p
             solo.tracks = [p.tracks[t]]
             solo.withoutMixer()
@@ -84,10 +88,12 @@ final class SpectrogramLayerView: NSView {
                     guard at >= 0, at + size <= m.count else { continue }
                     let (re, im) = stft.forward(m.baseAddress! + at)
                     for r in 0..<laneHeight {
+                        let y = laneY + r
+                        guard y >= top, y < bottom else { continue }
                         let k = rowBin[r]
                         let mag = (re[k] * re[k] + im[k] * im[k]).squareRoot() * norm / 2
                         let db = 20 * log10(max(1e-7, Double(mag)))
-                        pixels[(ruler + t * laneHeight + r) * columns + c] = colour((db + 100) / 90)
+                        pixels[y * columns + c] = colour((db + 100) / 90)
                     }
                 }
             }

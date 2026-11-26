@@ -15,12 +15,14 @@ struct Uniforms {
     float selectionEnd;
     float offsetCols;     // the picture's column for pixel 0, and its columns per pixel (WaveformRemap)
     float scale;
+    float scroll;         // pixels the lanes are scrolled up (LaneLayout); rulerHeight is then where the lanes start
     float4 wave;
     float4 waveSelected;
     float4 background;
     float4 laneBackground;
     float4 selectionBackground;
     float4 centerLine;
+    float lanesBottom;    // pixels: below this (the bottom edge row) no lane is drawn
 };
 
 struct VOut {
@@ -39,8 +41,8 @@ fragment float4 waveform_fragment(VOut in [[stage_in]],
                                   constant float2 *columns [[buffer(1)]]) {
     float x = in.position.x;
     float y = in.position.y; // top-left origin
-    if (y < u.rulerHeight) return u.background;
-    float laneY = y - u.rulerHeight;
+    if (y < u.rulerHeight || y >= u.lanesBottom) return u.background;
+    float laneY = y - u.rulerHeight + u.scroll;
     uint lane = uint(laneY / u.laneHeight);
     if (lane >= u.lanes) return u.background;
     bool selected = u.selectionStart >= 0 && x >= u.selectionStart && x < u.selectionEnd;

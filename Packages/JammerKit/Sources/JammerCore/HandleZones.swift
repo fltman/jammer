@@ -62,6 +62,8 @@ public enum HandleZones {
         public var flagHeight: Double = 14
         /// The Trim tool: a clip's edges are grabbed over the whole height of the lane.
         public var trimAnywhere = false
+        /// Where the lanes are, when they scroll (LaneLayout): nil, they start under the ruler and nothing scrolls.
+        public var scrolling: LaneLayout?
         public init(rulerHeight: Double, laneHeight: Double, lanes: [[ClipBox]], selection: (start: Double, end: Double)?, markers: [MarkerFlag]) {
             self.rulerHeight = rulerHeight; self.laneHeight = laneHeight; self.lanes = lanes; self.selection = selection; self.markers = markers
         }
@@ -75,13 +77,19 @@ public enum HandleZones {
     /// What is under a point. The order is the priority: a fade handle over a selection edge over a clip edge.
     public static func zone(at x: Double, _ y: Double, in l: Layout) -> Zone {
         if y < l.rulerHeight { return .ruler }
-        let lane = Int((y - l.rulerHeight) / max(1, l.laneHeight))
-        guard lane >= 0, lane < l.lanes.count else { return .none }
-        let top = l.rulerHeight + Double(lane) * l.laneHeight
-        // Marker flags hang under the ruler in the first lane's top row.
-        if lane == 0, y < l.rulerHeight + 2 + l.flagHeight, let m = l.markers.first(where: { x >= $0.x - grip && x <= $0.x + $0.width }) {
+        // Marker flags hang under the ruler (in the first lane's top row, or in the top edge row while the tracks scroll).
+        if y < l.rulerHeight + 2 + l.flagHeight, let m = l.markers.first(where: { x >= $0.x - grip && x <= $0.x + $0.width }) {
             return .marker(m.id)
         }
+        let lane: Int, top: Double
+        if let s = l.scrolling {
+            guard let i = s.lane(atY: y) else { return .none }
+            lane = i; top = s.laneTop(i)
+        } else {
+            lane = Int((y - l.rulerHeight) / max(1, l.laneHeight))
+            top = l.rulerHeight + Double(lane) * l.laneHeight
+        }
+        guard lane >= 0, lane < l.lanes.count else { return .none }
         let clips = l.lanes[lane]
         // Fade handles: a square at the top of the lane where each fade ends (or at the clip's corner when it has none).
         if y < top + fadeHandle + 4 {

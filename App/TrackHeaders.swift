@@ -11,16 +11,29 @@ struct TrackHeaders: View {
     @Bindable var session: EditorSession
     let rename: (UUID) -> Void
 
+    static func layout(_ session: EditorSession, height: CGFloat) -> LaneLayout {
+        LaneLayout(tracks: session.project.tracks.count, rulerHeight: Double(TimelineView.rulerHeight),
+                   areaHeight: Double(height - TimelineView.rulerHeight), zoom: session.trackZoom, scrollY: session.trackScroll)
+    }
+
     var body: some View {
         GeometryReader { geo in
             let tracks = session.project.tracks
-            let lane = (geo.size.height - TimelineView.rulerHeight) / CGFloat(max(1, tracks.count))
+            // The lanes' own layout (LaneLayout), so a header lies beside its lane however the tracks are scrolled.
+            let l = Self.layout(session, height: geo.size.height)
+            let lane = CGFloat(l.laneHeight)
             VStack(spacing: 0) {
-                Color.clear.frame(height: TimelineView.rulerHeight)
-                ForEach(tracks) { t in
-                    TrackHeader(session: session, track: t, height: lane, stereo: session.project.channels == 2, rename: rename)
-                        .frame(height: lane)
+                Color.clear.frame(height: TimelineView.rulerHeight + CGFloat(l.edge))
+                VStack(spacing: 0) {
+                    ForEach(tracks) { t in
+                        TrackHeader(session: session, track: t, height: lane, stereo: session.project.channels == 2, rename: rename)
+                            .frame(height: lane)
+                    }
                 }
+                .offset(y: -CGFloat(l.scrollY))
+                .frame(height: CGFloat(l.visibleHeight), alignment: .top)
+                .clipped()
+                Color.clear.frame(height: CGFloat(l.edge))
             }
         }
         .frame(width: 168)
@@ -167,14 +180,19 @@ private struct TrackHeader: View {
 /// Lock, Duplicate, Move, Delete, Plugins…), named and checked as in the menu bar (COMFORT 37, 4).
 final class TrackHeaderHost: NSHostingView<TrackHeaders> {
     weak var session: EditorSession?
+    /// Scrolling over the headers scrolls the tracks, as over the lanes.
+    var onScroll: ((NSEvent) -> Void)?
+
+    override func scrollWheel(with event: NSEvent) {
+        if let onScroll { onScroll(event) } else { super.scrollWheel(with: event) }
+    }
 
     override func menu(for event: NSEvent) -> NSMenu? {
         guard let session, !session.project.tracks.isEmpty else { return nil }
         let p = convert(event.locationInWindow, from: nil)
-        // From the top (the view isn't flipped): the ruler's height, then one lane per track.
-        let y = bounds.height - p.y - TimelineView.rulerHeight
-        let lane = (bounds.height - TimelineView.rulerHeight) / CGFloat(session.project.tracks.count)
-        guard y >= 0, lane > 0, let t = session.project.tracks[safe: Int(y / lane)] else { return nil }
+        // From the top (the view isn't flipped), through the lanes' own layout.
+        let l = TrackHeaders.layout(session, height: bounds.height)
+        guard let i = l.lane(atY: Double(bounds.height - p.y)), let t = session.project.tracks[safe: i] else { return nil }
         session.currentTrack = t.id
         return CommandCenter.contextMenu(.track)
     }

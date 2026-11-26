@@ -223,6 +223,10 @@ final class EditorSession {
     var tool = "select" { didSet { if let s = SpectralTool(rawValue: tool) { spectralTool = s } } }
     /// The track last clicked in: what the Track menu acts on (view state, not part of the document).
     var currentTrack: UUID?
+    /// The track height zoom (View › Taller Tracks, Shorter Tracks, Fit Tracks) and how far the tracks are scrolled, in
+    /// points (LaneLayout): view state, never an undo step, kept per document with the panels.
+    var trackZoom: Double = 1
+    var trackScroll: Double = 0
     /// Recording (App/Recording.swift): the armed tracks and their inputs, never saved; the recording going on now.
     var armed: [UUID: Recorder.Arm] = [:]
     var recording: RecordingNow?

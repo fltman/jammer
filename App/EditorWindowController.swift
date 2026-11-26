@@ -65,6 +65,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
             self.renameTrack(nil)
         })
         headers.session = session
+        headers.onScroll = { [unowned self] event in self.timeline.firstResponderView.scrollWheel(with: event) }
         headers.translatesAutoresizingMaskIntoConstraints = false
         // Its height is the lanes', never what SwiftUI would like: with its own size constraints the column pushed
         // the timeline down and left an empty band under the transport (seen 2026-11-25).
@@ -213,6 +214,9 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
     @objc func zoomOut(_ sender: Any?) { timeline.zoom(by: 0.5) }
     @objc func zoomToFit(_ sender: Any?) { timeline.zoomToFit() }
     @objc func zoomToSelection(_ sender: Any?) { timeline.zoomToSelection() }
+    @objc func tracksTaller(_ sender: Any?) { timeline.zoomTracks(by: 1.25) }
+    @objc func tracksShorter(_ sender: Any?) { timeline.zoomTracks(by: 0.8) }
+    @objc func tracksFit(_ sender: Any?) { timeline.fitTracks() }
 
     /// Double-enders: each speaker's own recording as a track, lined up with track 1.
     @objc func importTracks(_ sender: Any?) {
@@ -1566,12 +1570,27 @@ enum PanelMemory {
         return UserDefaults.standard.object(forKey: key) as? Bool ?? fallback
     }
 
+    /// A number kept per document (the tracks' zoom and scroll), with no default across documents.
+    static func value(_ key: String, _ session: EditorSession) -> Double? {
+        guard let path = session.document?.fileURL?.path else { return nil }
+        return (UserDefaults.standard.dictionary(forKey: byDocument)?[path] as? [String: Any])?[key] as? Double
+    }
+
+    static func keep(value: Double, _ key: String, _ session: EditorSession) {
+        guard session.document?.fileURL?.path != nil else { return }
+        store(value, key, session)
+    }
+
     static func keep(_ shown: Bool, _ key: String, _ session: EditorSession) {
         UserDefaults.standard.set(shown, forKey: key)
+        store(shown, key, session)
+    }
+
+    private static func store(_ value: Any, _ key: String, _ session: EditorSession) {
         guard let path = session.document?.fileURL?.path else { return }
         var all = UserDefaults.standard.dictionary(forKey: byDocument) ?? [:]
         var mine = all[path] as? [String: Any] ?? [:]
-        mine[key] = shown
+        mine[key] = value
         mine["at"] = Date().timeIntervalSince1970
         all[path] = mine
         if all.count > 200 {

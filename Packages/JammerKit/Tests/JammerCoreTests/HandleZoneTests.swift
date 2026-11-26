@@ -31,6 +31,22 @@ struct HandleZoneTests {
         #expect(z(10, 300) == .none)
     }
 
+    @Test("Scrolled lanes: a press finds the lane drawn under it, and the edge rows and what is scrolled away grab nothing")
+    func scrolled() {
+        var l = layout
+        // Two lanes of 48 pt in 60 pt: edge rows of 14, 32 pt seen, scrolled 40 pt (lane 1's top at 24 + 14 + 48 − 40 = 46).
+        l.scrolling = LaneLayout(tracks: 2, rulerHeight: 24, areaHeight: 60, scrollY: 40)
+        l.laneHeight = 48
+        func z(_ x: Double, _ y: Double) -> HandleZones.Zone { HandleZones.zone(at: x, y, in: l) }
+        #expect(z(56, 50) == .fadeIn(clip: b))
+        #expect(z(150, 60) == .lane(1))
+        // Lane 0 is scrolled under the top edge row: its handles can't be grabbed there.
+        #expect(z(161, 30) == .none)
+        #expect(z(150, 71) == .none)
+        // Marker flags still hang under the ruler.
+        #expect(z(510, 30) == .marker(m))
+    }
+
     @Test("The hit area of a grip is at least 8 pt wide whatever is drawn; a fade handle wins over a selection edge")
     func priorities() {
         var l = layout

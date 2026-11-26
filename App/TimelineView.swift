@@ -11,6 +11,8 @@ final class Viewport {
     /// Timeline frames per point.
     var framesPerPoint: Double = 1_000
     var width: CGFloat = 800
+    /// Where the tracks' lanes lie, scrolled (LaneLayout; the timeline keeps it current).
+    var lanes = LaneLayout(tracks: 0, rulerHeight: 26, areaHeight: 0)
 
     func frame(atX x: CGFloat) -> Double { start + Double(x) * framesPerPoint }
     func x(of frame: Double) -> CGFloat { CGFloat((frame - start) / framesPerPoint) }
@@ -122,8 +124,11 @@ final class TimelineView: NSView {
             window?.makeFirstResponder(overlay)   // the keys stay the timeline's, which offers them to the lanes
         }
         overlay.onChange = { [weak self] in self?.refresh(waveform: true) }
+        session.trackZoom = PanelMemory.value("tracks.zoom", session) ?? 1
+        session.trackScroll = PanelMemory.value("tracks.scroll", session) ?? 0
         observe()
         observePlayhead()
+        observeCurrentTrack()
     }
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
@@ -134,6 +139,7 @@ final class TimelineView: NSView {
 
     override func layout() {
         super.layout()
+        updateLanes()
         let wasUnset = viewport.width < 10 || viewport.width == 800
         viewport.width = bounds.width
         if wasUnset { zoomToFit() } else { refresh(waveform: true) }
@@ -233,6 +239,7 @@ final class TimelineView: NSView {
     }
 
     func refresh(waveform: Bool) {
+        updateLanes()
         if waveform { metal.invalidate(); spectrogram.refresh() }
         placePlayhead()
         overlay.needsDisplay = true
@@ -247,6 +254,8 @@ final class TimelineView: NSView {
             _ = session.version
             _ = session.selection
             _ = session.isPlaying
+            _ = session.trackZoom
+            _ = session.trackScroll
         } onChange: { [weak self] in
             Task { @MainActor in
                 guard let self else { return }
@@ -271,8 +280,143 @@ final class TimelineView: NSView {
     }
 
     private func changed(_ change: TimelineRedraw.Change) {
+        if change == .content { revealNewTracks() }
         let plan = TimelineRedraw.plan(change, follow: follow())
         if plan.refreshes > 0 { refresh(waveform: true) } else if plan.movePlayhead { placePlayhead() }
+    }
+
+    // MARK: Tracks scrolled in height
+
+    /// The lanes laid out for the tracks' area as it is now, the zoom and scroll the session keeps; a scroll past the
+    /// end (the window grew, a track went) is brought back.
+    private func updateLanes() {
+        let l = LaneLayout(tracks: session.project.tracks.count, rulerHeight: Double(Self.rulerHeight),
+                           areaHeight: Double(overlay.bounds.height - Self.rulerHeight), zoom: session.trackZoom, scrollY: session.trackScroll)
+        viewport.lanes = l
+        if overlay.bounds.height > Self.rulerHeight, l.scrollY != session.trackScroll { session.trackScroll = l.scrollY }
+        updateTrackScroller()
+    }
+
+    /// The tracks scrolled by `dy` points (a vertical swipe or wheel: always the tracks, nothing when they fit).
+    func scrollTracks(by dy: Double) {
+        set(viewport.lanes.scrolled(by: dy))
+    }
+
+    /// Track height ×`factor` (⌃⌘+ ⌃⌘−, ⌥-wheel), the lane under `anchorY` staying where it is.
+    func zoomTracks(by factor: Double, anchorY: CGFloat? = nil) {
+        set(viewport.lanes.zoomed(by: factor, anchorY: anchorY.map(Double.init)))
+    }
+
+    /// Every track in view when they can be (⌃⌘0).
+    func fitTracks() { set(viewport.lanes.fitted()) }
+
+    /// Track `i` brought into view: at once, or with a short glide when Reduce Motion is off and `animated`.
+    func revealTrack(_ i: Int, animated: Bool = false) {
+        let target = viewport.lanes.revealing(i)
+        guard target.scrollY != viewport.lanes.scrollY else { return }
+        guard animated, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else { set(target); return }
+        glide?.invalidate()
+        let from = viewport.lanes.scrollY, to = target.scrollY
+        var step = 0
+        glide = Timer.scheduledTimer(withTimeInterval: 1.0 / 60, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                step += 1
+                let k = min(1, Double(step) / 12), eased = k * k * (3 - 2 * k)
+                self.set(self.viewport.lanes.scrolled(to: from + (to - from) * eased))
+                if k >= 1 { self.glide?.invalidate(); self.glide = nil }
+            }
+        }
+    }
+    private var glide: Timer?
+
+    private func set(_ l: LaneLayout) {
+        guard l.zoom != session.trackZoom || l.scrollY != session.trackScroll else { return }
+        session.trackZoom = l.zoom
+        session.trackScroll = l.scrollY
+        keepTrackView()
+    }
+
+    /// The track view kept per document, like the panels: written once the scrolling has settled.
+    private func keepTrackView() {
+        keepTask?.cancel()
+        keepTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(600))
+            guard let self, !Task.isCancelled else { return }
+            PanelMemory.keep(value: self.session.trackZoom, "tracks.zoom", self.session)
+            PanelMemory.keep(value: self.session.trackScroll, "tracks.scroll", self.session)
+        }
+    }
+    private var keepTask: Task<Void, Never>?
+
+    /// The selected track (a click, Tab, ↑↓ among the headers, the agent's select_track) is brought into view.
+    private func observeCurrentTrack() {
+        withObservationTracking {
+            _ = session.currentTrack
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                guard let self else { return }
+                if let id = self.session.currentTrack, let i = self.session.project.tracks.firstIndex(where: { $0.id == id }) {
+                    self.updateLanes()
+                    self.revealTrack(i)
+                }
+                self.observeCurrentTrack()
+            }
+        }
+    }
+
+    /// A track added (at the bottom, or anywhere) is brought into view; the tracks a document opens with are not.
+    private func revealNewTracks() {
+        let ids = session.project.tracks.map(\.id)
+        defer { knownTracks = Set(ids) }
+        guard !knownTracks.isEmpty else { return }
+        if let i = ids.lastIndex(where: { !knownTracks.contains($0) }) {
+            updateLanes()
+            revealTrack(i)
+        }
+    }
+    private var knownTracks: Set<UUID> = []
+
+    /// The tracks the selection reaches into (those with a clip in it), by index.
+    var tracksInSelection: [Int] {
+        guard let sel = session.selection else { return [] }
+        return session.project.tracks.indices.filter { t in session.project.tracks[t].clips.contains { $0.start < sel.upperBound && $0.end > sel.lowerBound } }
+    }
+
+    // MARK: The tracks' scroller
+
+    private lazy var trackScroller: NSScroller = {
+        let s = NSScroller(frame: .zero)
+        s.scrollerStyle = NSScroller.preferredScrollerStyle
+        s.knobStyle = .light
+        s.target = self
+        s.action = #selector(trackScrollerMoved(_:))
+        s.isHidden = true
+        s.setAccessibilityLabel(L10n.text("timeline.scroller.tracks.ax"))
+        addSubview(s, positioned: .above, relativeTo: overlay)
+        return s
+    }()
+
+    /// Shown only while the tracks scroll, over the right edge of the lanes they scroll in.
+    private func updateTrackScroller() {
+        let l = viewport.lanes
+        trackScroller.isHidden = !l.overflows
+        guard l.overflows else { return }
+        let w = NSScroller.scrollerWidth(for: .regular, scrollerStyle: trackScroller.scrollerStyle)
+        // The overlay is flipped and fills the timeline's width; this view isn't flipped.
+        let inOverlay = NSRect(x: overlay.bounds.width - w, y: l.lanesTop, width: w, height: l.visibleHeight)
+        trackScroller.frame = overlay.convert(inOverlay, to: self)
+        trackScroller.knobProportion = CGFloat(l.visibleHeight / max(1, l.contentHeight))
+        trackScroller.doubleValue = l.maxScroll > 0 ? l.scrollY / l.maxScroll : 0
+    }
+
+    @objc private func trackScrollerMoved(_ s: NSScroller) {
+        let l = viewport.lanes
+        switch s.hitPart {
+        case .decrementPage: scrollTracks(by: -l.visibleHeight * 0.9)
+        case .incrementPage: scrollTracks(by: l.visibleHeight * 0.9)
+        default: set(l.scrolled(to: s.doubleValue * l.maxScroll))
+        }
     }
 
     /// The playhead's layer where the playhead is now (the view's VoiceOver value is asked for when it is read, so
@@ -297,13 +441,15 @@ final class WaveformMetalView: MTKView, MTKViewDelegate {
         var selectionEnd: Float
         /// The picture's column for pixel 0, and its columns per pixel (WaveformRemap): the same layout as before
         /// (they took two of the padding floats).
-        var offsetCols: Float = 0, scale: Float = 1, pad2: Float = 0
+        var offsetCols: Float = 0, scale: Float = 1, scroll: Float = 0
         var wave: SIMD4<Float>
         var waveSelected: SIMD4<Float>
         var background: SIMD4<Float>
         var laneBackground: SIMD4<Float>
         var selectionBackground: SIMD4<Float>
         var centerLine: SIMD4<Float>
+        /// Below this, in pixels, no lane is drawn (the bottom edge row while the tracks scroll).
+        var lanesBottom: Float
     }
 
     private let session: EditorSession
@@ -438,8 +584,10 @@ final class WaveformMetalView: MTKView, MTKViewDelegate {
             let s = c.usingColorSpace(.sRGB) ?? c
             return SIMD4(Float(s.redComponent), Float(s.greenComponent), Float(s.blueComponent), Float(a ?? s.alphaComponent))
         }
-        let ruler = Float(TimelineView.rulerHeight * CGFloat(scale))
-        let laneHeight = (Float(drawableSize.height) - ruler) / Float(lanes)
+        // Where the lanes are seen, scrolled (LaneLayout): from under the ruler and the top edge row to the bottom one.
+        let layout = viewport.lanes
+        let ruler = Float(layout.lanesTop * scale)
+        let laneHeight = Float(layout.laneHeight * scale)
         var selStart: Float = -1, selEnd: Float = -1
         if let sel = session.selection {
             selStart = Float(viewport.x(of: Double(sel.lowerBound)) * CGFloat(scale))
@@ -451,7 +599,8 @@ final class WaveformMetalView: MTKView, MTKViewDelegate {
                          selectionStart: selStart, selectionEnd: selEnd, offsetCols: map.offset, scale: map.scale,
                          wave: rgba(Theme.neon, 0.92), waveSelected: rgba(.white, 0.95), background: rgba(Theme.ink),
                          laneBackground: rgba(Theme.lane), selectionBackground: rgba(Theme.neon, 1) * SIMD4(0.22, 0.22, 0.22, 1),
-                         centerLine: rgba(.white, 0.12))
+                         centerLine: rgba(.white, 0.12), lanesBottom: Float(layout.lanesBottom * scale))
+        u.scroll = Float(layout.scrollY * scale)
         guard let cmd = queue.makeCommandBuffer(), let enc = cmd.makeRenderCommandEncoder(descriptor: pass) else { return }
         enc.setRenderPipelineState(pipeline)
         enc.setFragmentBytes(&u, length: MemoryLayout<Uniforms>.stride, index: 0)
@@ -548,7 +697,7 @@ final class TimelineOverlay: NSView {
     /// track, where they are drawn; press selects one, Show Menu gives its menu (COMFORT 37, the coordinator's note).
     override func accessibilityChildren() -> [Any]? {
         var out: [ClipAXElement] = []
-        for (t, track) in project.tracks.enumerated() {
+        for (t, track) in project.tracks.enumerated() where viewport.lanes.visibleLanes.contains(t) {
             for c in track.clips {
                 let x0 = viewport.x(of: Double(c.start)), x1 = viewport.x(of: Double(c.end))
                 guard x1 > 0, x0 < bounds.width else { continue }
@@ -598,6 +747,10 @@ final class TimelineOverlay: NSView {
             text += ", " + L10n.text("timeline.ax.selection", formatTime(p.seconds(sel.lowerBound)), formatTime(p.seconds(sel.upperBound)))
         }
         if p.tracks.count > 1 { text += ", " + L10n.count("import.tracks", p.tracks.count) }
+        if let timeline {
+            let h = viewport.lanes.hidden(timeline.tracksInSelection)
+            if h.above.count + h.below.count > 0 { text += ", " + L10n.count("timeline.hidden.ax", h.above.count + h.below.count) }
+        }
         if areaMode, let a = session.spectralArea { text += ", " + L10n.text("timeline.ax.area", L10n.message(a.shape.summarySaid.keyed)) }
         return text
     }
@@ -643,7 +796,9 @@ final class TimelineOverlay: NSView {
         let flags = project.markers.map { m in
             HandleZones.MarkerFlag(id: m.id, x: x(m.position), width: Double((" \(m.name) " as NSString).size(withAttributes: flagAttributes).width) + 1)
         }
-        return HandleZones.Layout(rulerHeight: Double(TimelineView.rulerHeight), laneHeight: Double(laneHeight), lanes: lanes, selection: sel, markers: flags)
+        var layout = HandleZones.Layout(rulerHeight: Double(TimelineView.rulerHeight), laneHeight: Double(laneHeight), lanes: lanes, selection: sel, markers: flags)
+        layout.scrolling = viewport.lanes
+        return layout
     }
 
     private func zone(at p: NSPoint) -> HandleZones.Zone {
@@ -743,7 +898,10 @@ final class TimelineOverlay: NSView {
         autoscroll = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self, let p = self.lastDragPoint else { return }
-                if p.x > self.bounds.width - 4 { self.timeline?.scroll(byPoints: 12) } else if p.x < 4 { self.timeline?.scroll(byPoints: -12) } else { self.stopScrolling(); return }
+                var moved = false
+                if p.x > self.bounds.width - 4 { self.timeline?.scroll(byPoints: 12); moved = true } else if p.x < 4 { self.timeline?.scroll(byPoints: -12); moved = true }
+                if let dy = self.verticalAutoscroll(at: p) { self.timeline?.scrollTracks(by: dy); moved = true }
+                guard moved else { self.stopScrolling(); return }
                 if let e = self.laneDragEvent, self.timeline?.automation.mouseDragged(e, at: p) == true { return }
                 self.drag(to: p, event: nil)
             }
@@ -755,9 +913,19 @@ final class TimelineOverlay: NSView {
     private var laneDragEvent: NSEvent?
 
     /// A handle or the selection followed to `p` (from mouseDragged, or the autoscroll timer with no event).
+    /// Held at the top or bottom of the tracks while they scroll, a drag that ranges over tracks (the selection, the Zoom
+    /// tool's range) scrolls them; drags that are a lane's own (a handle, a point, the Gain tool, a drawn area) don't.
+    private func verticalAutoscroll(at p: NSPoint) -> Double? {
+        let l = viewport.lanes
+        guard l.overflows, handleDrag == nil, gainDrag == nil, handDrag == nil, laneDragEvent == nil, drawing == nil else { return nil }
+        if p.y < l.lanesTop + 4 { return -12 }
+        if p.y > l.lanesBottom - 4 { return 12 }
+        return nil
+    }
+
     private func drag(to p: NSPoint, event: NSEvent?) {
         lastDragPoint = p
-        if p.x > bounds.width - 4 || p.x < 4 { keepScrolling() }
+        if p.x > bounds.width - 4 || p.x < 4 || verticalAutoscroll(at: p) != nil { keepScrolling() }
         let f = frame(at: p)
         if let h = handleDrag {
             let c: (Clip, Int)? = {
@@ -824,7 +992,11 @@ final class TimelineOverlay: NSView {
     override func draw(_ dirtyRect: NSRect) {
         Perf.count("timeline.overlay.draw")
         defer {
-            drawArea(); if !areaMode { drawHandles() } // the drawn spectrogram area and the handles, on top
+            // The drawn spectrogram area and the handles, on top, in the lanes that are seen.
+            NSGraphicsContext.saveGraphicsState()
+            NSRect(x: 0, y: viewport.lanes.lanesTop, width: bounds.width, height: viewport.lanes.visibleHeight).clip()
+            drawArea(); if !areaMode { drawHandles() }
+            NSGraphicsContext.restoreGraphicsState()
             // Where dropped files would start.
             if let x = dropX { Theme.neon.setFill(); NSRect(x: x - 1, y: 0, width: 2, height: bounds.height).fill() }
         }
@@ -862,11 +1034,13 @@ final class TimelineOverlay: NSView {
         NSColor(white: 1, alpha: 0.12).setFill()
         NSRect(x: 0, y: h - 1, width: bounds.width, height: 1).fill()
 
-        // Clip edges and track names.
-        let lanes = max(1, project.tracks.count)
-        let laneHeight = (bounds.height - h) / CGFloat(lanes)
-        for (i, track) in project.tracks.enumerated() {
-            let y = h + CGFloat(i) * laneHeight
+        // Clip edges and track names, in the lanes that are seen (LaneLayout), cut off at the edge rows.
+        let layout = viewport.lanes
+        let laneHeight = CGFloat(layout.laneHeight)
+        NSGraphicsContext.saveGraphicsState()
+        NSRect(x: 0, y: layout.lanesTop, width: bounds.width, height: layout.visibleHeight).clip()
+        for (i, track) in project.tracks.enumerated() where layout.visibleLanes.contains(i) {
+            let y = CGFloat(layout.laneTop(i))
             for c in track.clips {
                 for edge in [c.start, c.end] {
                     let x = viewport.x(of: Double(edge))
@@ -895,6 +1069,8 @@ final class TimelineOverlay: NSView {
                 (L10n.text("timeline.reading", String(Int(p * 100))) as NSString).draw(at: NSPoint(x: 8, y: y + 24), withAttributes: nameAttrs)
             }
         }
+        NSGraphicsContext.restoreGraphicsState()
+        drawHiddenTracks()
 
         // Selection edges.
         if let sel = session.selection {
@@ -924,6 +1100,29 @@ final class TimelineOverlay: NSView {
         }
         // The playhead is not drawn here: it is a layer of its own (PlayheadView), moved as it plays.
     }
+
+    /// The hidden tracks' mark, in the bottom edge row while the tracks scroll (a row of its own: it never lies over a
+    /// lane, a handle or a point): how many tracks out of view, above and below, the selection reaches into. Steady,
+    /// no motion; a click goes to the nearest.
+    private func drawHiddenTracks() {
+        hiddenMarks = []
+        let l = viewport.lanes
+        guard l.overflows, let timeline else { return }
+        let h = l.hidden(timeline.tracksInSelection)
+        let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 10, weight: .medium), .foregroundColor: Theme.neon]
+        var right = bounds.width - 6 - NSScroller.scrollerWidth(for: .regular, scrollerStyle: NSScroller.preferredScrollerStyle)
+        for (text, track) in [(h.below.isEmpty ? nil : L10n.count("timeline.hidden.below", h.below.count), h.below.first),
+                              (h.above.isEmpty ? nil : L10n.count("timeline.hidden.above", h.above.count), h.above.last)] {
+            guard let text, let track else { continue }
+            let size = (text as NSString).size(withAttributes: attrs)
+            let rect = NSRect(x: right - size.width - 8, y: l.lanesBottom, width: size.width + 8, height: l.edge)
+            (text as NSString).draw(at: NSPoint(x: rect.minX + 4, y: rect.midY - size.height / 2), withAttributes: attrs)
+            hiddenMarks.append((rect, track))
+            right = rect.minX - 8
+        }
+    }
+    /// Where the mark's parts are drawn, and the track each goes to.
+    private var hiddenMarks: [(rect: NSRect, track: Int)] = []
 
     /// A fade as it sounds: a straight line for a linear fade, the quarter sine of an equal-power one.
     private func drawFade(from a: Frame, to b: Frame, rising: Bool, y: CGFloat, height: CGFloat, shape: FadeShape = .linear, colour: NSColor = NSColor(white: 1, alpha: 0.55)) {
@@ -1038,8 +1237,8 @@ final class TimelineOverlay: NSView {
 
     static let fLo = 50.0
     var fHi: Double { min(16_000, project.sampleRate / 2) }
-    private var laneHeight: CGFloat { (bounds.height - TimelineView.rulerHeight) / CGFloat(max(1, project.tracks.count)) }
-    private func laneTop(_ i: Int) -> CGFloat { TimelineView.rulerHeight + CGFloat(i) * laneHeight }
+    private var laneHeight: CGFloat { CGFloat(viewport.lanes.laneHeight) }
+    private func laneTop(_ i: Int) -> CGFloat { CGFloat(viewport.lanes.laneTop(i)) }
     /// Frequency at a height in a lane, on the spectrogram's log scale (top is high).
     private func hz(atY y: CGFloat, lane: Int) -> Double {
         let r = Double(min(max(0, y - laneTop(lane)), laneHeight - 1)) / Double(max(1, laneHeight - 1))
@@ -1106,6 +1305,10 @@ final class TimelineOverlay: NSView {
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
         let p = convert(event.locationInWindow, from: nil)
+        // The hidden tracks' mark: to the nearest track it counts.
+        if let hit = hiddenMarks.first(where: { $0.rect.contains(p) }) { timeline?.revealTrack(hit.track, animated: true); return }
+        // The edge rows are no lane (the marker flags in the top one are found by the zones below).
+        if viewport.lanes.overflows, p.y >= viewport.lanes.lanesBottom { return }
         // A click on an automation point (or ⌥-click in a lane) is the lane's; everything else is the timeline's as before.
         if !areaMode, timeline?.automation.mouseDown(event, at: p) == true { dragAnchor = nil; return }
         let f = frame(at: p)
@@ -1286,19 +1489,31 @@ final class TimelineOverlay: NSView {
         }
     }
 
-    private func laneIndex(at y: CGFloat) -> Int {
-        let lanes = max(1, project.tracks.count)
-        return Int((y - TimelineView.rulerHeight) / ((bounds.height - TimelineView.rulerHeight) / CGFloat(lanes)))
-    }
+    private func laneIndex(at y: CGFloat) -> Int { viewport.lanes.lane(atY: Double(y)) ?? -1 }
 
     override func scrollWheel(with event: NSEvent) {
         let p = convert(event.locationInWindow, from: nil)
-        if event.modifierFlags.contains(.command) || event.modifierFlags.contains(.option) {
+        if event.modifierFlags.contains(.option) {
+            // Track height, the lane under the pointer staying where it is.
+            timeline?.zoomTracks(by: pow(1.01, Double(event.scrollingDeltaY)), anchorY: p.y)
+            return
+        }
+        if event.modifierFlags.contains(.command) {
             timeline?.zoom(by: pow(1.01, Double(event.scrollingDeltaY)), around: p.x)
             return
         }
-        let dx = abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY) ? event.scrollingDeltaX : event.scrollingDeltaY
-        timeline?.scroll(byPoints: -dx * (event.hasPreciseScrollingDeltas ? 1 : 10))
+        let unit: CGFloat = event.hasPreciseScrollingDeltas ? 1 : 10
+        // Always the same meaning (the coordinator, 2026-11-26): up and down move the tracks (nothing when they fit),
+        // sideways and ⇧ with a wheel move time.
+        if event.modifierFlags.contains(.shift), !event.hasPreciseScrollingDeltas {
+            timeline?.scroll(byPoints: -(event.scrollingDeltaY != 0 ? event.scrollingDeltaY : event.scrollingDeltaX) * unit)
+            return
+        }
+        if abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY) {
+            timeline?.scroll(byPoints: -event.scrollingDeltaX * unit)
+        } else if event.scrollingDeltaY != 0 {
+            timeline?.scrollTracks(by: -Double(event.scrollingDeltaY * unit))
+        }
     }
 
     override func magnify(with event: NSEvent) {
