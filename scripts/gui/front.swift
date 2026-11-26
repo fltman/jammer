@@ -5,7 +5,18 @@
 import AppKit
 
 let args = CommandLine.arguments
-guard args.count >= 2, let pid = pid_t(args[1]) else { print("usage: front <pid> [seconds]"); exit(2) }
+// front --wait-unlocked <seconds>: waits until the Mac isn't locked (loginwindow not in front), outside any GUI lock,
+// so a check can queue for the screen without holding it. Exit 0 when unlocked, 3 when still locked at the end.
+if args.count >= 2, args[1] == "--wait-unlocked" {
+    let until = Date().addingTimeInterval(args.count > 2 ? Double(args[2]) ?? 3600 : 3600)
+    while NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.apple.loginwindow" {
+        if Date() > until { print("front: still locked"); exit(3) }
+        RunLoop.current.run(until: Date().addingTimeInterval(5))
+    }
+    print("front: unlocked")
+    exit(0)
+}
+guard args.count >= 2, let pid = pid_t(args[1]) else { print("usage: front <pid> [seconds] | front --wait-unlocked <seconds>"); exit(2) }
 let limit = args.count > 2 ? Double(args[2]) ?? 5 : 5
 guard let app = NSRunningApplication(processIdentifier: pid) else { print("front: no app with pid \(pid)"); exit(1) }
 let deadline = Date().addingTimeInterval(limit)
