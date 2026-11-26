@@ -406,3 +406,37 @@ The other figures moved by one each way:
 - The average time per request went from 2.9 s to 3.0 s.
 
 The standard set's 13/18 is lower than the 17/18 measured on 2026-11-16 with the same model; both runs today are, which is why the comparison is made on the same day.
+
+## Why the standard set fell to 13/18, and the fix (2026-11-26)
+
+The standard set gave 13/18 on 2026-11-26, against 17/18 on 2026-11-19. To tell the code from the model, the commit measured then (d84d6ae) was built in a worktree of its own and evaluated on today's on-device model (macOS 27.2.1, 26B131, the same as then). It gave 17/18 three times out of three, so it is the code.
+
+Only three lines of what the on-device model is shown for these requests had changed:
+- **`transcribe`'s engine list** gained `pianissimo` and `berget_pianissimo` (86d0f4b, 2026-11-21). The paid one should never have been offered: the filter left out only `openai`.
+- **`transcribe`'s description** became "as a job and applies the transcript in one undo step" (the same commit).
+- **`remove_marker`** gained a marker id beside the name, so `name` was no longer required (1865d97, 2026-11-25). The assistant is never shown marker ids.
+
+Measured on the standard set:
+
+| Code | Standard set (runs) |
+|---|---|
+| d84d6ae (2026-11-19) | 17, 17, 17 |
+| 86d0f4b (the transcribe lines) | 16 |
+| Before the fix | 13, 13 |
+| `remove_marker` by name, paid engines out, the old description | 15, 17, 15, 15 |
+| The same, and `pianissimo` not offered | 17, 17 |
+
+The model is not fully repeatable: the same code moved by two on the standard set once, so each comparison was run more than once.
+
+The fix is in the assistant's view only; agents keep the new forms:
+- `remove_marker` is offered by name, as it was evaluated.
+- `transcribe` gets the engines it was evaluated with: no paid one, by the engines' own list, and not `pianissimo`, which stays the transcript panel's choice (and an agent's).
+- `transcribe` gets the description it was evaluated with, which is true for what the assistant can do.
+
+A test holds all three. With the fix, all seven sets in one run:
+
+| On-device, 2026-11-26 | Standard | Hold-out 1 | Hold-out 2 | Hold-out 3 | Hold-out 4 | Hold-out 5 | Hold-out 6 | All |
+|---|---|---|---|---|---|---|---|---|
+| Before the fix | 13/18 | 17/24 | 20/23 | 22/29 | 8/9 | 10/15 | 4/10 | 94/128 |
+| d84d6ae | 17/18 | 21/24 | 18/23 | 21/29 | 7/9 | 12/15 | 5/10 | 101/128 |
+| With the fix | 17/18 | 21/24 | 18/23 | 21/29 | 7/9 | 12/15 | 6/10 | 102/128 |

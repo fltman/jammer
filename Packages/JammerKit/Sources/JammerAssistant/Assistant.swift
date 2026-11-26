@@ -118,16 +118,31 @@ public enum AssistantCatalog {
     /// Own actions: every step (but the above), the useful endpoints, and the macros.
     public static var actions: [AssistantAction] {
         let endpointNames: Set<String> = ["transcribe", "restore", "analyze_restoration", "measure_loudness", "freeze", "unfreeze"]
-        return Operations.all.filter { !stepsNotForAssistant.contains($0.name) }.map { AssistantAction(name: $0.name, description: $0.description,
-                                                    params: $0.params.filter { !paramsNotForAssistant.contains($0.name) }, kind: .step,
-                                                    destructive: destructiveNames.contains($0.name)) }
+        return Operations.all.filter { !stepsNotForAssistant.contains($0.name) }.map { op in
+            var params = op.params.filter { !paramsNotForAssistant.contains($0.name) }
+            var description = op.description
+            // remove_marker by its id is for agents (2026-11-25): the assistant is never shown marker ids, and offered
+            // the id beside the name the on-device model planned three standard requests worse (16/18 to 13/18,
+            // 2026-11-26). It removes by name, as it was evaluated.
+            if op.name == "remove_marker" {
+                params = params.filter { $0.name != "marker" }.map { p in var p = p; if p.name == "name" { p.required = true }; return p }
+                description = "Removes the markers with this name."
+            }
+            return AssistantAction(name: op.name, description: description, params: params, kind: .step,
+                                   destructive: destructiveNames.contains(op.name))
+        }
             + Operations.endpoints.filter { endpointNames.contains($0.name) }.map {
                 // The assistant transcribes on this Mac: sending audio to a paid service is the user's own
                 // choice in the transcript panel, with its sheet, never something a plan does.
-                AssistantAction(name: $0.name, description: $0.description,
+                // The engines it was evaluated with: every paid one is left out by the engines' own list (before
+                // 2026-11-26 only openai was, so berget_pianissimo was offered), and local pianissimo too, which stays
+                // the transcript panel's choice (and an agent's): offered by name, it cost the on-device model two
+                // standard requests (15/18 against 17/18, three runs each, 2026-11-26). The description is the one it
+                // was evaluated with, true for what the assistant can do.
+                AssistantAction(name: $0.name, description: $0.name == "transcribe" ? "Transcribes the document on this Mac; words get ids and times." : $0.description,
                                 params: $0.params.filter { !["model", "allowPaid", "allowUnknownPrice"].contains($0.name) }.map { p in
                                     var p = p
-                                    p.options = p.options?.filter { $0 != "openai" }
+                                    p.options = p.options?.filter { TranscriptionChoice(rawValue: $0)?.paid != true && $0 != "pianissimo" }
                                     return p
                                 }, kind: .endpoint,
                                 destructive: destructiveNames.contains($0.name))

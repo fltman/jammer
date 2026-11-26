@@ -53,6 +53,17 @@ struct AssistantTests {
         return (p, pool)
     }
 
+    @Test("The assistant is offered what it was evaluated with: transcribe without paid engines or pianissimo, on this Mac; remove_marker by name")
+    func asEvaluated() throws {
+        let transcribe = try #require(actions.first { $0.name == "transcribe" })
+        let engines = transcribe.params.first { $0.name == "engine" }?.options ?? []
+        #expect(engines == ["auto", "apple", "parakeet", "whisper"], "\(engines)")
+        #expect(!engines.contains { TranscriptionChoice(rawValue: $0)?.paid == true }, "never a paid engine")
+        #expect(transcribe.description == "Transcribes the document on this Mac; words get ids and times.")
+        let marker = try #require(actions.first { $0.name == "remove_marker" })
+        #expect(marker.params.map(\.name) == ["name"] && marker.params.first?.required == true && marker.description == "Removes the markers with this name.")
+    }
+
     @Test("The catalogue comes from the registry: every step and the macros, compact")
     func catalogue() {
         let names = Set(actions.map(\.name))
