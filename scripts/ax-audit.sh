@@ -25,10 +25,14 @@ unnamed=0; states=0; died=0; unfilled=0; unread=0; manual=0
 crashes() { ls ~/Library/Logs/DiagnosticReports 2>/dev/null | grep -c -i "^Jammer\|^Jämmer"; }
 crashes0=$(crashes)
 
-osa() { osascript -e "tell application \"System Events\" to tell (first process whose unix id is $P) to $1" 2>/dev/null; }
-front() { osa 'set frontmost to true' >/dev/null; sleep 0.3; }
-key() { front; osascript -e "tell application \"System Events\" to $1" >/dev/null 2>&1; sleep 0.3; }
-raise() { front; osa "perform action \"AXRaise\" of (first window whose name contains \"$1\")" >/dev/null; sleep 0.4; }
+# Keys go to the test copy's pid only, each one after a check that it is in front (build/tools/keys); windows are read
+# and moved through the accessibility API, aimed at the pid (build/tools/ax). Never System Events, which sends keys to
+# whatever app is in front. Built by scripts/build-gui-tools.sh under the build lock.
+gt="$root/build/tools"
+for t in front keys ax; do [[ -x "$gt/$t" ]] || { echo "$(basename "$0"): build the GUI tools first, under the build lock: scripts/build-gui-tools.sh" >&2; exit 2; }; done
+front() { "$gt/front" $P 5 >/dev/null || { echo "$(basename "$0"): the test copy isn't in front; stopping before a key goes elsewhere." >&2; exit 1; }; sleep 0.3; }
+key() { "$gt/keys" $P "$@" || { echo "$(basename "$0"): the test copy isn't in front; stopping before a key goes elsewhere." >&2; exit 1; }; sleep 0.3; }
+raise() { front; "$gt/ax" $P raise "$1"; sleep 0.4; }
 # Menus by their keys in the string catalogue, never by their words: the script works in either language.
 t() { "$root/scripts/l10n.sh" "$1"; }
 menu() { front; "$SM" --pid $P "$(t $1)" "$(t $2)" >/dev/null || echo "   (menu not pressed: $1 › $2)"; sleep 1; }
@@ -38,12 +42,12 @@ json() { python3 -c "import json,sys; d=json.load(sys.stdin); $1" 2>/dev/null; }
 open_audio() { post -H 'Content-Type: audio/wav' --data-binary @"$1" "$B/documents?name=$2" | json "print(d['document']['id'])"; }
 steps() { post -o /dev/null -H 'Content-Type: application/json' -d "{\"steps\":[$2]}" "$B/documents/$1/steps"; }
 wait_job() { for _ in {1..120}; do s=$(curl -s "$B/jobs/$1" | json "print(d['job']['status'])"); [[ $s == done || $s == failed ]] && break; sleep 1; done; }
-winpos() { osa "get {position, size} of (first window whose name contains \"$1\")" | tr -d ','; }
+winpos() { "$gt/ax" $P window-frame "$1"; }
 # Puts a request in the assistant's field of the window named $1 and sends it. The field gets the
 # keyboard from the app's own command (View › Show Assistant / Ask the Assistant, ⌥⌘A), which is also
 # how a keyboard or VoiceOver user gets there. Nothing is typed unless the field really has the
 # keyboard: keys that miss it land on the timeline, where the space bar is Play.
-focused() { osa 'get value of attribute "AXDescription" of (value of attribute "AXFocusedUIElement")'; }
+focused() { "$gt/ax" $P focused-description; }
 ask() {
   raise "$1"
   if [[ "$(focused)" != "$(t assistant.field.ax)" ]]; then
@@ -54,7 +58,7 @@ ask() {
   fi
   local focus="$(focused)"
   if [[ "$focus" != "$(t assistant.field.ax)" ]]; then echo "NOT TYPED the assistant's field isn't focused (focus is on \"$focus\"): \"$2\""; return 1; fi
-  key "keystroke \"$2\""; key 'key code 36'; sleep ${3:-8}
+  key text "$2"; key code 36; sleep ${3:-8}
 }
 
 # One state: the listing, the count of unnamed controls, and whether the app is still there. $2 is a text
@@ -86,7 +90,7 @@ sleep 2; front
 # `note` as a third argument: only the assistant's note when a request can't be sent. Start the app with
 # a provider chosen and no model (defaults write <bundle id> assistant.source berget), which is that case.
 if [[ "${3:-}" == note ]]; then
-  key 'key code 53'
+  key code 53
   DOC=$(open_audio "$speech" Reading); sleep 1; raise Reading
   ask Reading "lower the volume by 3 dB" 3
   audit "assistant with a note that nothing was sent" "Note: Choose one of"
@@ -94,7 +98,7 @@ if [[ "${3:-}" == note ]]; then
   (( died == 0 && unnamed == 0 && unfilled == 0 && unread == 0 && $(crashes) == crashes0 )); exit
 fi
 audit "splash with the text for an agent" splash.agent.ax
-key 'key code 53'
+key code 53
 
 # The manual against the menus as they are (English only, where the manual's words are): build/menus lists every
 # item with its shortcut, scripts/check-manual.py holds the manual and the FAQ to it, and the kept copy
@@ -141,17 +145,17 @@ if [[ -f "$speech" && -f "$music" ]]; then
 
   menu menu.audio audio.dehum; sleep 4
   audit "Repair sheet with what it found" restore.mains
-  key 'key code 53'
+  key code 53
   menu menu.audio audio.plugins; sleep 1.5
   audit "Plugins sheet with a plugin on the track" "AULowpass"
-  key 'key code 36'; key 'key code 53'
+  key code 36; key code 53
   menu menu.audio audio.duck; sleep 1
   audit "Duck Under Speech sheet" duck.text
-  key 'key code 53'
-  key 'keystroke "k" using {command down}'; sleep 1
-  key 'keystroke "fade"'; sleep 1
+  key code 53
+  key cmd k; sleep 1
+  key text "fade"; sleep 1
   audit "omnibar with matches" omnibar.ask
-  key 'key code 53'
+  key code 53
 else
   echo "skipped  the document states: $speech or $music is missing"
 fi
@@ -162,7 +166,7 @@ if [[ -f "$data/flimmer/Morgon_i_hamnen.fcpxml" ]]; then
   if can menu.file file.sendToFlimmer; then
     menu menu.file file.sendToFlimmer; sleep 1
     audit "Send to Flimmer sheet" flimmer.mode.mix
-    key 'key code 53'
+    key code 53
   else
     echo "skipped  Send to Flimmer: the menu item isn't there or isn't enabled"
   fi
@@ -172,9 +176,9 @@ fi
 
 if [[ -d "$data/packages/Settings.jammer" ]]; then
   open -b "$(defaults read "$JAMMER_APP/Contents/Info" CFBundleIdentifier)" "$data/packages/Settings.jammer"; sleep 3
-  if [[ "$(osa 'get count of sheets of (first window whose name contains "Settings")')" == 1 ]]; then
+  if [[ "$("$gt/ax" $P sheet-count Settings)" == 1 ]]; then
     audit "question about a project's plugin settings" pluginSettings.ask.title.one
-    raise Settings; key 'key code 36'
+    raise Settings; key code 36
   else
     echo "skipped  plugin settings question: not asked (these settings are already allowed in this copy)"
   fi
@@ -187,9 +191,9 @@ if [[ -f "$data/link/clip.wav" ]]; then
   LINKED=$(curl -s "$B/documents" | json "print(next((x['id'] for x in d['documents'] if x['linkedFile']), ''))")
   if [[ -n "$LINKED" ]]; then
     steps $LINKED '{"op":"gain","params":{"db":-1,"start":0,"end":1}}'; sleep 1
-    raise clip; osa 'click button 1 of (first window whose name contains "clip")' >/dev/null; sleep 1.5
+    raise clip; "$gt/ax" $P press-button clip 1; sleep 1.5
     audit "question when a linked document is closed with changes" link.close.title
-    key 'key code 53'
+    key code 53
   else
     echo "skipped  linked document: the file didn't open linked (start with -linkAnyOpen Flimmer)"
   fi
