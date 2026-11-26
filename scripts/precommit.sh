@@ -22,7 +22,7 @@ scripts/export-agents-guide.sh > "$out/guide.out" 2>&1 || fail "the agents guide
 scripts/test-guest-clean.sh > "$out/guestclean.out" 2>&1 || fail "guest-clean.sh: $(tail -1 "$out/guestclean.out")"
 scripts/test-gui-warnings.sh > "$out/guiwarnings.out" 2>&1 || fail "the GUI checks' warning scan: $(head -1 "$out/guiwarnings.out")"
 scripts/check-no-system-events.sh > "$out/systemevents.out" 2>&1 || fail "a script sends keys to whatever app is in front: $(head -1 "$out/systemevents.out")"
-scripts/check-no-debug-deletes.sh > "$out/debugdeletes.out" 2>&1 || fail "a script deletes something of the plain Debug app: $(head -1 "$out/debugdeletes.out")"
+scripts/check-no-debug-deletes.sh > "$out/debugdeletes.out" 2>&1 || fail "a script deletes something of the real app or the plain Debug app: $(head -1 "$out/debugdeletes.out")"
 scripts/check-fetch-guard.sh > "$out/fetch.out" 2>&1 || fail "a script can fetch third-party code without a yes ($(head -1 "$out/fetch.out"))"
 scripts/check-strings.py --self-test > "$out/strings.out" 2>&1 || fail "the catalogue check doesn't catch what it should ($(head -1 "$out/strings.out"))"
 scripts/check-strings.py --require sv >> "$out/strings.out" 2>&1 || fail "the string catalogue: $(grep -c 'check-strings:' "$out/strings.out") fault(s), the first: $(grep 'check-strings:' "$out/strings.out" | head -1)"
