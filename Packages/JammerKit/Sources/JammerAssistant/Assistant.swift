@@ -150,6 +150,14 @@ public enum AssistantCatalog {
             + macros
     }
 
+    /// The engine a plan's `transcribe` runs with: the one it names, or auto; nil when it names a paid one or none
+    /// that exists (a paid engine is the transcript panel's choice, with its question, never a plan's).
+    public static func engine(planned name: String?) -> TranscriptionChoice? {
+        guard let name else { return .auto }
+        guard let choice = TranscriptionChoice(rawValue: name), !choice.paid else { return nil }
+        return choice
+    }
+
     /// Actions the small on-device model is told about only when the request has one of these words in it
     /// (lowercased, Swedish and English). Every action in the list costs that model attention and context:
     /// with 28 actions it planned 14 of 14 standard requests right; with all 37 in front of it, 10 of 14, and

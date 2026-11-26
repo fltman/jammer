@@ -64,6 +64,15 @@ struct AssistantTests {
         #expect(marker.params.map(\.name) == ["name"] && marker.params.first?.required == true && marker.description == "Removes the markers with this name.")
     }
 
+    @Test("A plan's transcribe runs with the engine it names, on this Mac; none named is auto; a paid one or an unknown one is refused")
+    func plannedEngine() {
+        #expect(AssistantCatalog.engine(planned: nil) == .auto)
+        #expect(AssistantCatalog.engine(planned: "whisper") == .whisper && AssistantCatalog.engine(planned: "parakeet") == .parakeet)
+        #expect(AssistantCatalog.engine(planned: "pianissimo") == .pianissimo, "local: it runs as asked")
+        #expect(AssistantCatalog.engine(planned: "berget_pianissimo") == nil && AssistantCatalog.engine(planned: "openai") == nil, "paid: never from a plan")
+        #expect(AssistantCatalog.engine(planned: "dragon") == nil)
+    }
+
     @Test("The catalogue comes from the registry: every step and the macros, compact")
     func catalogue() {
         let names = Set(actions.map(\.name))

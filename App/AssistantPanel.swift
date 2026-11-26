@@ -347,7 +347,14 @@ final class AssistantModel {
         switch s.op {
         case "transcribe":
             let lang = s.params["language"]?.string ?? transcriptLocale.identifier(.bcp47)
-            return await runJob(JobRegistry.shared.startTranscription(session, locale: Locale(identifier: lang), replace: s.params["replace"] == .bool(true)))
+            // The engine the plan names is the one that runs (until 2026-11-26 it was dropped, so "transcribe with
+            // Whisper" said Whisper and ran auto). Only an engine on this Mac: a paid one is the transcript panel's,
+            // with its question, never a plan's.
+            guard let engine = AssistantCatalog.engine(planned: s.params["engine"]?.string) else {
+                messages.append(Message(role: .note, text: L10n.reply("assistant.reply.engineNotHere", replyLanguage, s.params["engine"]?.string ?? "")))
+                return false
+            }
+            return await runJob(JobRegistry.shared.startTranscription(session, locale: Locale(identifier: lang), replace: s.params["replace"] == .bool(true), engine: engine))
         case "restore":
             do {
                 let req = try RestoreRequest.parse(s.params.mapValues(\.any))

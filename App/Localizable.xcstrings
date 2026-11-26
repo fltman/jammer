@@ -1911,6 +1911,24 @@
         }
       }
     },
+    "assistant.reply.engineNotHere": {
+      "comment": "A line in the assistant's conversation, in the language of the user's question. %@ the engine the plan named, which is paid.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "I transcribe only on this Mac. %@ sends the audio to a paid service: choose it in the transcript panel, which asks first."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jag transkriberar bara på den här Macen. %@ skickar ljudet till en betald tjänst: välj den i transkriptpanelen, som frågar först."
+          }
+        }
+      }
+    },
     "assistant.reply.found": {
       "comment": "A line in the assistant’s conversation, in the language of the user’s question. What the analysis found: %1$@ the clipped stretches, %2$@ the clicks (each a count).",
       "extractionState": "manual",
