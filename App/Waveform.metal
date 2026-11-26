@@ -13,6 +13,8 @@ struct Uniforms {
     uint channels;
     float selectionStart; // pixel x, or -1
     float selectionEnd;
+    float offsetCols;     // the picture's column for pixel 0, and its columns per pixel (WaveformRemap)
+    float scale;
     float4 wave;
     float4 waveSelected;
     float4 background;
@@ -49,8 +51,12 @@ fragment float4 waveform_fragment(VOut in [[stage_in]],
     uint ch = min(u.channels - 1, uint((inLane - 1.0) / band));
     float inBand = (inLane - 1.0) - float(ch) * band;
     float v = 1.0 - 2.0 * (inBand + 0.5) / band; // +1 top, -1 bottom
-    uint col = min(u.columns - 1, uint(x));
-    float2 mm = columns[(lane * u.channels + ch) * u.columns + col];
+    // The picture may be of the view before (a new one is being made): drawn where it belongs in this one.
+    float picture = u.offsetCols + x * u.scale;
+    float2 mm = float2(1.0, -1.0);
+    if (picture >= 0.0 && picture < float(u.columns)) {
+        mm = columns[(lane * u.channels + ch) * u.columns + uint(picture)];
+    }
     float halfPixel = 1.0 / band;
     float4 base = selected ? u.selectionBackground : u.laneBackground;
     if (abs(v) < halfPixel) base = mix(base, u.centerLine, u.centerLine.a);

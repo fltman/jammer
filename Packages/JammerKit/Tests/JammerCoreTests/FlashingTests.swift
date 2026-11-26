@@ -118,7 +118,7 @@ struct FlashingTests {
             let t = Double(i) * step
             if t >= nextPage {
                 key += 1
-                if !policy || WaveformBufferPolicy.drawsCoarse(needsExact: true, shownIsExact: shownExact, sameShape: true) { shownExact = false }
+                if !policy || WaveformRemap.computesInDraw(hasPicture: shownExact, sameShape: true) { shownExact = false }
                 shownKey = key
                 if inFlight == nil { inFlight = (key, t + delay) } else { wanted = key }
                 nextPage += 1 / pagesPerSecond
@@ -142,8 +142,26 @@ struct FlashingTests {
             if rate > 3, delay < 1 / rate { #expect(before > 3, "the measurement sees the old way at \(rate) pages a second") }
             #expect(after <= 1, "\(rate) pages a second, \(delay * 1_000) ms: \(after)")
         }
-        #expect(WaveformBufferPolicy.drawsCoarse(needsExact: true, shownIsExact: true, sameShape: false), "another size: drawn anew")
-        #expect(WaveformBufferPolicy.drawsCoarse(needsExact: false, shownIsExact: true, sameShape: true), "zoomed out: the peaks are exact enough")
+        #expect(WaveformRemap.computesInDraw(hasPicture: true, sameShape: false), "another size: drawn anew")
+        #expect(WaveformRemap.computesInDraw(hasPicture: false, sameShape: true), "nothing yet: drawn now")
+    }
+
+    @Test("While a new view's columns are made, the picture shown is mapped onto the new view: a scroll is an offset, a zoom a scale, exact far into an hour")
+    func remap() {
+        let rate = 48_000.0
+        // The same view: column x shows column x.
+        let same = WaveformRemap.mapping(viewStart: 1_000, viewFramesPerColumn: 100, shownStart: 1_000, shownFramesPerColumn: 100)
+        #expect(same.offset == 0 && same.scale == 1)
+        // Scrolled 50 columns on: column x shows column 50 + x.
+        let scrolled = WaveformRemap.mapping(viewStart: 6_000, viewFramesPerColumn: 100, shownStart: 1_000, shownFramesPerColumn: 100)
+        #expect(scrolled.offset == 50 && scrolled.scale == 1)
+        // Zoomed in twice about the start: column x shows column x / 2.
+        let zoomed = WaveformRemap.mapping(viewStart: 1_000, viewFramesPerColumn: 50, shownStart: 1_000, shownFramesPerColumn: 100)
+        #expect(zoomed.offset == 0 && zoomed.scale == 0.5)
+        // Near the end of an hour at a close zoom, a scroll of 1.5 columns is still 1.5 (a Float of the frame number
+        // itself would be off by several frames there).
+        let late = WaveformRemap.mapping(viewStart: rate * 3_599 + 3, viewFramesPerColumn: 2, shownStart: rate * 3_599, shownFramesPerColumn: 2)
+        #expect(late.offset == 1.5)
     }
 }
 

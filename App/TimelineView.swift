@@ -256,7 +256,9 @@ final class WaveformMetalView: MTKView, MTKViewDelegate {
         var channels: UInt32
         var selectionStart: Float
         var selectionEnd: Float
-        var pad0: Float = 0, pad1: Float = 0, pad2: Float = 0
+        /// The picture's column for pixel 0, and its columns per pixel (WaveformRemap): the same layout as before
+        /// (they took two of the padding floats).
+        var offsetCols: Float = 0, scale: Float = 1, pad2: Float = 0
         var wave: SIMD4<Float>
         var waveSelected: SIMD4<Float>
         var background: SIMD4<Float>
@@ -272,14 +274,17 @@ final class WaveformMetalView: MTKView, MTKViewDelegate {
     private var columnBuffer: MTLBuffer?
     /// What `columnBuffer` shows.
     private var shownKey: [Double] = []
-    /// Whether `columnBuffer` holds exact samples (not the block envelope), and for what shape (columns, lanes, channels).
-    private var shownIsExact = false
+    /// The geometry of what `columnBuffer` shows (its first frame and frames per column), and its shape (columns,
+    /// lanes, channels): a new view is drawn from it, mapped, until its own columns are made (WaveformRemap).
+    private var shownStart = 0.0, shownFpc = 1.0
     private var shownShape: [Int] = []
+    /// The view whose columns are wanted now (the job's answer is taken only if it is still this one).
+    private var wantedKey: [Double] = []
     /// Zoomed in past the peak index, exact samples come from the files on a
     /// background task (one at a time, always the latest view) and replace the
     /// block-level picture drawn meanwhile. The main thread never reads a file.
     private var exactInFlight = false
-    private var wantedExact: (key: [Double], job: @Sendable () -> [SIMD2<Float>])?
+    private var wantedExact: (key: [Double], start: Double, fpc: Double, shape: [Int], job: @Sendable () -> [SIMD2<Float>])?
 
     init(session: EditorSession, viewport: Viewport) {
         self.session = session
@@ -324,13 +329,15 @@ final class WaveformMetalView: MTKView, MTKViewDelegate {
         return values
     }
 
-    private func requestExact(_ key: [Double], _ job: @escaping @Sendable () -> [SIMD2<Float>]) {
-        wantedExact = (key, job)
+    /// A view's columns, made off the draw: one job at a time, always the latest view wanted (a view passed while a
+    /// job ran is skipped). The answer is shown only if it is still the view wanted, else the next is started.
+    private func requestExact(_ key: [Double], start: Double, fpc: Double, shape: [Int], _ job: @escaping @Sendable () -> [SIMD2<Float>]) {
+        wantedExact = (key, start, fpc, shape, job)
         if !exactInFlight { startExact() }
     }
 
     private func startExact() {
-        guard let (key, job) = wantedExact else { return }
+        guard let (key, start, fpc, shape, job) = wantedExact else { return }
         wantedExact = nil
         exactInFlight = true
         let span = Perf.Span("waveform.exact")
@@ -340,9 +347,10 @@ final class WaveformMetalView: MTKView, MTKViewDelegate {
             await MainActor.run {
                 guard let self else { return }
                 self.exactInFlight = false
-                if self.shownKey == key {
+                if self.wantedKey == key, shape == self.shownShape {
                     self.columnBuffer = self.device?.makeBuffer(bytes: values, length: values.count * MemoryLayout<SIMD2<Float>>.stride)
-                    self.shownIsExact = true
+                    self.shownKey = key
+                    self.shownStart = start; self.shownFpc = fpc
                     self.needsDisplay = true
                 }
                 if let next = self.wantedExact, next.key != key { self.startExact() } else { self.wantedExact = nil }
@@ -367,18 +375,20 @@ final class WaveformMetalView: MTKView, MTKViewDelegate {
             let start = viewport.start, peaks = session.peaks, pool = session.pool
             let needsFiles = fpc < Double(PeakIndex.baseBlock)
             let shape = [columns, lanes, channels]
-            // Zoomed in past the peaks, the last exact picture stays until the new view's own is ready: the block
-            // envelope in between is filled and bright where the exact line is thin, a flash at every page.
-            if columnBuffer == nil || WaveformBufferPolicy.drawsCoarse(needsExact: needsFiles, shownIsExact: shownIsExact, sameShape: shape == shownShape) {
+            // Only with nothing to show, or after a change of size, are the columns made here (from the peaks, at
+            // once). Otherwise the picture there is drawn onto this view, mapped, while a job makes this view's own:
+            // a draw stays well under a frame however many tracks there are (it took 56–66 ms for 24).
+            if WaveformRemap.computesInDraw(hasPicture: columnBuffer != nil, sameShape: shape == shownShape) {
                 let values = Self.columnValues(project, start: start, fpc: fpc, columns: columns, lanes: lanes, channels: channels,
                                                peaks: peaks, pool: pool, allowRaw: !needsFiles)
                 columnBuffer = device?.makeBuffer(bytes: values, length: values.count * MemoryLayout<SIMD2<Float>>.stride)
-                shownIsExact = !needsFiles
+                shownStart = start; shownFpc = fpc; shownShape = shape
+                shownKey = needsFiles ? [] : key
             }
-            shownShape = shape
-            shownKey = key
-            if needsFiles {
-                requestExact(key) {
+            if key != shownKey, key != wantedKey {
+                wantedKey = key
+                // Exact samples where the peaks are too coarse, the peaks elsewhere (allowRaw: true picks).
+                requestExact(key, start: start, fpc: fpc, shape: shape) {
                     Self.columnValues(project, start: start, fpc: fpc, columns: columns, lanes: lanes, channels: channels,
                                       peaks: peaks, pool: pool, allowRaw: true)
                 }
@@ -396,9 +406,10 @@ final class WaveformMetalView: MTKView, MTKViewDelegate {
             selStart = Float(viewport.x(of: Double(sel.lowerBound)) * CGFloat(scale))
             selEnd = Float(viewport.x(of: Double(sel.upperBound)) * CGFloat(scale))
         }
+        let map = WaveformRemap.mapping(viewStart: viewport.start, viewFramesPerColumn: fpc, shownStart: shownStart, shownFramesPerColumn: shownFpc)
         var u = Uniforms(size: SIMD2(Float(drawableSize.width), Float(drawableSize.height)), rulerHeight: ruler,
                          laneHeight: laneHeight, columns: UInt32(columns), lanes: UInt32(lanes), channels: UInt32(channels),
-                         selectionStart: selStart, selectionEnd: selEnd,
+                         selectionStart: selStart, selectionEnd: selEnd, offsetCols: map.offset, scale: map.scale,
                          wave: rgba(Theme.neon, 0.92), waveSelected: rgba(.white, 0.95), background: rgba(Theme.ink),
                          laneBackground: rgba(Theme.lane), selectionBackground: rgba(Theme.neon, 1) * SIMD4(0.22, 0.22, 0.22, 1),
                          centerLine: rgba(.white, 0.12))

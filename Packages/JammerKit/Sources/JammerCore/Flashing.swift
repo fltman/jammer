@@ -77,13 +77,20 @@ public enum FollowPolicy {
     }
 }
 
-/// What the waveform shows while the exact samples of a new view are read (zoomed in past the peak index): the last
-/// exact picture, kept until the new one is ready, rather than the block-level envelope, which is filled and bright
-/// where the exact line is thin. Alternating the two at every page was a flash over the whole timeline.
-public enum WaveformBufferPolicy {
-    /// Whether to draw the block-level picture now (true), or keep what is shown (false).
-    public static func drawsCoarse(needsExact: Bool, shownIsExact: Bool, sameShape: Bool) -> Bool {
-        !(needsExact && shownIsExact && sameShape)
+/// What the waveform shows while a new view's columns are made (the performance pass, 2026-11-26): the picture it has,
+/// drawn onto the new view's geometry, until the new one is ready. Making the columns in the draw call cost 56–66 ms
+/// for 24 tracks, about four frames lost at every step of a zoom; and the block-level envelope drawn between exact
+/// pictures was filled and bright where the exact line is thin, a flash at every page. The columns are only made in
+/// the draw when there is no picture yet, or the view changed size.
+public enum WaveformRemap {
+    /// Whether the draw has to make the columns itself (nothing to show, or a picture of another size).
+    public static func computesInDraw(hasPicture: Bool, sameShape: Bool) -> Bool { !(hasPicture && sameShape) }
+
+    /// The new view's pixel column x shows the picture's column `offset + x · scale`: worked out in double precision
+    /// (an hour's frame numbers lose frames in a Float) and handed to the shader as two numbers.
+    public static func mapping(viewStart: Double, viewFramesPerColumn: Double, shownStart: Double, shownFramesPerColumn: Double) -> (offset: Float, scale: Float) {
+        guard shownFramesPerColumn > 0 else { return (0, 1) }
+        return (Float((viewStart - shownStart) / shownFramesPerColumn), Float(viewFramesPerColumn / shownFramesPerColumn))
     }
 }
 
