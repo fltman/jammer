@@ -4,6 +4,7 @@
 // Keys:  code <n>            a key code (36 Return, 53 Escape, 48 Tab, 49 Space, 123–126 arrows)
 //        text <string>       the string, character by character
 //        <mods> <letter>     a shortcut: mods are cmd, opt, ctrl, shift joined with + (cmd, cmd+opt, cmd+shift)
+//        <mods> code:<n>     a shortcut on a key code (opt code:125 is ⌥↓); an arrow gets the flags a real one has
 // Built by scripts/build-gui-tools.sh.
 import AppKit
 import CoreGraphics
@@ -52,6 +53,13 @@ while i < args.count {
             case "shift": flags.insert(.maskShift)
             default: print("keys: unknown modifier \(m)"); exit(2)
             }
+        }
+        if value.hasPrefix("code:") {
+            guard let c = CGKeyCode(value.dropFirst(5)) else { print("keys: not a key code: \(value)"); exit(2) }
+            // The arrows (123–126) are function keys on the numeric pad, as the keyboard sends them.
+            if (123...126).contains(c) { flags.formUnion([.maskSecondaryFn, .maskNumericPad]) }
+            post(c, flags: flags)
+            continue
         }
         guard let ch = value.lowercased().first, let c = letters[ch] else { print("keys: no key code for \(value)"); exit(2) }
         post(c, flags: flags)

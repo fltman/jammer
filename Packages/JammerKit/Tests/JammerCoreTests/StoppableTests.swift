@@ -2,6 +2,14 @@ import Foundation
 import Testing
 @testable import JammerCore
 
+/// Set by the work at its first look.
+final class Begun: @unchecked Sendable {
+    private let lock = NSLock()
+    private var flag = false
+    func mark() { lock.lock(); flag = true; lock.unlock() }
+    var yes: Bool { lock.lock(); defer { lock.unlock() }; return flag }
+}
+
 @Suite("Stopping work that runs detached")
 struct StoppableTests {
     /// Steps of 10 ms until `stopped` says so, or `limit` steps.
@@ -21,11 +29,14 @@ struct StoppableTests {
 
     @Test("Stoppable.run: the stop reaches the work at its next look, and is said")
     func stops() async {
-        let outer = Task { await Stoppable.run { stopped in Self.steps(limit: 500, stopped) } }
-        try? await Task.sleep(for: .milliseconds(50))
+        // Stopped once the work has begun (not after a time: a loaded Mac took 46 s over a 50 ms wait, 2026-11-26),
+        // and the work, which would run 30 s, ends at its next look.
+        let begun = Begun()
+        let outer = Task { await Stoppable.run { stopped in Self.steps(limit: 3_000) { begun.mark(); return stopped() } } }
+        while !begun.yes { try? await Task.sleep(for: .milliseconds(5)) }
         outer.cancel()
         let (n, stopped) = await outer.value
-        #expect(stopped && n < 100, "stopped after \(n) steps")
+        #expect(stopped && n < 3_000, "stopped after \(n) steps")
         let (all, never) = await Stoppable.run { stopped in Self.steps(limit: 3, stopped) }
         #expect(all == 3 && !never, "not stopped: done, and said so")
     }
