@@ -20,6 +20,7 @@ scripts/export-agents-guide.sh > "$out/guide.out" 2>&1 || fail "the agents guide
 [[ ! -x "$tools/check-zsh-path.sh" ]] || "$tools/check-zsh-path.sh" scripts > "$out/path.out" 2>&1 || fail "a script uses zsh's path or status as a variable"
 # The string catalogue and the code that uses it: placeholders, plural forms, keys, and no user text in moved files.
 scripts/test-guest-clean.sh > "$out/guestclean.out" 2>&1 || fail "guest-clean.sh: $(tail -1 "$out/guestclean.out")"
+scripts/test-gui-warnings.sh > "$out/guiwarnings.out" 2>&1 || fail "the GUI checks' warning scan: $(head -1 "$out/guiwarnings.out")"
 scripts/check-fetch-guard.sh > "$out/fetch.out" 2>&1 || fail "a script can fetch third-party code without a yes ($(head -1 "$out/fetch.out"))"
 scripts/check-strings.py --self-test > "$out/strings.out" 2>&1 || fail "the catalogue check doesn't catch what it should ($(head -1 "$out/strings.out"))"
 scripts/check-strings.py --require sv >> "$out/strings.out" 2>&1 || fail "the string catalogue: $(grep -c 'check-strings:' "$out/strings.out") fault(s), the first: $(grep 'check-strings:' "$out/strings.out" | head -1)"

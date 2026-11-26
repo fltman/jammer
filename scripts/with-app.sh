@@ -47,7 +47,17 @@ language=(-language "${JAMMER_LANG:-en}")
 # A test copy's journal of linked documents is its own and empty: what one check left waiting must not open
 # in the next. A check that is about the journal names the folder itself: JAMMER_LINK_JOURNAL=<absolute path>.
 journal="${JAMMER_LINK_JOURNAL:-$(mktemp -d "${TMPDIR:-/tmp/}jammer-linkjournal.XXXXXX")}"
-env -u OPENROUTER_API_KEY ${=JAMMER_WRAP:-} "$app" $restore $quiet -ai.noKeychain YES -linkJournalFolder "$journal" $language ${=JAMMER_ARGS:-} >"${JAMMER_LOG:-/dev/null}" 2>&1 &
+# The app's output is always kept (in JAMMER_LOG when given), and at the end it and the app's entries in the system
+# log are searched for AppKit's and SwiftUI's own warnings, which come before their asserts: a table view's delegate
+# called reentrantly, "Publishing changes from within view updates", constraints that can't all hold, the main thread
+# checker. The main thread checker only speaks when its library is loaded, so it is, for the test copy, when Xcode
+# has it (JAMMER_NO_MTC=1 leaves it out). The warnings found go in the report; the full list to JAMMER_WARNINGS.
+applog="${JAMMER_LOG:-$(mktemp "${TMPDIR:-/tmp/}jammer-applog.XXXXXX")}"
+mtc=/Applications/Xcode.app/Contents/Developer/usr/lib/libMainThreadChecker.dylib
+insert=()
+[[ -z "${JAMMER_NO_MTC:-}" && -f "$mtc" ]] && insert=(DYLD_INSERT_LIBRARIES="$mtc")
+started="$(date '+%Y-%m-%d %H:%M:%S')"
+env -u OPENROUTER_API_KEY $insert ${=JAMMER_WRAP:-} "$app" $restore $quiet -ai.noKeychain YES -linkJournalFolder "$journal" $language ${=JAMMER_ARGS:-} >"$applog" 2>&1 &
 pid=$!
 # On the way out the test copy is stopped, and (unless the check is about restoration) the windows it
 # would bring back next time are forgotten: the debug copy's saved state, nothing of the real app's.
@@ -59,6 +69,12 @@ cleanup() {
   kill -9 $pid 2>/dev/null
   wait $pid 2>/dev/null
   [[ -n "${JAMMER_RESTORE:-}" ]] || rm -rf "${TMPDIR:-/tmp/}com.brattoo.jammer.debug.savedState"
+  report_warnings
+}
+# AppKit's and SwiftUI's warnings in what the test copy wrote and logged (see above): counted by kind in the report.
+report_warnings() {
+  "$root/scripts/gui/warnings.sh" "$applog" "$pid" "$started" "${JAMMER_WARNINGS:-${TMPDIR:-/tmp/}jammer-warnings-$pid.txt}" >&2
+  [[ -n "${JAMMER_LOG:-}" ]] || rm -f "$applog"
 }
 trap cleanup EXIT INT TERM HUP
 export JAMMER_PID=$pid JAMMER_APP="${app%/Contents/MacOS/Jammer}"
@@ -72,4 +88,12 @@ for _ in {1..60}; do
   sleep 0.5
 done
 [[ -n "${JAMMER_PORT:-}" ]] || { echo "with-app: Jammer's agent API didn't come up." >&2; exit 1; }
+# Before the first click or key: the test copy has to be able to come to the front. If another app keeps it (a
+# Terminal, a sheet elsewhere), the check stops here with a reason, not a minute later (no AppleScript, no System
+# Events: build/tools/front, from scripts/gui/front.swift). A check that never takes the front says JAMMER_NO_FRONT=1.
+if [[ -z "${JAMMER_NO_FRONT:-}" ]]; then
+  front="$root/build/tools/front"
+  [[ -x "$front" && ! "$root/scripts/gui/front.swift" -nt "$front" ]] || { echo "with-app: build the GUI tools first, under the build lock (not this GUI lock): scripts/build-gui-tools.sh" >&2; exit 1; }
+  "$front" $pid 5 >&2 || { echo "with-app: stopped before the check: the test copy couldn't come to the front." >&2; exit 77; }
+fi
 "$@"
