@@ -34734,6 +34734,24 @@
         }
       }
     },
+    "timeline.scroller.time.ax": {
+      "comment": "VoiceOver label of the timeline's horizontal scroller.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Time"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tid"
+          }
+        }
+      }
+    },
     "timeline.scroller.tracks.ax": {
       "comment": "VoiceOver label of the vertical scroller.",
       "extractionState": "manual",

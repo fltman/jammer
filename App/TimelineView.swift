@@ -98,7 +98,14 @@ final class TimelineView: NSView {
         addSubview(stripLanes)
         stripHeight = stripLanes.heightAnchor.constraint(equalToConstant: 0)
         NSLayoutConstraint.activate([stripLanes.leadingAnchor.constraint(equalTo: leadingAnchor), stripLanes.trailingAnchor.constraint(equalTo: trailingAnchor),
-                                     stripLanes.bottomAnchor.constraint(equalTo: bottomAnchor), stripHeight])
+                                     stripLanes.bottomAnchor.constraint(equalTo: timeScroller.topAnchor), stripHeight])
+        // Time's scroller, along the bottom (Anders: "och scroll vid långa klipp"): where in the document the view is,
+        // and a way to move it with a mouse that has no sideways wheel.
+        NSLayoutConstraint.activate([
+            timeScroller.leadingAnchor.constraint(equalTo: leadingAnchor), timeScroller.trailingAnchor.constraint(equalTo: trailingAnchor),
+            timeScroller.bottomAnchor.constraint(equalTo: bottomAnchor),
+            timeScroller.heightAnchor.constraint(equalToConstant: NSScroller.scrollerWidth(for: .regular, scrollerStyle: .legacy)),
+        ])
         for v in [metal, spectrogram, automation, overlay] as [NSView] {
             v.translatesAutoresizingMaskIntoConstraints = false
             addSubview(v)
@@ -114,7 +121,7 @@ final class TimelineView: NSView {
         addSubview(playheadView, positioned: .below, relativeTo: overlay)
         NSLayoutConstraint.activate([
             playheadView.leadingAnchor.constraint(equalTo: leadingAnchor), playheadView.trailingAnchor.constraint(equalTo: trailingAnchor),
-            playheadView.topAnchor.constraint(equalTo: topAnchor), playheadView.bottomAnchor.constraint(equalTo: bottomAnchor),
+            playheadView.topAnchor.constraint(equalTo: topAnchor), playheadView.bottomAnchor.constraint(equalTo: timeScroller.topAnchor),
         ])
         automation.onActivate = { [weak self] in self?.stripLanes.isActive = false; self?.automation.isActive = true }
         stripLanes.onActivate = { [weak self] in
@@ -295,6 +302,7 @@ final class TimelineView: NSView {
         viewport.lanes = l
         if overlay.bounds.height > Self.rulerHeight, l.scrollY != session.trackScroll { session.trackScroll = l.scrollY }
         updateTrackScroller()
+        updateTimeScroller()
     }
 
     /// The tracks scrolled by `dy` points (a vertical swipe or wheel: always the tracks, nothing when they fit).
@@ -381,6 +389,45 @@ final class TimelineView: NSView {
     var tracksInSelection: [Int] {
         guard let sel = session.selection else { return [] }
         return session.project.tracks.indices.filter { t in session.project.tracks[t].clips.contains { $0.start < sel.upperBound && $0.end > sel.lowerBound } }
+    }
+
+    // MARK: Time's scroller
+
+    /// Always there, under the tracks and the strips' rows: its knob is the share of the document in view.
+    private lazy var timeScroller: NSScroller = {
+        let s = NSScroller(frame: NSRect(x: 0, y: 0, width: 200, height: 15))
+        s.scrollerStyle = .legacy
+        s.translatesAutoresizingMaskIntoConstraints = false
+        s.target = self
+        s.action = #selector(timeScrollerMoved(_:))
+        s.setAccessibilityLabel(L10n.text("timeline.scroller.time.ax"))
+        addSubview(s)
+        return s
+    }()
+
+    /// The document's length and what is in view, in frames: the stretch the scroller can move over.
+    private var timeSpan: (total: Double, visible: Double) {
+        let visible = Double(viewport.width) * viewport.framesPerPoint
+        return (max(Double(session.project.length), viewport.start + visible, visible), visible)
+    }
+
+    private func updateTimeScroller() {
+        let (total, visible) = timeSpan
+        let room = total - visible
+        timeScroller.isEnabled = room > 1
+        timeScroller.knobProportion = CGFloat(min(1, visible / max(1, total)))
+        timeScroller.doubleValue = room > 1 ? min(1, max(0, viewport.start / room)) : 0
+    }
+
+    @objc private func timeScrollerMoved(_ s: NSScroller) {
+        let (total, visible) = timeSpan
+        switch s.hitPart {
+        case .decrementPage: scroll(byPoints: -viewport.width * 0.9)
+        case .incrementPage: scroll(byPoints: viewport.width * 0.9)
+        default:
+            viewport.start = s.doubleValue * (total - visible)
+            refresh(waveform: true)
+        }
     }
 
     // MARK: The tracks' scroller
