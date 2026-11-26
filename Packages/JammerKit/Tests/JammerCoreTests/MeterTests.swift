@@ -126,14 +126,45 @@ struct MeterFlashTests {
         }
     }
 
-    @Test("A single peak still shows: up at once, held a third of a second, then falling 20 dB a second")
+    @Test("A single peak still shows: up at once, held 0.4 s, then falling 20 dB a second")
     func singlePeak() {
         let t0 = Date(timeIntervalSince1970: 0)
         var l = MeterBallistics.next(.init(), peak: -6, dt: 1.0 / 30, now: t0)
         #expect(l.db == -6)
-        l = MeterBallistics.next(l, peak: -60, dt: 0.2, now: t0.addingTimeInterval(0.2))
-        #expect(l.db == -6, "still up within a third of a second")
-        l = MeterBallistics.next(l, peak: -60, dt: 0.2, now: t0.addingTimeInterval(0.4))
-        #expect(abs(l.db - -10) < 1e-9, "then down 20 dB a second")
+        l = MeterBallistics.next(l, peak: -60, dt: 0.35, now: t0.addingTimeInterval(0.35))
+        #expect(l.db == -6, "still up within 0.4 s")
+        l = MeterBallistics.next(l, peak: -60, dt: 0.1, now: t0.addingTimeInterval(0.45))
+        #expect(abs(l.db - -8) < 1e-9, "then down 20 dB a second")
+    }
+
+    /// The meter driven at `tickHz` (with up to ±5 ms of jitter on its clock) by a signal between `high` dBFS and
+    /// silence, `hz` times a second; the zone from `zone` dBFS up as brightness, sampled at every tick.
+    func zoneSeries(hz: Double, high: Double, zone: Double, tickHz: Double, seconds: Double = 6) -> [Double] {
+        var l = MeterBallistics.Level()
+        var rng = SystemRandomNumberGenerator()
+        let t0 = Date(timeIntervalSince1970: 0)
+        return (0..<Int(seconds * tickHz)).map { n in
+            let t = Double(n) / tickHz + Double.random(in: -0.005...0.005, using: &rng)
+            let on = (t * hz).truncatingRemainder(dividingBy: 1) < 0.5
+            l = MeterBallistics.next(l, peak: on ? high : -120, dt: 1 / tickHz, now: t0.addingTimeInterval(t))
+            return l.db >= zone ? 0.9 : 0.05
+        }
+    }
+
+    @Test("Densely: pulses of 4, 6, 10 and 25 Hz, a sliver over the red and the yellow line, at 30 and 120 ticks a second: no zone flashes more than three times in any second; the clip light still latches")
+    func zonesDensely() {
+        for tickHz in [30.0, 120] {
+            for hz in [4.0, 6, 10, 25] {
+                for (high, zone) in [(-2.9, -3.0), (-11.9, -12.0), (-1.0, -3.0)] {
+                    let n = FlashCounter.maxPerSecond(zoneSeries(hz: hz, high: high, zone: zone, tickHz: tickHz), rate: tickHz)
+                    #expect(n <= 3, "\(hz) Hz at \(high) dBFS, zone \(zone), \(tickHz) ticks: \(n) in a second")
+                }
+            }
+        }
+        var l = MeterBallistics.Level()
+        let t0 = Date(timeIntervalSince1970: 0)
+        l = MeterBallistics.next(l, peak: 0.2, dt: 1.0 / 30, now: t0)
+        for n in 1..<300 { l = MeterBallistics.next(l, peak: -120, dt: 1.0 / 30, now: t0.addingTimeInterval(Double(n) / 30)) }
+        #expect(l.clipped, "the clip light stays lit until it is clicked")
     }
 }

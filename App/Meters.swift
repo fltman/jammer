@@ -93,7 +93,7 @@ final class StripMeters {
         var next = levels
         for id in p.tracks.map(\.id) + p.buses.map(\.id) + [Master.id] {
             let db = peaks[id].map { $0 > 0 ? 20 * log10(Double($0)) : -.infinity } ?? -.infinity
-            // The ballistics, with the bar held a third of a second after it rises (no flash faster than 3 Hz).
+            // The ballistics, with the bar held 0.4 s after it rises (no flash faster than 3 Hz).
             next[id] = MeterBallistics.next(next[id] ?? Level(), peak: db, dt: dt, now: now)
         }
         if next != levels { levels = next }

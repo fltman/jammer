@@ -27,7 +27,8 @@ final class TranscriptPanel: NSView, NSTextViewDelegate {
     }
     private let transcribeButton = NSButton(title: L10n.text("transcript.transcribe"), target: nil, action: nil)
     private let progress = NSProgressIndicator()
-    private var placed: [PlacedWord] = []
+    private var placed: [PlacedWord] = [] { didSet { wordStarts = placed.map(\.start); wordEnds = placed.map(\.end) } }
+    private var wordStarts: [Frame] = [], wordEnds: [Frame] = []
     private var ranges: [NSRange] = []
     private var shownVersion = -1
     private var litWord: Int?
@@ -308,17 +309,24 @@ final class TranscriptPanel: NSView, NSTextViewDelegate {
         litWord = nil
     }
 
-    /// The word under the playhead gets a soft neon background while playing.
+    /// The word under the playhead gets a soft neon background while playing. In the short gaps between words it
+    /// stays on the word just said (LitWord: no blinking four to six times a second in fast speech).
     private func lightPlayingWord() {
         guard let lm = textView.layoutManager else { return }
-        let i = session.isPlaying ? wordIndex(at: session.playhead) : nil
+        let i = session.isPlaying
+            ? LitWord.index(at: session.playhead, starts: wordStarts, ends: wordEnds, lit: litWord, bridge: session.project.frames(1.0 / 3))
+            : nil
         guard i != litWord else { return }
         if let old = litWord, old < ranges.count { lm.removeTemporaryAttribute(.backgroundColor, forCharacterRange: ranges[old]) }
         litWord = i
         if let i, i < ranges.count {
             lm.addTemporaryAttribute(.backgroundColor, value: Theme.neon.withAlphaComponent(0.28), forCharacterRange: ranges[i])
             // Follow the playing word, unless the reader scrolled in the last 5 s (or since playback began).
-            if readerScrolledAt.map({ Date().timeIntervalSince($0) > 5 }) ?? true {
+            // With Reduce Motion the text moves only when the word would leave the view, not with every word.
+            let reduce = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+            let shown = lm.boundingRect(forGlyphRange: lm.glyphRange(forCharacterRange: ranges[i], actualCharacterRange: nil), in: textView.textContainer!)
+                .offsetBy(dx: textView.textContainerOrigin.x, dy: textView.textContainerOrigin.y)
+            if readerScrolledAt.map({ Date().timeIntervalSince($0) > 5 }) ?? true, !reduce || !textView.visibleRect.contains(shown) {
                 scrollingToWord = true
                 textView.scrollRangeToVisible(ranges[i])
                 scrollingToWord = false

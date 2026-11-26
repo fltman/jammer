@@ -171,14 +171,50 @@ final class TimelineView: NSView {
         viewport.start = max(-Double(bounds.width) * viewport.framesPerPoint * 0.05, min(viewport.start, max(0, end)))
     }
 
-    /// Keeps the playhead on screen while playing.
+    /// Keeps the playhead on screen while playing, a page at a time. A page replaces the whole picture, so at most
+    /// two a second, one with Reduce Motion (the flashing rule, FollowPolicy); zoomed in so far that following
+    /// would need more, the view stays where it is and a steady chip says so, until it is zoomed out or playing stops.
     private func follow() {
-        guard session.isPlaying else { return }
-        let x = viewport.x(of: Double(session.playhead))
-        if x > bounds.width * 0.9 || x < 0 {
-            viewport.start = Double(session.playhead) - Double(bounds.width) * 0.1 * viewport.framesPerPoint
+        guard session.isPlaying else {
+            lastPageAt = nil
+            showFollowPaused(false)
+            return
+        }
+        let reduce = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        let now = ProcessInfo.processInfo.systemUptime
+        let width = Double(bounds.width), fpp = viewport.framesPerPoint, rate = session.project.sampleRate
+        let decision = FollowPolicy.next(start: viewport.start, playhead: Double(session.playhead), width: width, framesPerPoint: fpp,
+                                         sampleRate: rate, lastPage: lastPageAt, now: now, reduceMotion: reduce)
+        if case .page(let start) = decision {
+            viewport.start = start
+            lastPageAt = now
             refresh(waveform: true)
         }
+        let tooClose = FollowPolicy.pagesPerSecond(width: width, framesPerPoint: fpp, sampleRate: rate) > FollowPolicy.limit(reduceMotion: reduce)
+        showFollowPaused(tooClose && (decision == .paused || !followChip.isHidden))
+    }
+    private var lastPageAt: Double?
+
+    /// "Following paused at this zoom": steady, in the ruler's right corner, while following would flash.
+    private lazy var followChip: NSTextField = {
+        let f = NSTextField(labelWithString: L10n.text("timeline.followPaused"))
+        f.font = .systemFont(ofSize: 10, weight: .medium)
+        f.textColor = .secondaryLabelColor
+        f.wantsLayer = true
+        f.layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.85).cgColor
+        f.layer?.cornerRadius = 4
+        f.isHidden = true
+        f.translatesAutoresizingMaskIntoConstraints = false
+        f.setAccessibilityIdentifier("timeline.followPaused")
+        addSubview(f)
+        NSLayoutConstraint.activate([f.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8), f.topAnchor.constraint(equalTo: topAnchor, constant: 5)])
+        return f
+    }()
+
+    private func showFollowPaused(_ shown: Bool) {
+        guard followChip.isHidden == shown else { return }
+        followChip.isHidden = !shown
+        if shown { NSAccessibility.post(element: followChip, notification: .layoutChanged) }
     }
 
     func refresh(waveform: Bool) {
@@ -235,6 +271,9 @@ final class WaveformMetalView: MTKView, MTKViewDelegate {
     private var columnBuffer: MTLBuffer?
     /// What `columnBuffer` shows.
     private var shownKey: [Double] = []
+    /// Whether `columnBuffer` holds exact samples (not the block envelope), and for what shape (columns, lanes, channels).
+    private var shownIsExact = false
+    private var shownShape: [Int] = []
     /// Zoomed in past the peak index, exact samples come from the files on a
     /// background task (one at a time, always the latest view) and replace the
     /// block-level picture drawn meanwhile. The main thread never reads a file.
@@ -300,6 +339,7 @@ final class WaveformMetalView: MTKView, MTKViewDelegate {
                 self.exactInFlight = false
                 if self.shownKey == key {
                     self.columnBuffer = self.device?.makeBuffer(bytes: values, length: values.count * MemoryLayout<SIMD2<Float>>.stride)
+                    self.shownIsExact = true
                     self.needsDisplay = true
                 }
                 if let next = self.wantedExact, next.key != key { self.startExact() } else { self.wantedExact = nil }
@@ -321,9 +361,16 @@ final class WaveformMetalView: MTKView, MTKViewDelegate {
         if key != shownKey || columnBuffer == nil {
             let start = viewport.start, peaks = session.peaks, pool = session.pool
             let needsFiles = fpc < Double(PeakIndex.baseBlock)
-            let values = Self.columnValues(project, start: start, fpc: fpc, columns: columns, lanes: lanes, channels: channels,
-                                           peaks: peaks, pool: pool, allowRaw: !needsFiles)
-            columnBuffer = device?.makeBuffer(bytes: values, length: values.count * MemoryLayout<SIMD2<Float>>.stride)
+            let shape = [columns, lanes, channels]
+            // Zoomed in past the peaks, the last exact picture stays until the new view's own is ready: the block
+            // envelope in between is filled and bright where the exact line is thin, a flash at every page.
+            if columnBuffer == nil || WaveformBufferPolicy.drawsCoarse(needsExact: needsFiles, shownIsExact: shownIsExact, sameShape: shape == shownShape) {
+                let values = Self.columnValues(project, start: start, fpc: fpc, columns: columns, lanes: lanes, channels: channels,
+                                               peaks: peaks, pool: pool, allowRaw: !needsFiles)
+                columnBuffer = device?.makeBuffer(bytes: values, length: values.count * MemoryLayout<SIMD2<Float>>.stride)
+                shownIsExact = !needsFiles
+            }
+            shownShape = shape
             shownKey = key
             if needsFiles {
                 requestExact(key) {

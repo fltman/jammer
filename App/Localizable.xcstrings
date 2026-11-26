@@ -34337,6 +34337,24 @@
         }
       }
     },
+    "timeline.followPaused": {
+      "comment": "A steady chip on the timeline: zoomed in so far that following the playhead would flash; zoom out to follow again.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Following paused at this zoom"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Följer inte vid den här zoomen"
+          }
+        }
+      }
+    },
     "timeline.reading": {
       "comment": "Drawn on a track while its waveform is read. %@ is a whole number of percent.",
       "extractionState": "manual",

@@ -1,13 +1,14 @@
 import Foundation
 
 /// How a peak meter's bar moves (the window's meters; COMFORT 28): up at once, held, then down 20 dB a second. The bar
-/// stays up at least a third of a second after it rose before it falls, so no part of it (the red top above all)
-/// can light and go out more than three times a second, whatever the signal does (WCAG 2.3.1, SIBLINGS 9d56b54).
+/// stays up at least 0.4 s after it rose before it falls, so no part of it (the red top above all) can light and go
+/// out more than two and a half times a second, whatever the signal does: under the three of WCAG 2.3.1 (SIBLINGS
+/// 9d56b54) with room to spare at any tick rate (a third of a second came to 2.9 a second at fast ticks).
 public enum MeterBallistics {
     public static let floor = -60.0
     public static let fall = 20.0         // dB a second
     public static let hold = 1.5          // seconds, the held peak's line
-    public static let minimumOn = 1.0 / 3 // seconds the bar stays up after it rose
+    public static let minimumOn = 0.4     // seconds the bar stays up after it rose
 
     public struct Level: Equatable, Sendable {
         public var db = -Double.infinity
