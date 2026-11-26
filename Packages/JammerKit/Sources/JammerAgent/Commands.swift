@@ -112,7 +112,10 @@ public enum Commands {
         var out: [Command] = []
         func add(_ id: String, _ menu: C.Menu, _ section: Int, _ title: C.Title, key: String = "", _ mods: Set<C.Modifier> = [], agent: C.Agent,
                  submenu: String? = nil, contexts: Set<C.Context> = [], payload: [String: JSONValue] = [:], palette: Bool = true) {
-            out.append(Command(id: id, menu: menu, submenu: submenu, section: section, title: title, key: key, modifiers: key.isEmpty ? [] : mods.union([.command]),
+            // An arrow key is taken as given (⌥↑); every other key has ⌘.
+            let arrow = ["↑", "↓", "←", "→"].contains(key)
+            out.append(Command(id: id, menu: menu, submenu: submenu, section: section, title: title, key: key,
+                               modifiers: key.isEmpty ? [] : arrow ? mods : mods.union([.command]),
                                agent: agent, contexts: contexts, payload: payload, inPalette: palette))
         }
         func key(_ k: String) -> C.Title { .key(k) }
@@ -209,6 +212,10 @@ public enum Commands {
         add("track.arm", .track, 1, key("track.arm"), agent: .none(.microphone), contexts: [.track])
         add("track.lock", .track, 1, key("track.lock"), agent: op("set_track"), contexts: [.track])
         add("track.duplicate", .track, 4, key("track.duplicate"), agent: op("duplicate_track"), contexts: [.track])
+        // The track above or below becomes the selected one, brought into view; only while the timeline has the keyboard
+        // (a text field keeps ⌥↑ ⌥↓, and with automation shown they move between the tracks' lanes).
+        add("track.previous", .track, 4, key("track.previous"), key: "↑", [.option], agent: op("select_track"))
+        add("track.next", .track, 4, key("track.next"), key: "↓", [.option], agent: op("select_track"))
         add("track.moveUp", .track, 4, key("track.moveUp"), agent: op("move_track"), contexts: [.track])
         add("track.moveDown", .track, 4, key("track.moveDown"), agent: op("move_track"), contexts: [.track])
         add("track.delete", .track, 4, key("track.delete"), agent: op("remove_track"), contexts: [.track])

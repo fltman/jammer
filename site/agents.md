@@ -245,6 +245,14 @@ Clears the selection.
 
 No params: `{"op": "deselect"}`
 
+### `select_track`
+
+Makes a track the selected one (the one the Track menu acts on) and brings it into view in the window.
+
+| Param | Type | Description |
+|---|---|---|
+| `track` | string | **Required.** Track id. |
+
 ### `set_playhead`
 
 Moves the playhead (where paste and markers go by default).

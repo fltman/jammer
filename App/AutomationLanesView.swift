@@ -725,6 +725,8 @@ final class AutomationLanesView: NSView {
             let next = focus + (event.keyCode == 125 ? 1 : -1)
             guard list.indices.contains(next) else { return false }
             focus = next
+            // The track's lane: its track is the selected one too, brought into view.
+            if rows == .tracks, project.tracks.contains(where: { $0.id == list[focus].id }) { session.currentTrack = list[focus].id }
             selected = nil
             session.status = L10n.text("automation.focus.status", list[focus].name)
             needsDisplay = true

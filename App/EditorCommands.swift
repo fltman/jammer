@@ -184,6 +184,17 @@ extension EditorWindowController {
         session.perform("duplicate_track", ["track": .string(track.id.uuidString), "name": .string(L10n.text("track.copyName", track.name))])
     }
 
+    @objc func previousTrack(_ sender: Any?) { selectTrack(by: -1) }
+    @objc func nextTrack(_ sender: Any?) { selectTrack(by: 1) }
+    /// The track above or below the selected one becomes the selected one (the timeline brings it into view); with none
+    /// selected, the first.
+    private func selectTrack(by n: Int) {
+        let tracks = session.project.tracks
+        guard !tracks.isEmpty else { return }
+        let i = tracks.firstIndex { $0.id == session.currentTrack }.map { min(tracks.count - 1, max(0, $0 + n)) } ?? 0
+        session.currentTrack = tracks[i].id
+        session.status = L10n.text("track.selected.status", tracks[i].name)
+    }
     @objc func moveTrackUp(_ sender: Any?) { moveTrack(by: -1) }
     @objc func moveTrackDown(_ sender: Any?) { moveTrack(by: 1) }
     private func moveTrack(by n: Int) {

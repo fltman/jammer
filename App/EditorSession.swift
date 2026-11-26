@@ -652,8 +652,10 @@ final class EditorSession {
     /// failure leaves the document as it was. One undo step.
     func run(_ steps: [Step], action: String) async -> [StepResult] {
         let probe0 = Date()
-        let start = EditState(project: project, selection: selection, playhead: playhead, clipboard: AppClipboard.content,
-                              pool: pool, media: MediaStore.folder)
+        var initial = EditState(project: project, selection: selection, playhead: playhead, clipboard: AppClipboard.content,
+                                pool: pool, media: MediaStore.folder)
+        initial.currentTrack = currentTrack
+        let start = initial
         let pool = self.pool
         let safe = Self.pluginSafeMode
         // A step still running after half a second shows in the status bar with a Stop (COMFORT 7). A stopped run
@@ -715,6 +717,8 @@ final class EditorSession {
         // The selection and the playhead are the run's only if nobody moved them meanwhile.
         if selection == start.selection { selection = end.selection }
         if playhead == start.playhead { playhead = end.playhead }
+        if currentTrack == start.currentTrack, end.currentTrack != start.currentTrack, let t = end.currentTrack,
+           project.tracks.contains(where: { $0.id == t }) { currentTrack = t }
         AppClipboard.content = end.clipboard
         if isPlaying, end.playhead != start.playhead { try? output.play(from: playhead) }
         // What a step wants said with its result (automation that stayed where it was under a moved track):

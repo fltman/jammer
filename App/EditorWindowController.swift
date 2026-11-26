@@ -1127,6 +1127,14 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
                 return (true, nil)
             }
             return (false, p.markers.isEmpty ? L10n.text("reason.noMarkers") : L10n.text("reason.chooseMarker"))
+        case "track.previous", "track.next":
+            // Only while the timeline has the keyboard: a key equivalent is taken before the focused view sees it, and
+            // a text field's ⌥↑ ⌥↓ (the transcript, the omnibar) and the automation lanes' own must stay theirs.
+            guard window?.firstResponder === timeline.firstResponderView else { return (false, L10n.text("reason.timelineKeys")) }
+            if timeline.shownAutomation != nil { return (false, L10n.text("reason.automationTrackKeys")) }
+            let i = p.tracks.firstIndex { $0.id == session.currentTrack }
+            if id == "track.previous" { return needs(!p.tracks.isEmpty && i != 0, L10n.text("reason.trackAtTop")) }
+            return needs(!p.tracks.isEmpty && i != p.tracks.count - 1, L10n.text("reason.trackAtBottom"))
         case "track.rename", "track.mute", "track.solo", "track.lock", "track.duplicate", "track.moveUp", "track.moveDown", "track.delete":
             guard let t = currentTrack else { return (false, L10n.text("reason.chooseTrack")) }
             if id == "track.mute" { item?.state = t.isMuted ? .on : .off }

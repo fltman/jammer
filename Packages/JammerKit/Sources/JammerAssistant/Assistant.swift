@@ -169,6 +169,7 @@ public enum AssistantCatalog {
         "debleed": ["bleed", "spill", "läck", "överhör"],
         "detect_tempo": ["tempo", "bpm", "takt", "beat"],
         "duck": ["duck", "under speech", "under the speech", "under the voice", "under talet", "under rösten", "musiken under", "music under", "sänk musiken", "lower the music"],
+        "select_track": ["select track", "select the track", "go to track", "show track", "välj spår", "välj spåret", "gå till spår", "visa spår"],
         "level_speakers": ["speakers", "talarna", "lika högt", "equally loud", "same level", "samma nivå", "even out", "jämna"],
         "loudness_preset": ["podcast", "podd", "spotify", "youtube", "apple", "broadcast", "ebu", "r128", "preset", "streaming", "sändning"],
         "rename_speaker": ["rename", "döp", "byt namn", "kalla", "call speaker", "name speaker"],

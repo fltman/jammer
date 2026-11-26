@@ -204,6 +204,8 @@ public enum Operations {
               params: [.init("start", .seconds, "Start in seconds.", required: true), .init("end", .seconds, "End in seconds.", required: true)], edits: false),
         .init("select_all", "Select All", "Selects the whole document.", edits: false),
         .init("deselect", "Deselect", "Clears the selection.", edits: false),
+        .init("select_track", "Select Track", "Makes a track the selected one (the one the Track menu acts on) and brings it into view in the window.",
+              params: [.init("track", .string, "Track id.", required: true)], edits: false),
         .init("set_playhead", "Move Playhead", "Moves the playhead (where paste and markers go by default).",
               params: [.init("at", .seconds, "Position in seconds.", required: true)], edits: false),
         .init("set_video_reference", "Set Film", "Gives the document a film to look at while the sound is worked on: a file on this Mac, shown in the Picture window and following the playhead. The film is only pointed at: it is not read into the project, not changed, and its own sound is not played. info has `at`.",
@@ -675,6 +677,8 @@ public struct EditState: Sendable {
     public var project: Project
     public var selection: Range<Frame>?
     public var playhead: Frame
+    /// The selected track (select_track), when a step chose one.
+    public var currentTrack: UUID?
     public var clipboard: ClipboardContent?
     /// For steps that render audio (echo): where sources are read and new files written.
     public var pool: SourcePool?
@@ -1026,6 +1030,11 @@ public enum StepRunner {
             s.selection = project.length > 0 ? 0..<project.length : nil
         case "deselect":
             s.selection = nil
+        case "select_track":
+            guard let id = UUID(uuidString: p["track"]?.string ?? ""), project.tracks.contains(where: { $0.id == id }) else {
+                throw StepFailure(Said("step.set_track.such_track", "set_track: no such track."), reason: "not_found")
+            }
+            s.currentTrack = id
         case "set_playhead":
             s.playhead = min(max(0, frames("at") ?? 0), project.length)
         case "set_video_reference":

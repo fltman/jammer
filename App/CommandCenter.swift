@@ -99,6 +99,8 @@ enum CommandCenter {
         case "track.solo": return (#selector(W.toggleTrackSolo(_:)), nil)
         case "track.lock": return (#selector(W.toggleTrackLock(_:)), nil)
         case "track.duplicate": return (#selector(W.duplicateTrack(_:)), nil)
+        case "track.previous": return (#selector(W.previousTrack(_:)), nil)
+        case "track.next": return (#selector(W.nextTrack(_:)), nil)
         case "track.moveUp": return (#selector(W.moveTrackUp(_:)), nil)
         case "track.moveDown": return (#selector(W.moveTrackDown(_:)), nil)
         case "track.delete": return (#selector(W.deleteTrack(_:)), nil)
@@ -170,7 +172,9 @@ enum CommandCenter {
 
     static func item(_ c: Command, inContext: Bool = false) -> NSMenuItem {
         let (action, target) = action(c)
-        let i = NSMenuItem(title: title(c), action: action, keyEquivalent: inContext ? "" : c.key)
+        let arrows = ["↑": NSUpArrowFunctionKey, "↓": NSDownArrowFunctionKey, "←": NSLeftArrowFunctionKey, "→": NSRightArrowFunctionKey]
+        let key = arrows[c.key].map { String(Character(UnicodeScalar($0)!)) } ?? c.key
+        let i = NSMenuItem(title: title(c), action: action, keyEquivalent: inContext ? "" : key)
         if !inContext {
             var mods: NSEvent.ModifierFlags = []
             if c.modifiers.contains(.command) { mods.insert(.command) }

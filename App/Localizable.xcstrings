@@ -21768,6 +21768,24 @@
         }
       }
     },
+    "op.select_track.title": {
+      "comment": "The title of the operation select_track: in the menus, the command palette, the assistant’s plan and as the undo name (“Undo …”). The agent API keeps the English title.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select Track"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Välj spår"
+          }
+        }
+      }
+    },
     "op.separate.title": {
       "comment": "The title of the operation separate: in the menus, the command palette, the assistant’s plan and as the undo name (“Undo …”). The agent API keeps the English title.",
       "extractionState": "manual",
@@ -25563,6 +25581,24 @@
         }
       }
     },
+    "reason.automationTrackKeys": {
+      "comment": "Why Previous or Next Track is dimmed while automation lanes are shown.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "With automation shown, ⌥↑ and ⌥↓ move between the tracks' lanes"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "När automation visas flyttar ⌥↑ och ⌥↓ mellan spårens banor"
+          }
+        }
+      }
+    },
     "reason.binauralFirst": {
       "comment": "Command registry (comfort block).",
       "extractionState": "manual",
@@ -25937,6 +25973,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Kräver ett dokument med fler än två kanaler."
+          }
+        }
+      }
+    },
+    "reason.timelineKeys": {
+      "comment": "Why Previous or Next Track is dimmed: another field has the keyboard.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Works while the timeline has the keyboard"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fungerar när tidslinjen har tangentbordet"
           }
         }
       }
@@ -35112,6 +35166,42 @@
         }
       }
     },
+    "track.next": {
+      "comment": "Menu item and palette command: the track below becomes the selected one.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Next Track"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nästa spår"
+          }
+        }
+      }
+    },
+    "track.previous": {
+      "comment": "Menu item and palette command: the track above becomes the selected one.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Previous Track"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Föregående spår"
+          }
+        }
+      }
+    },
     "track.rename": {
       "comment": "Track menu.",
       "extractionState": "manual",
@@ -35162,6 +35252,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Byt namn på spåret"
+          }
+        }
+      }
+    },
+    "track.selected.status": {
+      "comment": "Status bar, after Previous or Next Track: the track now selected.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Track: %@"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spår: %@"
           }
         }
       }
