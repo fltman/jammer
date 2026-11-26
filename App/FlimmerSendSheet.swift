@@ -111,7 +111,8 @@ final class FlimmerSendModel {
     }
 
     static let transport: FlimmerSend.Transport = { request in
-        let (data, response) = try await KeyedRequest.data(for: request, session: .shared)
+        // Flimmer is on this Mac: nothing of its answers is kept (COMFORT.md 620092e).
+        let (data, response) = try await KeyedRequest.data(for: request, session: LocalSession.shared)
         guard let http = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
         return (data, http)
     }

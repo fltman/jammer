@@ -23,7 +23,7 @@ public enum SiblingDirectory {
     nonisolated(unsafe) public static var ownKind: AgentAPI.BuildKind = AgentAPI.ownKind
 
     /// Finds the siblings that run. 1 s on the first port, about 300 ms on the rest.
-    public static func discover(session: URLSession = .shared) async -> [Sibling] {
+    public static func discover(session: URLSession = LocalSession.shared) async -> [Sibling] {
         await withTaskGroup(of: Sibling?.self) { group in
             for entry in table {
                 group.addTask {
@@ -139,7 +139,7 @@ public enum SiblingDirectory {
     }
 
     /// Runs it on the sibling's frontmost document; returns a one-line outcome.
-    public static func run(_ sibling: Sibling, _ action: AssistantAction, _ params: [String: JSONValue], session: URLSession = .shared) async -> String {
+    public static func run(_ sibling: Sibling, _ action: AssistantAction, _ params: [String: JSONValue], session: URLSession = LocalSession.shared) async -> String {
         let docs = await get("http://127.0.0.1:\(sibling.port)/api/v1/documents", timeout: 2, session: session)?["documents"] as? [[String: Any]] ?? []
         guard let doc = docs.first(where: { $0["frontmost"] as? Bool == true }) ?? docs.first, let id = doc["id"] as? String else {
             return "\(sibling.name) has no open document."

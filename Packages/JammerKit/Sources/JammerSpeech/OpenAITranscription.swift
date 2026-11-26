@@ -27,11 +27,12 @@ public struct OpenAITranscription: TranscriptionEngine {
 
     public static let defaultEndpoint = URL(string: "https://api.openai.com/v1")!
 
-    public init(endpoint: URL = OpenAITranscription.defaultEndpoint, model: String, key: @escaping @Sendable () -> String?, session: URLSession = .shared) {
+    public init(endpoint: URL = OpenAITranscription.defaultEndpoint, model: String, key: @escaping @Sendable () -> String?, session: URLSession? = nil) {
         self.endpoint = endpoint
         self.model = model
         self.key = key
-        self.session = session
+        // A server on this Mac (a test's): nothing cached (COMFORT.md 620092e).
+        self.session = session ?? LocalSession.session(for: endpoint)
     }
 
     public var id: String { "openai \(model)" }

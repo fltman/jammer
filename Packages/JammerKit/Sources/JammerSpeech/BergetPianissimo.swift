@@ -14,7 +14,7 @@ public struct BergetPianissimo: TranscriptionEngine {
 
     public init(key: String, endpoint: URL = defaultEndpoint) {
         self.init(key: key, endpoint: endpoint) { request in
-            let socket = KeyedRequest.webSocket(for: request, session: .shared)
+            let socket = KeyedRequest.webSocket(for: request, session: LocalSession.session(for: request.url))
             socket.resume()
             return socket
         }

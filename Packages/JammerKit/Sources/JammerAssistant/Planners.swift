@@ -99,11 +99,11 @@ public struct OpenRouterPlanner: AssistantPlanner {
     public var session: URLSession
 
     public init(endpoint: URL = URL(string: "https://openrouter.ai/api/v1")!, model: String,
-                key: @escaping @Sendable () -> String?, session: URLSession = .shared) {
+                key: @escaping @Sendable () -> String?, session: URLSession? = nil) {
         self.endpoint = endpoint
         self.model = model
         self.key = key
-        self.session = session
+        self.session = session ?? LocalSession.session(for: endpoint)   // a server on this Mac: nothing cached (COMFORT.md 620092e)
     }
 
     public var id: String { "openrouter:\(model)" }
@@ -195,7 +195,7 @@ public struct LocalServerPlanner: AssistantPlanner {
     /// A local model can take a while to load into memory the first time.
     public var timeout: TimeInterval
 
-    public init(endpoint: URL = Ollama.base.appending(path: "v1"), model: String, kind: String = "ollama", session: URLSession = .shared, timeout: TimeInterval = 180) {
+    public init(endpoint: URL = Ollama.base.appending(path: "v1"), model: String, kind: String = "ollama", session: URLSession = LocalSession.shared, timeout: TimeInterval = 180) {
         self.endpoint = endpoint
         self.model = model
         self.kind = kind
@@ -260,7 +260,7 @@ public struct OllamaPlanner: AssistantPlanner {
     /// Tokens of context asked for: the tools and the document's description fit in this.
     public var context: Int
 
-    public init(model: String, session: URLSession = .shared, timeout: TimeInterval = 240, context: Int = 16_384) {
+    public init(model: String, session: URLSession = LocalSession.shared, timeout: TimeInterval = 240, context: Int = 16_384) {
         self.model = model
         self.session = session
         self.timeout = timeout
@@ -335,20 +335,20 @@ public enum Ollama {
     }
 
     /// The server's version, or nil when none is running here.
-    public static func version(session: URLSession = .shared) async -> String? {
+    public static func version(session: URLSession = LocalSession.shared) async -> String? {
         guard let d = await get("api/version", session: session) else { return nil }
         return ((try? JSONSerialization.jsonObject(with: d)) as? [String: Any])?["version"] as? String
     }
 
     /// The models that are installed (Jämmer never fetches one).
-    public static func models(session: URLSession = .shared) async -> [String] {
+    public static func models(session: URLSession = LocalSession.shared) async -> [String] {
         guard let d = await get("api/tags", session: session), let list = ((try? JSONSerialization.jsonObject(with: d)) as? [String: Any])?["models"] as? [[String: Any]] else { return [] }
         return list.compactMap { $0["name"] as? String }.sorted()
     }
 
     /// What the server says the model can do (`capabilities` of /api/show: "completion", "tools",
     /// "thinking", "vision"), or nil when it has no such model or isn't running.
-    public static func capabilities(_ model: String, session: URLSession = .shared) async -> [String]? {
+    public static func capabilities(_ model: String, session: URLSession = LocalSession.shared) async -> [String]? {
         var req = URLRequest(url: base.appending(path: "api/show"))
         req.httpMethod = "POST"
         req.timeoutInterval = 5
@@ -358,7 +358,7 @@ public enum Ollama {
         return ((try? JSONSerialization.jsonObject(with: data)) as? [String: Any])?["capabilities"] as? [String] ?? []
     }
 
-    public static func supportsTools(_ model: String, session: URLSession = .shared) async -> Bool {
+    public static func supportsTools(_ model: String, session: URLSession = LocalSession.shared) async -> Bool {
         await capabilities(model, session: session)?.contains("tools") ?? false
     }
 }

@@ -28,8 +28,8 @@ public struct ElevenLabs: Sendable {
     public static let maxCharacters = 10_000
     public static let outputFormat = "mp3_44100_128"
 
-    public init(base: URL = ElevenLabs.defaultBase, key: @escaping @Sendable () -> String?, session: URLSession = .shared) {
-        self.base = base; self.key = key; self.session = session
+    public init(base: URL = ElevenLabs.defaultBase, key: @escaping @Sendable () -> String?, session: URLSession? = nil) {
+        self.base = base; self.key = key; self.session = session ?? LocalSession.session(for: base)
     }
 
     public struct Failure: Error, LocalizedError, Equatable {
