@@ -88,7 +88,10 @@ public struct ElevenLabs: Sendable {
             body.append(Data("\r\n".utf8))
         }
         body.append(Data("--\(boundary)--\r\n".utf8))
-        let (data, _) = try await send(r, body: body)
+        // Sent in a task of its own, so a Stop can't cut it off: once the samples have gone, ElevenLabs may make the
+        // voice (and charge for it) whatever happens here, and only its answer says which voice to delete.
+        let request = r, payload = body
+        let (data, _) = try await Task.detached { try await self.send(request, body: payload) }.value
         guard let o = try? JSONSerialization.jsonObject(with: data) as? [String: Any], let id = o["voice_id"] as? String, !id.isEmpty else {
             throw Failure(status: 200, message: "no voice_id in the answer")
         }

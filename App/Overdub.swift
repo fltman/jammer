@@ -17,9 +17,12 @@ extension EditorSession {
         // No stop check here on purpose: a voice ElevenLabs has made is always kept on record, so that it can be
         // deleted from Jämmer rather than left behind in the account.
         var p = project
-        p.voices.append(made.0)
+        // Stopped meanwhile: ElevenLabs made it anyway. Kept, marked, so it can be deleted here; it is never spoken with.
+        var voice = made.0
+        if Task.isCancelled { voice.madeAfterStop = true }
+        p.voices.append(voice)
         commit(p, action: L10n.text("overdub.undo.clone", name))
-        return made
+        return (voice, made.needsVerification)
     }
 
     /// Says `text` in `voice` and puts it in place of `range` on `track`: one undo step.
@@ -30,9 +33,15 @@ extension EditorSession {
         let after = p0.placedWords(in: range.upperBound..<min(p0.length, range.upperBound + p0.frames(10))).map(\.word.text).joined(separator: " ")
         let source = try await OverdubService(provider: Self.elevenLabs()).speak(voice, text: text, model: model, previous: before, next: after,
                                                                                  sampleRate: p0.sampleRate, folder: MediaStore.folder)
-        // Stopped while the answer came: the speech is not put in (it was paid for; the caller says so).
-        try Task.checkCancellation()
         var p = project
+        // Stopped while the answer came: the speech is paid for, so it is kept, but not put in place of the words (the
+        // person stopped it): a new muted track there, as a take. In the document, Storage knows its file.
+        if Task.isCancelled {
+            p.addTake(source, at: range.lowerBound, name: L10n.text("overdub.take"))
+            commit(p, action: L10n.text("overdub.undo.overdub"))
+            say(L10n.text("overdub.stoppedKept"), .warning)
+            return source
+        }
         // The place changed while the speech was made (paid): it goes on a new muted track there as a take, and nothing
         // made meanwhile is touched (COMFORT 59, 77).
         guard p.unchanged(range, track: trackID, since: p0), let i = p.tracks.firstIndex(where: { $0.id == trackID }) else {
@@ -132,7 +141,11 @@ extension EditorWindowController {
         defer { session.endWait(wait) }
         do {
             let (voice, verify) = try await request.value
-            session.say(verify ? L10n.text("overdub.clone.verify", voice.name) : L10n.text("overdub.clone.done", voice.name), verify ? .warning : .success)
+            if voice.madeAfterStop == true {
+                session.say(L10n.text("overdub.clone.afterStop", voice.name), .warning)
+            } else {
+                session.say(verify ? L10n.text("overdub.clone.verify", voice.name) : L10n.text("overdub.clone.done", voice.name), verify ? .warning : .success)
+            }
         } catch where request.isCancelled {
             session.say(L10n.text("overdub.clone.stopped"), .warning)
         } catch {
@@ -147,7 +160,7 @@ extension EditorWindowController {
 
     private func askToOverdub() async {
         let p = session.project
-        let voices = p.voices.filter { $0.deleted == nil }
+        let voices = p.voices.filter { $0.deleted == nil && $0.madeAfterStop != true }
         guard let first = voices.first else { session.say(L10n.text("overdub.noVoice"), .error); return }
         guard let sel = session.selection, let track = session.speechTrack(at: sel.lowerBound) else { session.say(L10n.text("overdub.selectWords"), .error); return }
         let pick = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 300, height: 26))
@@ -201,7 +214,8 @@ extension EditorWindowController {
         defer { session.endWait(wait) }
         do {
             _ = try await request.value
-            session.say(L10n.text("overdub.done", voice.name), .success)
+            // Stopped after the speech had come: it was kept as a muted take, and that was said.
+            if !request.isCancelled { session.say(L10n.text("overdub.done", voice.name), .success) }
         } catch where request.isCancelled {
             session.say(L10n.text("job.mayHaveBeenCharged", "ElevenLabs"), .warning)
         } catch {

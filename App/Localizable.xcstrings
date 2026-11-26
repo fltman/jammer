@@ -5321,6 +5321,24 @@
         }
       }
     },
+    "batch.stopped.paid": {
+      "comment": "Added to the batch's stop line when a paid transcription had been sent.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A paid transcription had already been sent, so the provider may have charged for it."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En betald transkribering hade redan skickats, så tjänsten kan ha tagit betalt för den."
+          }
+        }
+      }
+    },
     "batch.stopping": {
       "comment": "Batch window right after Stop.",
       "extractionState": "manual",
@@ -10476,6 +10494,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Den rösten är raderad hos leverantören."
+          }
+        }
+      }
+    },
+    "error.overdub.voiceMadeAfterStop": {
+      "comment": "Overdub refused: the voice was made after Stop.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "That voice was made after Stop was pressed: it is kept so you can delete it, not to speak with."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rösten gjordes efter att Stopp trycktes: den finns kvar så att du kan radera den, inte för att tala med."
           }
         }
       }
@@ -22702,6 +22738,24 @@
         }
       }
     },
+    "overdub.clone.afterStop": {
+      "comment": "Status bar: ElevenLabs made the voice after Stop. %@ its name.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ElevenLabs made the voice “%@” after you pressed Stop, and charged for it. It is in the document's voices so you can delete it (Speech › Delete Cloned Voice…); it won't be used to speak."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ElevenLabs gjorde rösten ”%@” efter att du tryckte på Stopp, och tog betalt för den. Den finns bland dokumentets röster så att du kan radera den (Tal › Radera klonad röst…); den används inte för att tala."
+          }
+        }
+      }
+    },
     "overdub.clone.done": {
       "extractionState": "manual",
       "localizations": {
@@ -23218,6 +23272,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Skickar texten till ElevenLabs (⌘Retur). Retur ensam ger en ny rad."
+          }
+        }
+      }
+    },
+    "overdub.stoppedKept": {
+      "comment": "Status bar: Overdub stopped after ElevenLabs had sent the speech; charged, kept as a muted take.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stopped after ElevenLabs had sent the speech, so it was charged. It is kept on a new muted track, as a take: the words it was to replace are as they were."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stoppat efter att ElevenLabs skickat talet, så det har debiterats. Det finns kvar på ett nytt tystat spår, som en tagning: orden det skulle ersätta är som förut."
           }
         }
       }
@@ -35390,6 +35462,66 @@
         }
       }
     },
+    "transcript.stopped.kept": {
+      "comment": "Status bar: words a stopped paid transcription had already received, kept in History.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Stopped. The %lld word that had already come back is paid for and kept in History, as a branch you can go to; the rest was never fetched."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Stopped. The %lld words that had already come back are paid for and kept in History, as a branch you can go to; the rest was never fetched."
+                }
+              }
+            }
+          }
+        },
+        "sv": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Stoppat. %lld ord som redan kommit tillbaka är betalt och finns kvar i Historik, som en gren du kan gå till; resten hämtades aldrig."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Stoppat. De %lld ord som redan kommit tillbaka är betalda och finns kvar i Historik, som en gren du kan gå till; resten hämtades aldrig."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "transcript.stopped.paid": {
+      "comment": "The transcript panel after a paid transcription was stopped.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stopped. The document is as it was; the provider may have charged for what had been sent."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stoppat. Dokumentet är som förut; tjänsten kan ha tagit betalt för det som skickats."
+          }
+        }
+      }
+    },
     "transcript.textOnly": {
       "extractionState": "manual",
       "localizations": {
@@ -35457,6 +35589,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Transkriberar varje fil som dokumentet spelar från, på språket bredvid, som ett ångrasteg."
+          }
+        }
+      }
+    },
+    "transcript.transcribe.stopped": {
+      "comment": "History: a paid transcription stopped part way, what came kept.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transcribe (stopped part way)"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkribera (stoppad halvvägs)"
           }
         }
       }

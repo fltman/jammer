@@ -65,7 +65,11 @@ enum BatchJobs {
             do { engine = try await MainActor.run { try SpeechEngines.engine(choice, for: locale, model: step.params["model"]?.string) } } catch let e as SpeechEngines.Unavailable { throw BatchError(e.reason, e.message) }
             var p = project
             let used = Set(p.tracks.flatMap { $0.clips.map(\.sourceID) })
-            for src in p.sources where used.contains(src.id) { p.setTranscript(try await engine.transcribe(src, pool: pool, locale: locale) { _ in }) }
+            for src in p.sources where used.contains(src.id) {
+                // From here the audio leaves for the provider: a stop now may have been charged, and says so.
+                if let provider = choice.provider { await MainActor.run { JobRegistry.shared.notePaidBatchRequest(provider) } }
+                p.setTranscript(try await engine.transcribe(src, pool: pool, locale: locale) { _ in })
+            }
             return p
         case "diarize":
             var p = project
@@ -228,7 +232,8 @@ final class BatchModel {
                 self?.jobID = nil
                 // Stopped: the files done so far stay in the folder, and the line says how many.
                 if let started, JobRegistry.shared.job(started)?.status == .cancelled {
-                    self?.status = L10n.text("batch.stopped", String(result.outputs.count))
+                    let stopped = L10n.text("batch.stopped", String(result.outputs.count))
+                    self?.status = JobRegistry.shared.mayHaveBeenCharged(started) ? stopped + " " + L10n.text("batch.stopped.paid") : stopped
                     return
                 }
                 var parts = [L10n.text("batch.result.done", String(result.outputs.count))]

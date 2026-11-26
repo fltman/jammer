@@ -637,6 +637,8 @@ public enum FlimmerSend {
             }
             let dry = body(project, plan: plan, mode: mode, items: items, uploads: uploads, dryRun: true)
             let answer = try await client.plan(dry, items: items)
+            // Backed out while Flimmer answered the dry run (it isn't cut off): the uploads go, as for any stop.
+            try Task.checkCancellation()
             progress(1)
             let transcripts = transcriptBodies(project, items: items)
             let said: [Said] = transcripts.isEmpty ? [] : transcripts.count == 1

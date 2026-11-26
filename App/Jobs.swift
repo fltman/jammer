@@ -39,6 +39,19 @@ final class JobRegistry {
     var running: [Job] { jobs.values.filter { !$0.isFinished }.sorted { $0.id < $1.id } }
 
     /// A document's running jobs, oldest first (the status bar's order; ⌘. stops the last).
+    /// A batch's paid transcription is about to leave the app: a stop of the batch from now on says it may have been
+    /// charged (the window's line, and `mayHaveBeenCharged` in the API). Batches rarely run side by side; each one
+    /// running is marked.
+    func notePaidBatchRequest(_ provider: String) {
+        for (id, j) in jobs where j.kind == "batch" && !j.isFinished { paidSent[id] = provider }
+    }
+
+    /// Whether a stopped job's paid request had left (the provider may have charged).
+    func mayHaveBeenCharged(_ id: String) -> Bool { jobs[id]?.result?["mayHaveBeenCharged"] == .bool(true) }
+
+    /// When a job began running (nil before it does, and after it ends).
+    func started(_ id: String) -> Date? { startedAt[id] }
+
     func running(document: String) -> [Job] {
         jobs.values.filter { !$0.isFinished && $0.documentID == document }
             .sorted { (startedAt[$0.id] ?? .distantFuture, $0.id) < (startedAt[$1.id] ?? .distantFuture, $1.id) }
@@ -247,7 +260,7 @@ final class JobRegistry {
                     j.progress = min(0.99, p)
                     self?.update(j)
                 }
-            }, cancelled: { Task.isCancelled })
+            })
             guard self?.jobs[id]?.status != .cancelled else { return }
             job.status = .done
             job.progress = 1
@@ -575,7 +588,12 @@ final class JobRegistry {
                     done += share
                 }
                 try Task.checkCancellation()
+            } catch let stopped as TranscriptionStopped {
+                // Stopped with answers already in: paid for, so kept (as a branch in History, not applied).
+                session?.keepStoppedTranscripts(results + [stopped.partial], basedOn: project, under: node)
+                return
             } catch is CancellationError {
+                if choice.provider != nil { session?.keepStoppedTranscripts(results, basedOn: project, under: node) }
                 return
             } catch {
                 guard self?.jobs[id]?.status != .cancelled else { return }

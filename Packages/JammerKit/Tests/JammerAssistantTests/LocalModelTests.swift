@@ -162,3 +162,35 @@ struct LocalModelTests {
     }
 }
 }
+
+/// A local server that takes the request and never answers until it is stopped.
+final class HoldingServer: URLProtocol, @unchecked Sendable {
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var came = 0
+    static var arrived: Bool { lock.withLock { came > 0 } }
+    static var session: URLSession {
+        let c = URLSessionConfiguration.ephemeral
+        c.protocolClasses = [HoldingServer.self]
+        return URLSession(configuration: c)
+    }
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() { Self.lock.withLock { Self.came += 1 } }
+    override func stopLoading() {}
+}
+
+@Suite("A local model stopped from the panel")
+struct LocalModelStopTests {
+    @Test("Stopped while the local server is still thinking: the planner ends with a stop, not \"didn't answer (cancelled)\"")
+    func stoppedIsAStop() async {
+        let planner = LocalServerPlanner(endpoint: URL(string: "http://127.0.0.1:8080/v1")!, model: "x", session: HoldingServer.session)
+        let (c, _) = ModelServices.LocalModelTests().context()
+        let task = Task { try await planner.plan(goal: "make it louder", context: c, history: [], actions: []) }
+        for _ in 0..<200 where !HoldingServer.arrived { try? await Task.sleep(for: .milliseconds(10)) }
+        task.cancel()
+        switch await task.result {
+        case .failure(let e): #expect(e is CancellationError, "\(e)")
+        case .success: Issue.record("an answer came from a server that never answers")
+        }
+    }
+}

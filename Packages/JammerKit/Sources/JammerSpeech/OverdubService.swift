@@ -55,6 +55,7 @@ public struct OverdubService: Sendable {
     public func speak(_ voice: ClonedVoice, text: String, model: String, previous: String?, next: String?, sampleRate: Double,
                       folder: URL, now: Date = Date()) async throws -> SourceRef {
         guard voice.deleted == nil else { throw OverdubError.voiceDeleted }
+        guard voice.madeAfterStop != true else { throw OverdubError.voiceMadeAfterStop }
         let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty else { throw OverdubError.emptyText }
         guard clean.count <= ElevenLabs.maxCharacters else { throw OverdubError.textTooLong(ElevenLabs.maxCharacters) }

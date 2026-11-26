@@ -1102,7 +1102,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         case "speech.cloneVoice": return needs(session.selection != nil && !p.transcripts.isEmpty, L10n.text("reason.selectTranscribed"))
         case "speech.overdub":
             if session.selection == nil { return (false, selection) }
-            return needs(p.voices.contains { $0.deleted == nil }, L10n.text("reason.cloneFirst"))
+            return needs(p.voices.contains { $0.deleted == nil && $0.madeAfterStop != true }, L10n.text("reason.cloneFirst"))
         case "speech.deleteVoice": return needs(p.voices.contains { $0.deleted == nil }, L10n.text("reason.cloneFirst"))
         case "transport.previousMarker", "transport.nextMarker": return needs(!p.markers.isEmpty, L10n.text("reason.noMarkers"))
         case "transport.record":

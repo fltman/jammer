@@ -50,6 +50,8 @@ final class PretendFlimmer: @unchecked Sendable {
     /// Seconds before the answer to the plan's POST or to a job poll arrives, after Flimmer has acted on it.
     /// The wait ends early on a cancel, as URLSession's does: the request was made, its answer is lost.
     var planAnswerDelay = 0.0
+    /// Dry runs asked for.
+    var dryRuns = 0
     var pollAnswerDelay = 0.0
 
     var transport: FlimmerSend.Transport {
@@ -252,6 +254,7 @@ final class PretendFlimmer: @unchecked Sendable {
             }
         }
         if b["dryRun"] as? Bool == true {
+            dryRuns += 1
             return answer(200, ["dryRun": true, "wouldCreate": create, "wouldMute": mute, "wouldSetTracks": settings, "overlaps": overlaps, "listed": listed, "warnings": []], r)
         }
         // For real: all at once, one undo step; the uploads are consumed.
@@ -632,6 +635,20 @@ struct FlimmerSendTests {
         plan = RenderPlanProbe.stereoised(p, pool: pool, differ: false)
         let same = try await FlimmerSend.prepare(plan.project, mode: .takes, client: client(f), render: render(plan.pool))
         #expect(channels(f.uploads[same.uploads[0]]!.data) == 1 && !same.lines.contains { $0.contains("stereo") })
+    }
+
+    @Test("Backed out while Flimmer answers the dry run: every upload is taken away again, and nothing is prepared")
+    func cancelDuringDryRun() async throws {
+        let (p, pool) = film()
+        let f = flimmer(), c = client(f)
+        f.planAnswerDelay = 0.3
+        let task = Task { try await FlimmerSend.prepare(p, mode: .mix, client: c, render: render(pool)) }
+        while f.lock.withLock({ f.dryRuns }) == 0 { try await Task.sleep(for: .milliseconds(5)) }
+        #expect(f.lock.withLock { !f.uploads.isEmpty }, "the files were up when the dry run was asked")
+        task.cancel()
+        let result = await task.result
+        #expect((try? result.get()) == nil, "nothing prepared for a sheet that is gone")
+        #expect(f.lock.withLock { f.uploads.isEmpty }, "the uploads are taken away from Flimmer")
     }
 
     @Test("Large files go in chunks from disk; one over the limit is refused before anything is uploaded; a dropped upload is removed")

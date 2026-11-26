@@ -116,11 +116,19 @@ extension EditorWindowController {
         (sender as? NSMenuItem)?.title = L10n.text(v.isHidden ? "view.toolPalette" : "view.hideToolPalette")
     }
 
-    /// Edit › Stop Job: the newest job this document runs; the others go on.
+    /// Edit › Stop Job: this document's own newest work (a wait in its window or one of its jobs); what Jämmer does
+    /// for another app only when the document has nothing going (StopChoice). The others go on.
     @objc func stopJob(_ sender: Any?) {
-        if let wait = session.shownWaits.last { wait.stop(); return }
-        guard let job = JobRegistry.shared.running(document: session.agentID).last else { return }
-        JobRegistry.shared.stop(job.id, in: session)
+        let registry = JobRegistry.shared
+        let own = session.waits.map { StopChoice.Candidate(id: $0.id.uuidString, kind: .wait, started: $0.started) }
+        let jobs = registry.running(document: session.agentID).map { StopChoice.Candidate(id: $0.id, kind: .job, started: registry.started($0.id) ?? .distantPast) }
+        let other = AgentServer.shared.sibling.map { [StopChoice.Candidate(id: $0.id.uuidString, kind: .otherApp, started: $0.started)] } ?? []
+        guard let chosen = StopChoice.pick(own + jobs + other) else { return }
+        switch chosen.kind {
+        case .job: registry.stop(chosen.id, in: session)
+        case .wait: session.waits.first { $0.id.uuidString == chosen.id }?.stop()
+        case .otherApp: AgentServer.shared.sibling?.stop()
+        }
     }
 
     /// Edit › Split at Playhead (⌘B): every track's clip under the playhead in two.

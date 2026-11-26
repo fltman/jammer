@@ -19,6 +19,13 @@ final class RestoreModel {
     /// click doesn't start a second render).
     var rendering: (progress: Double, stop: JobRegistry.StopFlag)?
     func stopRendering() { rendering?.stop.set() }
+    /// The sheet goes (Cancel, Apply): a preview still rendering is stopped too, so it can't start playing after.
+    func dismiss() {
+        dismissed = true
+        stopRendering()
+        stopPreview()
+    }
+    @ObservationIgnored private var dismissed = false
     /// What the Preview button does: start the preview, or stop it (or its rendering). Space does the same (COMFORT 66).
     func togglePreview() {
         if rendering != nil { stopRendering() } else if previewing { stopPreview() } else { Task { await preview() } }
@@ -83,7 +90,7 @@ final class RestoreModel {
             }
         }.value
         rendering = nil
-        if stop.isSet {
+        if stop.isSet || dismissed {
             try? FileManager.default.removeItem(at: dir)
             return
         }
@@ -206,8 +213,8 @@ struct RestoreSheet: View {
                 .frame(width: 180)
                 .disabled(!model.previewing)
                 Spacer()
-                Button(L10n.text("button.cancel")) { model.stopPreview(); close() }.keyboardShortcut(.cancelAction)
-                Button(L10n.text("button.apply")) { model.apply(); close() }.keyboardShortcut(.defaultAction)
+                Button(L10n.text("button.cancel")) { model.dismiss(); close() }.keyboardShortcut(.cancelAction)
+                Button(L10n.text("button.apply")) { model.dismiss(); model.apply(); close() }.keyboardShortcut(.defaultAction)
             }
         }
         .padding(20)

@@ -15,6 +15,15 @@ public protocol TranscriptionEngine: Sendable {
                     progress: @escaping @Sendable (Double) -> Void) async throws -> SourceTranscript
 }
 
+/// A paid transcription stopped after some of its answers had come: what they said, which is paid for and is kept
+/// (LateResults: never thrown away), with how much of the source it covers. The rest was never fetched.
+public struct TranscriptionStopped: Error, Sendable {
+    public var partial: SourceTranscript
+    /// The stretch of the source (frames) the words cover, from its start.
+    public var covers: Range<Frame>
+    public init(partial: SourceTranscript, covers: Range<Frame>) { self.partial = partial; self.covers = covers }
+}
+
 public enum TranscriptionError: Error, LocalizedError, Equatable {
     case unsupportedLanguage(String)
     case unreadableSource

@@ -22,6 +22,7 @@ final class EditorSession {
     /// a Stop beside the jobs (COMFORT 7).
     struct Wait: Identifiable {
         let id = UUID()
+        let started = Date()
         var label: String
         let stop: @MainActor () -> Void
     }
@@ -507,6 +508,16 @@ final class EditorSession {
         for t in ts where all.source(t.sourceID) != nil { all.setTranscript(t) }
         _ = keepLate(all, action: L10n.text("transcript.transcribe"), under: node)
         say(L10n.text("error.step.changedMeanwhile.kept"), .warning)
+    }
+
+    /// A paid transcription stopped after some answers came: what they said is paid for and kept, not applied (the
+    /// person stopped it), as a branch in History from where the work began, the document as it was plus them.
+    func keepStoppedTranscripts(_ ts: [SourceTranscript], basedOn base: Project, under node: UUID?) {
+        guard !ts.isEmpty else { return }
+        var all = base
+        for t in ts where all.source(t.sourceID) != nil { all.setTranscript(t) }
+        guard keepLate(all, action: L10n.text("transcript.transcribe.stopped"), under: node) != nil else { return }
+        say(L10n.count("transcript.stopped.kept", ts.reduce(0) { $0 + $1.words.count }), .warning)
     }
 
     /// A finished repair. If the user edited meanwhile, the repaired clips are carried

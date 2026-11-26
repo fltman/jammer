@@ -1654,6 +1654,8 @@ extension AgentRouter {
                                 "consentHeard": v.attestation.heard, "created": f.string(from: v.created),
                                 "samples": v.samples.map { [$0.lowerBound, $0.upperBound] }]
         if let d = v.deleted { o["deleted"] = f.string(from: d) }
+        // Made after Stop: kept so it can be deleted; overdub refuses it (voice_made_after_stop).
+        if v.madeAfterStop == true { o["madeAfterStop"] = true }
         return o
     }
 

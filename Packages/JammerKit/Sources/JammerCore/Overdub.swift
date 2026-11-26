@@ -52,6 +52,9 @@ public struct ClonedVoice: Codable, Hashable, Sendable, Identifiable {
     /// Set when the voice was deleted at the provider; the record of consent is kept (the provider's terms ask
     /// for records of consents to be kept).
     public var deleted: Date?
+    /// Made at the provider after Stop was pressed (the samples had already gone): kept so it can be deleted from
+    /// Jämmer, charged for, and never spoken with, from the window or the agent API (OverdubService.speak).
+    public var madeAfterStop: Bool?
 
     public init(id: UUID = UUID(), provider: String, providerVoiceID: String, name: String, attestation: VoiceAttestation, samples: [ClosedRange<Double>], created: Date) {
         self.id = id; self.provider = provider; self.providerVoiceID = providerVoiceID; self.name = name
@@ -150,7 +153,7 @@ public enum Overdub {
 
 public enum OverdubError: Error, LocalizedError, Equatable, KeyedFailure {
     case notAttested, notAdult, noTranscript, consentNotHeard(String), samplesTooShort, samplesTooLong, sampleOutside
-    case noVoice, voiceDeleted, emptyText, textTooLong(Int), noTrack
+    case noVoice, voiceDeleted, emptyText, textTooLong(Int), noTrack, voiceMadeAfterStop
 
     public var reason: String {
         switch self {
@@ -166,6 +169,7 @@ public enum OverdubError: Error, LocalizedError, Equatable, KeyedFailure {
         case .emptyText: "empty_text"
         case .textTooLong: "text_too_long"
         case .noTrack: "no_track"
+        case .voiceMadeAfterStop: "voice_made_after_stop"
         }
     }
     var said: Said {
@@ -182,6 +186,7 @@ public enum OverdubError: Error, LocalizedError, Equatable, KeyedFailure {
         case .emptyText: Said("error.overdub.emptyText", "Write what the voice should say.")
         case .textTooLong(let n): Said("error.overdub.textTooLong", "The text is longer than the model takes (%@ characters).", values: [Said.n(Double(n), 0)])
         case .noTrack: Said("error.overdub.noTrack", "No track has speech where the words are to be replaced.")
+        case .voiceMadeAfterStop: Said("error.overdub.voiceMadeAfterStop", "That voice was made after Stop was pressed: it is kept so you can delete it, not to speak with.")
         }
     }
     public var errorDescription: String? { said.text }

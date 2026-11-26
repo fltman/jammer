@@ -38,23 +38,28 @@ enum HostedPluginsController {
     }
 
     /// Looks through the plugin folders (each bundle in a confined helper process). Returns the catalogue after it.
+    /// Stopped (the job's task cancelled), the bundle being probed is the last: nothing is saved and the list the
+    /// app has stays as it was.
     @discardableResult
-    static func scan(force: Bool, progress: @escaping @Sendable (Double) -> Void = { _ in }, cancelled: @escaping @Sendable () -> Bool = { false }) async -> PluginCatalogue {
+    static func scan(force: Bool, progress: @escaping @Sendable (Double) -> Void = { _ in }) async -> PluginCatalogue {
         guard let probe, !scanning else { return HostedPlugins.current() }
         scanning = true
         defer { scanning = false }
         let before = HostedPlugins.current(), file = self.file
-        var catalogue = await Task.detached(priority: .utility) { () -> PluginCatalogue in
+        // The scan runs detached, where Task.isCancelled is always false: the stop reaches it through Stoppable.
+        let (scanned, stopped) = await Stoppable.run { stopped -> PluginCatalogue in
             var c = before
             // CLAP from the user's plugin folders. VST 3 can be hosted too, but so far only our own
             // test plugins have been through it, and a plugin that is listed has to be one that works:
             // until real ones have been tried, VST 3 is read only from the test folder (-pluginFolder).
             let clap = HostedPlugins.folders(.clap), vst3 = HostedPlugins.extraFolders
             c.scan(with: PluginScanner(probe: probe, readable: clap + vst3), folders: vst3.isEmpty ? [.clap: clap] : [.clap: clap, .vst3: vst3],
-                   force: force, progress: progress, cancelled: cancelled)
-            try? c.save(file)
+                   force: force, progress: progress, cancelled: stopped)
             return c
-        }.value
+        }
+        if stopped { return HostedPlugins.current() }
+        var catalogue = scanned
+        try? catalogue.save(file)
         // What was blocked while the scan ran stays blocked.
         catalogue.blocked.formUnion(HostedPlugins.current().blocked)
         HostedPlugins.update(catalogue)

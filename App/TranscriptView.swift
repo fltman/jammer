@@ -214,7 +214,8 @@ final class TranscriptPanel: NSView, NSTextViewDelegate {
                 // Transcribed, but nothing that plays now has words: cut away, or every such track muted.
                 empty.stringValue = L10n.text("transcript.empty.nothingAudible")
             } else if let job, job.status == .cancelled {
-                empty.stringValue = L10n.text("job.stopped")
+                // A paid request had left: "nothing changed" would sit beside "may have been charged" (the status bar).
+                empty.stringValue = JobRegistry.shared.mayHaveBeenCharged(job.id) ? L10n.text("transcript.stopped.paid") : L10n.text("job.stopped")
             } else if let job, job.status == .failed {
                 empty.stringValue = job.errorKeyed.map(L10n.message) ?? job.error?.message ?? L10n.text("transcript.failed")
             } else {

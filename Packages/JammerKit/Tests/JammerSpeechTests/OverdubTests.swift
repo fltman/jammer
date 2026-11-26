@@ -11,6 +11,10 @@ final class FakeElevenLabs: URLProtocol, @unchecked Sendable {
     nonisolated(unsafe) private static var answers: [(Int, Data, [String: String])] = []
     static func set(_ a: [(Int, Data, [String: String])]) { lock.withLock { answers = a; asked = [] } }
     static var requests: [Asked] { lock.withLock { asked } }
+    /// How long the stand-in takes to answer once the request has reached it (a request stopped meanwhile gets nothing).
+    nonisolated(unsafe) static var answerDelay: TimeInterval = 0
+    private let stopped = NSLock()
+    nonisolated(unsafe) private var isStopped = false
     static var session: URLSession {
         let c = URLSessionConfiguration.ephemeral
         c.protocolClasses = [FakeElevenLabs.self]
@@ -40,11 +44,16 @@ final class FakeElevenLabs: URLProtocol, @unchecked Sendable {
                                     json: json, fields: fields, files: files))
             return Self.answers.isEmpty ? (500, Data("{}".utf8), [:]) : Self.answers.removeFirst()
         }
-        client?.urlProtocol(self, didReceive: HTTPURLResponse(url: url, statusCode: answer.0, httpVersion: nil, headerFields: answer.2)!, cacheStoragePolicy: .notAllowed)
-        client?.urlProtocol(self, didLoad: answer.1)
-        client?.urlProtocolDidFinishLoading(self)
+        let deliver: @Sendable () -> Void = { [self] in
+            guard !stopped.withLock({ isStopped }) else { return }
+            client?.urlProtocol(self, didReceive: HTTPURLResponse(url: url, statusCode: answer.0, httpVersion: nil, headerFields: answer.2)!, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: answer.1)
+            client?.urlProtocolDidFinishLoading(self)
+        }
+        let wait = Self.answerDelay
+        if wait > 0 { DispatchQueue.global().asyncAfter(deadline: .now() + wait, execute: deliver) } else { deliver() }
     }
-    override func stopLoading() {}
+    override func stopLoading() { stopped.withLock { isStopped = true } }
 }
 
 @Suite("Overdub: consent first, then a cloned voice and speech in it (a stand-in ElevenLabs)", .serialized)
@@ -95,6 +104,32 @@ struct OverdubTests {
         #expect(reason(.ownerConsent) == nil)
         let (attestation, files) = try OverdubService.prepareClone(p, plan: plan, kind: .own, adult: true, consent: 0.9...5.1, samples: [5...11, 9...15])
         #expect(attestation.kind == .own && attestation.heard.hasPrefix("Jag samtycker") && files.count == 2 && files[0].count == 44 + 6 * 48_000 * 2)
+    }
+
+    @Test("Stopped after the samples have gone: ElevenLabs' answer is still read, so the voice it made (and charged for) comes back to be kept, and can be deleted")
+    func cloneStoppedAfterSending() async throws {
+        let dir = Self.folder(); defer { try? FileManager.default.removeItem(at: dir) }
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let p = try Self.project(dir)
+        let (attestation, files) = try OverdubService.prepareClone(p, plan: PlanCompiler.compile(p, pool: SourcePool()), kind: .own, adult: true,
+                                                                   consent: 0.9...5.1, samples: [5...11, 9...15])
+        FakeElevenLabs.set([(200, Data(#"{"voice_id":"made-anyway","requires_verification":false}"#.utf8), [:])])
+        FakeElevenLabs.answerDelay = 0.4
+        defer { FakeElevenLabs.answerDelay = 0 }
+        let service = OverdubService(provider: ElevenLabs(base: URL(string: "https://stand-in.invalid")!, key: { "test-key" }, session: FakeElevenLabs.session))
+        let request = Task { try await service.clone(name: "Anders", attestation: attestation, samples: [5...11, 9...15], files: files) }
+        // Stop once the stand-in has the samples, before it answers.
+        while FakeElevenLabs.requests.isEmpty { try await Task.sleep(for: .milliseconds(10)) }
+        request.cancel()
+        let (voice, _) = try await request.value
+        #expect(voice.providerVoiceID == "made-anyway", "the id of the voice to delete")
+        // Kept with the mark, it is never spoken with.
+        var marked = voice
+        marked.madeAfterStop = true
+        await #expect(throws: OverdubError.voiceMadeAfterStop) {
+            _ = try await service.speak(marked, text: "Hej", model: ElevenLabs.defaultModel, previous: nil, next: nil, sampleRate: Self.rate, folder: dir)
+        }
+        #expect(FakeElevenLabs.requests.count == 1, "nothing was asked to speak")
     }
 
     @Test("Cloned at the stand-in: the samples go as files beside the name and a description of the consent, with the user's key; the voice keeps its attestation. Speech in it: the text and model as JSON, MP3 asked for, the file kept as it came; the clip replaces the words, carries the mark and its words, and the project is saved as format 7")

@@ -77,7 +77,14 @@ public struct OpenAITranscription: TranscriptionEngine {
         let scale = source.info.sampleRate / Double(SpeechAudio.rate)
         var words: [Word] = []
         var before = ""
+        var heard: Frame = 0
+        // Stopped after some pieces were answered: those words are paid for and go back with the stop.
+        func stopped(_ e: CancellationError) -> Error {
+            words.isEmpty ? e : TranscriptionStopped(partial: SourceTranscript(sourceID: source.id, language: locale.identifier(.bcp47), engine: id, words: words, textOnly: true),
+                                                     covers: 0..<heard)
+        }
         for i in 0..<(cuts.count - 1) {
+            if Task.isCancelled { throw stopped(CancellationError()) }
             try Task.checkCancellation()
             let piece = samples[cuts[i]..<cuts[i + 1]]
             guard !piece.isEmpty else { continue }
@@ -95,7 +102,8 @@ public struct OpenAITranscription: TranscriptionEngine {
             req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
             req.httpBody = Self.multipart(fields, file: file, name: "part-\(i + 1).wav", boundary: boundary)
             let data: Data, response: URLResponse
-            do { (data, response) = try await KeyedRequest.data(for: req, session: session) } catch let e as CancellationError { throw e } catch {
+            do { (data, response) = try await KeyedRequest.data(for: req, session: session) } catch let e as CancellationError { throw stopped(e) } catch {
+                if Task.isCancelled { throw stopped(CancellationError()) }
                 throw TranscriptionError.failed("OpenAI couldn't be reached (\(error.localizedDescription)). Nothing was changed.")
             }
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
@@ -105,6 +113,7 @@ public struct OpenAITranscription: TranscriptionEngine {
             }
             let range = Frame(Double(cuts[i]) * scale)..<min(source.info.frames, Frame(Double(cuts[i + 1]) * scale))
             words += SpeechAudio.spread(text, over: range)
+            heard = range.upperBound
             before += " " + text
             progress(Double(cuts[i + 1]) / Double(max(1, samples.count)))
         }

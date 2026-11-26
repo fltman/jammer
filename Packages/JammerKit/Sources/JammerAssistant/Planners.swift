@@ -229,6 +229,8 @@ public struct LocalServerPlanner: AssistantPlanner {
         req.httpBody = try JSONSerialization.data(withJSONObject: requestBody(goal: goal, context: context, history: history, actions: actions))
         let data: Data, response: URLResponse
         do { (data, response) = try await KeyedRequest.data(for: req, session: session) } catch {
+            // Stopped from the panel: a stop, not a server that didn't answer.
+            if Task.isCancelled || (error as? URLError)?.code == .cancelled { throw CancellationError() }
             throw AssistantError.local(Said("error.assistant.local_model_server_1", "The local model server at %1$@:%2$@ didn't answer (%3$@).", "\(endpoint.host() ?? "127.0.0.1")", "\(endpoint.port ?? 80)", "\(error.localizedDescription)"))
         }
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
@@ -293,6 +295,7 @@ public struct OllamaPlanner: AssistantPlanner {
         req.httpBody = try JSONSerialization.data(withJSONObject: requestBody(goal: goal, context: c, history: history, actions: actions, thinks: caps.contains("thinking")))
         let data: Data, response: URLResponse
         do { (data, response) = try await KeyedRequest.data(for: req, session: session) } catch {
+            if Task.isCancelled || (error as? URLError)?.code == .cancelled { throw CancellationError() }
             throw AssistantError.local(Said("error.assistant.ollama_didn_t_answer", "Ollama didn't answer (%@).", "\(error.localizedDescription)"))
         }
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
