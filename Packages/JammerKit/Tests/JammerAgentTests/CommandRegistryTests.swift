@@ -147,4 +147,19 @@ struct CommandRegistryTests {
         #expect(AgentAPI.deleteVoiceGone.contains("Speech › Delete Cloned Voice"))
         #expect(every.contains { $0.name == "list_voices" }, "the agent still sees the voices")
     }
+
+    /// Anders, 2026-11-25: when others' voices are recorded, one line in the window about consent is enough. It is
+    /// in both languages and stands beside Record while a track is armed.
+    @Test("Recording: the line about consent is in English and Swedish, shown while a track is armed")
+    func recordingConsentLine() throws {
+        let data = try Data(contentsOf: Self.repo.appending(path: "App/Localizable.xcstrings"))
+        let strings = try #require((try JSONSerialization.jsonObject(with: data) as? [String: Any])?["strings"] as? [String: Any])
+        let entry = try #require(strings["record.consent"] as? [String: Any], "the line is in the catalogue")
+        let l = try #require(entry["localizations"] as? [String: Any])
+        func value(_ lang: String) -> String? { ((l[lang] as? [String: Any])?["stringUnit"] as? [String: Any])?["value"] as? String }
+        #expect(value("en")?.contains("consent") == true && value("sv")?.contains("samtycke") == true, "\(value("en") ?? "") / \(value("sv") ?? "")")
+        let bar = try String(contentsOf: Self.repo.appending(path: "App/EditorWindowController.swift"), encoding: .utf8)
+        let at = try #require(bar.range(of: "L10n.text(\"record.consent\")"), "the transport bar shows it")
+        #expect(bar[..<at.lowerBound].suffix(200).contains("!session.armed.isEmpty"), "while a track is armed")
+    }
 }

@@ -734,6 +734,13 @@ final class EditorSession {
                     : op == "duck" && failed.reason == "no_speech" ? L10n.text("duck.noSpeech")
                     : failed.keyed.map(L10n.message) ?? failed.error, .error, retry: { [weak self] in self?.perform(op, params, saying: saying) })
                 NSSound.beep()
+            } else if op == "acx_match", let info = r.first?.info {
+                // What was done, and the noise floor, which isn't touched: over −60 dB, Reduce Noise is a choice of its own.
+                let done = info["unchanged"] == 1 ? L10n.text("acx.match.unchanged")
+                    : info["limited"] == 1 ? L10n.text("acx.match.limited", L10n.number(info["rmsAfter"] ?? 0, 1), L10n.number(info["truePeakAfter"] ?? 0, 1), L10n.number(info["reductionMaxDB"] ?? 0, 1))
+                    : L10n.text("acx.match.done", L10n.number(info["rmsAfter"] ?? 0, 1), L10n.number(info["truePeakAfter"] ?? 0, 1))
+                let floor = info["noiseFloorTooHigh"] == 1 ? " " + L10n.text("acx.match.noise", L10n.number(info["noiseFloorAfter"] ?? 0, 1)) : ""
+                say(done + floor, info["noiseFloorTooHigh"] == 1 ? .warning : .success)
             } else if op == "limit", let info = r.first?.info, let after = info["truePeakAfter"], let cut = info["reductionMaxDB"], let secs = info["limitedSeconds"] {
                 status = L10n.text("limit.done", L10n.number(after, 2), L10n.number(cut, 1), L10n.number(secs, 1))
                     + (info["beforePlugins"] == 1 ? " " + L10n.text("limit.done.beforePlugins") : "")

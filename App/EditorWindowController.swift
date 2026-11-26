@@ -642,6 +642,9 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
     /// Audio › Duck Under Speech…: the user ticks the tracks to lower (music, atmosphere); the others
     /// decide when. A guess is ticked in advance (the tracks with the fewest words per second, when
     /// there is a transcript), but it is only a guess: transcribing music gives words too.
+    /// Audio › Match ACX Requirements: the loudness and peaks within ACX's limits as one step; the noise floor only said.
+    @objc func matchACX(_ sender: Any?) { session.perform("acx_match") }
+
     /// Audio › Check Against ACX Requirements…: measures, changes nothing, and says what was measured against what.
     @objc func checkACX(_ sender: Any?) {
         guard let window else { return }
@@ -1210,6 +1213,15 @@ struct TransportBar: View {
             .disabled(session.recordRefusal != nil)
             .help(session.recordRefusal ?? (session.recording != nil ? L10n.text("record.stop.help") : L10n.text("record.record.help")))
             .accessibilityIdentifier("transport.record")
+            // Anders, 2026-11-25: when others' voices are recorded, one line in the window about consent is enough. It
+            // stands beside Record while a track is armed, when it matters, and goes with the last disarm.
+            if !session.armed.isEmpty {
+                Text(L10n.text("record.consent"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .accessibilityIdentifier("transport.recordConsent")
+            }
             if let rec = session.recording {
                 // The indicator: steady, no blinking and no pulse (the flash rule; the coordinator, 2026-11-25).
                 SwiftUI.TimelineView(.periodic(from: rec.since, by: 1)) { context in

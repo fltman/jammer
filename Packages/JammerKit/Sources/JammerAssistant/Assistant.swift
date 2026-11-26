@@ -109,7 +109,9 @@ public enum AssistantCatalog {
     /// Plugin steps need track and insert ids and weren't in the measured action set.
     /// (Buses are named to the model by name, and `set_bus` and `remove_bus` take the name. Sends are not offered yet.)
     // set_clip and set_marker take ids the assistant isn't shown (the timeline's handles and agents use them).
-    public static let stepsNotForAssistant: Set<String> = ["remove_track", "duplicate_track", "move_track", "split", "set_clip", "move_clip", "set_take", "set_marker", "set_layout", "set_timecode", "go_to_timecode", "set_video_reference", "remove_video_reference", "add_insert", "set_insert", "remove_insert", "spectral_edit", "set_track", "set_group", "set_automation", "clear_automation"]
+    // acx_match (2026-11-26) waits for the assistant's evaluation to be run with it: the catalogue's size is held to
+    // what was evaluated.
+    public static let stepsNotForAssistant: Set<String> = ["remove_track", "duplicate_track", "move_track", "split", "set_clip", "move_clip", "set_take", "acx_match", "set_marker", "set_layout", "set_timecode", "go_to_timecode", "set_video_reference", "remove_video_reference", "add_insert", "set_insert", "remove_insert", "spectral_edit", "set_track", "set_group", "set_automation", "clear_automation"]
 
     /// Parameters the assistant isn't given on the steps it has: a bus's turn in a surround document (surround
     /// isn't the assistant's yet; its tools stay as they were evaluated).

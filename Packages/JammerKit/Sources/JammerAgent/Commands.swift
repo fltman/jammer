@@ -244,6 +244,7 @@ public enum Commands {
             payload: ["op": .string("level_speakers"), "mode": .string("dynamic")])
         add("audio.measureLoudness", .audio, 3, key("audio.measureLoudness"), key: "l", [.option], agent: op("measure_loudness"))
         add("audio.acx", .audio, 3, key("audio.acx"), agent: .route("GET", doc + "/analysis/acx"))
+        add("audio.matchACX", .audio, 3, key("audio.matchACX"), agent: op("acx_match"))
         add("audio.stems.music4", .audio, 4, key("audio.stems.music"), agent: op("separate"), submenu: "audio.stems", payload: ["model": .string("music4")])
         add("audio.stems.dialog", .audio, 4, key("audio.stems.soundtrack"), agent: op("separate"), submenu: "audio.stems", payload: ["model": .string("dialog")])
 

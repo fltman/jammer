@@ -4,6 +4,10 @@ Not a list of commits: what behaves differently from before, for a user, an agen
 
 ## 2026-11-26
 
+- **Match ACX Requirements** (Audio menu, and `acx_match` for an agent): the loudness and peaks of an audiobook file within ACX's limits in one step, the limiter used only when the peaks are in the way. A file already within them is left alone. The noise floor is said, never changed.
+- **Deleting a cloned voice is yours alone**, in the window (Speech › Delete Cloned Voice…): an agent can suggest which, not delete it (`delete_voice` is gone).
+- **Every Stop stops**, and what was paid for and has come back is kept: a voice ElevenLabs made after Stop, words OpenAI had sent, Overdub's speech.
+- **Nothing flashes more than three times a second**: the timeline follows the playhead at most twice a second while playing (once with Reduce Motion), and says so where the zoom is too close.
 - **Recording** (not in a release yet): tracks armed with **R** in their headers record from the Mac's input, each from its own input channel or pair, while the others play (Transport › Record, ⌘R). A selection is a punch, played into from two seconds before it. Every take over a stretch is kept and one plays; a recorded clip's menu chooses another or deletes one. A crash loses at most the last second, and the document offers its takes back when it opens again, wherever its file has moved. The agent API reads the recording's state (`GET …/recording`) and chooses among takes (`set_take`); it never arms, records or deletes a take. A document with takes is saved as format 8, which earlier Jämmers refuse instead of dropping the takes.
 
 ## 2026-11-19

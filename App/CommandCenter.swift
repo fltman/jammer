@@ -105,6 +105,7 @@ enum CommandCenter {
         case "audio.duck": return (#selector(W.duckUnderSpeech(_:)), nil)
         case "audio.measureLoudness": return (#selector(W.analyzeLoudness(_:)), nil)
         case "audio.acx": return (#selector(W.checkACX(_:)), nil)
+        case "audio.matchACX": return (#selector(W.matchACX(_:)), nil)
         case "repair.attenuateFrequencies": return (#selector(W.attenuateFrequencies(_:)), nil)
         case "repair.attenuateArea": return (#selector(W.attenuateArea(_:)), nil)
         case "repair.healArea": return (#selector(W.healArea(_:)), nil)

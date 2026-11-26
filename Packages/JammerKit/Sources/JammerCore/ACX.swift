@@ -141,3 +141,95 @@ public enum ACX {
         return out
     }
 }
+
+/// What bringing a file within ACX's limits did (Audio › Match ACX Requirements, `acx_match`).
+public struct ACXMatch: Sendable, Equatable {
+    /// Already within RMS and peaks: nothing was changed.
+    public var unchanged = false
+    public var gainDB = 0.0
+    public var rmsBefore = 0.0, rmsAfter = 0.0
+    public var samplePeakAfter = 0.0, truePeakAfter = 0.0
+    public var limited = false
+    public var reductionMaxDB = 0.0
+    /// The noise floor as it is after the gain (a gain lifts it by as much); never changed here. nil: not measured.
+    public var noiseFloorAfter: Double?
+    public var noiseFloorTooHigh: Bool { noiseFloorAfter.map { $0 > ACX.noiseFloorMax } ?? false }
+}
+
+extension ACX {
+    /// Where an RMS outside the range is brought: the middle of it.
+    public static let rmsTarget = -20.0
+    /// What the limiter holds the peaks at: under −3 with room for an MP3 encoder, which lifts peaks a little.
+    public static let limiterCeiling = -3.5
+
+    /// Within ACX's loudness and peak limits as judged (RMS to a tenth of a dB, sample and true peak).
+    public static func within(_ m: LoudnessResult) -> Bool {
+        guard let rms = m.rms else { return false }
+        return rmsRange.contains((rms * 10).rounded() / 10) && m.samplePeak <= peakMax && m.truePeak <= peakMax
+    }
+}
+
+extension Project {
+    /// Brings `range` within ACX's loudness and peaks, as one change (the coordinator, 2026-11-26): the RMS into
+    /// −23…−18 dB (to the middle when outside it), the peaks at or under −3 dB, by the limiter where a gain alone
+    /// can't (at −3.5 dBTP, with the gain corrected for what the limiter takes, up to three times). A file already
+    /// within both is left as it is. The noise floor is only measured and said (`noiseFloorBefore`, lifted by the
+    /// gain), never touched: over −60 dB the answer points to Reduce Noise, a choice of its own. nil: silent.
+    public func matchingACX(range r: Range<Frame>, noiseFloorBefore: Double?, pool: SourcePool?, media: URL?,
+                            measure: (Project, Range<Frame>) -> LoudnessResult) throws -> (Project, ACXMatch)? {
+        let m = measure(self, r)
+        guard let rms = m.rms, rms.isFinite else { return nil }
+        var out = ACXMatch()
+        out.rmsBefore = rms
+        if ACX.within(m) {
+            out.unchanged = true
+            out.rmsAfter = rms; out.samplePeakAfter = m.samplePeak; out.truePeakAfter = m.truePeak
+            out.noiseFloorAfter = noiseFloorBefore
+            return (self, out)
+        }
+        let rmsOK = ACX.rmsRange.contains((rms * 10).rounded() / 10)
+        var gain = rmsOK ? 0 : ACX.rmsTarget - rms
+        // A gain alone, when the peaks leave room for it.
+        if max(m.truePeak, m.samplePeak) + gain <= ACX.limiterCeiling {
+            var p = self
+            try p.changeGain(r, by: (gain * 100).rounded() / 100)
+            let after = measure(p, r)
+            out.gainDB = (gain * 100).rounded() / 100
+            out.rmsAfter = after.rms ?? rms + gain; out.samplePeakAfter = after.samplePeak; out.truePeakAfter = after.truePeak
+            out.noiseFloorAfter = noiseFloorBefore.map { $0 + out.gainDB }
+            return (p, out)
+        }
+        // The peaks are in the way: the limiter holds them, and the gain makes up what it takes.
+        guard let pool, let media else { throw ACXMatchError.needsRender }
+        let target = rmsOK ? rms : ACX.rmsTarget
+        var best: (Project, ACXMatch)?
+        var written: [URL] = []
+        for _ in 0..<3 {
+            var p = self
+            if gain != 0 { try p.changeGain(r, by: (gain * 100).rounded() / 100) }
+            let (limited, report) = try p.limiting(Limiter(ceilingDB: ACX.limiterCeiling), range: r, pool: pool, media: media)
+            let after = measure(limited, r)
+            guard let reached = after.rms else { break }
+            var now = out
+            now.gainDB = (gain * 100).rounded() / 100
+            now.rmsAfter = reached; now.samplePeakAfter = after.samplePeak; now.truePeakAfter = after.truePeak
+            now.limited = true; now.reductionMaxDB = report.reductionMaxDB
+            now.noiseFloorAfter = noiseFloorBefore.map { $0 + now.gainDB }
+            // The earlier try's files are not played by anything: take them away.
+            let mine = Set(limited.sources.map(\.path)).subtracting(sources.map(\.path))
+            for u in written where !mine.contains(u.path) { try? FileManager.default.removeItem(at: u) }
+            written = mine.map { URL(fileURLWithPath: $0) }
+            best = (limited, now)
+            if ACX.rmsRange.contains((reached * 10).rounded() / 10) && abs(target - reached) <= 0.5 { break }
+            gain += target - reached
+        }
+        return best
+    }
+}
+
+public enum ACXMatchError: Error, LocalizedError, Equatable, KeyedFailure {
+    case needsRender
+    public var errorDescription: String? { said.text }
+    public var keyed: KeyedMessage? { said.keyed }
+    private var said: Said { Said("error.acx.needsRender", "The peaks need the limiter, which needs the app to render audio.") }
+}

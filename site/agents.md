@@ -680,6 +680,15 @@ Brings the range (the whole document without a range or selection) to a delivery
 | `end` | seconds | Range end in seconds. |
 | `limit` | boolean | Use the limiter to reach the target when the peaks would stop the gain short of it. Default false: one gain, never over the ceiling. With it, the answer says what the limiter took (`reductionMaxDB`, `limitedSeconds`, `rangeBeforeLU`, `rangeAfterLU`). |
 
+### `acx_match`
+
+Brings the range (the whole document without a range or selection) within ACX's loudness and peaks, as one undo step: the RMS into −23…−18 dB (to −20 when it is outside), the sample and true peak at or under −3 dB, by the limiter at −3.5 dBTP where a gain alone can't. A file already within both is left as it is (info.unchanged 1). The noise floor is measured and said, never changed: info.noiseFloorAfter is the floor after the gain, and info.noiseFloorTooHigh 1 means it is over ACX's −60 dB, for which Reduce Noise (restore, kind denoise) is a choice of its own. Only ACX approves a file; GET …/analysis/acx checks one.
+
+| Param | Type | Description |
+|---|---|---|
+| `start` | seconds | Range start in seconds. With `end`, overrides the selection. |
+| `end` | seconds | Range end in seconds. |
+
 ### `add_marker`
 
 Adds a marker, or a region when `duration` is given.

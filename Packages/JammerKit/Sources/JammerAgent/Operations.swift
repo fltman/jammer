@@ -367,6 +367,8 @@ public enum Operations {
         .init("loudness_preset", "Loudness Preset", "Brings the range (the whole document without a range or selection) to a delivery target in one step. Without `limit`, it is one gain that stops where the true peak would pass the ceiling; info.limitedByPeak is then 1 and integratedAfter shows what was reached. With `limit`, the limiter holds the peaks at the ceiling so the target is reached, and the answer says what that took.",
               params: [.init("preset", .string, "The target.", required: true, options: LoudnessPreset.allCases.map(\.rawValue)), start, end,
                        .init("limit", .boolean, "Use the limiter to reach the target when the peaks would stop the gain short of it. Default false: one gain, never over the ceiling. With it, the answer says what the limiter took (`reductionMaxDB`, `limitedSeconds`, `rangeBeforeLU`, `rangeAfterLU`).")]),
+        .init("acx_match", "Match ACX Requirements", "Brings the range (the whole document without a range or selection) within ACX's loudness and peaks, as one undo step: the RMS into −23…−18 dB (to −20 when it is outside), the sample and true peak at or under −3 dB, by the limiter at −3.5 dBTP where a gain alone can't. A file already within both is left as it is (info.unchanged 1). The noise floor is measured and said, never changed: info.noiseFloorAfter is the floor after the gain, and info.noiseFloorTooHigh 1 means it is over ACX's −60 dB, for which Reduce Noise (restore, kind denoise) is a choice of its own. Only ACX approves a file; GET …/analysis/acx checks one.",
+              params: [start, end]),
         .init("add_marker", "Add Marker", "Adds a marker, or a region when `duration` is given.",
               params: [.init("at", .seconds, "Position in seconds. Defaults to the selection start, else the playhead."),
                        .init("name", .string, "Marker name.", required: true),
@@ -1501,6 +1503,24 @@ public enum StepRunner {
                 if let a = m.rangeBefore { info["rangeBeforeLU"] = r2(a) }
                 if let b = m.rangeAfter { info["rangeAfterLU"] = r2(b) }
             }
+            return info
+        case "acx_match":
+            let r = try range(wholeIfNone: true); try checkInside(r)
+            let floor = s.pool.flatMap { Restoration.analyze(s.project, range: r, pool: $0).noiseFloor?.level }
+            let matched: (Project, ACXMatch)?
+            do { matched = try s.project.matchingACX(range: r, noiseFloorBefore: floor, pool: s.pool, media: s.media, measure: measure) } catch let e as LimiterError {
+                throw StepFailure("acx_match", wrapping: e, reason: "ceiling_not_met")
+            } catch let e as ACXMatchError {
+                throw StepFailure(Said.of(e), reason: "needs_render")
+            }
+            guard let (project, m) = matched else { throw StepFailure(Said("step.acx_match.silent", "acx_match: the range is silent, so there's nothing to match.")) }
+            s.project = project
+            func r2(_ v: Double) -> Double { (v * 100).rounded() / 100 }
+            var info = ["unchanged": m.unchanged ? 1 : 0, "gainDB": m.gainDB, "rmsBefore": r2(m.rmsBefore), "rmsAfter": r2(m.rmsAfter),
+                        "samplePeakAfter": r2(m.samplePeakAfter), "truePeakAfter": r2(m.truePeakAfter), "limited": m.limited ? 1 : 0,
+                        "noiseFloorTooHigh": m.noiseFloorTooHigh ? 1 : 0]
+            if m.limited { info["reductionMaxDB"] = r2(m.reductionMaxDB) }
+            if let f = m.noiseFloorAfter { info["noiseFloorAfter"] = r2(f) }
             return info
         case "add_marker":
             let at = min(frames("at") ?? s.selection?.lowerBound ?? s.playhead, project.length)

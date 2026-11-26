@@ -513,6 +513,78 @@
         }
       }
     },
+    "acx.match.done": {
+      "comment": "Status after matching. %1$@ RMS, %2$@ true peak.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Within ACX's loudness and peaks: RMS %1$@ dB, true peak %2$@ dB."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inom ACX:s ljudnivå och toppar: RMS %1$@ dB, äkta topp %2$@ dB."
+          }
+        }
+      }
+    },
+    "acx.match.limited": {
+      "comment": "Status after matching with the limiter. %1$@ RMS, %2$@ true peak, %3$@ dB taken at most.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Within ACX's loudness and peaks: RMS %1$@ dB, true peak %2$@ dB; the limiter took up to %3$@ dB off the peaks."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inom ACX:s ljudnivå och toppar: RMS %1$@ dB, äkta topp %2$@ dB; begränsaren tog upp till %3$@ dB av topparna."
+          }
+        }
+      }
+    },
+    "acx.match.noise": {
+      "comment": "Added when the noise floor is over −60 dB. %@ the floor.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The noise floor is %@ dB, over ACX's −60 dB; it wasn't touched. Repair › Reduce Noise… is a choice of its own."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Brusgolvet är %@ dB, över ACX:s −60 dB; det rördes inte. Reparera › Minska brus… är ett eget val."
+          }
+        }
+      }
+    },
+    "acx.match.unchanged": {
+      "comment": "Status: the file was already within ACX's loudness and peaks.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Already within ACX's loudness and peaks: nothing was changed."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Redan inom ACX:s ljudnivå och toppar: inget ändrades."
+          }
+        }
+      }
+    },
     "acx.met": {
       "comment": "Start of a row in the ACX report.",
       "extractionState": "manual",
@@ -3101,6 +3173,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Loudness-förval med limiter"
+          }
+        }
+      }
+    },
+    "audio.matchACX": {
+      "comment": "Audio › Match ACX Requirements.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Match ACX Requirements"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anpassa till ACX:s krav"
           }
         }
       }
@@ -6538,6 +6628,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "KB-Whisper är inte installerad. Installera den under Jämmer › Inställningar › Modeller."
+          }
+        }
+      }
+    },
+    "error.acx.needsRender": {
+      "comment": "ACX match: the limiter needs rendering.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The peaks need the limiter, which needs the app to render audio."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Topparna behöver begränsaren, och den behöver att appen renderar ljud."
           }
         }
       }
@@ -20444,6 +20552,24 @@
         }
       }
     },
+    "op.acx_match.title": {
+      "comment": "Operation title: loudness and peaks within ACX's limits.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Match ACX Requirements"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anpassa till ACX:s krav"
+          }
+        }
+      }
+    },
     "op.add_bus.title": {
       "comment": "The title of the operation add_bus: in the menus, the command palette, the assistant’s plan and as the undo name (“Undo …”). The agent API keeps the English title.",
       "extractionState": "manual",
@@ -25941,6 +26067,24 @@
         }
       }
     },
+    "record.consent": {
+      "comment": "One line beside Record while a track is armed (Anders, 2026-11-25: one line about consent when others' voices are recorded).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recording someone else? Tell them, and record only with their consent."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spelar du in någon annan? Säg det, och spela bara in med deras samtycke."
+          }
+        }
+      }
+    },
     "record.denied": {
       "comment": "The microphone isn't allowed.",
       "extractionState": "manual",
@@ -30702,6 +30846,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Delar upp tal, musik och effekter… (det här tar en stund)"
+          }
+        }
+      }
+    },
+    "step.acx_match.silent": {
+      "comment": "acx_match: nothing to match.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "acx_match: the range is silent, so there's nothing to match."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "acx_match: avsnittet är tyst, så det finns inget att anpassa."
           }
         }
       }

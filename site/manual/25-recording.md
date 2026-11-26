@@ -6,7 +6,7 @@ Jämmer records from your Mac's input onto one or more tracks at once, while the
 
 Press **R** in a track's header to arm it (or choose **Track › Arm to Record** for the current track). The first time, macOS asks whether Jämmer may use the microphone. That answer is yours, and you can change it later under System Settings › Privacy & Security › Microphone.
 
-An armed track's **R** is red, and its meter shows its input, so you can set the level before you record. The menu beside the **R** chooses the input: **In 1**, **In 2**, … for one channel, or **In 1+2** for a pair. Several tracks can be armed at once, each from its own input. The input is the device chosen under System Settings › Sound › Input, and it must run at the document's sample rate (set it in Audio MIDI Setup if it doesn't). A locked track can't be armed.
+An armed track's **R** is red, and its meter shows its input, so you can set the level before you record. The menu beside the **R** chooses the input: **In 1**, **In 2**, … for one channel, or **In 1+2** for a pair. Several tracks can be armed at once, each from its own input. While a track is armed, a line beside Record reminds you to record other people only with their consent. The input is the device chosen under System Settings › Sound › Input, and it must run at the document's sample rate (set it in Audio MIDI Setup if it doesn't). A locked track can't be armed.
 
 ## Recording
 

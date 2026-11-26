@@ -63,3 +63,55 @@ struct ACXTests {
         #expect(json["pass"] is NSNull && json["required"] as? String == "All files must be in the same channel format (all mono or all stereo)")
     }
 }
+
+@Suite("Matching ACX's loudness and peaks")
+struct ACXMatchTests {
+    static let n = 48_000 * 6
+    /// A mono tone of `amp` (its RMS is 20·log10(amp/√2)), and, with `bursts`, 5 ms at 0.79 (−2 dBFS) each second.
+    static func document(amp: Double, bursts: Bool = false) -> (Project, SourcePool) {
+        let info = AudioFileInfo(container: .wav, sampleFormat: .float32, bigEndian: false, channels: 1, sampleRate: 48_000,
+                                 channelMask: nil, dataOffset: 0, frames: Int64(n), chunks: [], bext: nil, ixml: nil, markers: [])
+        let a = SourceRef(name: "narration", path: "/dev/null", info: info)
+        let pool = SourcePool()
+        pool.register(a.id, memory: (0..<n).map { i in
+            let level = bursts && i % 48_000 < 240 ? 0.79 : amp
+            return Float(level * sin(Double(i) * 0.13))
+        }, channels: 1)
+        return (Project(source: a), pool)
+    }
+    static func measure(_ pool: SourcePool) -> (Project, Range<Frame>) -> LoudnessResult {
+        { p, r in LoudnessMeter.measure(PlanCompiler.compile(p, pool: pool), r) }
+    }
+    func folder() -> URL { FileManager.default.temporaryDirectory.appending(path: "jammer-acx-\(UUID().uuidString)") }
+
+    @Test("A file already within ACX's loudness and peaks is left exactly as it is, and says so")
+    func alreadyWithin() throws {
+        let (p, pool) = Self.document(amp: 0.1414)   // RMS −20, peak −17
+        let (q, m) = try #require(try p.matchingACX(range: 0..<p.length, noiseFloorBefore: -70, pool: pool, media: folder(), measure: Self.measure(pool)))
+        #expect(m.unchanged && q == p && m.gainDB == 0 && m.noiseFloorAfter == -70 && !m.noiseFloorTooHigh)
+    }
+
+    @Test("Too quiet with room for it: one gain to −20 RMS, no limiter, the peaks under −3; the noise floor rises with it and is said when it passes −60")
+    func gainAlone() throws {
+        let (p, pool) = Self.document(amp: 0.0447)   // RMS −30, peak −27
+        let (q, m) = try #require(try p.matchingACX(range: 0..<p.length, noiseFloorBefore: -65, pool: pool, media: folder(), measure: Self.measure(pool)))
+        #expect(!m.unchanged && !m.limited && abs(m.gainDB - 10) < 0.05, "gain \(m.gainDB)")
+        let after = Self.measure(pool)(q, 0..<q.length)
+        #expect(ACX.within(after) && abs((after.rms ?? 0) - -20) < 0.1)
+        #expect(abs((m.noiseFloorAfter ?? 0) - -55) < 0.05 && m.noiseFloorTooHigh, "the floor isn't touched, only said: −65 + 10")
+    }
+
+    @Test("Peaks in the way: the limiter holds them at −3.5 dBTP and the gain makes up what it takes; the RMS lands in −23…−18")
+    func withTheLimiter() throws {
+        let (p, pool) = Self.document(amp: 0.05, bursts: true)   // RMS about −29, peaks −2
+        let media = folder()
+        defer { try? FileManager.default.removeItem(at: media) }
+        let (q, m) = try #require(try p.matchingACX(range: 0..<p.length, noiseFloorBefore: nil, pool: pool, media: media, measure: Self.measure(pool)))
+        #expect(m.limited && m.reductionMaxDB > 0)
+        let after = Self.measure(pool)(q, 0..<q.length)
+        #expect(ACX.within(after), "RMS \(after.rms ?? 0), sample \(after.samplePeak), true \(after.truePeak)")
+        #expect(after.truePeak <= -3.4 && m.noiseFloorAfter == nil)
+        // Without the app's rendering it says so, instead of going over the peaks.
+        #expect(throws: ACXMatchError.needsRender) { try p.matchingACX(range: 0..<p.length, noiseFloorBefore: nil, pool: nil, media: nil, measure: Self.measure(pool)) }
+    }
+}
