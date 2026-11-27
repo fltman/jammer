@@ -32,8 +32,16 @@ if (( ${#stray} )); then
   exit 2
 fi
 out="build/precommit/commit-checked.out"; mkdir -p build/precommit
+# The tree as it is now, to hold against the tree after the gate: an edit made while the gate ran (2026-11-27: the
+# gate of a docs commit built and tested work begun meanwhile) means the gate tested something else.
+tree() { { git diff HEAD --binary -- "$@"; git ls-files --others --exclude-standard -z -- "$@" | xargs -0 shasum 2>/dev/null; } | shasum | cut -c1-40; }
+before=$(tree . ':!AGENTS.md')
 /Users/andersbj/Projekt/the-apps/tools/with-build-lock.sh jammer --wait 7200 -- scripts/precommit.sh > "$out" 2>&1
 rc=$?
 tail -1 "$out"
 if (( rc != 0 )); then echo "commit-checked: the gate exited $rc; nothing committed (the log: $out)." >&2; exit 1; fi
+if [[ "$(tree . ':!AGENTS.md')" != "$before" ]]; then
+  echo "commit-checked: the tree changed while the gate ran, so the gate didn't test what would be committed; nothing committed. Run it again." >&2
+  exit 1
+fi
 git add -- "$@" && git commit -q -F "$msg" && git log --oneline -1

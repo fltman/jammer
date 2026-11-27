@@ -6,6 +6,8 @@ import JammerCore
 /// before anything is opened as audio. `formats`: the extensions this route reads (`nil`: every timeline
 /// format). `unpackTo`: where audio inside a DAWproject is unpacked (Jämmer's own media folder, allowed).
 public enum TimelineImport {
+    /// A file's size on disk, asked before it is read (0 when it can't be told; the reader's own limit still holds).
+    static func fileSize(_ url: URL) -> Int { (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0 }
     public static let extensions = ["fcpxml", "fcpxmld", "edl", "otio", "dawproject"]
 
     public static func check(_ body: [String: Any], policy: FolderPolicy?, formats: [String]? = ["fcpxml", "fcpxmld"],
@@ -43,11 +45,13 @@ public enum TimelineImport {
         do {
             switch ext {
             case "edl":
-                guard let data = FileManager.default.contents(atPath: url.path), data.count < 32 << 20 else { throw FCPXMLImport.ImportError.unreadable(Said("error.import.far_larger_than_edit", "it is far larger than an edit decision list.")) }
+                guard fileSize(url) < 32 << 20, let data = FileManager.default.contents(atPath: url.path), data.count < 32 << 20 else { throw FCPXMLImport.ImportError.unreadable(Said("error.import.far_larger_than_edit", "it is far larger than an edit decision list.")) }
                 // Lists are ASCII in practice; older ones Latin-1.
                 let text = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1) ?? ""
                 timeline = try EDL.read(text, base: base, name: name, rate: rate)
             case "otio":
+                // OTIO.read refuses more than 256 MB; the size is asked first, so such a file is never read whole.
+                guard fileSize(url) < 256 << 20 else { throw FCPXMLImport.ImportError.unreadable(Said("error.import.larger_than_otio_timeline", "it is larger than an OTIO timeline is.")) }
                 guard let data = FileManager.default.contents(atPath: url.path) else { throw FCPXMLImport.ImportError.unreadable(Said("error.import.couldn_t_read", "it couldn't be read.")) }
                 timeline = try OTIO.read(data, base: base, name: name)
             case "dawproject":

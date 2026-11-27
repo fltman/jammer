@@ -10,6 +10,13 @@ public struct AudioFileInfo: Sendable, Equatable, Codable {
     /// What a file may claim and still be opened. A header is untrusted input: one that says
     /// 65 535 channels or a sample rate of four billion is refused, not believed.
     public static let maxChannels = 32
+    /// What is read of a file's markers and texts, far beyond any real file (EBU Tech 3285 coding histories are a few
+    /// lines; a marker list of a recording, a few thousand): cue points (the project's own limit on markers), an
+    /// `adtl` list, one marker's name, and a text chunk (the bext coding history).
+    public static let maxMarkers = 100_000
+    public static let maxListBytes = 16 << 20
+    public static let maxLabel = 64 << 10
+    public static let maxTextChunk = 1 << 20
     public static let sampleRates: ClosedRange<Double> = 8_000...768_000
 
     /// Nil when the format is one Jämmer can work with; else why not, in words.
@@ -309,35 +316,39 @@ public enum AudioFileReader {
             b.maxMomentaryLoudness = try loud(418)
             b.maxShortTermLoudness = try loud(420)
         }
-        if c.size > 602 { b.codingHistory = try text(602, Int(c.size - 602)) }
+        // The coding history is a few lines of text; a chunk that claims gigabytes is read for its first megabyte.
+        if c.size > 602 { b.codingHistory = try text(602, Int(min(c.size - 602, Int64(AudioFileInfo.maxTextChunk)))) }
         return b
     }
 
+    /// Markers, and their names and lengths. Each part is read once into memory and walked there, within limits a
+    /// real file is far inside: `AudioFileInfo.maxMarkers` cue points (the project's own limit), an `adtl` list of at
+    /// most `maxListBytes`, a name of at most `maxLabel` bytes. A name or length that runs past its list ends the list
+    /// (the markers keep their numbers) rather than refusing a recording over its labels.
     private static func parseCues(_ r: inout ByteReader, _ chunks: [AudioFileInfo.Chunk]) throws -> [FileMarker] {
         guard let cue = chunks.first(where: { $0.id == "cue " }), cue.size >= 4 else { return [] }
-        let count = Int(try r.u32le(at: cue.offset))
-        var points: [(id: UInt32, position: Int64)] = []
-        for i in 0..<min(count, Int((cue.size - 4) / 24)) {
-            let p = cue.offset + 4 + Int64(i) * 24
-            points.append((try r.u32le(at: p), Int64(try r.u32le(at: p + 20))))
-        }
+        let claimed = Int64(try r.u32le(at: cue.offset))
+        let n = Int(min(claimed, (cue.size - 4) / 24, Int64(AudioFileInfo.maxMarkers)))
+        let table = [UInt8](try r.bytes(at: cue.offset + 4, count: n * 24))
+        func le32(_ b: [UInt8], _ o: Int) -> UInt32 { UInt32(b[o]) | UInt32(b[o + 1]) << 8 | UInt32(b[o + 2]) << 16 | UInt32(b[o + 3]) << 24 }
+        let points: [(id: UInt32, position: Int64)] = (0..<n).map { (le32(table, $0 * 24), Int64(le32(table, $0 * 24 + 20))) }
         var labels: [UInt32: String] = [:]
         var lengths: [UInt32: Int64] = [:]
-        for list in chunks where list.id == "LIST" && list.size >= 4 {
-            guard try r.fourCC(at: list.offset) == "adtl" else { continue }
-            var p = list.offset + 4
-            let end = list.offset + list.size
-            while p + 8 <= end {
-                let id = try r.fourCC(at: p)
-                let size = Int64(try r.u32le(at: p + 4))
-                let body = p + 8
+        for list in chunks where list.id == "LIST" && list.size >= 4 && list.size <= Int64(AudioFileInfo.maxListBytes) {
+            let b = [UInt8](try r.bytes(at: list.offset, count: Int(list.size)))
+            guard String(decoding: b[0..<4], as: UTF8.self) == "adtl" else { continue }
+            var p = 4
+            while p + 8 <= b.count {
+                let id = String(decoding: b[p..<(p + 4)], as: UTF8.self)
+                let size = Int(le32(b, p + 4)), body = p + 8
+                guard size <= b.count - body else { break }
                 if (id == "labl" || id == "note"), size >= 4 {
-                    let cueID = try r.u32le(at: body)
-                    let raw = try r.bytes(at: body + 4, count: Int(size - 4))
+                    let cueID = le32(b, body)
+                    let raw = b[(body + 4)..<(body + 4 + min(size - 4, AudioFileInfo.maxLabel))]
                     let s = String(decoding: raw.prefix { $0 != 0 }, as: UTF8.self)
                     if id == "labl" || labels[cueID] == nil { labels[cueID] = s }
                 } else if id == "ltxt", size >= 8 {
-                    lengths[try r.u32le(at: body)] = Int64(try r.u32le(at: body + 4))
+                    lengths[le32(b, body)] = Int64(le32(b, body + 4))
                 }
                 p = body + size + (size & 1)
             }

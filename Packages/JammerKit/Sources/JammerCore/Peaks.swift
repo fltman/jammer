@@ -115,6 +115,8 @@ public final class PeakIndex: @unchecked Sendable {
     // MARK: Cache
 
     private static let magic: UInt32 = 0x4A4D_504B // "JMPK"
+    /// The longest sound a peak file can be of: more than a year at 384 kHz.
+    static let maxFrames: Int64 = 1 << 44
 
     /// A stable cache name for a file's samples (path, size and modification date).
     public static func cacheKey(for url: URL, info: AudioFileInfo) -> String {
@@ -139,11 +141,14 @@ public final class PeakIndex: @unchecked Sendable {
         func u32(_ o: Int) -> UInt32 { d.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: o, as: UInt32.self) } }
         func u64(_ o: Int) -> UInt64 { d.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: o, as: UInt64.self) } }
         guard u32(0) == magic, u32(4) == 1 else { return nil }
-        let channels = Int(u32(8)), frames = Int64(u64(12)), count = Int(u64(20))
         // Never trusted further than it holds together: the count has to be what the frames and channels it names
         // give (one min and max per block of 256 per channel), and every value a number. Otherwise it is built again.
+        // The figures are checked before any sum is made of them: a damaged file must not overflow and stop Jämmer.
+        let channels = Int(u32(8))
+        guard (1...64).contains(channels), let frames = Int64(exactly: u64(12)), frames <= maxFrames,
+              let count = Int(exactly: u64(20)), count <= (d.count - 28) / 4 else { return nil }
         let blocks = max(1, Int((frames + Int64(baseBlock) - 1) / Int64(baseBlock)))
-        guard (1...64).contains(channels), frames >= 0, count == blocks * channels * 2, d.count == 28 + count * 4 else { return nil }
+        guard count == blocks * channels * 2, d.count == 28 + count * 4 else { return nil }
         let level0 = d.withUnsafeBytes { raw in
             Array(UnsafeBufferPointer(start: raw.baseAddress!.advanced(by: 28).assumingMemoryBound(to: Float.self), count: count))
         }

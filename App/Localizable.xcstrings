@@ -14278,6 +14278,23 @@
         }
       }
     },
+    "import.note.no_room": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ wasn't unpacked: the audio in the project is more than the disk has room for."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ packades inte upp: ljudet i projektet är mer än det finns plats för på disken."
+          }
+        }
+      }
+    },
     "import.note.outside.one": {
       "extractionState": "manual",
       "localizations": {

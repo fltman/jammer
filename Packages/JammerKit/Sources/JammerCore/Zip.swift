@@ -41,6 +41,7 @@ enum Zip {
     }
 
     enum Failure: Error { case notZip(Said) }
+    static let maxDeflateRatio = 1_032
 
     /// The entries of a ZIP's central directory.
     static func entries(_ d: Data) throws -> [Entry] {
@@ -80,6 +81,9 @@ enum Zip {
         switch e.method {
         case 0: out = raw
         case 8:
+            // Deflate makes at most about 1 032 bytes of each one (RFC 1951's longest match from a two-bit code): an
+            // entry that claims more is a bomb or a lie, and is refused before its size is set aside.
+            guard e.size <= e.compressed * maxDeflateRatio + 1_024 else { throw Failure.notZip(Said("error.zip.couldn_t_unpacked", "%@ couldn't be unpacked.", "\(e.name)")) }
             var buffer = [UInt8](repeating: 0, count: max(1, e.size))
             let n = raw.withUnsafeBytes { src in
                 compression_decode_buffer(&buffer, buffer.count, src.bindMemory(to: UInt8.self).baseAddress!, raw.count, nil, COMPRESSION_ZLIB)

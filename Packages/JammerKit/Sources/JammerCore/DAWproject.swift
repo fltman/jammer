@@ -102,6 +102,11 @@ public enum DAWproject {
         index(root)
         var tracks: [String: FCPXMLImport.TrackItem] = [:], order: [String] = []
         var warped = 0, nested = 0, notes = 0, inside = 0
+        // All the audio unpacked from one project together within what the disk has room for (AudioImporter's own
+        // limit): each entry is checked against what is left before it is set aside, so a small file that claims
+        // many large entries can't fill the disk or the memory.
+        let room = Int64(AudioImporter.decodedLimit(in: unpackTo))
+        var unpacked: Int64 = 0
         func seconds(_ v: String?, _ unit: String) -> Double? {
             guard let v, let d = Double(v), d.isFinite else { return nil }
             return unit == "beats" ? d * 60 / bpm : d
@@ -133,6 +138,11 @@ public enum DAWproject {
                         let safe = path.split(separator: "/").last.map(String.init)?.replacingOccurrences(of: "..", with: "_") ?? "audio"
                         url = unpackTo.appending(path: "\(inside)-\(safe)")
                         if !FileManager.default.fileExists(atPath: url.path) {
+                            guard Int64(e.size) <= room - unpacked else {
+                                warnings.append(.init(code: "missing_media", message: Said("import.note.no_room", "%@ wasn't unpacked: the audio in the project is more than the disk has room for.", "\(path)"), clip: c["name"]))
+                                continue
+                            }
+                            unpacked += Int64(e.size)
                             do {
                                 try FileManager.default.createDirectory(at: unpackTo, withIntermediateDirectories: true)
                                 try Zip.read(e, in: data, limit: 4 << 30).write(to: url)
