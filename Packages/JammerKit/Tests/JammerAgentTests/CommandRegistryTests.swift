@@ -54,6 +54,19 @@ struct CommandRegistryTests {
         #expect(Commands.command("view.fullScreen")?.shortcut == "⌃⌘F")
     }
 
+    @Test("No menu takes a key a view keeps (Space, Return, Esc, Tab, ⌫, Home, End, the arrows) but the named exceptions, and macOS's find and Dock keys stay free")
+    func viewKeys() {
+        let onViewKeys = Commands.all.filter { c in Commands.viewKeys.contains { $0.key == c.key && $0.modifiers == c.modifiers } }
+        #expect(Set(onViewKeys.map(\.id)) == Set(Commands.viewKeyMenus.keys),
+                "on a view's key: \(onViewKeys.map { "\($0.id) \($0.shortcut)" }); named: \(Commands.viewKeyMenus.keys.sorted())")
+        for (id, why) in Commands.viewKeyMenus { #expect(!why.isEmpty, "\(id) says why the view keeps its key") }
+        // Flimmer's K2a: Find Next/Previous, Use Selection for Find, Jump to Selection, the Dock.
+        for key in ["⌘G", "⇧⌘G", "⌘E", "⌘J", "⌥⌘D"] {
+            #expect(Commands.reserved.keys.contains(key), "\(key) is macOS's")
+            if let c = Commands.all.first(where: { $0.shortcut == key }) { #expect(Commands.reserved[key] == c.id, "\(key) belongs to \(c.id)") }
+        }
+    }
+
     @Test("The menus follow Apple's order, the Audio menu is split into Track, Audio, Repair and Speech, and nothing of today's menus is lost")
     func menus() throws {
         let menus = Commands.all.map(\.menu)

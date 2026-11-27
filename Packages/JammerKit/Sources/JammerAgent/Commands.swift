@@ -340,10 +340,27 @@ public enum Commands {
         "⌘H": "app.hide", "⌥⌘H": "app.hideOthers", "⌘M": "window.minimize", "⌥⌘M": nil, "⌘Q": "app.quit", "⌥⌘Q": nil,
         "⌘W": "file.close", "⌥⌘W": nil, "⌃⌘F": "view.fullScreen", "⌘,": "app.settings", "⌘?": "help.manual",
         "⌘`": nil, "⌘ ": nil, "⌃⌘Q": nil, "⌃⌘ ": nil, "⌥⌘D": nil, "⌥⌘ ": nil, "⇧⌘3": nil, "⇧⌘4": nil, "⇧⌘5": nil,
-        "⌘E": nil, "⌘F": "edit.findInTranscript", "⌘G": "edit.findNext", "⌘P": nil, "⌘.": nil, "⌘Z": "edit.undo", "⇧⌘Z": "edit.redo",
+        "⌘E": nil, "⌘F": "edit.findInTranscript", "⌘G": "edit.findNext", "⇧⌘G": nil, "⌘J": nil, "⌘P": nil, "⌘.": nil, "⌘Z": "edit.undo", "⇧⌘Z": "edit.redo",
         "⌘X": "edit.cut", "⌘C": "edit.copy", "⌘V": "edit.paste", "⌘A": "edit.selectAll", "⌘N": "file.new", "⌘O": "file.open", "⌘S": "file.save",
         "⇧⌘S": "file.saveAs", "⇧⌘A": "edit.deselectAll",
         // The system's Zoom, when it is turned on in Accessibility.
         "⌥⌘=": nil, "⌥⌘+": nil, "⌥⌘-": nil, "⌥⌘8": nil,
+    ]
+
+    /// Keys a view keeps for itself: the timeline's (Space plays, Return goes to the start, Esc lets go, Tab and ⇧Tab
+    /// the next clip, ⌫ and ⌦ delete, Home and End, the arrows seek, ⌥← ⌥→ nudge, ⌥↑ ⌥↓ the automation lanes'),
+    /// and a text field's caret. A menu's key equivalent is taken before the focused view sees the key, so none of
+    /// these may be one, but for `viewKeyMenus` (Flimmer's K2a, the-apps COMFORT.md 706a66d).
+    public static let viewKeys: [(key: String, modifiers: Set<Command.Modifier>)] = [
+        (" ", []), ("↩", []), ("⎋", []), ("⇥", []), ("⇥", [.shift]), ("⌫", []), ("⌦", []), ("↖", []), ("↘", []),
+        ("←", []), ("→", []), ("↑", []), ("↓", []), ("←", [.option]), ("→", [.option]), ("←", [.option, .shift]), ("→", [.option, .shift]),
+        ("↑", [.option]), ("↓", [.option]),
+    ]
+
+    /// The menu commands that do sit on a view's key, each with why the view still gets it. A new one fails the test
+    /// until it is named here (the model of Glimmer's layer keys, COMFORT.md 7e6b3ca).
+    public static let viewKeyMenus: [String: String] = [
+        "track.previous": "⌥↑ is enabled only while the timeline has the keyboard and no automation is shown (EditorWindowController's validation); a disabled menu item passes the key on, so a text field's caret and the lanes' ⌥↑ keep it",
+        "track.next": "⌥↓, as track.previous",
     ]
 }

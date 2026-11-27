@@ -268,6 +268,7 @@ public enum AgentAPI {
         }
         let allowPaid = obj["allowPaid"] as? Bool ?? false
         var steps: [Step] = []
+        var unpaid: (index: Int, op: String)?
         for (i, item) in raw.enumerated() {
             guard let dict = item as? [String: Any], let op = dict["op"] as? String else {
                 throw .badRequest("Step \(i) needs an \"op\".")
@@ -292,10 +293,13 @@ public enum AgentAPI {
             do { try StepRunner.validate(step) } catch {
                 throw APIError(400, "bad_request", "Step \(i): \(error.localizedDescription)", step: i)
             }
-            if spec.paid, !allowPaid {
-                throw APIError(402, "paid_not_allowed", "Step \(i) (\(op)) calls a paid service. Pass \"allowPaid\": true to allow it.", step: i)
-            }
+            if spec.paid, !allowPaid, unpaid == nil { unpaid = (i, op) }
             steps.append(step)
+        }
+        // The price only after every step's schema (CallChecks' order, SIBLINGS 0e3ae19): a later step's bad value is
+        // said before an earlier step's price. (No editing step is paid today: PaidQuestionTests holds that.)
+        if let unpaid {
+            throw APIError(402, "paid_not_allowed", "Step \(unpaid.index) (\(unpaid.op)) calls a paid service. Pass \"allowPaid\": true to allow it.", step: unpaid.index)
         }
         return (steps, allowPaid)
     }
