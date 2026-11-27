@@ -26,8 +26,10 @@ struct TrackHeaders: View {
                 Color.clear.frame(height: TimelineView.rulerHeight + CGFloat(l.edge))
                 VStack(spacing: 0) {
                     ForEach(tracks) { t in
+                        // Drawn from the lane's top and cut at its bottom: a header never lies over the next one.
                         TrackHeader(session: session, track: t, height: lane, stereo: session.project.channels == 2, rename: rename)
-                            .frame(height: lane)
+                            .frame(height: lane, alignment: .top)
+                            .clipped()
                     }
                 }
                 .offset(y: -CGFloat(l.scrollY))
@@ -60,6 +62,48 @@ private struct TrackHeader: View {
     private var lockLabel: String { track.locked ? L10n.text("trackHeader.unlock", track.name) : L10n.text("trackHeader.lock", track.name) }
 
     var body: some View {
+        Group {
+            if LaneLayout.header(forLane: Double(height)) == .full { full } else { compact }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(current ? Theme.neonColor.opacity(0.08) : .clear)
+        .overlay(alignment: .bottom) { Rectangle().fill(Color.white.opacity(0.08)).frame(height: 1) }
+        .contentShape(.rect)
+        .onTapGesture(count: 2) { rename(track.id) }
+        .onTapGesture { session.currentTrack = track.id }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(track.name)
+    }
+
+    /// A lane too low for all of it (LaneLayout.header): the name and M, S, R on one row, in the middle of the lane.
+    /// The level, the meter and the input are in the mixer, and the full header is back as soon as the lane is.
+    private var compact: some View {
+        HStack(spacing: 4) {
+            if track.locked {
+                Image(systemName: "lock.fill").font(.system(size: 9)).foregroundStyle(.secondary).accessibilityHidden(true)
+            }
+            Text(track.name).font(.system(size: 11, weight: .semibold)).lineLimit(1).truncationMode(.tail)
+                .help(track.name)
+                .layoutPriority(1)
+            Spacer(minLength: 4)
+            toggle("M", on: track.isMuted, color: .orange, help: L10n.text("mixer.mute.ax", track.name)) {
+                set(["muted": .bool(!track.isMuted)])
+            }
+            toggle("S", on: soloed, color: .yellow, help: L10n.text("mixer.solo.ax", track.name)) {
+                var s = session.solo
+                if s.contains(track.id) { s.remove(track.id) } else { s.insert(track.id) }
+                session.setSolo(s)
+            }
+            toggle("R", on: armed, color: StateKind.error.color, help: armed ? L10n.text("record.disarm.help", track.name) : L10n.text("record.arm.help", track.name)) {
+                Task { await session.toggleArm(track.id) }
+            }
+            .accessibilityIdentifier("header.arm")
+        }
+        .padding(.horizontal, 8)
+        .frame(maxHeight: .infinity)
+    }
+
+    private var full: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 4) {
                 if track.locked {
@@ -141,14 +185,6 @@ private struct TrackHeader: View {
         }
         .padding(.horizontal, 8)
         .padding(.top, 6)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(current ? Theme.neonColor.opacity(0.08) : .clear)
-        .overlay(alignment: .bottom) { Rectangle().fill(Color.white.opacity(0.08)).frame(height: 1) }
-        .contentShape(.rect)
-        .onTapGesture(count: 2) { rename(track.id) }
-        .onTapGesture { session.currentTrack = track.id }
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel(track.name)
     }
 
     private func toggle(_ letter: String, on: Bool, color: Color, help: String, action: @escaping () -> Void) -> some View {

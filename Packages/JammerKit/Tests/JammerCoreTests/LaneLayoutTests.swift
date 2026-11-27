@@ -104,4 +104,18 @@ struct LaneLayoutTests {
         let all = LaneLayout(tracks: 4, rulerHeight: ruler, areaHeight: 600).hidden([0, 1, 2, 3])
         #expect(all.above.isEmpty && all.below.isEmpty)
     }
+
+    @Test("A header shows all it has where it fits and one row below that, and the least lane holds the row")
+    func header() {
+        let least = LaneLayout.minimum * LaneLayout.zoomRange.lowerBound
+        #expect(least >= LaneLayout.compactHeader, "the least lane, \(least) pt, holds the one-row header")
+        #expect(LaneLayout.header(forLane: least) == .compact)
+        #expect(LaneLayout.header(forLane: LaneLayout.minimum * 0.625) == .compact, "30 pt: the round's case")
+        #expect(LaneLayout.header(forLane: LaneLayout.fullHeader - 0.5) == .compact)
+        #expect(LaneLayout.header(forLane: LaneLayout.minimum) == .full, "zoom 1 is the full header, as before")
+        #expect(LaneLayout.header(forLane: 150) == .full)
+        // Many tracks at the least zoom are shown in the least lane, so the compact header is what they get.
+        let many = LaneLayout(tracks: 24, rulerHeight: ruler, areaHeight: 400, zoom: 0.5)
+        #expect(LaneLayout.header(forLane: many.laneHeight) == .compact && many.laneHeight >= LaneLayout.compactHeader)
+    }
 }

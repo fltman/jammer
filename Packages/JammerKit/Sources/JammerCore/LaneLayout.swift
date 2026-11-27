@@ -14,6 +14,16 @@ public struct LaneLayout: Sendable, Equatable {
     /// over no lane, so it never covers a handle or a point).
     public static let edgeRow = 14.0
 
+    /// What a track's header shows in a lane of `height` points. All of it (the name; M, S, R, the lock and the
+    /// level; the meter; from 74 the level slider, from 96 the pan) needs `fullHeader`; below that the header is one
+    /// row, the name and M, S, R, which `compactHeader` holds, so the least lane (`minimum` × the least zoom) keeps
+    /// it and as many tracks stay in view as can be (the round of 2026-11-27: at 30 points a full header ran into
+    /// the one below). Either way a header never draws outside its lane.
+    public enum Header: Sendable, Equatable { case compact, full }
+    public static let fullHeader = 48.0
+    public static let compactHeader = 20.0
+    public static func header(forLane height: Double) -> Header { height >= fullHeader ? .full : .compact }
+
     public let tracks: Int
     /// The ruler's height, above the tracks' area.
     public let rulerHeight: Double
