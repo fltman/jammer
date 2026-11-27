@@ -691,6 +691,20 @@ final class TimelineOverlay: NSView {
         super.init(frame: .zero)
         // Files dropped from Finder (COMFORT 22, 71): audio as new tracks where it lands, a film as the picture.
         registerForDraggedTypes([.fileURL])
+        observeTool()
+    }
+
+    /// Another tool (a key, the palette, the menu) with the mouse still over the lanes: the pointer it gives, now.
+    private func observeTool() {
+        withObservationTracking {
+            _ = session.tool
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                guard let self else { return }
+                self.refreshPointer()
+                self.observeTool()
+            }
+        }
     }
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
@@ -917,8 +931,27 @@ final class TimelineOverlay: NSView {
 
     override func cursorUpdate(with event: NSEvent) { cursor(for: zone(at: convert(event.locationInWindow, from: nil))).set() }
 
+    /// The pointer for where the mouse is now (COMFORT 45). `afterDrag`: a drag of the timeline's own ended, so when
+    /// the mouse is outside, the arrow.
+    private func refreshPointer(afterDrag: Bool = false) {
+        Pointer.refresh(self, ours: afterDrag) { at in timeline?.automation.pointer(at: at) ?? cursor(for: zone(at: at)) }
+    }
+
     override func mouseExited(with event: NSEvent) {
         if hover != .none { hover = .none; needsDisplay = true }
+        Pointer.left(self)
+    }
+
+    /// ⌥ turns the zoom tool's plus into a minus without the mouse moving.
+    override func flagsChanged(with event: NSEvent) {
+        super.flagsChanged(with: event)
+        if tool == "zoom" { refreshPointer() }
+    }
+
+    override func viewDidHide() { Pointer.gone(self); super.viewDidHide() }
+    override func viewWillMove(toWindow newWindow: NSWindow?) {
+        if newWindow == nil { Pointer.gone(self) }
+        super.viewWillMove(toWindow: newWindow)
     }
 
     /// Where a dragged edge may snap: clip edges, markers, the playhead and the selection's edges (⌃ turns it off).
@@ -1485,6 +1518,8 @@ final class TimelineOverlay: NSView {
     }
 
     override func mouseUp(with event: NSEvent) {
+        // Whatever the drag was, the pointer is then the one for where the mouse is (the arrow outside).
+        defer { refreshPointer(afterDrag: true) }
         if timeline?.automation.mouseUp(event, at: convert(event.locationInWindow, from: nil)) == true { stopScrolling(); return }
         stopScrolling()
         snapX = nil
@@ -1507,7 +1542,7 @@ final class TimelineOverlay: NSView {
             needsDisplay = true
             return
         }
-        if handDrag != nil { handDrag = nil; NSCursor.openHand.set(); return }
+        if handDrag != nil { handDrag = nil; return }
         if let h = handleDrag {
             handleDrag = nil
             if case .marker(let id) = h.kind { session.currentMarker = id }

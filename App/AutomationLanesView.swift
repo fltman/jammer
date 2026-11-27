@@ -76,7 +76,10 @@ final class AutomationLanesView: NSView {
         session.seek(Frame(max(0, min(Double(project.length), viewport.frame(atX: p.x))).rounded()))
     }
     override func mouseDragged(with event: NSEvent) { _ = mouseDragged(event, at: convert(event.locationInWindow, from: nil)) }
-    override func mouseUp(with event: NSEvent) { _ = mouseUp(event, at: convert(event.locationInWindow, from: nil)) }
+    override func mouseUp(with event: NSEvent) {
+        _ = mouseUp(event, at: convert(event.locationInWindow, from: nil))
+        Pointer.refresh(self, ours: true) { pointer(at: $0) ?? .arrow }
+    }
 
     /// The rows, top to bottom. Among the strips only those that can have a lane of the shown kind:
     /// a VCA group has a level and a mute, the master a level.
@@ -633,7 +636,16 @@ final class AutomationLanesView: NSView {
         trackingAreas.forEach(removeTrackingArea)
         addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self))
     }
-    override func mouseExited(with event: NSEvent) { if drag == nil, hover != nil { hover = nil; needsDisplay = true } }
+    override func mouseExited(with event: NSEvent) {
+        if drag == nil, hover != nil { hover = nil; needsDisplay = true }
+        // The strips' rows set their own pointer (over the tracks, the timeline does): the arrow when the mouse leaves.
+        if rows != .tracks { Pointer.left(self) }
+    }
+    override func viewDidHide() { if rows != .tracks { Pointer.gone(self) }; super.viewDidHide() }
+    override func viewWillMove(toWindow newWindow: NSWindow?) {
+        if newWindow == nil, rows != .tracks { Pointer.gone(self) }
+        super.viewWillMove(toWindow: newWindow)
+    }
     /// The pointer over the lanes (COMFORT 1): an open hand over a point that a press would grab, a closed one while
     /// points are dragged; nil elsewhere (the timeline's own pointer).
     func pointer(at p: NSPoint) -> NSCursor? {
