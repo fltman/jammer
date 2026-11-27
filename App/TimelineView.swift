@@ -925,16 +925,23 @@ final class TimelineOverlay: NSView {
     override func mouseMoved(with event: NSEvent) {
         let at = convert(event.locationInWindow, from: nil)
         let z = zone(at: at)
-        (timeline?.automation.pointer(at: at) ?? cursor(for: z)).set()
+        pointer(at: at).set()
         if z != hover { hover = z; needsDisplay = true }
     }
 
-    override func cursorUpdate(with event: NSEvent) { cursor(for: zone(at: convert(event.locationInWindow, from: nil))).set() }
+    override func cursorUpdate(with event: NSEvent) { pointer(at: convert(event.locationInWindow, from: nil)).set() }
+
+    /// The pointer for a place: a grip of the drawn box, an automation point, or the zone's (the same zones a press
+    /// takes).
+    private func pointer(at at: NSPoint) -> NSCursor {
+        if let g = boxGrip(at: at) { return Self.cursor(for: g, dragging: boxDrag != nil) }
+        return timeline?.automation.pointer(at: at) ?? cursor(for: zone(at: at))
+    }
 
     /// The pointer for where the mouse is now (COMFORT 45). `afterDrag`: a drag of the timeline's own ended, so when
     /// the mouse is outside, the arrow.
     private func refreshPointer(afterDrag: Bool = false) {
-        Pointer.refresh(self, ours: afterDrag) { at in timeline?.automation.pointer(at: at) ?? cursor(for: zone(at: at)) }
+        Pointer.refresh(self, ours: afterDrag) { at in pointer(at: at) }
     }
 
     override func mouseExited(with event: NSEvent) {
@@ -1334,6 +1341,46 @@ final class TimelineOverlay: NSView {
     private static let brushPixels: CGFloat = 10
     private var areaMode: Bool { timeline?.showsSpectrogram == true }
 
+    // MARK: The drawn box's grips (the comfort sweep of 2026-11-25, [2])
+
+    /// A grip being dragged: which, the box as it was, where the drag began, and its lane.
+    private var boxDrag: (grip: BoxGrips.Grip, start: BoxGrips.Rect, anchor: NSPoint, lane: Int)?
+
+    /// The spectral area's box in the view's points, when the area is a box (a lasso or a brush stroke has no grips).
+    private func boxRect() -> (rect: BoxGrips.Rect, lane: Int)? {
+        guard areaMode, let area = session.spectralArea, case .box(let a, let b, let lo, let hi) = area.shape else { return nil }
+        return (BoxGrips.Rect(minX: Double(viewport.x(of: a * project.sampleRate)), minY: Double(y(ofHz: hi, lane: area.track)),
+                              maxX: Double(viewport.x(of: b * project.sampleRate)), maxY: Double(y(ofHz: lo, lane: area.track))), area.track)
+    }
+    private func boxGrip(at p: NSPoint) -> BoxGrips.Grip? {
+        guard let (r, _) = boxRect() else { return nil }
+        if let d = boxDrag { return d.grip }
+        return BoxGrips.grip(atX: Double(p.x), y: Double(p.y), in: r)
+    }
+    private static func cursor(for g: BoxGrips.Grip, dragging: Bool) -> NSCursor {
+        switch g {
+        case .inside: return dragging ? .closedHand : .openHand
+        case .edge(.left), .edge(.right): return .resizeLeftRight
+        case .edge(.top), .edge(.bottom): return .resizeUpDown
+        case .corner(let left, let top):
+            return .frameResize(position: left ? (top ? .topLeft : .bottomLeft) : (top ? .topRight : .bottomRight), directions: .all)
+        }
+    }
+    /// The box after a grip moved by (`dx`, `dy`): kept in its lane, and from the start of the document on.
+    private func dragBox(_ d: (grip: BoxGrips.Grip, start: BoxGrips.Rect, anchor: NSPoint, lane: Int), to p: NSPoint) {
+        var dx = Double(p.x - d.anchor.x), dy = Double(p.y - d.anchor.y)
+        let top = Double(laneTop(d.lane)), bottom = top + Double(laneHeight - 1), zeroX = Double(viewport.x(of: 0))
+        if d.grip == .inside {
+            dx = max(dx, zeroX - d.start.minX)
+            dy = min(max(dy, top - d.start.minY), bottom - d.start.maxY)
+        }
+        let r = BoxGrips.drag(d.grip, d.start, dx: dx, dy: dy)
+        let start = max(0, seconds(atX: CGFloat(r.minX))), end = max(start, seconds(atX: CGFloat(r.maxX)))
+        let high = hz(atY: CGFloat(max(top, r.minY)), lane: d.lane), low = hz(atY: CGFloat(min(bottom, r.maxY)), lane: d.lane)
+        session.spectralArea = .init(shape: .box(start: start, end: end, low: min(low, high), high: max(low, high)), track: d.lane)
+        needsDisplay = true
+    }
+
     private func updateArea(_ d: (lane: Int, anchor: NSPoint, points: [NSPoint])) {
         let lane = d.lane
         let shape: SpectralShape
@@ -1380,6 +1427,14 @@ final class TimelineOverlay: NSView {
         Theme.neon.setStroke()
         path.lineWidth = 1.5
         path.stroke()
+        // A box's eight handles, where its corners and edges can be taken.
+        if let (r, _) = boxRect(), drawing == nil {
+            for h in BoxGrips.handles(r) {
+                let sq = NSBezierPath(rect: NSRect(x: h.x - 3, y: h.y - 3, width: 6, height: 6))
+                Theme.neon.setFill(); sq.fill()
+                NSColor.black.withAlphaComponent(0.6).setStroke(); sq.lineWidth = 1; sq.stroke()
+            }
+        }
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -1392,6 +1447,15 @@ final class TimelineOverlay: NSView {
         // A click on an automation point (or ⌥-click in a lane) is the lane's; everything else is the timeline's as before.
         if !areaMode, timeline?.automation.mouseDown(event, at: p) == true { dragAnchor = nil; return }
         let f = frame(at: p)
+        if areaMode, p.y >= TimelineView.rulerHeight, event.clickCount == 1, !event.modifierFlags.contains(.shift),
+           let (r, lane) = boxRect(), let g = BoxGrips.grip(atX: Double(p.x), y: Double(p.y), in: r) {
+            // A grip of the box there is: it is adjusted, not drawn again.
+            boxDrag = (g, r, p, lane)
+            didDrag = false
+            dragAnchor = nil
+            refreshPointer()
+            return
+        }
         if areaMode, p.y >= TimelineView.rulerHeight, event.clickCount == 1, !event.modifierFlags.contains(.shift) {
             let lane = min(max(0, laneIndex(at: p.y)), max(0, project.tracks.count - 1))
             drawing = (lane, p, [p])
@@ -1488,6 +1552,11 @@ final class TimelineOverlay: NSView {
             if p.x > bounds.width - 4 || p.x < 4 { keepScrolling() }
             return
         }
+        if let d = boxDrag {
+            didDrag = true
+            dragBox(d, to: p)
+            return
+        }
         if var d = drawing {
             d.points.append(p)
             drawing = d
@@ -1524,7 +1593,7 @@ final class TimelineOverlay: NSView {
         stopScrolling()
         snapX = nil
         lastDragPoint = nil
-        if cancelled { cancelled = false; dragAnchor = nil; handleDrag = nil; gainDrag = nil; zoomDrag = nil; handDrag = nil; needsDisplay = true; return }
+        if cancelled { cancelled = false; dragAnchor = nil; handleDrag = nil; gainDrag = nil; zoomDrag = nil; handDrag = nil; boxDrag = nil; needsDisplay = true; return }
         if let g = gainDrag {
             gainDrag = nil
             if g.db != g.startDB { session.perform("set_clip", ["clip": .string(g.clip.uuidString), "gainDB": .number(g.db)]) }
@@ -1552,6 +1621,11 @@ final class TimelineOverlay: NSView {
         }
         selectionBeforeDrag = nil
         needsDisplay = true
+        if boxDrag != nil {
+            boxDrag = nil
+            needsDisplay = true
+            return
+        }
         if let d = drawing {
             drawing = nil
             if !didDrag {
@@ -1657,7 +1731,7 @@ final class TimelineOverlay: NSView {
         case 49: session.togglePlay() // space
         case 36: session.seek(0) // return
         case 53 where cancelDrag(): break // escape: a drag in progress first
-        case 53 where areaMode && session.spectralArea != nil: session.spectralArea = nil; needsDisplay = true // escape: the area first
+        case 53 where areaMode && session.spectralArea != nil: boxDrag = nil; session.spectralArea = nil; needsDisplay = true // escape: the area first
         case 53: session.selection = nil // escape
         case _ where event.modifierFlags.intersection([.command, .control, .option]).isEmpty
             && Commands.tools.contains(where: { $0.letter == event.charactersIgnoringModifiers?.lowercased() }):
