@@ -955,6 +955,11 @@ public enum StepRunner {
     /// Checks names and required params before anything runs.
     public static func validate(_ step: Step) throws {
         guard let spec = Operations.named(step.op) else { throw StepFailure(Said("step.step.unknown_op", "Unknown op \"%@\".", "\(step.op)")) }
+        try validate(step, against: spec)
+    }
+
+    /// `step`'s params against `spec`'s: what is required, and each value's kind, options and range.
+    static func validate(_ step: Step, against spec: OperationSpec) throws {
         for p in spec.params where p.required && step.params[p.name] == nil {
             throw StepFailure(Said("step.any.2", "%1$@ needs \"%2$@\".", "\(step.op)", "\(p.name)"))
         }

@@ -130,4 +130,32 @@ extension AgentAPI {
             throw .badRequest("\(here) has no field \"\(unknown)\" in its body. \(takes(allowed))")
         }
     }
+
+    /// What a call is told before its document is looked up (Drömmer 3baad5a; Flimmer's K2a: the schema first, then
+    /// the document, then what is missing, the price last): the method its path takes (405), and a JSON body against
+    /// the operation the route is, its values' kinds, options and ranges and what is required (400). nil: nothing
+    /// to say here. Names the route doesn't take at all are checkParameters' (it runs first).
+    public static func schemaRefusal(method: String, path: [String], body: Data) -> APIError? {
+        let forPath = routes.filter { $0.pattern.count == path.count && zip($0.pattern, path).allSatisfy { $0 == "*" || $0 == $1 } }
+        guard !forPath.isEmpty else { return nil }
+        guard forPath.contains(where: { $0.method == method }) else {
+            let methods = Array(Set(forPath.map(\.method))).sorted()
+            return APIError(405, "method_not_allowed", "\(method) isn't allowed here; use \(methods.joined(separator: " or ")).")
+        }
+        let pattern = forPath.first { $0.method == method }!.pattern
+        guard let spec = (Operations.all + Operations.endpoints).first(where: { spec in
+                  guard let call = spec.call else { return false }
+                  return call.method == method && RouteParameters(call.method, call.path).pattern == pattern
+              }),
+              !body.isEmpty, let object = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any] else { return nil }
+        var params: [String: JSONValue] = [:]
+        for (k, v) in object where spec.params.contains(where: { $0.name == k }) {
+            guard let j = JSONValue(v) else { return .badRequest("\(spec.name): \"\(k)\" must be a number, string, boolean or list.") }
+            params[k] = j
+        }
+        do { try StepRunner.validate(Step(op: spec.name, params: params), against: spec) } catch {
+            return .badRequest(error.localizedDescription)
+        }
+        return nil
+    }
 }

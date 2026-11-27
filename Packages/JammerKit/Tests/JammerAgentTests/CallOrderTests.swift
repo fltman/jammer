@@ -26,6 +26,17 @@ struct CallOrderTests {
         #expect(status(#"{"steps": [{"op": "add_marker", "params": {"name": "A", "at": 1}}]}"#) == nil, "a good step passes")
     }
 
+    @Test("Routes, the schema before the document: a bad value or method on a document that isn't there is 400 or 405, not 404")
+    func schemaBeforeDocument() {
+        let missing = ["api", "v1", "documents", "00000000-0000-0000-0000-000000000000", "transcribe"]
+        func refusal(_ method: String, _ body: String) -> Int? { AgentAPI.schemaRefusal(method: method, path: missing, body: Data(body.utf8))?.status }
+        #expect(refusal("POST", #"{"engine": "bogus"}"#) == 400, "a value not among the options")
+        #expect(refusal("POST", #"{"engine": 3}"#) == 400, "a value of the wrong kind")
+        #expect(refusal("GET", "") == 405, "a method the path doesn't take")
+        #expect(refusal("POST", #"{"engine": "openai", "language": "sv-SE"}"#) == nil, "a good body: the document comes next (404)")
+        #expect(AgentAPI.schemaRefusal(method: "GET", path: ["api", "v1", "documents", "x"], body: Data()) == nil, "a route without a body")
+    }
+
     @Test("In App/AgentServer.swift every price check (allowPaid, paidGates, paid_not_allowed) is in a CallChecks price stage")
     func priceLast() throws {
         let server = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../../../../App/AgentServer.swift").standardizedFileURL

@@ -410,6 +410,9 @@ enum AgentRouter {
             }
         case let p where p.count >= 4 && Array(p.prefix(3)) == ["api", "v1", "documents"]:
             guard let session = AgentRegistry.shared.session(p[3]) else {
+                // The schema before the document (K2a, as Drömmer 3baad5a): a bad method or value is said even when
+                // the document isn't there, so the order an agent is told in is the same whatever it got wrong first.
+                if let refusal = AgentAPI.schemaRefusal(method: r.method, path: s, body: r.body) { throw refusal }
                 throw APIError.notFound("No open document with id \(p[3]). GET /api/v1/documents lists them.")
             }
             switch Array(p.dropFirst(4)) {
