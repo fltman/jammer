@@ -64,6 +64,11 @@ struct PluginsSheet: View {
                             .foregroundStyle(.secondary)
                     }
                     ForEach(track.inserts) { insert in row(track, insert) }
+                        // Dragged to another place in the chain: one set_insert step, as an agent would.
+                        .onMove { from, to in
+                            guard let i = from.first else { return }
+                            move(track, track.inserts[i], to: to > i ? to - 1 : to)
+                        }
                 }
                 .frame(minHeight: 170)
                 .id(session.pluginsVersion)
@@ -180,6 +185,9 @@ struct PluginsSheet: View {
                 .help(L10n.text("plugins.key.help"))
             }
             Button(L10n.text("plugins.edit")) { PluginWindows.show(session, track: track.id, insert: insert.id) }
+                // Without a drag (VoiceOver): one place earlier or later.
+                .accessibilityAction(named: L10n.text("plugins.moveUp")) { step(track, insert, by: -1) }
+                .accessibilityAction(named: L10n.text("plugins.moveDown")) { step(track, insert, by: 1) }
                 .accessibilityLabel(L10n.text("plugins.edit.ax", insert.name))
                 .disabled(session.inserts.instance(insert.id) == nil)
             Button { session.perform("remove_insert", ["track": .string(track.id.uuidString), "insert": .string(insert.id.uuidString)]) } label: {
@@ -188,6 +196,15 @@ struct PluginsSheet: View {
             .buttonStyle(.borderless)
             .help(L10n.text("button.remove.ax", insert.name))
         }
+    }
+
+    private func move(_ track: Strip, _ insert: Insert, to position: Int) {
+        guard track.inserts.firstIndex(where: { $0.id == insert.id }) != position else { return }
+        session.perform("set_insert", ["track": .string(track.id.uuidString), "insert": .string(insert.id.uuidString), "position": .number(Double(position))])
+    }
+    private func step(_ track: Strip, _ insert: Insert, by delta: Int) {
+        guard let i = track.inserts.firstIndex(where: { $0.id == insert.id }), track.inserts.indices.contains(i + delta) else { return }
+        move(track, insert, to: i + delta)
     }
 }
 

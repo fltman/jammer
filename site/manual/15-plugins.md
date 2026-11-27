@@ -12,7 +12,7 @@ A track can run through Audio Unit effects (AUv2 and AUv3) after its clips and b
 - **Edit…**, which opens the plugin's own window (or sliders for its parameters when it has no window),
 - the bin, to take it off.
 
-Plugins run in the order listed. Each one is one undo step, and so is a change made in a plugin's window: Jämmer stores the plugin's settings in the document shortly after you stop turning a knob, and when you close the window.
+Plugins run in the order listed; drag one up or down the list to change its place (with VoiceOver, its Move Up and Move Down actions). Each one is one undo step, and so is a change made in a plugin's window: Jämmer stores the plugin's settings in the document shortly after you stop turning a knob, and when you close the window.
 
 ## What they affect
 

@@ -362,7 +362,8 @@ public enum Operations {
                        .init("bypass", .boolean, "True to bypass, false to switch back on."),
                        .init("preset", .string, "A factory preset, by name."),
                        .init("parameter", .string, "Parameter identifier, e.g. global.0, or its exact name."),
-                       .init("value", .number, "The parameter's new value, in its unit.")]),
+                       .init("value", .number, "The parameter's new value, in its unit."),
+                       .init("position", .number, "Moves it to this place in the chain, 0 first (beyond the end: last). info has position.", range: 0...63)]),
         .init("remove_insert", "Remove Plugin", "Takes a plugin off a track or a bus.",
               params: [.init("track", .string, "The id of the track or bus the plugin is on.", required: true),
                        .init("insert", .string, "Insert id (or its name when that's unique on the track).", required: true)]),
@@ -1853,6 +1854,11 @@ extension StepRunner {
             }
             var list = current
             list[i] = insert
+            // Another place in the chain (the comfort sweep: the order could only be set when a plugin was added).
+            if let to = p["position"]?.double.map({ min(list.count - 1, max(0, Int($0))) }) {
+                list.insert(list.remove(at: i), at: to)
+                info["position"] = Double(to)
+            }
             put(list, &s)
             if let named = p["key"]?.string {
                 guard Operations.sidechainOn else { throw StepFailure(Said("step.set_insert.build_has_sidechain_keys", "set_insert: this build has no sidechain keys."), reason: "not_available") }

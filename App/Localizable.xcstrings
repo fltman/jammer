@@ -24943,6 +24943,42 @@
         }
       }
     },
+    "plugins.moveDown": {
+      "comment": "Button.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move Down"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flytta ned"
+          }
+        }
+      }
+    },
+    "plugins.moveUp": {
+      "comment": "Button.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move Up"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flytta upp"
+          }
+        }
+      }
+    },
     "plugins.noParameters": {
       "comment": "Shown in a plugin’s window.",
       "extractionState": "manual",
