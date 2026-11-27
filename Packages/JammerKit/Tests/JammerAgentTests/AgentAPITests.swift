@@ -225,7 +225,8 @@ struct SiteGuideTests {
         // The site describes the release build, whatever this test process has switched on.
         let guide = AgentAPI.guide(port: AgentAPI.ports[0], appVersion: Self.appVersion,
                                    features: .init(dereverb: Features.dereverb, spectralFreeform: Features.spectralFreeform, clap: Features.clap))
-        if ProcessInfo.processInfo.environment["JAMMER_WRITE_GUIDE"] == "1" {
+        // Written only when it changed: commit-checked.sh refuses a commit when a file is touched during the gate.
+        if ProcessInfo.processInfo.environment["JAMMER_WRITE_GUIDE"] == "1", (try? String(contentsOf: url, encoding: .utf8)) != guide {
             try guide.write(to: url, atomically: true, encoding: .utf8)
         }
         let onDisk = try String(contentsOf: url, encoding: .utf8)
