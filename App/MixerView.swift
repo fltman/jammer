@@ -68,7 +68,8 @@ struct MixerSheet: View {
                                    change: { session.perform("set_track", ["track": .string(t.id.uuidString)].merging($0) { $1 }) },
                                    send: { session.perform("set_send", ["from": .string(t.id.uuidString)].merging($0) { $1 }) }, remove: nil,
                                    place: t.position, placeable: project.channels > 2, heights: project.layout == .immersive714 || project.layout.isAmbisonic,
-                                   field: project.playsField(t), rotation: t.rotation)
+                                   field: project.playsField(t), rotation: t.rotation,
+                                   inserts: t.inserts, plugins: { openPlugins(t.id) })
                         // The strip's own menu (COMFORT 37, 26): what the Track menu does to this track, the same steps.
                         .contextMenu { trackMenu(t) }
                     }
@@ -88,7 +89,8 @@ struct MixerSheet: View {
                                    send: { session.perform("set_send", ["from": .string(b.id.uuidString)].merging($0) { $1 }) },
                                    remove: { session.perform("remove_bus", ["bus": .string(b.id.uuidString), "reroute": .string(b.output?.uuidString ?? "master")]) },
                                    // A bus is turned, not placed: its tracks have placed its channels already.
-                                   place: b.azimuth.map { SurroundPosition(azimuth: $0) }, placeable: project.channels > 2 && !project.layout.isAmbisonic)
+                                   place: b.azimuth.map { SurroundPosition(azimuth: $0) }, placeable: project.channels > 2 && !project.layout.isAmbisonic,
+                                   inserts: b.inserts, plugins: { openPlugins(b.id) })
                         .contextMenu {
                             Button(L10n.text("mixer.bus.delete", b.name)) {
                                 session.perform("remove_bus", ["bus": .string(b.id.uuidString), "reroute": .string(b.output?.uuidString ?? "master")])
@@ -182,6 +184,11 @@ struct MixerSheet: View {
         } else {
             do { try session.unfreeze(id) } catch { session.say(L10n.error(error), .error) }
         }
+    }
+
+    /// The plugins window, on this strip.
+    private func openPlugins(_ id: UUID) {
+        (session.window?.windowController as? EditorWindowController)?.showPlugins(strip: id)
     }
 
     private func toggleSolo(_ id: UUID, _ on: Bool) {
@@ -359,6 +366,9 @@ struct MixerStrip: View {
     /// A track that plays a sound field: its turn round the listener, in place of a place.
     var field = false
     var rotation: FieldRotation? = nil
+    /// The strip's plugins, and what opens them (the plugins window on this strip).
+    var inserts: [Insert] = []
+    var plugins: (() -> Void)? = nil
     @State private var yaw = 0.0
     @State private var azimuth = 0.0
     @State private var level = 0.0
@@ -434,6 +444,20 @@ struct MixerStrip: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             controls
+            if let plugins {
+                // The inserts in the strip itself (the comfort sweep: the mixer showed none), in their order.
+                HStack(spacing: 6) {
+                    Text(inserts.isEmpty ? L10n.text("mixer.inserts.none")
+                         : inserts.map { $0.bypass ? L10n.text("mixer.insert.bypassed", $0.name) : $0.name }.joined(separator: " → "))
+                        .font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.tail)
+                    Button(inserts.isEmpty ? L10n.text("mixer.inserts.add") : L10n.text("mixer.inserts.edit"), action: plugins)
+                        .buttonStyle(.link).font(.caption)
+                        .help(L10n.text("mixer.inserts.help", name))
+                        .accessibilityLabel(L10n.text("mixer.inserts.ax", name))
+                        .accessibilityIdentifier("mixer.strip.plugins")
+                }
+                .padding(.leading, 160).frame(height: 18)
+            }
             if frozen {
                 Text(kind == "bus" ? L10n.text("mixer.frozen.bus") : L10n.text("mixer.frozen.track"))
                     .font(.caption).foregroundStyle(.secondary)

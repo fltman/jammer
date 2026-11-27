@@ -19,6 +19,13 @@ struct PluginsSheet: View {
     @State private var scanning = false
     @State private var safeMode = EditorSession.pluginSafeMode
 
+    /// `strip`: the track or bus it opens on (a mixer strip's Plugins button); otherwise the first.
+    init(session: EditorSession, strip: UUID? = nil, done: @escaping () -> Void) {
+        self.session = session
+        self.done = done
+        _trackID = State(initialValue: strip)
+    }
+
     /// What plugins sit on: a track or a bus.
     struct Strip: Identifiable {
         let id: UUID

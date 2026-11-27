@@ -550,17 +550,25 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         session.status = model == "dialog" ? L10n.text("stems.working.soundtrack") : L10n.text("stems.working")
     }
 
-    @objc func showPlugins(_ sender: Any?) {
-        guard let window else { return }
-        let host = NSHostingController(rootView: AnyView(EmptyView()))
-        host.rootView = AnyView(PluginsSheet(session: session) { [weak host] in
-            guard let sheet = host?.view.window else { return }
-            window.endSheet(sheet)
-        })
-        window.contentViewController?.presentAsSheet(host) ?? {
-            let sheet = NSWindow(contentViewController: host)
-            window.beginSheet(sheet)
+    /// Audio › Plugins…, and a mixer strip's Plugins button: a window of its own beside the document's, as the mixer
+    /// is (it was a sheet over the document, so the Space bar didn't play and the mixer couldn't be reached while it
+    /// was open; the comfort sweep of 2026-11-25). One per document; it opens on the strip it was asked for.
+    private var pluginsWindow: MixerWindow?
+    @objc func showPlugins(_ sender: Any?) { showPlugins(strip: session.currentTrack) }
+    func showPlugins(strip: UUID?) {
+        let w = pluginsWindow ?? {
+            let w = MixerWindow(contentRect: .zero, styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
+            w.session = session
+            w.isReleasedWhenClosed = false
+            w.identifier = NSUserInterfaceItemIdentifier("plugins")
+            w.title = L10n.text("plugins.window.title", session.name)
+            w.nextResponder = self
+            pluginsWindow = w
+            return w
         }()
+        w.contentViewController = NSHostingController(rootView: PluginsSheet(session: session, strip: strip) { [weak w] in w?.close() })
+        if !w.isVisible { w.center() }
+        w.makeKeyAndOrderFront(nil)
     }
 
     /// Audio › Mixer…: a window of its own beside the document's, so that a level can be set, and ridden,
@@ -595,7 +603,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         }
     }
     /// The mixer goes with its document, and so does the picture.
-    func closeMixer() { mixerWindow?.close(); mixerWindow = nil; pictureWindow?.close(); pictureWindow = nil }
+    func closeMixer() { mixerWindow?.close(); mixerWindow = nil; pictureWindow?.close(); pictureWindow = nil; pluginsWindow?.close(); pluginsWindow = nil }
 
     private var pictureWindow: PictureWindow?
     /// The film beside the sound, in a window of its own: it follows the playhead.

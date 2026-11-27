@@ -18313,6 +18313,114 @@
         }
       }
     },
+    "mixer.insert.bypassed": {
+      "comment": "Button.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ (bypassed)"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ (förbikopplat)"
+          }
+        }
+      }
+    },
+    "mixer.inserts.add": {
+      "comment": "Button.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add Plugin…"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lägg till plugin…"
+          }
+        }
+      }
+    },
+    "mixer.inserts.ax": {
+      "comment": "Button.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plugins on %@"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pluginer på %@"
+          }
+        }
+      }
+    },
+    "mixer.inserts.edit": {
+      "comment": "Button.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plugins…"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pluginer…"
+          }
+        }
+      }
+    },
+    "mixer.inserts.help": {
+      "comment": "Button.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opens the plugins window on %@: add, order, bypass or remove its plugins."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Öppnar fönstret för pluginer på %@: lägg till, ordna, förbikoppla eller ta bort dess pluginer."
+          }
+        }
+      }
+    },
+    "mixer.inserts.none": {
+      "comment": "Button.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No plugins"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inga pluginer"
+          }
+        }
+      }
+    },
     "mixer.intro": {
       "comment": "Explanation at the top of the mixer.",
       "extractionState": "manual",
@@ -25083,6 +25191,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pluginer"
+          }
+        }
+      }
+    },
+    "plugins.window.title": {
+      "comment": "Button.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plugins — %@"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pluginer – %@"
           }
         }
       }

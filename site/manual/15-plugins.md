@@ -6,7 +6,7 @@ A track can run through Audio Unit effects (AUv2 and AUv3) after its clips and b
 
 ## Add one
 
-**Track › Plugins…** (⌥⇧⌘P). Pick the track (or a bus, when the document has any; see [the mixer](20-mixer.md)), then **Add Plugin** and the effect, grouped by manufacturer. Each plugin in the list has:
+**Track › Plugins…** (⌥⇧⌘P) opens a window of its own beside the document's, on the selected track; the Space bar still plays while it is open. In [the mixer](20-mixer.md), each strip lists its plugins in their order (a bypassed one says so), and its **Plugins…** button opens the same window on that strip. Pick the track (or a bus, when the document has any), then **Add Plugin** and the effect, grouped by manufacturer. Each plugin in the list has:
 
 - a switch to turn it **on or off** (off is bypass: the track sounds exactly as without it),
 - **Edit…**, which opens the plugin's own window (or sliders for its parameters when it has no window),
