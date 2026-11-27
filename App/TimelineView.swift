@@ -1078,7 +1078,11 @@ final class TimelineOverlay: NSView {
 
     /// Esc during a drag puts back what was there and ends it without a step (COMFORT.md 41).
     private func cancelDrag() -> Bool {
-        guard handleDrag != nil || (dragAnchor != nil && didDrag) || selectionBeforeDrag != nil || gainDrag != nil || zoomDrag != nil else { return false }
+        guard handleDrag != nil || (dragAnchor != nil && didDrag) || selectionBeforeDrag != nil || gainDrag != nil || zoomDrag != nil
+                || drawing != nil || boxDrag != nil else { return false }
+        // An area being drawn or a box's grip being dragged: the area as it was before (the comfort sweep, [5]: Esc
+        // cleared the area but the drawing went on, and the next movement drew it again).
+        if drawing != nil || boxDrag != nil { session.spectralArea = areaBeforeDrag; drawing = nil; boxDrag = nil }
         gainDrag = nil
         zoomDrag = nil
         if let before = selectionBeforeDrag { session.selection = before }
@@ -1361,6 +1365,8 @@ final class TimelineOverlay: NSView {
     private func seconds(atX x: CGFloat) -> Double { viewport.frame(atX: x) / project.sampleRate }
     private func point(_ p: NSPoint, lane: Int) -> SpectralPoint { SpectralPoint(t: seconds(atX: p.x), f: hz(atY: p.y, lane: lane)) }
     private var drawing: (lane: Int, anchor: NSPoint, points: [NSPoint])?
+    /// The spectral area as it was when a drawing or a grip's drag began: what Esc puts back.
+    private var areaBeforeDrag: EditorSession.SpectralArea?
     private static let brushPixels: CGFloat = 10
     private var areaMode: Bool { timeline?.showsSpectrogram == true }
 
@@ -1473,6 +1479,7 @@ final class TimelineOverlay: NSView {
         if areaMode, p.y >= TimelineView.rulerHeight, event.clickCount == 1, !event.modifierFlags.contains(.shift),
            let (r, lane) = boxRect(), let g = BoxGrips.grip(atX: Double(p.x), y: Double(p.y), in: r) {
             // A grip of the box there is: it is adjusted, not drawn again.
+            areaBeforeDrag = session.spectralArea
             boxDrag = (g, r, p, lane)
             didDrag = false
             dragAnchor = nil
@@ -1481,6 +1488,7 @@ final class TimelineOverlay: NSView {
         }
         if areaMode, p.y >= TimelineView.rulerHeight, event.clickCount == 1, !event.modifierFlags.contains(.shift) {
             let lane = min(max(0, laneIndex(at: p.y)), max(0, project.tracks.count - 1))
+            areaBeforeDrag = session.spectralArea
             drawing = (lane, p, [p])
             didDrag = false
             dragAnchor = nil
@@ -1616,7 +1624,7 @@ final class TimelineOverlay: NSView {
         stopScrolling()
         snapX = nil
         lastDragPoint = nil
-        if cancelled { cancelled = false; dragAnchor = nil; handleDrag = nil; gainDrag = nil; zoomDrag = nil; handDrag = nil; boxDrag = nil; needsDisplay = true; return }
+        if cancelled { cancelled = false; dragAnchor = nil; handleDrag = nil; gainDrag = nil; zoomDrag = nil; handDrag = nil; boxDrag = nil; drawing = nil; needsDisplay = true; return }
         if let g = gainDrag {
             gainDrag = nil
             if g.db != g.startDB { session.perform("set_clip", ["clip": .string(g.clip.uuidString), "gainDB": .number(g.db)]) }
