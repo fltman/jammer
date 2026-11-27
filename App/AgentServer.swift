@@ -512,11 +512,16 @@ enum AgentRouter {
                     body["beats"] = e.beats.map { (($0 + offset) * 1_000).rounded() / 1_000 }
                     body["pulse"] = e.pulse
                     body["alternatives"] = e.alternatives
+                    body["segments"] = e.stretches.map { ["start": ((offset + $0.start) * 1_000).rounded() / 1_000, "bpm": $0.bpm, "beats": $0.beats, "pulse": $0.pulse, "bridge": $0.bridge] as [String: Any] }
+                    // A tempo that changes was read further than one tempo is.
+                    if e.stretches.count > 1 { body["analyzedSeconds"] = min(session.project.seconds(Frame(range.count)), Rhythm.maxMapSeconds) }
                 case .failure(let error):
                     guard let f = error as? Rhythm.Failure, f != .unavailable else { throw APIError.notAvailable("Tempo detection isn't available in this build.") }
                     body["bpm"] = NSNull()
                     body["beats"] = [Double]()
                     body["alternatives"] = [Double]()
+                    body["segments"] = [[String: Any]]()
+                    if case .glides = f { body["analyzedSeconds"] = min(session.project.seconds(Frame(range.count)), Rhythm.maxMapSeconds) }
                     body["reason"] = f.reason
                     body["message"] = f.localizedDescription
                 }

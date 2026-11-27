@@ -146,4 +146,101 @@ struct RhythmReferenceTests {
             if name == "Demo song" || name == "Music bed" { #expect(e.map { abs($0.bpm - 120) <= 0.1 } ?? false) } else { #expect(e == nil, "\(name)") }
         }
     }
+    // MARK: Tempo that changes (a tempo map, 2026-11-26)
+
+    /// Clicks or drums on the given beat times (the first of four louder), `seconds` long.
+    func sound(at times: [Double], seconds: Double, drums: Bool = false) -> [Float] {
+        let n = Int(seconds * sr)
+        var x = [Float](repeating: 0, count: n)
+        var seed: UInt64 = 3
+        for (k, t0) in times.enumerated() {
+            let s = Int(t0 * sr)
+            for i in 0..<Int(0.06 * sr) where s + i < n {
+                let t = Double(i) / sr
+                var v: Double
+                if drums {
+                    v = exp(-t / 0.03) * sin(2 * .pi * (60 + 80 * exp(-t / 0.01)) * t) * 0.8
+                    if k % 2 == 1 {
+                        seed = seed &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+                        v += exp(-t / 0.008) * Double(Int32(truncatingIfNeeded: seed >> 32)) / 2_147_483_648 * 0.4
+                    }
+                } else {
+                    v = exp(-t / 0.008) * sin(2 * .pi * (k % 4 == 0 ? 1_500 : 1_000) * t) * (k % 4 == 0 ? 0.8 : 0.5)
+                }
+                x[s + i] += Float(v)
+            }
+        }
+        return x
+    }
+
+    /// Beat times of steps: each (bpm, seconds) after the one before, from `start`; and where each step begins.
+    func steps(_ parts: [(Double, Double)], start: Double = 0.2) -> (times: [Double], starts: [Double]) {
+        var times: [Double] = [], starts: [Double] = [], t = start
+        for (bpm, length) in parts {
+            starts.append(t)
+            let end = t + length
+            while t < end - 1e-9 { times.append(t); t += 60 / bpm }
+        }
+        return (times, starts)
+    }
+
+    @Test("Steps of tempo become a map: each tempo within half a BPM, each change within 30 ms, every click on the map's grid within 20 ms",
+          arguments: [([(120.0, 16.0), (90.0, 16.0), (140.0, 16.0)], false), ([(100.0, 20.0), (128.0, 20.0)], true)])
+    func stepsBecomeAMap(parts: [(Double, Double)], drums: Bool) throws {
+        let dir = try folder()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let (times, starts) = steps(parts)
+        let length = parts.reduce(0.2) { $0 + $1.1 } + 1
+        let (p, pool) = try project(sound(at: times, seconds: length, drums: drums), in: dir)
+        let e = try Rhythm.estimate(p, range: 0..<p.length, pool: pool)
+        print("TEMPOMAP", parts.map(\.0), e.stretches.map { "\($0.bpm) from \($0.start) (\($0.beats) beats, pulse \($0.pulse))" })
+        #expect(e.stretches.count == parts.count, "\(e.stretches)")
+        for (k, part) in parts.enumerated() where k < e.stretches.count {
+            #expect(abs(e.stretches[k].bpm - part.0) <= 0.5, "\(part.0): \(e.stretches[k].bpm)")
+            let period = 60 / part.0
+            // The tracker may start a stretch's count a beat in: where it starts, as a place in the beat.
+            let off = (e.stretches[k].start - starts[k]).truncatingRemainder(dividingBy: period)
+            #expect(min(abs(off), period - abs(off)) <= 0.03, "stretch \(k) at \(e.stretches[k].start), not \(starts[k])")
+        }
+        // The map the step sets: every click lies on one of its beats.
+        let map = try Rhythm.tempoMap(e.stretches, offset: 0, sampleRate: sr)
+        for t in times where t >= e.stretches[0].start {
+            let q = map.quarterNotes(at: Frame((t * sr).rounded()), sampleRate: sr)
+            let beat = 60 / map.bpm(at: Frame((t * sr).rounded()))
+            #expect(abs(q - q.rounded()) * beat <= 0.02, "the click at \(t) is \(abs(q - q.rounded()) * beat) s off the grid")
+        }
+    }
+
+    @Test("A steady tempo is one tempo, run after run (the tracker isn't the same twice): never a change")
+    func steadyStaysOne() throws {
+        let dir = try folder()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let (p, pool) = try project(beats(bpm: 120, seconds: 40), in: dir)
+        for _ in 0..<10 {
+            let e = try Rhythm.estimate(p, range: 0..<p.length, pool: pool)
+            #expect(e.stretches.count == 1 && abs(e.bpm - 120) <= 0.1, "\(e.stretches)")
+        }
+    }
+
+    @Test("A tempo that glides (a ritardando, 140 to 100 over 30 s) is refused, saying from what to what and between when")
+    func glideRefused() throws {
+        let dir = try folder()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        var times: [Double] = []
+        var t = 0.2
+        while t < 10 { times.append(t); t += 60 / 140.0 }
+        let from = t
+        while t < from + 30 { times.append(t); t += 60 / (140 - 40 * (t - from) / 30) }
+        let to = t
+        while t < to + 12 { times.append(t); t += 60 / 100.0 }
+        let (p, pool) = try project(sound(at: times, seconds: t + 1), in: dir)
+        #expect {
+            _ = try Rhythm.estimate(p, range: 0..<p.length, pool: pool)
+        } throws: { error in
+            print("TEMPOGLIDE", error)
+            guard case .glides(let a, let b, let s, let e) = error as? Rhythm.Failure else { return false }
+            return abs(a - 140) <= 8 && abs(b - 100) <= 8 && abs(s - from) <= 5 && abs(e - to) <= 5
+        }
+    }
 }
+

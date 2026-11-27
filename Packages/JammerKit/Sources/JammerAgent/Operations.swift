@@ -406,7 +406,7 @@ public enum Operations {
                        .init("at", .seconds, "Where the tempo starts. Defaults to 0, the start of the document."),
                        .init("beats", .number, "Beats per bar (1–64). Give it with `unit`; without both, the time signature in effect at `at` is kept."),
                        .init("unit", .number, "Note value of a beat: 1, 2, 4, 8, 16 or 32 (4 is a quarter note).")]),
-        .init("detect_tempo", "Detect Tempo", "Finds the tempo of music and sets the document's tempo map from it, so the ruler's beats fall on the music's beats (one tempo for the whole document; changes of tempo aren't followed). Changes no audio. Only music with a steady beat has a tempo: for speech, noise, silence, or music whose tempo changes it fails with reason no_steady_tempo and nothing is changed. A fast tempo can come back at half speed (174 as 87) or a slow one doubled: GET …/analysis/rhythm lists the alternatives; give multiply 2 or 0.5, or the bpm you know. Where bars begin is not detected: bar numbers on the ruler count from the first beat and say nothing about the music's bars. info: bpm, firstBeat (seconds on the timeline of the first beat the grid is set from), pulse (how strongly the sound repeats at the beat, 0 to 1), beats (how many were found).",
+        .init("detect_tempo", "Detect Tempo", "Finds the tempo of music and sets the document's tempo map from it, so the ruler's beats fall on the music's beats. Music whose tempo changes in clear steps gets a map with a tempo per stretch, each change on a beat and a whole number of beats between changes; a tempo that glides (a ritardando) fails with reason tempo_glides and says from what to what and where, to be set by hand. Changes no audio. Only music with a beat has a tempo: for speech, noise or silence it fails with reason no_steady_tempo and nothing is changed. A tempo map that was there is replaced (one undo step; the result's warnings say so). A fast tempo can come back at half speed (174 as 87) or a slow one doubled: GET …/analysis/rhythm lists the alternatives; give multiply 2 or 0.5, or the bpm you know. Where bars begin is not detected: bar numbers on the ruler count from the first beat and say nothing about the music's bars. info: bpm (the first stretch's), firstBeat (seconds on the timeline of the first beat the grid is set from), pulse (how strongly the sound repeats at the beat, 0 to 1; the weakest stretch's), beats (how many were found), tempi (how many stretches), bridges (when there are any: beats between two stretches with a length of their own, each a one-beat change in the map), replaced (the changes of the map that was replaced, when it had more than one).",
               params: [.init("tracks", .list, "Only these tracks' sound. Default: the mix."),
                        start, end,
                        .init("multiply", .number, "0.5 or 2: the tempo found, halved or doubled.", options: nil, range: 0.5...2),
@@ -1735,8 +1735,20 @@ public enum StepRunner {
             do {
                 let e = try Rhythm.estimate(project, range: r, tracks: only, pool: pool, multiply: multiply, bpm: p["bpm"]?.double)
                 let first = project.seconds(r.lowerBound) + e.firstBeat
-                s.project.tempo = try Rhythm.tempoMap(bpm: e.bpm, firstBeat: first, sampleRate: project.sampleRate, meter: project.tempo.meter(at: 0))
-                return ["bpm": e.bpm, "firstBeat": (first * 1_000).rounded() / 1_000, "pulse": e.pulse, "beats": Double(e.beats.count)]
+                let meter = project.tempo.meter(at: 0), old = project.tempo
+                s.project.tempo = e.stretches.count > 1
+                    ? try Rhythm.tempoMap(e.stretches, offset: project.seconds(r.lowerBound), sampleRate: project.sampleRate, meter: meter)
+                    : try Rhythm.tempoMap(bpm: e.bpm, firstBeat: first, sampleRate: project.sampleRate, meter: meter)
+                var info: [String: Double] = ["bpm": e.bpm, "firstBeat": (first * 1_000).rounded() / 1_000, "pulse": e.pulse,
+                                              "beats": Double(e.beats.count), "tempi": Double(max(1, e.stretches.filter { !$0.bridge }.count))]
+                let bridges = e.stretches.filter(\.bridge).count
+                if bridges > 0 { info["bridges"] = Double(bridges) }
+                // A map that was there (set by hand, or found before) is replaced: said, with the way back.
+                if old.changes.count > 1, old != s.project.tempo {
+                    info["replaced"] = Double(old.changes.count)
+                    s.warnings.append("This replaces the tempo map that was there (\(old.changes.count) changes); Undo brings it back.")
+                }
+                return info
             } catch let e as Rhythm.Failure {
                 throw StepFailure("detect_tempo: \(e.localizedDescription)", reason: e.reason, keyed: e.keyed)
             }

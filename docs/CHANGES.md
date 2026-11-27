@@ -2,6 +2,10 @@
 
 Not a list of commits: what behaves differently from before, for a user, an agent, or a file. Newest first.
 
+## 2026-11-27
+
+- **Detect Tempo follows a tempo that changes in steps**: the document gets a tempo map with a tempo per stretch, each change on a beat and a whole number of beats between changes, and the status line lists them ("Tempo map: 3 tempi, 120 (0:00), 90 (0:16), 140 (0:32) BPM from where each begins."). The stretches are read from the sound itself, up to 10 minutes of it. A tempo that glides (a ritardando) is refused, saying from about what to what and between when, to be set by hand; before, both were refused as "no steady tempo". A tempo map that was there is replaced in one undo step, and the status line says so. For an agent: `detect_tempo`'s info has `tempi` (and `bridges`, `replaced`), the reason `tempo_glides` is new, and `GET …/analysis/rhythm` answers `segments`.
+
 ## 2026-11-26
 
 - **Previous Track and Next Track** (Track menu, ⌥↑ and ⌥↓ while the timeline has the keyboard; `select_track` for an agent): the track above or below becomes the selected one and is scrolled into view. A text field keeps its own ⌥↑ ⌥↓, and with automation shown they still move between the tracks' lanes (now also selecting that track).

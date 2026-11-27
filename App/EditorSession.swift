@@ -760,8 +760,21 @@ final class EditorSession {
                     ? L10n.text("loudness.done.short", L10n.number(after, 1), L10n.number(target, 0))
                     : L10n.text("loudness.done", title, L10n.number(after, 1), L10n.number(info["gainDB"] ?? 0, 2, sign: true))
             } else if op == "detect_tempo", let info = r.first?.info, let bpm = info["bpm"] {
-                let shown = bpm == bpm.rounded() ? L10n.number(bpm, 0) : L10n.number(bpm, 2)
-                status = L10n.text("tempo.done", shown, L10n.number(info["firstBeat"] ?? 0, 3))
+                func shown(_ v: Double) -> String { v == v.rounded() ? L10n.number(v, 0) : L10n.number(v, 2) }
+                let tempi = Int(info["tempi"] ?? 1)
+                if tempi > 1 {
+                    // Each tempo and where it begins: the map's last changes (the first is the beat before them), less the
+                    // bridges, the one-beat changes between two stretches (a stretch has at least 8 beats).
+                    let changes = Array(project.tempo.changes.suffix(tempi + Int(info["bridges"] ?? 0)))
+                    let stretches = changes.indices.filter { k in
+                        k + 1 == changes.count || project.seconds(changes[k + 1].position - changes[k].position) >= 2 * 60 / changes[k].bpm
+                    }
+                    let steps = stretches.map { changes[$0] }.map { "\(shown($0.bpm)) (\(formatTime(project.seconds($0.position), millis: false)))" }
+                    status = L10n.text("tempo.done.map", String(tempi), steps.joined(separator: ", "))
+                } else {
+                    status = L10n.text("tempo.done", shown(bpm), L10n.number(info["firstBeat"] ?? 0, 3))
+                }
+                if let replaced = info["replaced"], let said = status { status = said + " " + L10n.text("tempo.replaced", String(Int(replaced))) }
             } else if op == "duck", let info = r.first?.info, let regions = info["regions"] {
                 let n = Int(regions), by = params["amount"]?.double ?? -12
                 let amount = "\(by < 0 ? "−" : "")\(abs(by).formatted(.number.precision(.fractionLength(0...1))))"

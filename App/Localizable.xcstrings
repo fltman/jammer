@@ -11191,6 +11191,24 @@
         }
       }
     },
+    "error.rhythm.glides": {
+      "comment": "Detect Tempo refused a gradual tempo change (a ritardando): from and to BPM, and from and to time.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "the tempo glides from about %1$@ to %2$@ BPM between %3$@ and %4$@; set it by hand."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "tempot glider från ungefär %1$@ till %2$@ BPM mellan %3$@ och %4$@; ställ in det för hand."
+          }
+        }
+      }
+    },
     "error.rhythm.noSteadyTempo": {
       "comment": "An error’s reason, shown in the status line after a step that failed (the agent API says the same in English). Placeholders are names, ids or numbers.",
       "extractionState": "manual",
@@ -11198,13 +11216,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "no steady tempo was found (speech, noise, silence, or music whose tempo changes). If you know the tempo, give bpm."
+            "value": "no steady tempo was found (speech, noise, silence, or music whose tempo neither stays nor changes in clear steps). If you know the tempo, give bpm."
           }
         },
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "inget stadigt tempo hittades (tal, brus, tystnad eller musik vars tempo ändras). Ange bpm om du vet tempot."
+            "value": "inget stadigt tempo hittades (tal, brus, tystnad eller musik vars tempo varken håller sig eller ändras i tydliga steg). Ange bpm om du vet tempot."
           }
         }
       }
@@ -34286,6 +34304,24 @@
         }
       }
     },
+    "tempo.done.map": {
+      "comment": "Status after Detect Tempo found tempo changes: how many, then each tempo with the time it begins in brackets.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tempo map: %1$@ tempi, %2$@ BPM from where each begins."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tempokarta: %1$@ tempon, %2$@ BPM från där vart och ett börjar."
+          }
+        }
+      }
+    },
     "tempo.fromPlayhead": {
       "comment": "Checkbox. %@ is the playhead’s place as bar.beat.tick.",
       "extractionState": "manual",
@@ -34318,6 +34354,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Inget stadigt tempo hittades, så tempot är som det var."
+          }
+        }
+      }
+    },
+    "tempo.replaced": {
+      "comment": "After Detect Tempo, when a tempo map with more than one change was there.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "It replaced the tempo map that was there (%@ changes); Undo brings it back."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Den ersatte tempokartan som fanns (%@ ändringar). Ångra tar tillbaka den."
           }
         }
       }
