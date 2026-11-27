@@ -4,6 +4,7 @@ Not a list of commits: what behaves differently from before, for a user, an agen
 
 ## 2026-11-27
 
+- **The omnibar's field keeps ⌥↑, ⌥↓ and ⇧ with the arrows**: only a plain arrow moves among the rows, so ⌥↑ goes to the start of the line and ⇧↑ selects, as in any text field.
 - **A large document no longer freezes the window when it opens**: before its waveforms' peaks were there, the first drawing of the timeline read the sound itself from disk on the main thread, which for 24 tracks of an hour took about two and a half minutes with Jämmer not answering. Now a track whose peaks aren't there yet is drawn empty, says it is waiting or reading, and its waveform comes a moment later (the peaks of eight five-minute sources take under four seconds).
 - **A track says what its own waveform is doing**: "Waiting to read waveform…" while its sources wait their turn (two are read at a time), then "Reading waveform… 42 %" as they are read, and nothing once they are there. Before, every track showed one source's figure, usually a waiting one's 0 %, and the line went from all tracks as soon as any source was done.
 - **Plugins in a window of their own, and in the mixer**: Track › Plugins… opens a window beside the document's instead of a sheet over it, so the Space bar plays and the mixer can be used while it is open; each mixer strip lists its plugins in order (a bypassed one marked), and its Plugins… button opens the window on that strip.

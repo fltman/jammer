@@ -123,6 +123,14 @@ final class OmnibarModel {
 }
 
 struct OmnibarView: View {
+    /// A plain arrow moves among the rows; with ⌥, ⇧, ⌘ or ⌃ it is left to the field (⌥↑ to the start of the line,
+    /// ⇧↑ to select; K2a: a view's key stays the view's).
+    private func rowMove(_ press: KeyPress, _ by: Int) -> KeyPress.Result {
+        guard press.modifiers.isDisjoint(with: [.option, .shift, .command, .control]) else { return .ignored }
+        model.move(by)
+        return .handled
+    }
+
     @Bindable var model: OmnibarModel
     @FocusState private var focused: Bool
 
@@ -174,8 +182,10 @@ struct OmnibarView: View {
                         model.submit(alwaysAsk: true)
                         return .handled
                     }
-                    .onKeyPress(.downArrow) { model.move(1); return .handled }
-                    .onKeyPress(.upArrow) { model.move(-1); return .handled }
+                    // A plain arrow moves among the rows; with ⌥, ⇧, ⌘ or ⌃ it is the field's (⌥↑ to the start of the
+                    // line, ⇧↑ to select; K2a: a view's key stays the view's).
+                    .onKeyPress(.downArrow, phases: [.down, .repeat]) { (press: KeyPress) -> KeyPress.Result in rowMove(press, 1) }
+                    .onKeyPress(.upArrow, phases: [.down, .repeat]) { (press: KeyPress) -> KeyPress.Result in rowMove(press, -1) }
                     .onKeyPress(.escape) { model.cancel(); return .handled }
                 if model.deciding {
                     ProgressView().controlSize(.small).accessibilityLabel(L10n.text("omnibar.deciding"))
