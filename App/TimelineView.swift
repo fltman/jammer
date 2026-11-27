@@ -896,8 +896,22 @@ final class TimelineOverlay: NSView {
     private static let zoomOut = symbolCursor("minus.magnifyingglass")
     private static let closedHandCursor = NSCursor.closedHand
 
+    /// The brush's own pointer: a ring as wide as what it paints (`brushPixels` each way), so its reach is seen before
+    /// a stroke (the comfort sweep of 2026-11-25, [1]); dark round light, to be seen over any spectrogram.
+    private static let brushCursor: NSCursor = {
+        let d = brushPixels * 2 + 4
+        let image = NSImage(size: NSSize(width: d, height: d), flipped: false) { r in
+            let ring = NSBezierPath(ovalIn: r.insetBy(dx: 2, dy: 2))
+            NSColor.black.withAlphaComponent(0.7).setStroke(); ring.lineWidth = 3; ring.stroke()
+            NSColor.white.setStroke(); ring.lineWidth = 1.2; ring.stroke()
+            NSColor.white.setFill(); NSBezierPath(ovalIn: NSRect(x: d / 2 - 1, y: d / 2 - 1, width: 2, height: 2)).fill()
+            return true
+        }
+        return NSCursor(image: image, hotSpot: NSPoint(x: d / 2, y: d / 2))
+    }()
+
     private func cursor(for z: HandleZones.Zone) -> NSCursor {
-        if areaMode, z != .ruler { return .crosshair }
+        if areaMode, z != .ruler { return session.spectralTool == .brush ? Self.brushCursor : .crosshair }
         if handleDrag.map({ if case .marker = $0.kind { true } else { false } }) == true { return .closedHand }
         if case .lane = z {
             switch tool {

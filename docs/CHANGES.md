@@ -4,6 +4,7 @@ Not a list of commits: what behaves differently from before, for a user, an agen
 
 ## 2026-11-27
 
+- **The brush shows its reach**: over the spectrogram the brush's pointer is a ring as wide as what it paints, so it is seen before a stroke; the box and the lasso keep the crosshair.
 - **For an agent, the schema before the document**: a call to a document that isn't open is told first what is wrong with its method or its values (405, 400), as for an open one, and only then that the document isn't there (404). Before, a missing document was said first, so the order of the answers depended on which mistake came first.
 - **The omnibar's field keeps ⌥↑, ⌥↓ and ⇧ with the arrows**: only a plain arrow moves among the rows, so ⌥↑ goes to the start of the line and ⇧↑ selects, as in any text field.
 - **A large document no longer freezes the window when it opens**: before its waveforms' peaks were there, the first drawing of the timeline read the sound itself from disk on the main thread, which for 24 tracks of an hour took about two and a half minutes with Jämmer not answering. Now a track whose peaks aren't there yet is drawn empty, says it is waiting or reading, and its waveform comes a moment later (the peaks of eight five-minute sources take under four seconds).
