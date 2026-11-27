@@ -36,6 +36,20 @@ struct BigOpenBench {
         _ = try History(root: project)
         print("BIGOPEN history: \(ms(t0))")
 
+        // The first draw before any peaks are there, as the timeline made it on the main thread (WaveformMetalView:
+        // columnValues with allowRaw = !needsFiles, true when the whole hour is in view), and as it does now (false:
+        // the main thread never reads the files). The whole hour across 1 500 columns.
+        for allowRaw in [true, false] {
+            t0 = Date()
+            var read = 0
+            for t in project.tracks.indices {
+                let cols = Waveform.columns(project, track: t, start: 0, framesPerColumn: Double(project.length) / 1_500, count: 1_500,
+                                            peaks: [:], pool: pool, allowRaw: allowRaw)
+                read += cols.first?.filter { $0 != .empty }.count ?? 0
+            }
+            print("BIGOPEN first draw without peaks, allowRaw \(allowRaw): \(ms(t0)) (\(read) columns with something)")
+        }
+
         // The peaks as the app reads them (EditorSession.loadPeaks), built anew (no cache), two at a time.
         let limit = TaskLimit(2)
         let log = Log()

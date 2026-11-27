@@ -610,19 +610,23 @@ final class WaveformMetalView: MTKView, MTKViewDelegate {
             // Only with nothing to show, or after a change of size, are the columns made here (from the peaks, at
             // once). Otherwise the picture there is drawn onto this view, mapped, while a job makes this view's own:
             // a draw stays well under a frame however many tracks there are (it took 56–66 ms for 24).
+            // Never from the files here, on the main thread: a source without peaks yet is drawn empty and comes when
+            // its peaks do (2026-11-27: allowRaw was true with the whole hour in view, and the first draw of a document
+            // of 24 tracks read every clip of under 8 million frames from disk, 156 s with the window unanswering).
             if WaveformRemap.computesInDraw(hasPicture: columnBuffer != nil, sameShape: shape == shownShape) {
                 let values = Self.columnValues(project, start: start, fpc: fpc, columns: columns, lanes: lanes, channels: channels,
-                                               peaks: peaks, pool: pool, allowRaw: !needsFiles)
+                                               peaks: peaks, pool: pool, allowRaw: false)
                 columnBuffer = device?.makeBuffer(bytes: values, length: values.count * MemoryLayout<SIMD2<Float>>.stride)
                 shownStart = start; shownFpc = fpc; shownShape = shape
                 shownKey = needsFiles ? [] : key
             }
             if key != shownKey, key != wantedKey {
                 wantedKey = key
-                // Exact samples where the peaks are too coarse, the peaks elsewhere (allowRaw: true picks).
+                // Exact samples where the peaks are too coarse (zoomed in past a peak block), the peaks elsewhere. With
+                // more in view than that, a source without peaks waits for them rather than being read whole from disk.
                 requestExact(key, start: start, fpc: fpc, shape: shape) {
                     Self.columnValues(project, start: start, fpc: fpc, columns: columns, lanes: lanes, channels: channels,
-                                      peaks: peaks, pool: pool, allowRaw: true)
+                                      peaks: peaks, pool: pool, allowRaw: needsFiles)
                 }
             }
         }
