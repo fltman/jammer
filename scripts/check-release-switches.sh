@@ -10,6 +10,10 @@
 # Counting is done in a file, never with `grep -q` on a pipe: under pipefail a writer that gets SIGPIPE
 # makes "found" read as "not found".
 set -u
+# Builds only under the series' build lock (re-entrant: under precommit or commit-checked it runs as it is;
+# scripts/check-build-lock.py holds every script that builds to this).
+apps_tools="$(cd "$(dirname "$0")/../.." && pwd)/the-apps/tools"
+case ":${APPS_HELD_LOCKS:-}:" in *":/tmp/the-apps-build.lock:"*) ;; *) [ ! -x "$apps_tools/with-build-lock.sh" ] || exec "$apps_tools/with-build-lock.sh" jammer --wait "${BUILD_WAIT:-3600}" -- "$0" "$@" ;; esac
 cd "$(dirname "$0")/.."
 F=Config/Features.xcconfig
 keep="$(mktemp -d)"; cp "$F" "$keep/Features.xcconfig"

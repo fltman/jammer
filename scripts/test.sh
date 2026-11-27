@@ -2,6 +2,10 @@
 # Runs the package tests. The engine's realtime guard runs as part of the build
 # (-Werror=function-effects), so a passing build is itself a check.
 set -eu
+# Builds only under the series' build lock (re-entrant: under precommit or commit-checked it runs as it is;
+# scripts/check-build-lock.py holds every script that builds to this).
+apps_tools="$(cd "$(dirname "$0")/../.." && pwd)/the-apps/tools"
+case ":${APPS_HELD_LOCKS:-}:" in *":/tmp/the-apps-build.lock:"*) ;; *) [ ! -x "$apps_tools/with-build-lock.sh" ] || exec "$apps_tools/with-build-lock.sh" jammer --wait "${BUILD_WAIT:-3600}" -- "$0" "$@" ;; esac
 # This Mac's own settings (JAMMER_TEST_MEDIA, model folders), never in the repository: scripts/local.env.
 local_env="$(dirname "$0")/local.env"
 if [ -f "$local_env" ]; then set -a; . "$local_env"; set +a; fi

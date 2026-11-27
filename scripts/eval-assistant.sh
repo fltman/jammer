@@ -14,11 +14,24 @@
 # For comparison, docs/ASSISTANT.md has the on-device model's and qwen3:8b's results.
 set -eu
 root="$(cd "$(dirname "$0")/.." && pwd)"
-# One model evaluation at a time on this Mac, across the three apps: two at once fill the memory and the
-# Mac's own model starts to fail. The series' lock is taken here unless the caller already holds it.
-lock="$root/../the-apps/tools/with-model-lock.sh"
-if [ -z "${JAMMER_MODEL_LOCKED:-}" ] && [ -x "$lock" ]; then
-  JAMMER_MODEL_LOCKED=1 exec "$lock" jammer --wait "${JAMMER_MODEL_WAIT:-3600}" -- "$0" "$@"
+# Built first, under the series' build lock, and let go; then evaluated under the model lock (one model
+# evaluation at a time on this Mac, across the three apps: two at once fill the memory and the Mac's own model
+# starts to fail) with --skip-build. Never both locks at once: a build waiting behind a model run would hold up
+# every app's builds. A caller that already holds the model lock has built the tests itself.
+tools="$root/../the-apps/tools"
+case ":${APPS_HELD_LOCKS:-}:" in *":/tmp/the-apps-build.lock:"*)
+  echo "eval-assistant: run it without the build lock held (it builds under it, then evaluates under the model lock)." >&2; exit 64 ;; esac
+if [ -z "${JAMMER_MODEL_LOCKED:-}" ]; then
+  mkdir -p "$root/build/eval"
+  built() { cd "$root/Packages/JammerKit" && swift build --build-tests; }
+  if [ -x "$tools/with-build-lock.sh" ]; then
+    (cd "$root/Packages/JammerKit" && "$tools/with-build-lock.sh" jammer --wait "${BUILD_WAIT:-3600}" -- swift build --build-tests) > "$root/build/eval/build.log" 2>&1
+  else
+    (built) > "$root/build/eval/build.log" 2>&1
+  fi || { echo "eval-assistant: the tests didn't build; see build/eval/build.log" >&2; exit 1; }
+  if [ -x "$tools/with-model-lock.sh" ]; then
+    JAMMER_MODEL_LOCKED=1 exec "$tools/with-model-lock.sh" jammer --wait "${JAMMER_MODEL_WAIT:-3600}" -- "$0" "$@"
+  fi
 fi
 model="${1:-}"
 case "$model" in
@@ -38,7 +51,7 @@ mkdir -p "$out"
 cd "$root/Packages/JammerKit"
 run() { # <report> <test filter> <env…>
   report="$1"; filter="$2"; shift 2
-  env JAMMER_EVAL_PLANNER="$model" JAMMER_EVAL_REPORT="$out/$report" "$@" swift test --filter "$filter" >"$out/$report.log" 2>&1 || { echo "eval-assistant: $report failed; see $out/$report.log" >&2; return 1; }
+  env JAMMER_EVAL_PLANNER="$model" JAMMER_EVAL_REPORT="$out/$report" "$@" swift test --skip-build --filter "$filter" >"$out/$report.log" 2>&1 || { echo "eval-assistant: $report failed; see $out/$report.log" >&2; return 1; }
   printf '%s: %s\n' "$report" "$(tail -1 "$out/$report")"
 }
 run standard.md AssistantEval JAMMER_ASSISTANT_EVAL=1

@@ -8,6 +8,10 @@ set -eu
 # each time it is done (the series' rule). So this script does nothing until it is told he has:
 #   JAMMER_FETCH_ALLOWED=yes scripts/build-lame.sh
 [ "${JAMMER_FETCH_ALLOWED:-}" = "yes" ] || { echo "$(basename "$0"): this fetches and builds third-party code, which Anders allows each time. After his yes: JAMMER_FETCH_ALLOWED=yes scripts/$(basename "$0")" >&2; exit 77; }
+# Builds only under the series' build lock (re-entrant: under precommit or commit-checked it runs as it is;
+# scripts/check-build-lock.py holds every script that builds to this).
+apps_tools="$(cd "$(dirname "$0")/../.." && pwd)/the-apps/tools"
+case ":${APPS_HELD_LOCKS:-}:" in *":/tmp/the-apps-build.lock:"*) ;; *) [ ! -x "$apps_tools/with-build-lock.sh" ] || exec "$apps_tools/with-build-lock.sh" jammer --wait "${BUILD_WAIT:-3600}" -- "$0" "$@" ;; esac
 root="$(cd "$(dirname "$0")/.." && pwd)"
 version=3.100
 sha256=ddfe36cab873794038ae2c1210557ad34857a4b6bdc515785d1da9e175b1da1e

@@ -5,6 +5,10 @@
 #   scripts/rtsan.sh           build and run the harness; exit 1 on a violation
 #   scripts/rtsan.sh --plant   prove the harness catches a planted violation
 set -eu
+# Builds only under the series' build lock (re-entrant: under precommit or commit-checked it runs as it is;
+# scripts/check-build-lock.py holds every script that builds to this).
+apps_tools="$(cd "$(dirname "$0")/../.." && pwd)/the-apps/tools"
+case ":${APPS_HELD_LOCKS:-}:" in *":/tmp/the-apps-build.lock:"*) ;; *) [ ! -x "$apps_tools/with-build-lock.sh" ] || exec "$apps_tools/with-build-lock.sh" jammer --wait "${BUILD_WAIT:-3600}" -- "$0" "$@" ;; esac
 root="$(cd "$(dirname "$0")/.." && pwd)"
 llvm="${LLVM:-}"
 if [ -z "$llvm" ]; then

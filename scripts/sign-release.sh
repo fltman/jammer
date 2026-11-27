@@ -11,6 +11,10 @@
 # framework); the app signed again over them with its own entitlements; then checked: codesign --verify
 # --deep --strict, and what Gatekeeper would say (which is "rejected … Unnotarized" until notarised).
 set -eu
+# Builds only under the series' build lock (re-entrant: under precommit or commit-checked it runs as it is;
+# scripts/check-build-lock.py holds every script that builds to this).
+apps_tools="$(cd "$(dirname "$0")/../.." && pwd)/the-apps/tools"
+case ":${APPS_HELD_LOCKS:-}:" in *":/tmp/the-apps-build.lock:"*) ;; *) [ ! -x "$apps_tools/with-build-lock.sh" ] || exec "$apps_tools/with-build-lock.sh" jammer --wait "${BUILD_WAIT:-3600}" -- "$0" "$@" ;; esac
 cd "$(dirname "$0")/.."
 id="${JAMMER_SIGN_ID:?name the Developer ID identity: JAMMER_SIGN_ID=\"Developer ID Application: …\"}"
 team="$(print -r -- "$id" | sed -n 's/.*(\([A-Z0-9]*\))$/\1/p')"
