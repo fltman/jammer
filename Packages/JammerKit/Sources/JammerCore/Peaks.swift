@@ -156,3 +156,20 @@ public final class PeakIndex: @unchecked Sendable {
         return PeakIndex(channels: channels, frames: frames, level0: level0)
     }
 }
+
+/// What a lane says while its waveform isn't there yet (the coordinator, 2026-11-27: every lane said "Reading
+/// waveform… 0 %" for 20 s while the sources were read two at a time, one queued source's 0 standing for all). A
+/// source's entry is there until its peaks are: a negative value while it waits its turn, its progress once read.
+public enum PeakReading {
+    public enum Status: Equatable, Sendable { case reading(Double), waiting }
+    /// The lane's `sources`, by `progress`: nil when all of them have their peaks; reading (the least progress of
+    /// those being read) before waiting.
+    public static func status(of sources: [UUID], progress: [UUID: Double]) -> Status? {
+        let mine = Set(sources).compactMap { progress[$0] }
+        guard !mine.isEmpty else { return nil }
+        let reading = mine.filter { $0 >= 0 }
+        return reading.isEmpty ? .waiting : .reading(reading.min()!)
+    }
+    /// A source queued, not yet being read.
+    public static let waiting = -1.0
+}

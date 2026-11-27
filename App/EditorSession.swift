@@ -1093,7 +1093,7 @@ final class EditorSession {
             let cacheURL = Self.peakCache.appending(path: PeakIndex.cacheKey(for: url, info: ref.info) + ".peaks")
             let info = ref.info
             let id = ref.id
-            peakProgress[id] = 0
+            peakProgress[id] = PeakReading.waiting
             let span = Perf.Span("peaks")
             let name = ref.name
             let report: @Sendable (Double) -> Void = { [weak self] p in Task { @MainActor in self?.peakProgress[id] = p } }
@@ -1102,6 +1102,7 @@ final class EditorSession {
                 // detached work, where Task.isCancelled is always false), progress at most four times a second.
                 let throttle = Throttle(perSecond: 4)
                 let index = await Self.peakLimit.run { await Stoppable.run(priority: .utility) { stopped -> PeakIndex? in
+                    report(0)   // its turn: from waiting to reading
                     if let cached = PeakIndex.read(from: cacheURL), cached.frames == info.frames { return cached }
                     guard let src = AudioFileReader.openSource(info, at: url) else { return nil }
                     defer { jm_source_release(src) }

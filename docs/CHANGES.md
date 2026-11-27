@@ -4,6 +4,7 @@ Not a list of commits: what behaves differently from before, for a user, an agen
 
 ## 2026-11-27
 
+- **A track says what its own waveform is doing**: "Waiting to read waveform…" while its sources wait their turn (two are read at a time), then "Reading waveform… 42 %" as they are read, and nothing once they are there. Before, every track showed one source's figure, usually a waiting one's 0 %, and the line went from all tracks as soon as any source was done.
 - **Plugins in a window of their own, and in the mixer**: Track › Plugins… opens a window beside the document's instead of a sheet over it, so the Space bar plays and the mixer can be used while it is open; each mixer strip lists its plugins in order (a bypassed one marked), and its Plugins… button opens the window on that strip.
 - **File › Storage… opens at once**: the projects and the folder are read in the background while the window shows that it is reading, instead of the window waiting for every recent project and its whole history first. It has Refresh, Esc closes it, and a file's row has Show in Finder. An agent's `GET /api/v1/storage` no longer holds up the window while it reads.
 - **A box drawn in the spectrogram can be adjusted**: its corners and edges have handles that resize it, and a drag inside it moves it (within its track, and not before the start), with the pointer showing which. Before, every press drew a new box, so a box a little wrong had to be drawn again. A lasso or a brush stroke is drawn again as before.

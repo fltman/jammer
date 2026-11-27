@@ -35021,6 +35021,24 @@
         }
       }
     },
+    "timeline.readingWaiting": {
+      "comment": "Button.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Waiting to read waveform…"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Väntar på att läsa vågform…"
+          }
+        }
+      }
+    },
     "timeline.scroller.time.ax": {
       "comment": "VoiceOver label of the timeline's horizontal scroller.",
       "extractionState": "manual",
