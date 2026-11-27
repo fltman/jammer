@@ -19,23 +19,50 @@ enum StorageScanner {
         return .init(name: package.deletingPathExtension().lastPathComponent, location: package.path, states: states)
     }
 
+    /// What only the main thread can say: the open documents as they are (their histories are decoded later, off
+    /// it), and where the other projects are.
+    struct Gathered: Sendable {
+        struct Open: Sendable { var name: String, location: String, project: Project, history: History? }
+        var open: [Open]
+        var recent: [URL]
+        var autosave: URL
+        var media: URL
+    }
+    static func gather() -> Gathered {
+        Gathered(open: AgentRegistry.shared.sessions.map { s in
+                    .init(name: s.name, location: s.document?.fileURL?.path ?? s.document?.autosavedContentsFileURL?.path ?? "untitled:\(s.agentID)",
+                          project: s.project, history: s.history)
+                 },
+                 recent: NSDocumentController.shared.recentDocumentURLs, autosave: autosaveFolder, media: MediaStore.folder)
+    }
+
+    /// `known()` and the report off the main thread (the comfort sweep's [9]: the window read every recent package
+    /// and decoded its whole history on it, and an agent's GET …/storage did the same).
+    static func knownInBackground() async -> [MediaStorage.Known] {
+        let g = gather()
+        return await Task.detached(priority: .userInitiated) { known(g) }.value
+    }
+    static func reportInBackground() async -> MediaStorage.Report {
+        let g = gather()
+        return await Task.detached(priority: .userInitiated) { MediaStorage.report(media: g.media, known: known(g)) }.value
+    }
+
     /// Every project that can be read now: the open ones (with their history, every branch), the recent
     /// ones, the autosaved ones, and those the register has seen use a file, where they can be read.
     /// Also tidies the register of projects that are gone for certain: an untitled document that is no
     /// longer open, and an autosaved one whose file is no longer there. A project somewhere else that
     /// can't be read is NOT gone: it stays in the register, and its files stay "unknown".
-    static func known() -> [MediaStorage.Known] {
-        let media = MediaStore.folder
+    nonisolated static func known(_ g: Gathered) -> [MediaStorage.Known] {
+        let media = g.media, autosaveFolder = g.autosave
         var out: [MediaStorage.Known] = []
         var locations = Set<String>()
-        for s in AgentRegistry.shared.sessions {
-            let location = s.document?.fileURL?.path ?? s.document?.autosavedContentsFileURL?.path ?? "untitled:\(s.agentID)"
+        for s in g.open {
             var states = [s.project]
             if let h = s.history { states += h.nodes.compactMap { try? h.project(of: $0.id) } }
-            out.append(.init(name: s.name, location: location, states: states))
-            locations.insert(location)
+            out.append(.init(name: s.name, location: s.location, states: states))
+            locations.insert(s.location)
         }
-        var packages = NSDocumentController.shared.recentDocumentURLs
+        var packages = g.recent
         packages += (try? FileManager.default.contentsOfDirectory(at: autosaveFolder, includingPropertiesForKeys: nil))?.filter { $0.pathExtension == "jammer" } ?? []
         var listed: [String] = []
         if case .read(let r) = MediaRegister.state(media) { listed = Array(Set(r.files.values.flatMap { $0.projects.keys })) }
@@ -61,7 +88,6 @@ enum StorageScanner {
         return out
     }
 
-    static func report() -> MediaStorage.Report { MediaStorage.report(media: MediaStore.folder, known: known()) }
 
     static func location(_ s: EditorSession) -> String {
         s.document?.fileURL?.path ?? s.document?.autosavedContentsFileURL?.path ?? "untitled:\(s.agentID)"
@@ -84,7 +110,7 @@ enum StorageWindow {
     private static var window: NSWindow?
     static func show() {
         if let window { window.makeKeyAndOrderFront(nil); return }
-        let w = NSWindow(contentRect: .zero, styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        let w = EscClosingWindow(contentRect: .zero, styleMask: [.titled, .closable], backing: .buffered, defer: false)
         w.title = L10n.text("storage.title")
         w.isReleasedWhenClosed = false
         w.contentView = NSHostingView(rootView: StorageView())
@@ -101,12 +127,24 @@ struct StorageView: View {
     @State private var chosen = Set<String>()
     @State private var asking = false
     @State private var said: String?
+    /// Reading the projects and the folder, off the main thread: the window stays usable meanwhile.
+    @State private var scanning = false
 
     static func size(_ bytes: Int64) -> String { ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(L10n.text("storage.title")).font(.title2.bold())
+            HStack {
+                Text(L10n.text("storage.title")).font(.title2.bold())
+                Spacer()
+                if scanning {
+                    ProgressView().controlSize(.small)
+                    Text(L10n.text("storage.reading")).font(.callout).foregroundStyle(.secondary)
+                }
+                Button(L10n.text("storage.refresh")) { Task { await reload() } }
+                    .disabled(scanning)
+                    .accessibilityIdentifier("storage.refresh")
+            }
             Text(L10n.text("storage.intro"))
                 .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             if report.register == "broken" {
@@ -134,9 +172,9 @@ struct StorageView: View {
         }
         .padding(20)
         .frame(width: 640)
-        .onAppear(perform: reload)
+        .task { await reload() }
         .confirmationDialog(confirmTitle, isPresented: $asking) {
-            Button(L10n.text("storage.confirm.move"), role: .destructive, action: move)
+            Button(L10n.text("storage.confirm.move"), role: .destructive) { Task { await move() } }
             Button(L10n.text("button.cancel"), role: .cancel) {}
         } message: {
             Text(L10n.text("storage.confirm.text"))
@@ -173,20 +211,27 @@ struct StorageView: View {
                     if !f.projects.isEmpty { Text(f.projects.map { ($0 as NSString).lastPathComponent }.joined(separator: ", ")).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
                     Text(Self.size(f.bytes)).monospacedDigit().font(.caption)
                 }
+                .contextMenu {
+                    Button(L10n.text("settings.models.showInFinder")) {
+                        NSWorkspace.shared.activateFileViewerSelecting([MediaStore.folder.appending(path: f.name)])
+                    }
+                }
             }
             if files.count > 200 { Text(L10n.text("storage.more", String(files.count - 200))).font(.caption).foregroundStyle(.secondary) }
         }
     }
 
-    private func reload() {
-        report = StorageScanner.report()
+    private func reload() async {
+        scanning = true
+        report = await StorageScanner.reportInBackground()
         chosen = chosen.intersection(report.names(.canBeFreed))
+        scanning = false
     }
 
-    private func move() {
+    private func move() async {
         do {
             // What would go is worked out first, and only then moved: the same reading both times.
-            let known = StorageScanner.known()
+            let known = await StorageScanner.knownInBackground()
             let dry = try MediaStorage.moveToTrash(Array(chosen), media: MediaStore.folder, known: known, dryRun: true)
             let moved = try MediaStorage.moveToTrash(dry.names, media: MediaStore.folder, known: known, dryRun: false)
             said = L10n.text("storage.moved", L10n.count("storage.moved.files", moved.names.count), Self.size(moved.bytes))
@@ -194,7 +239,7 @@ struct StorageView: View {
             said = L10n.error(error)
         }
         chosen = []
-        reload()
+        await reload()
     }
 }
 

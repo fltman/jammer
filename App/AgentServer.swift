@@ -369,7 +369,7 @@ enum AgentRouter {
             // What takes room in the media folder and what of it could be let go. Reading only: an agent
             // can see this, and there is no way for one to remove anything.
             try only("GET")
-            let report = StorageScanner.report()
+            let report = await StorageScanner.reportInBackground()
             func group(_ g: MediaStorage.Group) -> [String: Any] {
                 ["bytes": report.bytes(g), "files": report.files.filter { $0.group == g }.map { f -> [String: Any] in
                     var d: [String: Any] = ["name": f.name, "bytes": f.bytes]
