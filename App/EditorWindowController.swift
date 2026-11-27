@@ -1069,7 +1069,10 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
              "repair.attenuateFrequencies", "edit.deselectAll":
             return needs(session.selection != nil, selection)
         case "repair.healArea", "repair.attenuateArea":
-            return needs(timeline.showsSpectrogram && session.spectralArea != nil, L10n.text("reason.spectralArea"))
+            guard timeline.showsSpectrogram, let area = session.spectralArea else { return (false, L10n.text("reason.spectralArea")) }
+            // Heal says before it runs why it can't take this area (too long, or at the very start or end).
+            if id == "repair.healArea", let no = Spectral.healRefusal(area.shape, duration: p.duration), let keyed = no.keyed { return (false, L10n.message(keyed)) }
+            return (true, nil)
         case "view.automation.addPoint", "view.automation.previousPoint", "view.automation.nextPoint", "view.automation.previousLane", "view.automation.nextLane":
             return needs(timeline.shownAutomation != nil, L10n.text("reason.showAutomation"))
         case "view.automation.strips":

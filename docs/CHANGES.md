@@ -4,6 +4,7 @@ Not a list of commits: what behaves differently from before, for a user, an agen
 
 ## 2026-11-27
 
+- **Heal Area says in its menu why it can't**: an area longer than half a second, or at the very start or end of the document, leaves Repair › Heal Area off with the reason, instead of failing once it has run; and a failure of heal or attenuate is said in the window's language.
 - **Plugins change places**: drag one up or down in the plugins window to change its place in the chain (VoiceOver: Move Up, Move Down), one undo step; for an agent, `set_insert` takes `position`.
 - **Esc stops a drawing in the spectrogram**: pressed while an area is drawn or a box's handle is dragged, it puts back the area as it was before; the drawing no longer goes on with the next movement.
 - **The brush shows its reach**: over the spectrogram the brush's pointer is a ring as wide as what it paints, so it is seen before a stroke; the box and the lasso keep the crosshair.

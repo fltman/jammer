@@ -262,7 +262,8 @@ final class EditorSession {
         Task {
             let r = await run([Step(op: "spectral_edit", params: params)], action: title)
             if let f = r.first(where: { $0.status == .failed }) {
-                if f.reason == "stopped" { say(L10n.text("job.stopped"), .info) } else { status = f.error; NSSound.beep() }
+                // In the window's language, as perform says a failure (the comfort sweep: heal's error was English).
+                if f.reason == "stopped" { say(L10n.text("job.stopped"), .info) } else { status = f.keyed.map(L10n.message) ?? f.error; NSSound.beep() }
             } else { spectralArea = nil; status = L10n.text("status.done", title) }
         }
     }

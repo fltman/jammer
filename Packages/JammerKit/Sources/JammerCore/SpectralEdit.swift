@@ -116,6 +116,16 @@ extension Spectral {
     /// The longest area heal rebuilds: it interpolates between the frames on either side.
     public static let healLimit = 0.5
 
+    /// Why heal can't take `shape` in a document `duration` seconds long, or nil: too long, or with no sound just
+    /// before or after it to rebuild from. Asked when it runs and by the menu before (the comfort sweep, [13]: Heal
+    /// Area said why only once it had run).
+    public static func healRefusal(_ shape: SpectralShape, duration: Double) -> SpectralEditError? {
+        let t = shape.timeSpan
+        if t.upperBound - t.lowerBound > healLimit { return .tooLong(t.upperBound - t.lowerBound) }
+        if !(t.lowerBound > 0.05 && t.upperBound < duration - 0.05) { return .noContext }
+        return nil
+    }
+
     /// Runs one channel through the STFT and changes the bins inside `mask` (frame-centre
     /// sample index relative to `x`, frequency in Hz): attenuate scales them by `gain`;
     /// heal rebuilds each bin's magnitude by interpolating, in log, between the frames
@@ -225,10 +235,7 @@ extension Project {
             throw SpectralEditError.badShape(Said("error.spectralEdit.area_lies_outside_audio", "The area lies outside the audio (0–%1$@ s, 0–%2$@ Hz).", values: [Said.n(duration, 2), "\(Int(sampleRate / 2))"]))
         }
         guard (-80...0).contains(gainDB) else { throw SpectralEditError.badShape(Said("error.spectralEdit.db_between_80_0", "db must be between -80 and 0.")) }
-        if action == .heal {
-            guard t.upperBound - t.lowerBound <= Spectral.healLimit else { throw SpectralEditError.tooLong(t.upperBound - t.lowerBound) }
-            guard t.lowerBound > 0.05, t.upperBound < duration - 0.05 else { throw SpectralEditError.noContext }
-        }
+        if action == .heal, let refusal = Spectral.healRefusal(shape, duration: duration) { throw refusal }
         // Heal reaches half an analysis window past the drawn area: frames whose window
         // overlaps the sound must be rebuilt too, or a short click survives in them.
         let pad = action == .heal ? 1_024.0 / sampleRate : 0

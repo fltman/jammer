@@ -38,3 +38,16 @@ struct BoxGripsTests {
         #expect(BoxGrips.handles(box).count == 8)
     }
 }
+
+@Suite("Heal says before it runs why it can't take an area")
+struct HealRefusalTests {
+    @Test("Too long, at the very start or end, or fine: the same reasons the edit gives when it runs")
+    func refusals() {
+        #expect(Spectral.healRefusal(.box(start: 1, end: 1.4, low: 100, high: 2_000), duration: 10) == nil)
+        if case .tooLong(let s)? = Spectral.healRefusal(.box(start: 1, end: 1.8, low: 100, high: 2_000), duration: 10) {
+            #expect(abs(s - 0.8) < 1e-9, "longer than half a second: \(s) s")
+        } else { Issue.record("an area of 0.8 s is too long for heal") }
+        #expect(Spectral.healRefusal(.box(start: 0.01, end: 0.2, low: 100, high: 2_000), duration: 10) == .noContext, "at the start")
+        #expect(Spectral.healRefusal(.box(start: 9.8, end: 9.99, low: 100, high: 2_000), duration: 10) == .noContext, "at the end")
+    }
+}
