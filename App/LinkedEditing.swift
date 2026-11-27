@@ -92,9 +92,11 @@ enum LinkedEditing {
 }
 
 extension EditorSession {
-    /// File › Save Back to clip.wav: the mix as heard, plugins included, into the linked file.
-    func saveBack(then done: (@MainActor (Bool) -> Void)? = nil) {
-        guard let link = linkedFile else { done?(false); return }
+    /// File › Save Back to clip.wav: the mix as heard, plugins included, into the linked file. It is rendered and
+    /// written in the background; `done` is told when the file is written (nil) or why it isn't (an agent's save
+    /// answers only then: scripts/check-agent-waits.py).
+    func saveBack(then done: (@MainActor (Error?) -> Void)? = nil) {
+        guard let link = linkedFile else { done?(CocoaError(.fileNoSuchFile)); return }
         let project = self.project, pool = self.pool
         let markers = project.markers.map { FileMarker(position: $0.position, length: $0.length, name: $0.cueLabel) }
         status = L10n.text("link.saving", link.fileName)
@@ -112,11 +114,11 @@ extension EditorSession {
                 LinkJournalStore.note(self)
                 (window?.windowController as? EditorWindowController)?.showLink()
                 status = L10n.text("link.saved", link.fileName, link.requester)
-                done?(true)
+                done?(nil)
             } catch {
                 status = L10n.text("link.saveFailed", link.fileName, L10n.error(error))
                 NSSound.beep()
-                done?(false)
+                done?(error)
             }
         }
     }

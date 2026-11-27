@@ -4,6 +4,7 @@ Not a list of commits: what behaves differently from before, for a user, an agen
 
 ## 2026-11-27
 
+- **An agent's save of a linked document answers when the file is written**, not when the saving begins: the mix is rendered first, which can take a while, and a file that can't be written answers `save_failed`, saying why. Before, it answered `saved` at once, and a failure reached only the window's status line.
 - **Detect Tempo follows a tempo that changes in steps**: the document gets a tempo map with a tempo per stretch, each change on a beat and a whole number of beats between changes, and the status line lists them ("Tempo map: 3 tempi, 120 (0:00), 90 (0:16), 140 (0:32) BPM from where each begins."). The stretches are read from the sound itself, up to 10 minutes of it. A tempo that glides (a ritardando) is refused, saying from about what to what and between when, to be set by hand; before, both were refused as "no steady tempo". A tempo map that was there is replaced in one undo step, and the status line says so. For an agent: `detect_tempo`'s info has `tempi` (and `bridges`, `replaced`), the reason `tempo_glides` is new, and `GET …/analysis/rhythm` answers `segments`.
 
 ## 2026-11-26

@@ -153,7 +153,7 @@ final class JammerDocument: NSDocument {
                 MainActor.assumeIsolated {
                     switch response {
                     case .alertFirstButtonReturn where session.linkedFile != nil:
-                        session.saveBack { saved in answer(saved) }
+                        session.saveBack { failure in answer(failure == nil) }
                     case .alertFirstButtonReturn:
                         // The copy is saved through the ordinary panel; the document stays open until that is done.
                         session.saveJammerCopy()

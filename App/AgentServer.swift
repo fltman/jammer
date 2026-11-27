@@ -458,7 +458,10 @@ enum AgentRouter {
                 try only("POST")
                 session.checkLink()
                 if let link = session.linkedFile {
-                    session.saveBack()
+                    // The mix is rendered and written in the background, as the window's Save Back does; the answer
+                    // waits for the file to be written, and says why when it isn't (COMFORT.md e32a6c8, Glimmer's lesson).
+                    let failure = await withCheckedContinuation { (c: CheckedContinuation<Error?, Never>) in session.saveBack { c.resume(returning: $0) } }
+                    if let failure { throw APIError.unprocessable("save_failed", "\(link.fileName) couldn't be saved back: \(failure.localizedDescription)") }
                     return .json(["saved": link.fileName, "linked": true, "edited": session.document?.isDocumentEdited ?? false])
                 }
                 if let lost = session.lostLink {
