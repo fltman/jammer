@@ -942,6 +942,7 @@ final class TimelineOverlay: NSView {
 
     override func mouseMoved(with event: NSEvent) {
         let at = convert(event.locationInWindow, from: nil)
+        if areaMode { readoutAt = at; needsDisplay = true }
         let z = zone(at: at)
         pointer(at: at).set()
         if z != hover { hover = z; needsDisplay = true }
@@ -964,6 +965,7 @@ final class TimelineOverlay: NSView {
 
     override func mouseExited(with event: NSEvent) {
         if hover != .none { hover = .none; needsDisplay = true }
+        if readoutAt != nil { readoutAt = nil; needsDisplay = true }
         Pointer.left(self)
     }
 
@@ -1105,6 +1107,7 @@ final class TimelineOverlay: NSView {
             NSGraphicsContext.saveGraphicsState()
             NSRect(x: 0, y: viewport.lanes.lanesTop, width: bounds.width, height: viewport.lanes.visibleHeight).clip()
             drawArea(); if !areaMode { drawHandles() }
+            if areaMode { drawFrequencyScale(); drawReadout() }
             NSGraphicsContext.restoreGraphicsState()
             // Where dropped files would start.
             if let x = dropX { Theme.neon.setFill(); NSRect(x: x - 1, y: 0, width: 2, height: bounds.height).fill() }
@@ -1355,16 +1358,47 @@ final class TimelineOverlay: NSView {
     private func laneTop(_ i: Int) -> CGFloat { CGFloat(viewport.lanes.laneTop(i)) }
     /// Frequency at a height in a lane, on the spectrogram's log scale (top is high).
     private func hz(atY y: CGFloat, lane: Int) -> Double {
-        let r = Double(min(max(0, y - laneTop(lane)), laneHeight - 1)) / Double(max(1, laneHeight - 1))
-        return Self.fLo * pow(fHi / Self.fLo, 1 - r)
+        SpectrogramScale.hz(atY: Double(y - laneTop(lane)), low: Self.fLo, high: fHi, height: Double(laneHeight))
     }
     private func y(ofHz f: Double, lane: Int) -> CGFloat {
-        let r = 1 - log(max(Self.fLo, f) / Self.fLo) / log(fHi / Self.fLo)
-        return laneTop(lane) + CGFloat(r) * (laneHeight - 1)
+        laneTop(lane) + CGFloat(SpectrogramScale.y(of: f, low: Self.fLo, high: fHi, height: Double(laneHeight)))
     }
     private func seconds(atX x: CGFloat) -> Double { viewport.frame(atX: x) / project.sampleRate }
     private func point(_ p: NSPoint, lane: Int) -> SpectralPoint { SpectralPoint(t: seconds(atX: p.x), f: hz(atY: p.y, lane: lane)) }
     private var drawing: (lane: Int, anchor: NSPoint, points: [NSPoint])?
+    /// Where the pointer is over the spectrogram, for the readout of the time and frequency there.
+    private var readoutAt: NSPoint?
+
+    /// Each lane's frequency ticks at its left edge (SpectrogramScale: as many as fit, never crowded).
+    private func drawFrequencyScale() {
+        let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .medium), .foregroundColor: NSColor.white.withAlphaComponent(0.75)]
+        let ticks = SpectrogramScale.ticks(low: Self.fLo, high: fHi, height: Double(laneHeight))
+        for i in viewport.lanes.visibleLanes where i < project.tracks.count {
+            for f in ticks {
+                let y = y(ofHz: f, lane: i)
+                NSColor.white.withAlphaComponent(0.35).setFill()
+                NSRect(x: 0, y: y, width: 5, height: 1).fill()
+                (SpectrogramScale.tick(f) as NSString).draw(at: NSPoint(x: 7, y: y - 6), withAttributes: attrs)
+            }
+        }
+    }
+
+    /// The time and frequency under the pointer, beside it ("1:02.345 · 840 Hz").
+    private func drawReadout() {
+        guard let p = readoutAt, p.y >= TimelineView.rulerHeight, !project.tracks.isEmpty else { return }
+        let lane = min(max(0, laneIndex(at: p.y)), project.tracks.count - 1)
+        let f = SpectrogramScale.readout(hz(atY: p.y, lane: lane))
+        let freq = f.kilo ? L10n.text("spectrogram.khz", L10n.number(f.value, f.decimals)) : L10n.text("spectrogram.hz", L10n.number(f.value, f.decimals))
+        let text = L10n.text("spectrogram.readout", formatTime(seconds(atX: p.x)), freq) as NSString
+        let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .medium), .foregroundColor: NSColor.white]
+        let size = text.size(withAttributes: attrs)
+        var at = NSPoint(x: p.x + 14, y: p.y + 12)
+        if at.x + size.width + 8 > bounds.width { at.x = p.x - size.width - 14 }
+        if at.y + size.height + 4 > bounds.height { at.y = p.y - size.height - 12 }
+        NSColor(white: 0, alpha: 0.65).setFill()
+        NSBezierPath(roundedRect: NSRect(x: at.x - 4, y: at.y - 2, width: size.width + 8, height: size.height + 4), xRadius: 4, yRadius: 4).fill()
+        text.draw(at: at, withAttributes: attrs)
+    }
     /// The spectral area as it was when a drawing or a grip's drag began: what Esc puts back.
     private var areaBeforeDrag: EditorSession.SpectralArea?
     private static let brushPixels: CGFloat = 10

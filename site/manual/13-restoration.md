@@ -32,7 +32,7 @@ The repaired clips play from a new file that Jämmer writes in `~/Library/Applic
 
 ![The spectrogram of speech with a phone ringing; a box is drawn round the two ring tones](../screens/spectrogram.webp)
 
-In the spectrogram (**View › Show Spectrogram**) you can mark a sound by where it is in time *and* pitch, and change only that. Pick a tool with **B** (box), **L** (lasso) or **P** (brush), then drag over the sound on its track; the area shows in turquoise and the status bar describes it ("Box, 1.42–1.59 s, 66–210 Hz"). A box has handles at its corners and edges: drag one to make it longer or higher, or drag inside it to move it, instead of drawing it again; a press outside it draws a new one. Esc clears it.
+In the spectrogram (**View › Show Spectrogram**) you can mark a sound by where it is in time *and* pitch, and change only that. Each track has a frequency scale at its left edge, and the time and frequency under the pointer are shown beside it ("1:02.345 · 840 Hz"). Pick a tool with **B** (box), **L** (lasso) or **P** (brush), then drag over the sound on its track; the area shows in turquoise and the status bar describes it ("Box, 1.42–1.59 s, 66–210 Hz"). A box has handles at its corners and edges: drag one to make it longer or higher, or drag inside it to move it, instead of drawing it again; a press outside it draws a new one. Esc clears it.
 
 - **Repair › Heal Area** rebuilds the area from the sound just before and after it. It's for short sounds (a click, a cough, a phone ringing, up to half a second); longer areas are refused, use attenuate for those.
 - **Repair › Attenuate Area…** lowers the area by the amount you choose.
