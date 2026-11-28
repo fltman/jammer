@@ -2,6 +2,10 @@
 
 Not a list of commits: what behaves differently from before, for a user, an agent, or a file. Newest first.
 
+## 2026-11-28
+
+- **ADM objects in a WAV export**: in a 5.1, 7.1 or 7.1.4 document, Export Audio's "ADM objects for placed tracks" writes each placed track as an ADM object (ITU-R BS.2076-3) with its place over time, after a bed of everything else; a stereo track is two objects, what a track sends to a bus stays in the bed, and Jämmer reads the objects back. For an agent, `POST …/export` takes `objects: true`. Not yet tried with another program that renders ADM.
+
 ## 2026-11-27
 
 - **A slider goes back with a double-click or a ⌥-click, and ⌥-drag is fine**: levels to 0 dB, pans and turns to the middle, the limiter's ceiling to −1 dBTP, each as one undo step; with ⌥ held a drag moves a tenth as far. In the mixer and in the track headers.

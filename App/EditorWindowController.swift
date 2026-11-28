@@ -956,7 +956,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.wav, .aiff, UTType("org.xiph.flac") ?? .audio, .mpeg4Audio, UTType(filenameExtension: "opus") ?? .audio, .mp3]
         panel.allowsOtherFileTypes = true
-        let model = ExportChoices(hasSelection: session.selection != nil, wide: session.project.channels > 2)
+        let model = ExportChoices(hasSelection: session.selection != nil, wide: session.project.channels > 2,
+                                  objects: !ADMObjects.tracks(session.project).isEmpty)
         // The name carries the chosen format's extension from the start, and follows it when the format changes, so
         // the panel's question about a file of that name is about the file that will be written (COMFORT 16).
         panel.nameFieldStringValue = FileNames.safe(session.name, ext: model.choice.fileExtension)
@@ -975,6 +976,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSMenu
             // Opus is always 48 kHz; for the rest, the rate chosen when it isn't the document's own.
             if model.sampleRate > 0, model.choice != .opus { options.sampleRate = model.sampleRate }
             if model.selectionOnly { options.range = self.session.selection }
+            options.admObjects = model.objectsApply
             // After a loudness preset, a lossy file is delivered at the preset's target: measured as written, corrected, encoded again.
             options.loudness = self.session.deliveryTarget
             let session = self.session
@@ -1461,9 +1463,14 @@ final class ExportChoices {
     let hasSelection: Bool
     /// A document wider than stereo: APAC is offered and MP3 and Opus (mono and stereo only) are not.
     let wide: Bool
-    init(hasSelection: Bool, wide: Bool = false) {
+    /// Placed tracks that can be ADM objects (WAV in the document's rate), and whether they are to be.
+    let objects: Bool
+    var admObjects = false
+    var objectsApply: Bool { objects && admObjects && choice.encoded == nil && sampleRate == 0 }
+    init(hasSelection: Bool, wide: Bool = false, objects: Bool = false) {
         self.hasSelection = hasSelection
         self.wide = wide
+        self.objects = objects
         selectionOnly = hasSelection
         if wide, [.mp3, .mp3High, .opus].contains(choice) { choice = .wav24 }
         if !wide, choice == .apac { choice = .wav24 }
@@ -1501,6 +1508,11 @@ struct ExportAccessory: View {
             Toggle(L10n.text("export.selectionOnly"), isOn: $model.selectionOnly).disabled(!model.hasSelection)
             Toggle(L10n.text("export.chapters"), isOn: $model.chapters).disabled(!model.takesChapters)
             Toggle(L10n.text("export.chaptersJSON"), isOn: $model.chaptersJSON)
+            if model.objects {
+                Toggle(L10n.text("export.admObjects"), isOn: $model.admObjects)
+                    .disabled(model.choice.encoded != nil || model.sampleRate != 0)
+                    .help(L10n.text("export.admObjects.help"))
+            }
         }
         .padding(12)
         .frame(width: 320)

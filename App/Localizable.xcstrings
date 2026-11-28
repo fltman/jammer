@@ -8627,6 +8627,42 @@
         }
       }
     },
+    "error.export.no_objects": {
+      "comment": "Button.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "There are no ADM objects to write: they are the tracks the surround panner places, in a 5.1, 7.1 or 7.1.4 document."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Det finns inga ADM-objekt att skriva: de är spåren som surroundpanoreringen placerar, i ett 5.1-, 7.1- eller 7.1.4-dokument."
+          }
+        }
+      }
+    },
+    "error.export.objects_wav": {
+      "comment": "Button.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ADM objects are written in WAV, at the document's rate, from the whole mix."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ADM-objekt skrivs i WAV, i dokumentets samplingsfrekvens, från hela mixen."
+          }
+        }
+      }
+    },
     "error.export.opus_here_takes_mono": {
       "extractionState": "manual",
       "localizations": {
@@ -12354,6 +12390,42 @@
           "stringUnit": {
             "state": "translated",
             "value": "den är för kort för att vara en ZIP-fil."
+          }
+        }
+      }
+    },
+    "export.admObjects": {
+      "comment": "Button.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ADM objects for placed tracks"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ADM-objekt för placerade spår"
+          }
+        }
+      }
+    },
+    "export.admObjects.help": {
+      "comment": "Button.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Each track the surround panner places is written as an ADM object with its place over time, after a bed of everything else (WAV, at the document’s rate)."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Varje spår som surroundpanoreringen placerar skrivs som ett ADM-objekt med sin plats över tid, efter en bädd med allt annat (WAV, i dokumentets samplingsfrekvens)."
           }
         }
       }

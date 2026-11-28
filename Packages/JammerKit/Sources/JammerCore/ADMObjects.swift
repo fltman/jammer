@@ -182,6 +182,66 @@ public enum ADMObjects {
         return [("chna", chna), ("axml", Data(x.utf8))]
     }
 
+    // MARK: The sound of a file with objects
+
+    /// The document the bed is rendered from: every object track's own sound kept out of it, routed to a muted bus,
+    /// so its sends to buses (a reverb) are still in the bed while its direct sound is its object's. Where no bus can
+    /// be added (the most a document has), those tracks are muted, sends and all.
+    public static func bedProject(_ project: Project) -> Project {
+        let ids = Set(tracks(project).map(\.id))
+        guard !ids.isEmpty else { return project }
+        var p = project
+        if let sink = try? p.addBus(name: "ADM objects"), let b = p.buses.firstIndex(where: { $0.id == sink.id }) {
+            p.buses[b].isMuted = true
+            for i in p.tracks.indices where ids.contains(p.tracks[i].id) { p.tracks[i].output = sink.id }
+        } else {
+            for i in p.tracks.indices where ids.contains(p.tracks[i].id) { p.tracks[i].isMuted = true }
+        }
+        return p
+    }
+
+    /// The document one object track is rendered from: the track alone, after its clips, plugins and fader (with
+    /// its VCA group's level), before the panner, in mono, or as its two channels for a stereo track (its objects'
+    /// order); the master's level applies, not its limiter, which is the bed's.
+    public static func objectProject(_ project: Project, track id: UUID) -> Project? {
+        guard let t = project.tracks.first(where: { $0.id == id }) else { return nil }
+        var p = project
+        let stereo = t.clips.contains { (project.source($0.sourceID)?.info.channels ?? 1) == 2 }
+        var only = t
+        only.position = nil
+        only.pan = 0
+        only.sends = []
+        only.output = nil
+        only.isMuted = false
+        p.tracks = [only]
+        p.buses = []
+        p.channels = stereo ? 2 : 1
+        p.master.limiter = nil
+        p.master.inserts = []
+        let kept = Set([id] + (t.vca.map { [$0] } ?? []))
+        p.automation = p.automation.filter { kept.contains($0.strip) && ![.azimuth, .elevation, .pan, .send].contains($0.param) }
+        return p
+    }
+
+    /// One block of the file: the bed's channels, then each object track's channels in turn (mono one, stereo two),
+    /// frame by frame. Each input has the same number of frames.
+    public static func interleave(bed: [Float], bedChannels: Int, objects: [[Float]], objectChannels: [Int]) -> [Float] {
+        let frames = bed.count / max(1, bedChannels)
+        let width = bedChannels + objectChannels.reduce(0, +)
+        var out = [Float](repeating: 0, count: frames * width)
+        for f in 0..<frames {
+            var at = f * width
+            for c in 0..<bedChannels { out[at + c] = bed[f * bedChannels + c] }
+            at += bedChannels
+            for (k, o) in objects.enumerated() {
+                let n = objectChannels[k]
+                for c in 0..<n where f * n + c < o.count { out[at + c] = o[f * n + c] }
+                at += n
+            }
+        }
+        return out
+    }
+
     // MARK: Read back
 
     /// An object as a file describes it: its name, the file's track (1-based, from chna) and its blocks (times in

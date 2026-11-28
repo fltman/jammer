@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import JammerCore
+import JammerEngine
 
 /// ADM objects as ITU-R BS.2076-3 lays them out (§ 5.3–5.6, 5.13, 6, 7, 8, Annex 2 § 3): placed tracks as objects
 /// with their place over time, the XML's structure, and read back.
@@ -101,5 +102,80 @@ struct ADMObjectsTests {
         }
         #expect(ADMObjects.frames("00:00:01.50000", rate: 48_000) == 72_000 && ADMObjects.frames("00:01:00.24000S48000", rate: 48_000) == 2_904_000)
         #expect(ADMObjects.read(axml: Data("not xml".utf8), rate: 48_000).isEmpty)
+    }
+
+    /// A 5.1 document whose sources are in memory: a voice (440 Hz) placed at 30° left, and a hum (100 Hz) left to the bed.
+    func rendered() throws -> (Project, SourcePool) {
+        let n = 48_000
+        let info = AudioFileInfo(container: .wav, sampleFormat: .float32, bigEndian: false, channels: 1, sampleRate: Self.rate,
+                                 channelMask: nil, dataOffset: 0, frames: Int64(n), chunks: [], bext: nil, ixml: nil, markers: [])
+        let pool = SourcePool()
+        let voice = SourceRef(name: "voice", path: "/dev/null", info: info), hum = SourceRef(name: "hum", path: "/dev/null", info: info)
+        pool.register(voice.id, memory: (0..<n).map { Float(0.1 * sin(2 * .pi * 440 * Double($0) / Self.rate)) }, channels: 1)
+        pool.register(hum.id, memory: (0..<n).map { Float(0.1 * sin(2 * .pi * 100 * Double($0) / Self.rate)) }, channels: 1)
+        var p = Project(source: voice)
+        p.channels = 6
+        _ = p.addTrack(source: hum, name: "Hum")
+        p.tracks[0].position = SurroundPosition(azimuth: 30)
+        return (p, pool)
+    }
+
+    @Test("The file's sound: the object is the voice after its fader, the bed is everything else, and a send still reaches the bed")
+    func sound() throws {
+        let (p, pool) = try rendered()
+        let frames = Int(p.length)
+        let object = try #require(ADMObjects.objectProject(p, track: p.tracks[0].id))
+        #expect(object.channels == 1)
+        let voice = PlanCompiler.compile(object, pool: pool).render(from: 0, frames: frames)
+        let source = pool.read(p.sources[0], from: 0, count: frames)
+        #expect(zip(voice, source).allSatisfy { abs($0 - $1) < 1e-6 }, "the object is the voice itself, not panned")
+        // The bed: the hum alone, as the document without the voice would be.
+        let bed = PlanCompiler.compile(ADMObjects.bedProject(p), pool: pool).render(from: 0, frames: frames)
+        var humOnly = p
+        humOnly.tracks.remove(at: 0)
+        let expected = PlanCompiler.compile(humOnly, pool: pool).render(from: 0, frames: frames)
+        #expect(bed.count == expected.count && zip(bed, expected).allSatisfy { abs($0 - $1) < 1e-6 }, "the voice's direct sound isn't in the bed")
+        // With a send to a bus, its share is in the bed.
+        var sent = p
+        let bus = try sent.addBus(name: "Room")
+        sent.tracks[0].sends = [Send(to: bus.id, gainDB: -6)]
+        let bedSent = PlanCompiler.compile(ADMObjects.bedProject(sent), pool: pool).render(from: 0, frames: frames)
+        let extra = zip(bedSent, expected).map { abs($0 - $1) }.max() ?? 0
+        #expect(extra > 0.01, "the send's share of the voice reaches the bed (\(extra))")
+        // Interleaved: six bed channels, then the object.
+        let file = ADMObjects.interleave(bed: bed, bedChannels: 6, objects: [voice], objectChannels: [1])
+        #expect(file.count == frames * 7)
+        #expect((0..<frames).allSatisfy { f in file[f * 7 + 6] == voice[f] && file[f * 7 + 2] == bed[f * 6 + 2] })
+    }
+
+    @Test("Written as the export writes it and read back by Jämmer: seven channels, the objects as written, the voice in its own channel")
+    func fileRoundTrip() throws {
+        var (p, pool) = try rendered()
+        p.automation = [AutomationLane(strip: p.tracks[0].id, param: .azimuth, points: [.init(frame: 12_000, value: 30), .init(frame: 36_000, value: 110)])]
+        let range: Range<Frame> = 0..<p.length, frames = Int(p.length)
+        let objects = ADMObjects.objects(p, range: range)
+        let dir = FileManager.default.temporaryDirectory.appending(path: "jammer-adm-\(UUID().uuidString.prefix(6))")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appending(path: "objects.wav")
+        var options = WAVWriter.Options(encoding: .float32, channels: 7, sampleRate: Self.rate, channelMask: p.layout.mask)
+        options.foreignChunks = try #require(ADMObjects.chunks(bed: .surround51, objects: objects, title: "Scene", rate: Self.rate))
+        let w = try WAVWriter(url: url, options: options)
+        let voice = PlanCompiler.compile(try #require(ADMObjects.objectProject(p, track: p.tracks[0].id)), pool: pool).render(from: 0, frames: frames)
+        try w.write(ADMObjects.interleave(bed: PlanCompiler.compile(ADMObjects.bedProject(p), pool: pool).render(from: 0, frames: frames), bedChannels: 6,
+                                          objects: [voice], objectChannels: [1]))
+        try w.finish()
+
+        let info = try AudioFileReader.info(at: url)
+        #expect(info.channels == 7 && info.frames == Int64(frames))
+        let read = try AudioFileReader.admObjects(at: url)
+        #expect(read.count == 1 && read[0].name == "voice" && read[0].track == 7)
+        #expect(read[0].blocks.map(\.start) == objects[0].blocks.map(\.start) && read[0].blocks.map(\.azimuth) == [30, 110, 110])
+        // The seventh channel is the voice, as rendered.
+        let src = AudioFileReader.openSource(info, at: url)
+        defer { if let src { jm_source_release(src) } }
+        var all = [Float](repeating: 0, count: frames * 7)
+        _ = jm_source_read(try #require(src), 0, Int64(frames), &all)
+        #expect((0..<frames).allSatisfy { abs(all[$0 * 7 + 6] - voice[$0]) < 1e-6 })
     }
 }

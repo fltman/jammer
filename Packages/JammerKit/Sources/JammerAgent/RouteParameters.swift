@@ -93,7 +93,7 @@ extension AgentAPI {
         .init("POST", doc + "/restore", body: RestoreRequest.fields),
         .init("POST", doc + "/restore/preview", body: RestoreRequest.fields),
         .init("POST", doc + "/export/timeline", body: ["format"]),
-        .init("POST", doc + "/export", body: ["tracks", "format", "bitDepth", "bitRate", "start", "end", "targetLUFS", "compensate", "sampleRate", "dither", "chapters"]),
+        .init("POST", doc + "/export", body: ["tracks", "format", "bitDepth", "bitRate", "start", "end", "targetLUFS", "compensate", "sampleRate", "dither", "chapters", "objects"]),
         .init("POST", doc + "/play", body: ["at"]),
         .init("POST", doc + "/stop"),
         .init("POST", doc + "/solo", body: ["strips"]),

@@ -189,6 +189,19 @@ public enum AudioFileReader {
         }
     }
 
+    /// The ADM objects a WAV, RF64 or BW64 file describes in its `axml` (and `chna`), as ADMObjects reads them; empty
+    /// for a file without, or with an `axml` over 16 MB.
+    public static func admObjects(at url: URL) throws -> [ADMObjects.Read] {
+        let info = try self.info(at: url)
+        guard let axml = info.chunks.first(where: { $0.id == "axml" }), axml.size > 0, axml.size <= 16 << 20 else { return [] }
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { try? handle.close() }
+        let size = Int64(try handle.seekToEnd())
+        let r = ByteReader(handle: handle, size: size)
+        let chna = try info.chunks.first(where: { $0.id == "chna" && $0.size <= 1 << 20 }).map { try r.bytes(at: $0.offset, count: Int($0.size)) }
+        return ADMObjects.read(axml: try r.bytes(at: axml.offset, count: Int(axml.size)), chna: chna, rate: info.sampleRate)
+    }
+
     /// Opens the samples for the engine.
     public static func openSource(_ info: AudioFileInfo, at url: URL) -> OpaquePointer? {
         jm_source_open(url.path, info.dataOffset, info.frames, Int32(info.channels), info.sampleFormat.engineFormat, info.bigEndian)

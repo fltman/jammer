@@ -1616,13 +1616,25 @@ enum AgentRouter {
             if format == .opus, n.doubleValue != 48_000 { throw APIError.badRequest("opus is always written at 48000 Hz; leave sampleRate out or give 48000.") }
             sampleRate = n.doubleValue
         }
+        // ADM objects: each placed track as an object after the bed, in WAV at the document's rate, the whole mix.
+        var objects = false
+        if let o = obj["objects"] {
+            guard let on = o as? Bool else { throw APIError.badRequest("objects must be true or false.") }
+            if on {
+                guard format == .wav, sampleRate == nil, only == nil else { throw APIError.badRequest("objects is for wav, at the document's rate, from the whole mix (no tracks, no sampleRate).") }
+                guard !ADMObjects.tracks(session.project).isEmpty else {
+                    throw APIError.unprocessable("no_objects", "There are no ADM objects to write: they are the tracks the surround panner places (set_track position), in a 5.1, 7.1 or 7.1.4 document.")
+                }
+            }
+            objects = on
+        }
         let delivery: LoudnessDelivery?
         // A closed connection stops it (stopsOnHangUp): the file isn't finished and the temporary one is removed.
         let stop = JobRegistry.StopFlag()
         do {
             delivery = try await withTaskCancellationHandler {
                 try await session.export(to: tmp, options: .init(encoding: encoding, range: range, dither: obj["dither"] as? Bool ?? false, encoded: encoded,
-                                                                 chapters: obj["chapters"] as? Bool ?? true, loudness: target, tracks: only, sampleRate: sampleRate), stop: stop)
+                                                                 chapters: obj["chapters"] as? Bool ?? true, loudness: target, tracks: only, sampleRate: sampleRate, admObjects: objects), stop: stop)
             } onCancel: { stop.set() }
         } catch is CancellationError {
             session.say(L10n.text("status.stoppedByAgent"), .info)

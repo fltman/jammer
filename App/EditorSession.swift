@@ -1208,6 +1208,9 @@ final class EditorSession {
         var tracks: Set<UUID>?
         /// The file's sample rate when it is to differ from the document's (one of `Resampler.rates`).
         var sampleRate: Double?
+        /// WAV in a 5.1, 7.1 or 7.1.4 document: each placed track as an ADM object with its place over time, after
+        /// the bed of everything else (ADMObjects). The document's rate, the whole mix.
+        var admObjects = false
     }
 
     /// The target of a loudness preset, while the document is still as that preset left it:
@@ -1249,6 +1252,7 @@ final class EditorSession {
 
     private func exportWhole(to url: URL, options: ExportOptions, stop: JobRegistry.StopFlag, progress: @escaping @Sendable (Double) -> Void) async throws -> LoudnessDelivery? {
         lastExportLimiter = nil
+        if options.admObjects { try await exportADMObjects(to: url, options: options, stop: stop, progress: progress); return nil }
         guard let ceiling = project.master.limiter?.ceilingDB else {
             return try await exportOnce(to: url, options: options, masterMargin: Mixer.masterMargins[0], stop: stop, progress: progress)
         }
@@ -1281,6 +1285,47 @@ final class EditorSession {
     /// The ceiling, the true peak the file measured, and how far under the ceiling the limiter had to aim,
     /// for the last export through a master limiter; nil when there was none.
     var lastExportLimiter: (ceilingDB: Double, truePeakDB: Double, marginDB: Double)?
+
+    /// A WAV of the bed followed by an ADM object for each placed track (ITU-R BS.2076-3; ADMObjects): the bed
+    /// rendered from the document with those tracks' own sound kept out (their sends stay in), each object its
+    /// track alone before the panner, all rendered side by side, block by block, into one file.
+    private func exportADMObjects(to url: URL, options: ExportOptions, stop: JobRegistry.StopFlag, progress: @escaping @Sendable (Double) -> Void) async throws {
+        let range = options.range ?? 0..<project.length
+        guard !range.isEmpty else { throw EditError.emptyRange }
+        guard options.encoded == nil, options.sampleRate == nil, options.tracks == nil else {
+            throw ExportError.unsupported(Said("error.export.objects_wav", "ADM objects are written in WAV, at the document's rate, from the whole mix."))
+        }
+        let objects = ADMObjects.objects(project, range: range)
+        guard let chunks = ADMObjects.chunks(bed: project.layout, objects: objects, title: name, rate: project.sampleRate) else {
+            throw ExportError.unsupported(Said("error.export.no_objects", "There are no ADM objects to write: they are the tracks the surround panner places, in a 5.1, 7.1 or 7.1.4 document."))
+        }
+        let safe = Self.pluginSafeMode, pool = self.pool, project = self.project
+        let bed = await PlanCompiler.mix(ADMObjects.bedProject(project), pool: pool, outOfProcess: safe)
+        var plans: [(plan: RenderPlan, channels: Int)] = []
+        var done = Set<UUID>()
+        for o in objects where done.insert(o.track).inserted {
+            guard let alone = ADMObjects.objectProject(project, track: o.track) else { continue }
+            plans.append((await PlanCompiler.mix(alone, pool: pool, outOfProcess: safe), alone.channels))
+        }
+        var wav = WAVWriter.Options(encoding: options.encoding, channels: project.channels + objects.count, sampleRate: project.sampleRate,
+                                    channelMask: project.layout.mask, dither: options.dither)
+        wav.foreignChunks = chunks
+        let finalOptions = wav, bedChannels = project.channels, objectPlans = plans
+        try await Task.detached(priority: .userInitiated) {
+            let writer = try WAVWriter(url: url, options: finalOptions)
+            var at = range.lowerBound
+            while at < range.upperBound {
+                if stop.isSet { throw CancellationError() }
+                let n = Int(min(Frame(65_536), range.upperBound - at))
+                let block = ADMObjects.interleave(bed: bed.render(from: at, frames: n), bedChannels: bedChannels,
+                                                  objects: objectPlans.map { $0.plan.render(from: at, frames: n) }, objectChannels: objectPlans.map(\.channels))
+                try writer.write(block)
+                at += Frame(n)
+                progress(Double(at - range.lowerBound) / Double(range.count))
+            }
+            try writer.finish()
+        }.value
+    }
 
     private func exportOnce(to url: URL, options: ExportOptions, masterMargin: Double, stop: JobRegistry.StopFlag,
                             progress: @escaping @Sendable (Double) -> Void) async throws -> LoudnessDelivery? {
