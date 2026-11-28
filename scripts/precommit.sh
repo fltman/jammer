@@ -24,6 +24,8 @@ scripts/test-gui-warnings.sh > "$out/guiwarnings.out" 2>&1 || fail "the GUI chec
 scripts/check-no-system-events.sh > "$out/systemevents.out" 2>&1 || fail "a script sends keys to whatever app is in front: $(head -1 "$out/systemevents.out")"
 scripts/check-no-debug-deletes.sh > "$out/debugdeletes.out" 2>&1 || fail "a script deletes something of the real app or the plain Debug app: $(head -1 "$out/debugdeletes.out")"
 scripts/check-fetch-guard.sh > "$out/fetch.out" 2>&1 || fail "a script can fetch third-party code without a yes ($(head -1 "$out/fetch.out"))"
+scripts/check-private-paths.py --self-test > "$out/private.out" 2>&1 || fail "the private-path check doesn't catch what it should ($(head -1 "$out/private.out"))"
+scripts/check-private-paths.py >> "$out/private.out" 2>&1 || fail "$(tail -1 "$out/private.out")"
 scripts/check-build-lock.py --self-test > "$out/buildlock.out" 2>&1 || fail "the build-lock check doesn't catch what it should ($(head -1 "$out/buildlock.out"))"
 scripts/check-build-lock.py >> "$out/buildlock.out" 2>&1 || fail "a script builds without the build lock: $(grep 'builds without' "$out/buildlock.out" | head -1)"
 scripts/commit-checked.sh --self-test > "$out/commitchecked.out" 2>&1 || fail "commit-checked doesn't refuse what it should ($(head -1 "$out/commitchecked.out"))"

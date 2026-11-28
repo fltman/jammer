@@ -9,7 +9,8 @@
 # when scripts/precommit.sh exits 0. Not a hook: Anders's own commits don't wait for it.
 set -u
 cd "$(dirname "$0")/.."
-lock_tool=/Users/andersbj/Projekt/the-apps/tools/with-build-lock.sh
+# The series' build lock, found beside the repository as every script finds it (no private path in the repository).
+lock_tool="$(cd .. && pwd)/the-apps/tools/with-build-lock.sh"
 
 # The tree as it is: its hash through an index of its own (tracked and new files, AGENTS.md left out), and a marker
 # whose time every file is held to. A file changed during the gate and put back has the same content but a newer time.

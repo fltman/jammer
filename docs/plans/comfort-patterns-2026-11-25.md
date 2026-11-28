@@ -1,6 +1,6 @@
 ## Jämmer against COMFORT.md (read-only, HEAD ce38c13)
 
-I read the code and searched it. I ran nothing. Paths are under /Users/andersbj/Projekt/jammer-native; ETC is App/EditorWindowController.swift and ES is App/EditorSession.swift. **Row 60 is wrong in every paid alert**: Send is the first button, so it is Return.
+I read the code and searched it. I ran nothing. Paths are from the repository's root; ETC is App/EditorWindowController.swift and ES is App/EditorSession.swift. **Row 60 is wrong in every paid alert**: Send is the first button, so it is Return.
 
 | # | Pattern | Status | Evidence | What to do |
 |---|---|---|---|---|
