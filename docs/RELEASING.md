@@ -10,6 +10,21 @@ How a release is built, signed, notarised and published, and what a release buil
 4. Sparkle's `sign_update --account jammer` on the archive; the signature goes into the appcast (`Config/appcast-template.xml`), checked against the app's `SUPublicEDKey`.
 5. The site built with `the-apps/site/build.mjs --prod --strict`; the site, the archive under `releases/`, the release notes (`docs/release-notes/`) and `appcast.xml` go up together.
 
+## Release 0.5.0, prepared 2026-11-28
+
+With Anders's yes in this window (2026-11-28: the version, the notes, the switches check, signing, notarising, Sparkle and the signed-build rehearsal; the publishing by the coordinating session of the-apps):
+
+| Step | Result |
+|---|---|
+| Pre-commit | green (789 tests) on 27634ed, the commit built |
+| The build switches | `scripts/check-release-switches.sh`: reverb code 1, 0, 1; freeform 1, 0; CLAP helpers 0 and 2, then 0 as the file says; no debug-only argument in the build |
+| In the app first | Round 5 on a guest copy: the two new agent routes (duplicate; save with collect, 8 of 8 sources into a package with the originals untouched); the menus read again into `Config/menus-en.txt` |
+| Built and signed | `scripts/sign-release.sh`: Developer ID Application: Brattoo AB (V783A2L763), hardened runtime and timestamp on every program, no get-task-allow; version 0.5.0 (3); entitlements: audio input (for recording), no sandbox; DeepFilter, LAME and Sparkle signed by the same team |
+| Notarised | `scripts/notarize-release.sh` (profile `jammer-notary`): Accepted, submission 656b1d34-db3d-4ac2-a0a1-a89aa5751e76; stapled; Gatekeeper "accepted, source=Notarized Developer ID"; archived as `Jämmer-0.5.0.zip` (25,518,488 bytes) |
+| Appcast signed | `sign_update --account jammer`; the signature verifies and a changed one is refused; the appcast has 0.5.0 first and 0.1.0's item as published |
+| The folder to publish | `build/publish-0.5.0`: `appcast.xml`, `releases/Jämmer-0.5.0.zip`, `releases/notes/0.5.0.en.html` and `.sv.html`; the site is built from `site/` (version and download in `site/app.json`) |
+| Not done in the rehearsal | Another developer's Audio Unit out of process and the sidechain refusal (none is installed on this Mac), and the Keychain item in the signed app (it would mean running the real app, and GUI checks run only a guest copy) |
+
 ## Release 0.1.0, prepared 2026-11-19
 
 With Anders's yes at each step, in this window:
