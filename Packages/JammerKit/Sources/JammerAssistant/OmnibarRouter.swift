@@ -29,19 +29,12 @@ public enum OmnibarRouter {
             several things, or is a question, answer "\(assistant)".
             """
         let prompt = "Typed: \(text)\nCommands: \(titles.joined(separator: "; "))"
-        let answer = await withTaskGroup(of: String?.self) { group in
-            group.addTask {
-                let session = LanguageModelSession(instructions: instructions)
-                let r = try? await session.respond(to: prompt, schema: schema, options: GenerationOptions(samplingMode: .greedy, maximumResponseTokens: 40))
-                return r.flatMap { try? $0.content.value(String.self) }
-            }
-            group.addTask {
-                try? await Task.sleep(for: .seconds(timeout))
-                return nil
-            }
-            let first = await group.next() ?? nil
-            group.cancelAll()
-            return first
+        // The first of the model's answer and the limit (Deadline): a task group would wait for the model even
+        // after the limit, since a group returns only when every child has (the-apps COMFORT.md 7b3c2e1).
+        let answer: String? = await Deadline.first(within: timeout) {
+            let session = LanguageModelSession(instructions: instructions)
+            let r = try? await session.respond(to: prompt, schema: schema, options: GenerationOptions(samplingMode: .greedy, maximumResponseTokens: 40))
+            return r.flatMap { try? $0.content.value(String.self) }
         }
         return answer.flatMap { titles.firstIndex(of: $0) }
     }
