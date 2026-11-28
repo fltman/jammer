@@ -161,4 +161,41 @@ struct FreezeTests {
         }
         #expect(blocks == 3 && ((try? FileManager.default.contentsOfDirectory(atPath: dir.url.path))?.isEmpty ?? true), "a stopped freeze left a file")
     }
+
+    @Test("A placed track frozen keeps its moving place, a turned bus frozen is turned once, and a frozen track's place can't change under it")
+    func surround() throws {
+        let dir = TempDir()
+        var (p, pool) = MixerTests.document()
+        p.channels = 6
+        p.tracks[0].position = SurroundPosition(azimuth: 30)
+        p.automation = [AutomationLane(strip: p.tracks[0].id, param: .azimuth, points: [.init(frame: 0, value: 30), .init(frame: 48_000, value: -110)])]
+        let live = Self.heard(p, pool)
+        let frozen = try Self.freeze(p, p.tracks[0].id, pool: pool, media: dir.url)
+        let error = Self.db(Self.heard(frozen.played(), pool), live)
+        #expect(error < -100, "frozen as it moves: \(error) dB from the live mix")
+        var moved = frozen
+        moved.tracks[0].position?.azimuth = -60
+        #expect(frozen.frozenViolation(in: moved) == p.tracks[0].name, "its place is in the file")
+        var lane = frozen
+        lane.automation[0].points[1].value = 0
+        #expect(frozen.frozenViolation(in: lane) == p.tracks[0].name, "so is how it moves")
+        var faded = frozen
+        faded.tracks[0].gainDB = -6
+        #expect(frozen.frozenViolation(in: faded) == nil, "the fader is after the file")
+        // Frozen before the place was part of what it was made from: still recognised, as it was.
+        var old = frozen
+        old.tracks[0].frozen?.madeFrom = p.content(of: p.tracks[0].id, places: false)!
+        #expect(old.frozenViolation(in: old) == nil)
+
+        var (q, pool2) = MixerTests.document()
+        q.channels = 6
+        q.tracks[0].position = SurroundPosition(azimuth: 30)
+        let bus = try q.addBus(name: "Turned")
+        q.tracks[0].output = bus.id
+        try q.setBusTurn(bus.id, azimuth: 90)
+        let live2 = Self.heard(q, pool2)
+        let frozen2 = try Self.freeze(q, bus.id, pool: pool2, media: dir.url)
+        let error2 = Self.db(Self.heard(frozen2.played(), pool2), live2)
+        #expect(error2 < -100, "a turned bus frozen is turned once, after its file: \(error2) dB")
+    }
 }

@@ -71,13 +71,20 @@ extension Project {
     /// A digest of everything that decides what a strip sounds like before its own fader: for a track
     /// its clips and plugins, and whatever its plugins listen to; for a bus its plugins and everything
     /// that arrives at it. nil when there is no such strip.
-    public func content(of strip: UUID) -> String? {
+    ///
+    /// A track's place and its field's turn (fixed and by lanes) are in it: the surround panner and the turn
+    /// work before the fader, so a frozen file has them. (`places: false` leaves them out, as before 2026-11-28,
+    /// when a freeze lost a moving place: what was frozen then is still recognised.)
+    public func content(of strip: UUID, places: Bool = true) -> String? {
         var seen = Set<UUID>()
-        guard let text = signal(of: strip, afterFader: false, seen: &seen) else { return nil }
+        guard let text = signal(of: strip, afterFader: false, places: places, seen: &seen) else { return nil }
         return SHA256.hash(data: Data(text.utf8)).map { String(format: "%02x", $0) }.joined()
     }
 
-    private func signal(of id: UUID, afterFader: Bool, seen: inout Set<UUID>) -> String? {
+    /// The lanes that move a track's place or turn its field: before its fader, so in its frozen file.
+    static let beforeFader: Set<AutomationLane.Param> = [.azimuth, .elevation, .yaw, .pitch, .roll]
+
+    private func signal(of id: UUID, afterFader: Bool, places: Bool = true, seen: inout Set<UUID>) -> String? {
         // (A loop can't be set and is cut in a file; this is so that even one doesn't hang here.)
         guard seen.insert(id).inserted else { return "again:\(id.uuidString)" }
         defer { seen.remove(id) }
@@ -94,22 +101,27 @@ extension Project {
             return l.isEmpty ? "" : ",automation:\(encoded(l))"
         }
         func keys(_ inserts: [Insert], _ seen: inout Set<UUID>) -> String {
-            inserts.filter { !$0.bypass }.compactMap(\.key).map { signal(of: $0, afterFader: true, seen: &seen) ?? "gone" }.joined(separator: ";")
+            inserts.filter { !$0.bypass }.compactMap(\.key).map { signal(of: $0, afterFader: true, places: places, seen: &seen) ?? "gone" }.joined(separator: ";")
         }
         if let t = tracks.first(where: { $0.id == id }) {
             var s = "track{clips:\(encoded(t.clips)),inserts:\(encoded(t.inserts)),keys:[\(keys(t.inserts, &seen))]"
+            // (Only for a placed or turned track, so that what any other track was frozen from stays good.)
+            let moves = self.lanes(of: id).filter { $0.enabled && Self.beforeFader.contains($0.param) }
+            if places, t.position != nil || t.rotation != nil || !moves.isEmpty {
+                s += ",place:\(encoded(t.position)),turn:\(encoded(t.rotation)),moves:\(encoded(moves))"
+            }
             if afterFader { let h = heard(gainDB: t.gainDB, muted: t.isMuted, vca: t.vca); s += ",fader:\(h.gainDB),\(h.muted),\(t.pan)" + lanes(id) }
             return s + "}"
         }
         if let b = bus(id) {
             var inputs: [String] = []
             for t in tracks {
-                if t.output == id { inputs.append("out:" + (signal(of: t.id, afterFader: true, seen: &seen) ?? "")) }
-                for send in t.sends where send.to == id { inputs.append("send:\(send.gainDB),\(send.pre):" + (signal(of: t.id, afterFader: !send.pre, seen: &seen) ?? "")) }
+                if t.output == id { inputs.append("out:" + (signal(of: t.id, afterFader: true, places: places, seen: &seen) ?? "")) }
+                for send in t.sends where send.to == id { inputs.append("send:\(send.gainDB),\(send.pre):" + (signal(of: t.id, afterFader: !send.pre, places: places, seen: &seen) ?? "")) }
             }
             for other in buses where other.id != id {
-                if other.output == id { inputs.append("out:" + (signal(of: other.id, afterFader: true, seen: &seen) ?? "")) }
-                for send in other.sends where send.to == id { inputs.append("send:\(send.gainDB),\(send.pre):" + (signal(of: other.id, afterFader: !send.pre, seen: &seen) ?? "")) }
+                if other.output == id { inputs.append("out:" + (signal(of: other.id, afterFader: true, places: places, seen: &seen) ?? "")) }
+                for send in other.sends where send.to == id { inputs.append("send:\(send.gainDB),\(send.pre):" + (signal(of: other.id, afterFader: !send.pre, places: places, seen: &seen) ?? "")) }
             }
             var s = "bus{inserts:\(encoded(b.inserts)),keys:[\(keys(b.inserts, &seen))],in:[\(inputs.joined(separator: "|"))]"
             if afterFader { let h = heard(gainDB: b.gainDB, muted: b.isMuted, vca: b.vca); s += ",fader:\(h.gainDB),\(h.muted),\(b.pan)" + lanes(id) }
@@ -124,7 +136,7 @@ extension Project {
     public func frozenViolation(in new: Project) -> String? {
         for (id, name, frozen) in tracks.compactMap({ t in t.frozen.map { (t.id, t.name, $0) } }) + buses.compactMap({ b in b.frozen.map { (b.id, b.name, $0) } }) {
             guard new.frozen(id) == frozen else { continue }
-            if new.content(of: id) != frozen.madeFrom { return name }
+            if new.content(of: id) != frozen.madeFrom, new.content(of: id, places: false) != frozen.madeFrom { return name }
         }
         return nil
     }
@@ -140,7 +152,10 @@ extension Project {
         // The strip's own level, pan, mute and send lanes come after the frozen file, like its fader; the
         // master's are not in it either. A lane on one of the strip's plugins is in the file: it is part
         // of what the plugins make of the sound.
-        p.automation.removeAll { ($0.strip == strip && $0.param != .plugin) || $0.strip == Master.id }
+        // A track's place and turn are before its fader (the panner), so its lanes for them stay: the file is
+        // in the document's layout, placed as the track is at each moment. A bus's turn is after its fader.
+        let isTrack = tracks.contains { $0.id == strip }
+        p.automation.removeAll { ($0.strip == strip && $0.param != .plugin && !(isTrack && Self.beforeFader.contains($0.param))) || $0.strip == Master.id }
         let sink = Bus(id: Self.frozenSink, name: "sink", isMuted: true)
         if let t = p.tracks.firstIndex(where: { $0.id == strip }) {
             p.tracks[t].gainDB = 0; p.tracks[t].pan = 0; p.tracks[t].isMuted = false
@@ -148,7 +163,7 @@ extension Project {
             for o in p.tracks.indices where o != t && p.tracks[o].output == nil { p.tracks[o].output = sink.id }
             for b in p.buses.indices where p.buses[b].output == nil { p.buses[b].output = sink.id }
         } else if let b = p.buses.firstIndex(where: { $0.id == strip }) {
-            p.buses[b].gainDB = 0; p.buses[b].pan = 0; p.buses[b].isMuted = false
+            p.buses[b].gainDB = 0; p.buses[b].pan = 0; p.buses[b].isMuted = false; p.buses[b].azimuth = nil
             p.buses[b].output = nil; p.buses[b].sends = []; p.buses[b].vca = nil; p.buses[b].frozen = nil
             for o in p.tracks.indices where p.tracks[o].output == nil { p.tracks[o].output = sink.id }
             for o in p.buses.indices where o != b && p.buses[o].output == nil { p.buses[o].output = sink.id }
