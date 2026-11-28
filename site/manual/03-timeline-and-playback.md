@@ -42,9 +42,9 @@ Every project has a tempo map. It starts at 120 BPM in 4/4, and for speech you c
 | ⌘+ / ⌘− | Zoom in / out |
 | ⌘0 | Zoom to fit the whole project |
 | ⌥⌘E | Zoom to the selection |
-| ⌃⌘+ / ⌃⌘− | Taller / shorter tracks (the View menu) |
-| ⌃⌘0 | Fit the tracks to the window (the View menu) |
-| ⌥↑ / ⌥↓ | Select the track above / below, scrolled into view (the Track menu) |
+| ⌃⌘+ / ⌃⌘− | Taller / shorter tracks (**View › Taller Tracks, Shorter Tracks**) |
+| ⌃⌘0 | Fit the tracks to the window (**View › Fit Tracks**) |
+| ⌥↑ / ⌥↓ | Select the track above / below, scrolled into view (**Track › Previous Track, Next Track**; with automation shown, these keys move between lanes) |
 | ⌃⌘F | Full screen |
 
 You can zoom in until single samples are wider than a pixel.

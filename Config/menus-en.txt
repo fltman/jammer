@@ -76,6 +76,9 @@ View › Zoom In	⌘+
 View › Zoom Out	⌘-
 View › Zoom to Fit	⌘0
 View › Zoom to Selection	⌥⌘E
+View › Taller Tracks	⌃⌘+
+View › Shorter Tracks	⌃⌘-
+View › Fit Tracks	⌃⌘0
 View › Focus Mode	⌃⇧⌘F
 Track › Rename Track…	
 Track › Mute	
@@ -83,6 +86,8 @@ Track › Solo
 Track › Arm to Record	
 Track › Lock Track	
 Track › Duplicate Track	
+Track › Previous Track	⌥
+Track › Next Track	⌥
 Track › Move Track Up	
 Track › Move Track Down	
 Track › Delete Track	

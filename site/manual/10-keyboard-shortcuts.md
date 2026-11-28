@@ -73,13 +73,14 @@
 | ⌘+ / ⌘− | Zoom In / Out |
 | ⌘0 | Zoom to Fit |
 | ⌥⌘E | Zoom to Selection |
+| ⌃⌘+ / ⌃⌘− | Taller / Shorter Tracks |
+| ⌃⌘0 | Fit Tracks |
 | ⌥⌘T | Show or Hide Transcript |
 | ⌥⌘A | Assistant: show it and put the cursor in its field; from the field, hide it |
 | ⌥⌘S | Spectrogram or Waveform |
 | ⌃⇧⌘F | Focus Mode: hide the side panels |
 | ⌃⌘F | Full Screen |
 | ⌥⌘Y | Show History |
-| ⌃⌘F | Full Screen |
 | ⌘M | Minimize |
 
 The keys for drawing automation lanes (⌥-click, ⌥→, ⌥Return and the rest) are in chapter 24, Automation.
