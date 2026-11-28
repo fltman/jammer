@@ -522,6 +522,31 @@ struct SiblingTests {
         for op in ["add_bus", "set_bus", "remove_bus"] { #expect(Operations.named(op)?.tier == "advanced") }
     }
 
+    @Test("set_bus turns the field a bus carries in Ambisonics (yaw, pitch, roll; turned false takes it away), and is refused in words elsewhere")
+    func busFieldTurnThroughSteps() throws {
+        let info = AudioFileInfo(container: .wav, sampleFormat: .float32, bigEndian: false, channels: 4, sampleRate: 48_000,
+                                 channelMask: nil, dataOffset: 0, frames: 48_000, chunks: [], bext: nil, ixml: nil, markers: [])
+        var p = Project(source: SourceRef(name: "field", path: "/dev/null", info: info))
+        p.channels = 4
+        var s = EditState(project: p, pool: nil, media: nil)
+        let quiet: StepRunner.Measure = { _, _ in LoudnessResult(integrated: nil, range: nil, maxMomentary: nil, maxShortTerm: nil, samplePeak: 0, truePeak: 0, duration: 0) }
+        func run(_ op: String, _ params: [String: JSONValue]) -> StepResult { StepRunner.run([Step(op: op, params: params)], on: &s, measure: quiet)[0] }
+        #expect(run("add_bus", ["name": .string("Room")]).status == .done)
+        let bus = s.project.buses[0].id.uuidString
+        #expect(run("set_bus", ["bus": .string(bus), "yaw": .number(45), "roll": .number(-10)]).status == .done)
+        #expect(s.project.buses[0].rotation == FieldRotation(yaw: 45, roll: -10))
+        #expect(run("set_bus", ["bus": .string(bus), "pitch": .number(5)]).status == .done)
+        #expect(s.project.buses[0].rotation == FieldRotation(yaw: 45, pitch: 5, roll: -10), "what isn't given stays")
+        #expect(run("set_bus", ["bus": .string(bus), "turned": .bool(false)]).status == .done)
+        #expect(s.project.buses[0].rotation == nil)
+        let azimuth = run("set_bus", ["bus": .string(bus), "azimuth": .number(30)])
+        #expect(azimuth.status == .failed, "a turn by azimuth is a loudspeaker layout's")
+        #expect(throws: (any Error).self) { try StepRunner.validate(Step(op: "set_bus", params: ["bus": .string(bus), "pitch": .number(91)])) }
+        s.project.channels = 6
+        let wide = run("set_bus", ["bus": .string(bus), "yaw": .number(10)])
+        #expect(wide.status == .failed && (wide.error ?? "").contains("Ambisonics"), "\(wide.error ?? "")")
+    }
+
     @Test("duck through steps: lowers one track under the other, says how, refuses in words, and is a core operation")
     func duckThroughSteps() throws {
         let n = 48_000 * 6

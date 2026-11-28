@@ -39,6 +39,9 @@ public struct Bus: Codable, Hashable, Sendable, Identifiable {
     /// (positive to the left). A bus carries every channel already placed by its tracks, so it isn't placed
     /// from one direction as a track is: it is turned. nil: as its tracks placed it.
     public var azimuth: Double?
+    /// In an Ambisonics document: the sound field the bus carries turned round the listener (yaw, pitch, roll),
+    /// after its fader. nil: as its tracks made it.
+    public var rotation: FieldRotation?
 
     public init(id: UUID = UUID(), name: String, gainDB: Double = 0, pan: Double = 0, isMuted: Bool = false, output: UUID? = nil, sends: [Send] = []) {
         self.id = id
@@ -50,7 +53,7 @@ public struct Bus: Codable, Hashable, Sendable, Identifiable {
         self.sends = sends
     }
 
-    private enum CodingKeys: String, CodingKey { case id, name, gainDB, pan, isMuted, output, sends, inserts, vca, frozen, azimuth }
+    private enum CodingKeys: String, CodingKey { case id, name, gainDB, pan, isMuted, output, sends, inserts, vca, frozen, azimuth, rotation }
     public func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(id, forKey: .id)
@@ -64,11 +67,13 @@ public struct Bus: Codable, Hashable, Sendable, Identifiable {
         try c.encodeIfPresent(vca, forKey: .vca)
         try c.encodeIfPresent(frozen, forKey: .frozen)
         try c.encodeIfPresent(azimuth, forKey: .azimuth)
+        try c.encodeIfPresent(rotation, forKey: .rotation)
     }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(UUID.self, forKey: .id)
         azimuth = (try? c.decodeIfPresent(Double.self, forKey: .azimuth)).flatMap { $0 }.flatMap { $0.isFinite && abs($0) <= 180 ? $0 : nil }
+        rotation = (try? c.decodeIfPresent(FieldRotation.self, forKey: .rotation)).flatMap { $0 }.flatMap { $0.isValid && !$0.isNone ? $0 : nil }
         vca = try c.decodeIfPresent(UUID.self, forKey: .vca)
         frozen = try c.decodeIfPresent(Frozen.self, forKey: .frozen)
         name = try c.decode(String.self, forKey: .name)
@@ -542,6 +547,24 @@ extension Project {
             guard azimuth.isFinite, abs(azimuth) <= 180 else { throw Mixer.Failure.badValue(Said("error.value.azimuth_180_180", "azimuth is −180 to 180.")) }
             buses[i].azimuth = azimuth
         }
+    }
+
+    /// Turns the sound field a bus carries round the listener (`turned: false` takes the turn away). Ambisonics
+    /// documents only; what isn't given stays as it was.
+    public mutating func setBusRotation(_ id: UUID, yaw: Double? = nil, pitch: Double? = nil, roll: Double? = nil, turned: Bool? = nil) throws {
+        guard let i = buses.firstIndex(where: { $0.id == id }) else { throw Mixer.Failure.noBus(id.uuidString) }
+        guard layout.isAmbisonic else {
+            throw Mixer.Failure.badValue(Said("error.value.bus_field_ambisonic", "a bus's field is turned in an Ambisonics document; this one is %@. In a loudspeaker layout a bus is turned by azimuth.", layout.rawValue))
+        }
+        if turned == false, yaw == nil, pitch == nil, roll == nil { buses[i].rotation = nil; return }
+        var r = buses[i].rotation ?? FieldRotation()
+        if let yaw { r.yaw = yaw }
+        if let pitch { r.pitch = pitch }
+        if let roll { r.roll = roll }
+        guard [r.yaw, r.pitch, r.roll].allSatisfy(\.isFinite), r.isValid else {
+            throw Mixer.Failure.badValue(Said("error.value.yaw_pitch_roll", "yaw is −360 to 360, pitch −90 to 90 and roll −180 to 180 degrees."))
+        }
+        buses[i].rotation = r.isNone ? nil : r
     }
 
     public mutating func setBus(_ id: UUID, name: String? = nil, gainDB: Double? = nil, pan: Double? = nil, muted: Bool? = nil, output: UUID?? = nil) throws {

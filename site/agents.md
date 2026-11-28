@@ -539,7 +539,10 @@ Changes one bus: its name, gain, pan, mute, or where it goes. A route that would
 | `muted` | boolean | True to mute everything that goes through the bus. |
 | `output` | string | The id of the bus this one feeds, or "master" for the output. |
 | `azimuth` | number | In a loudspeaker layout wider than stereo: the bus's whole image turned round the listener, in degrees, positive to the left (each channel re-panned from its loudspeaker's direction plus the turn; the LFE as it is). Not in mono, stereo or Ambisonics. |
-| `turned` | boolean | false takes the turn away. |
+| `yaw` | number | In an Ambisonics document: the field the bus carries turned round the vertical, in degrees, positive to the left (after its fader; the same turn as a track's). |
+| `pitch` | number | In an Ambisonics document: the bus's field tilted, positive lifting the front. |
+| `roll` | number | In an Ambisonics document: the bus's field rolled, positive lifting the left side. |
+| `turned` | boolean | false takes the turn away (the azimuth's, or in Ambisonics the field's). |
 
 ### `set_send`
 

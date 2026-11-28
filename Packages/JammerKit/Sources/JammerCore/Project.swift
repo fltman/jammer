@@ -385,7 +385,7 @@ public struct Project: Codable, Equatable, Sendable {
 
     /// A source marked as a sound field, a track turned, or a lane that turns one.
     public var usesFields: Bool {
-        sources.contains { $0.fieldOrder != nil } || tracks.contains { $0.rotation != nil }
+        sources.contains { $0.fieldOrder != nil } || tracks.contains { $0.rotation != nil } || buses.contains { $0.rotation != nil }
             || automation.contains { [.yaw, .pitch, .roll].contains($0.param) }
     }
     /// Marks the files of a sound field's size as fields of `order` (a document made Ambisonics says what its

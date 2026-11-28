@@ -72,6 +72,48 @@ void Curve::apply(const float *in, float *out, int64_t at, int64_t n, int32_t ch
     }
 }
 
+/// A bus's sound field turned by yaw, pitch and roll: the turn's matrix worked out at the timeline's grid points
+/// and, between them, a curve through three of them, or straight to a lane's own point where one turns within
+/// the next two quanta: the same as a track's turned field (Plan::mixClip), so a field turned on its bus sounds
+/// as the same field turned on its track. Nothing allocated.
+void Graph::turnField(const FieldTurn &ft, const float *in, float *out, int64_t at, int64_t q) const JM_NONBLOCKING {
+    constexpr int32_t kC = FieldTurn::kMaxComponents;
+    float m0[kC * kC], m1[kC * kC], m2[kC * kC];
+    const int32_t n = ft.components;
+    int64_t i = 0;
+    while (i < q) {
+        const int64_t t = at + i;
+        // (Floor: before the timeline's start the grid goes on below 0.)
+        const int64_t g = (t >= 0 ? t / Chain::kQuantum : -((-t + Chain::kQuantum - 1) / Chain::kQuantum)) * Chain::kQuantum;
+        const int64_t len = std::min(q - i, g + Chain::kQuantum - t);
+        ft.matrix(g, m0);
+        ft.matrix(g + Chain::kQuantum, m1);
+        const int64_t bendAt = ft.bend(g, g + 2 * Chain::kQuantum);
+        const bool curve = bendAt < 0;
+        const bool kink = !curve && bendAt < g + Chain::kQuantum;
+        if (curve) ft.matrix(g + 2 * Chain::kQuantum, m2);
+        else if (kink) ft.matrix(bendAt, m2);
+        const float uk = kink ? float(bendAt - g) / float(Chain::kQuantum) : 0;
+        for (int64_t j = 0; j < len; ++j, ++i) {
+            const float u = float(t + j - g) / float(Chain::kQuantum);
+            float l0, l1, l2;
+            if (curve) { l0 = (u - 1) * (u - 2) * 0.5f; l1 = u * (2 - u); l2 = u * (u - 1) * 0.5f; }
+            else if (kink && u < uk) { const float v = u / uk; l0 = 1 - v; l1 = 0; l2 = v; }
+            else if (kink) { const float v = (u - uk) / (1 - uk); l0 = 0; l1 = v; l2 = 1 - v; }
+            else { l0 = 1 - u; l1 = u; l2 = 0; }
+            const float *x = in + i * channels_;
+            float *y = out + i * channels_;
+            for (int32_t d = 0; d < channels_; ++d) y[d] = 0.0f;
+            for (int32_t k = 0; k < n && k < channels_; ++k) {
+                if (x[k] == 0.0f) continue;
+                const int32_t row = k * n;
+                for (int32_t d = 0; d < n && d < channels_; ++d)
+                    y[d] += x[k] * (l0 * m0[row + d] + l1 * m1[row + d] + (l2 != 0.0f ? l2 * m2[row + d] : 0.0f));
+            }
+        }
+    }
+}
+
 /// A bus's image turned by an azimuth: each channel with a direction re-panned from it plus the turn (the
 /// panner's own gains), others (the LFE) as they are. Worked out at the timeline's grid points and ramped
 /// between them, as a track's moving place.
@@ -479,6 +521,8 @@ void Graph::produce(const Plan &plan, Renderer &renderer) {
                 if (!replaced && !bus.curve.empty()) { bus.curve.apply(post, faded_.data(), at, q, channels_); post = faded_.data(); }
                 if (!bus.panCurve.empty()) { bus.panCurve.apply(post, faded_.data(), at, q, channels_); post = faded_.data(); }
                 if (!bus.turn.empty()) { turnImage(plan.panLayout, bus.turn, post, turned_.data(), at, q); post = turned_.data(); }
+                // (One or the other: a turn by azimuth is a loudspeaker layout's, a field's turn an Ambisonics one's.)
+                else if (bus.field) { turnField(*bus.field, post, turned_.data(), at, q); post = turned_.data(); }
             }
             if (renderer.meters)
                 renderer.meters->put(LiveTrims::slot(1, int32_t(b)), cursor_ - nodeOut_[size_t(n)], bus.mute ? 0.0f : peakOf(post, samples) * bus.gain);

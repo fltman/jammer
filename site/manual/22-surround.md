@@ -36,6 +36,8 @@ Measured, not heard: in 7.1 a sound at ear level comes from within a few degrees
 
 A track that plays a sound field can be turned round the listener: in the Mixer the slider turns it (to the left is to the left), and the menu beside it lifts its front or one side, or takes the turn away. The turn applies in an Ambisonics document and in loudspeakers alike.
 
+In an Ambisonics document a bus carries a sound field too, and its strip has the same slider and menu: they turn everything that goes through the bus at once, after its fader, as if each field in it were turned on its own track. Its turn can be automated like a track's.
+
 ## Listening
 
 - On a device with fewer channels than the document, such as the Mac's speakers or headphones, a loudspeaker document is folded down to stereo by the same rules. The document and its exports keep all their channels.
@@ -60,4 +62,4 @@ A 7.1 or 7.1.4 WAV with no channel mask and no ADM doesn't say whether its sides
 
 ## For agents
 
-`set_layout` sets the layout (`mono`, `stereo`, `5.1`, `7.1`, `7.1.4`, `ambix1`, `ambix2`, `ambix3`; an Ambisonics layout marks the files of its size as sound fields; `order` `bs2051` or `wav` says how a 7.1 or 7.1.4 file without a mask or ADM is heard, also as `?order=` when a document is made); `set_track` `field` (1–3, 0) marks a track's files, and `yaw`, `pitch`, `roll` turn its field (`turned: false` takes the turn away); `GET …/documents/{id}` has `layout` and `outputPath` (`binaural` or `spatialSpeakers` when the spatial mixer is used). `set_track` places a track with `azimuth` (degrees, positive to the left), `elevation` and `width`, and `placed: false` takes it back; each track in `GET …/mixer` has its `position`. `POST …/export` with `format: "apac"`. In a loudspeaker layout `pan` is refused, and in mono or stereo a place by azimuth is refused, each with the reason in words.
+`set_layout` sets the layout (`mono`, `stereo`, `5.1`, `7.1`, `7.1.4`, `ambix1`, `ambix2`, `ambix3`; an Ambisonics layout marks the files of its size as sound fields; `order` `bs2051` or `wav` says how a 7.1 or 7.1.4 file without a mask or ADM is heard, also as `?order=` when a document is made); `set_track` `field` (1–3, 0) marks a track's files, and `yaw`, `pitch`, `roll` turn its field (`turned: false` takes the turn away); in an Ambisonics document `set_bus` takes `yaw`, `pitch`, `roll` and `turned: false` for the field a bus carries, and its `rotation` is in `GET …/mixer`; `GET …/documents/{id}` has `layout` and `outputPath` (`binaural` or `spatialSpeakers` when the spatial mixer is used). `set_track` places a track with `azimuth` (degrees, positive to the left), `elevation` and `width`, and `placed: false` takes it back; each track in `GET …/mixer` has its `position`. `POST …/export` with `format: "apac"`. In a loudspeaker layout `pan` is refused, and in mono or stereo a place by azimuth is refused, each with the reason in words.

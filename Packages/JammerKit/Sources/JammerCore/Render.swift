@@ -268,6 +268,21 @@ public enum PlanCompiler {
                     var v: [Float] = turnLane?.points.map { Float($0.value) } ?? [Float(b.azimuth ?? 0)]
                     jm_plan_set_bus_turn(plan, index, &f, &v, Int32(f.count))
                 }
+                // In an Ambisonics document: the field the bus carries turned, fixed or by its yaw, pitch and roll lanes.
+                if let order = project.layout.ambisonicOrder {
+                    func line(_ p: AutomationLane.Param, _ fixed: Double) -> ([Int64], [Float])? {
+                        guard let lane = project.lane(strip: b.id, param: p).flatMap({ $0.enabled && !$0.points.isEmpty ? $0 : nil }) else {
+                            return fixed == 0 ? nil : ([0], [Float(fixed)])
+                        }
+                        return (lane.points.map { Int64($0.frame) }, lane.points.map { Float($0.value) })
+                    }
+                    let r = b.rotation ?? FieldRotation()
+                    let y = line(.yaw, r.yaw), pi = line(.pitch, r.pitch), ro = line(.roll, r.roll)
+                    if y != nil || pi != nil || ro != nil {
+                        var (yf, yv) = y ?? ([0], [0]), (pf, pv) = pi ?? ([0], [0]), (rf, rv) = ro ?? ([0], [0])
+                        jm_plan_set_bus_field_turn(plan, index, Int32(order), &yf, &yv, Int32(yf.count), &pf, &pv, Int32(pf.count), &rf, &rv, Int32(rf.count))
+                    }
+                }
             }
             for b in project.buses {
                 guard let from = busIndex[b.id] else { continue }

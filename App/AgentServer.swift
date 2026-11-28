@@ -964,6 +964,8 @@ enum AgentRouter {
             ["id": b.id.uuidString, "name": b.name, "gainDB": b.gainDB, "pan": b.pan, "muted": b.isMuted, "output": to(b.output), "sends": sends(b.sends),
              // In a loudspeaker layout wider than stereo: the bus's image turned round the listener (degrees; null: not turned).
              "azimuth": b.azimuth ?? NSNull(),
+             // In an Ambisonics document: the field the bus carries turned (null: not turned).
+             "rotation": b.rotation.map { ["yaw": $0.yaw, "pitch": $0.pitch, "roll": $0.roll] as [String: Any] } ?? NSNull(),
              "vca": b.vca?.uuidString ?? NSNull(), "heard": heard(b.gainDB, b.isMuted, b.vca), "frozen": frozen(b.frozen), "automation": lanes(b.id),
              "inserts": plugins(b.inserts), "latencySamples": b.frozen == nil ? own(b.inserts) : 0, "compensationSamples": plan.compensation(bus: true, index: p.buses.firstIndex { $0.id == b.id } ?? 0),
              "inputs": ["tracks": p.tracks.filter { $0.output == b.id }.map(\.id.uuidString), "buses": p.buses.filter { $0.output == b.id }.map(\.id.uuidString)]]

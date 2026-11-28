@@ -90,6 +90,8 @@ struct MixerSheet: View {
                                    remove: { session.perform("remove_bus", ["bus": .string(b.id.uuidString), "reroute": .string(b.output?.uuidString ?? "master")]) },
                                    // A bus is turned, not placed: its tracks have placed its channels already.
                                    place: b.azimuth.map { SurroundPosition(azimuth: $0) }, placeable: project.channels > 2 && !project.layout.isAmbisonic,
+                                   // In Ambisonics a bus carries a sound field, turned as a track's is.
+                                   field: project.layout.isAmbisonic, rotation: b.rotation,
                                    inserts: b.inserts, plugins: { openPlugins(b.id) })
                         .contextMenu {
                             Button(L10n.text("mixer.bus.delete", b.name)) {

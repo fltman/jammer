@@ -114,7 +114,7 @@ public enum Automation {
         /// Pan automation in a document wider than stereo. The value is the layout.
         case wide(String)
 
-        static let noFieldSaid = Said("error.automation.noField", "that strip plays no sound field to turn: yaw, pitch and roll are a track's whose files are Ambisonics (set_track field).")
+        static let noFieldSaid = Said("error.automation.noField", "that strip plays no sound field to turn: yaw, pitch and roll are a track's whose files are Ambisonics (set_track field), or a bus's in an Ambisonics document.")
         public var reason: String {
             switch self {
             case .noStrip: "not_found"
@@ -302,7 +302,9 @@ extension Project {
         }
         if param == .yaw || param == .pitch || param == .roll {
             // A track's sound field turned: only a track that plays one.
-            guard let track = tracks.first(where: { $0.id == strip }), playsField(track) else { throw Automation.Failure.noField }
+            // (Or a bus in an Ambisonics document: the field it carries.)
+            let fieldBus = bus(strip) != nil && layout.isAmbisonic
+            guard fieldBus || tracks.first(where: { $0.id == strip }).map(playsField) == true else { throw Automation.Failure.noField }
         }
         // A mute holds its value until the next point; a level and a pan go in a straight line.
         if let shape, shape != (param == .mute ? .hold : .linear) {

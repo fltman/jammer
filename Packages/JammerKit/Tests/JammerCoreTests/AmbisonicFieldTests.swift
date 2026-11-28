@@ -100,4 +100,59 @@ struct AmbisonicFieldTests {
         let part = plan.render(from: Frame(from), frames: 20_000)
         #expect(Array(out[(from * 16)..<((from + 20_000) * 16)]) == part)
     }
+
+    @Test("A bus in Ambisonics turns the field it carries: fixed as the turned direction, and by lanes as the same field turned on its track")
+    func busTurn() throws {
+        let dir = TempDir()
+        let (ref, mono) = try field(dir, name: "f.wav", azimuth: 10, elevation: 5, seconds: 1)
+        let n = mono.count
+        var p = Project(source: ref)
+        p.channels = ChannelLayout.ambix3.channels
+        let bus = try p.addBus(name: "Room")
+        p.tracks[0].output = bus.id
+        let untouched = PlanCompiler.compile(p, pool: SourcePool()).render(from: 0, frames: n)
+        try p.setBusRotation(bus.id, yaw: 70, pitch: 15, roll: -20)
+        let out = PlanCompiler.compile(p, pool: SourcePool()).render(from: 0, frames: n)
+        let t = Ambisonics.angles(Ambisonics.rotate(Ambisonics.vector(10, 5), yaw: 70, pitch: 15, roll: -20))
+        let y = Ambisonics.encode(azimuth: t.azimuth, elevation: t.elevation, order: 3)
+        let want = mono.flatMap { s in y.map { s * $0 } }
+        #expect(zip(out, want).map { abs($0 - $1) }.max()! < 2e-5, "turned once, after the fader, to where the turn puts it")
+        // Taken away, it is the bus as it was, sample for sample.
+        try p.setBusRotation(bus.id, turned: false)
+        #expect(p.buses[0].rotation == nil && PlanCompiler.compile(p, pool: SourcePool()).render(from: 0, frames: n) == untouched)
+
+        // By lanes, a corner off the grid included: as the same lanes on the track that plays the field.
+        let lanes = { (strip: UUID) in [AutomationLane(strip: strip, param: .yaw, points: [.init(frame: 0, value: 0), .init(frame: 30_001, value: 60), .init(frame: Frame(n), value: -40)]),
+                                         AutomationLane(strip: strip, param: .pitch, points: [.init(frame: 0, value: 0), .init(frame: Frame(n), value: 20)])] }
+        var onBus = p, onTrack = p
+        onBus.automation = lanes(bus.id)
+        onTrack.automation = lanes(p.tracks[0].id)
+        let a = PlanCompiler.compile(onBus, pool: SourcePool()).render(from: 0, frames: n)
+        let b = PlanCompiler.compile(onTrack, pool: SourcePool()).render(from: 0, frames: n)
+        let peak = b.map { abs($0) }.max()!
+        let worst = zip(a, b).map { abs($0 - $1) }.max()!
+        #expect(worst / peak < 1e-5, "the bus's turn is the track's: \(worst / peak)")
+        // A render from the middle gives the same samples.
+        let part = PlanCompiler.compile(onBus, pool: SourcePool()).render(from: 17_777, frames: 10_000)
+        #expect(Array(a[(17_777 * 16)..<((17_777 + 10_000) * 16)]) == part)
+        // Saved and read back.
+        let back = try JSONDecoder().decode(Project.self, from: try JSONEncoder().encode(onBus))
+        #expect(back.automation == onBus.automation)
+        var fixed = p
+        try fixed.setBusRotation(bus.id, yaw: 30)
+        #expect(try JSONDecoder().decode(Project.self, from: try JSONEncoder().encode(fixed)).buses[0].rotation == FieldRotation(yaw: 30))
+    }
+
+    @Test("A bus's field turn is Ambisonics' only: refused in loudspeakers, with yaw lanes refused there too, and out-of-range turns refused")
+    func busTurnRefused() throws {
+        var (p, _) = MixerTests.document()
+        p.channels = 6
+        let bus = try p.addBus(name: "Room")
+        #expect(throws: Mixer.Failure.self) { try p.setBusRotation(bus.id, yaw: 30) }
+        #expect(throws: Automation.Failure.self) { try p.setAutomation(strip: bus.id, param: .yaw, points: [.init(frame: 0, value: 10)]) }
+        p.channels = ChannelLayout.ambix1.channels
+        #expect(throws: Mixer.Failure.self) { try p.setBusRotation(bus.id, pitch: 120) }
+        try p.setAutomation(strip: bus.id, param: .yaw, points: [.init(frame: 0, value: 10)])
+        #expect(p.usesFields)
+    }
 }

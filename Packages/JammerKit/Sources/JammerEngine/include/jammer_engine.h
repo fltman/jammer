@@ -99,6 +99,13 @@ void jm_plan_set_source_turn(jm_plan *_Nonnull plan, int32_t source, int32_t ord
                              const int64_t *_Nonnull yaw_frames, const float *_Nonnull yaw_values, int32_t yaw_count,
                              const int64_t *_Nonnull pitch_frames, const float *_Nonnull pitch_values, int32_t pitch_count,
                              const int64_t *_Nonnull roll_frames, const float *_Nonnull roll_values, int32_t roll_count);
+/// A bus's sound field turned round the listener, in an Ambisonics document of `order` 1–3 (as many channels as
+/// the field has components): its yaw, pitch and roll over the timeline, as jm_plan_set_source_turn's, after
+/// the bus's fader.
+void jm_plan_set_bus_field_turn(jm_plan *_Nonnull plan, int32_t bus, int32_t order,
+                                const int64_t *_Nonnull yaw_frames, const float *_Nonnull yaw_values, int32_t yaw_count,
+                                const int64_t *_Nonnull pitch_frames, const float *_Nonnull pitch_values, int32_t pitch_count,
+                                const int64_t *_Nonnull roll_frames, const float *_Nonnull roll_values, int32_t roll_count);
 /// Adds a track. Gain is linear. Returns its index.
 int32_t jm_plan_add_track(jm_plan *_Nonnull plan, float gain, bool mute);
 /// Adds a clip: `length` frames of `source` from `source_start`, placed at `timeline_start`.

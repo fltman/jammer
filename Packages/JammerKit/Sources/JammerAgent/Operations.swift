@@ -308,7 +308,10 @@ public enum Operations {
                        .init("muted", .boolean, "True to mute everything that goes through the bus."),
                        .init("output", .string, "The id of the bus this one feeds, or \"master\" for the output."),
                        .init("azimuth", .number, "In a loudspeaker layout wider than stereo: the bus's whole image turned round the listener, in degrees, positive to the left (each channel re-panned from its loudspeaker's direction plus the turn; the LFE as it is). Not in mono, stereo or Ambisonics.", range: -180...180),
-                       .init("turned", .boolean, "false takes the turn away.")]),
+                       .init("yaw", .number, "In an Ambisonics document: the field the bus carries turned round the vertical, in degrees, positive to the left (after its fader; the same turn as a track's).", range: -360...360),
+                       .init("pitch", .number, "In an Ambisonics document: the bus's field tilted, positive lifting the front.", range: -90...90),
+                       .init("roll", .number, "In an Ambisonics document: the bus's field rolled, positive lifting the left side.", range: -180...180),
+                       .init("turned", .boolean, "false takes the turn away (the azimuth's, or in Ambisonics the field's).")]),
         .init("set_send", "Set Send", "Sends a copy of a track or a bus to a bus, at a level of its own: for a shared reverb, a parallel compressor, a headphone mix. One send per pair; giving it again changes it, and `remove` takes it away. After the fader by default (the copy follows the strip's level and pan); with `pre` it is taken before them. A send that would lead a bus back into itself is refused (reason routing_loop).",
               params: [.init("from", .string, "The id of the track or bus the copy is taken from.", required: true),
                        .init("to", .string, "The id of the bus it goes to.", required: true),
@@ -1314,7 +1317,11 @@ public enum StepRunner {
             catch let e as Mixer.Failure { throw StepFailure("set_bus: " + (e.errorDescription ?? ""), reason: e.reason, keyed: e.keyed) }
             var turned: Bool?
             if let v = p["turned"], case .bool(let b) = v { turned = b }
-            if p["azimuth"] != nil || turned != nil {
+            let field = p["yaw"] != nil || p["pitch"] != nil || p["roll"] != nil
+            if field || (turned != nil && s.project.layout.isAmbisonic && p["azimuth"] == nil) {
+                do { try s.project.setBusRotation(id, yaw: p["yaw"]?.double, pitch: p["pitch"]?.double, roll: p["roll"]?.double, turned: turned) }
+                catch let e as Mixer.Failure { throw StepFailure("set_bus: " + (e.errorDescription ?? ""), reason: e.reason, keyed: e.keyed) }
+            } else if p["azimuth"] != nil || turned != nil {
                 do { try s.project.setBusTurn(id, azimuth: p["azimuth"]?.double, turned: turned) }
                 catch let e as Mixer.Failure { throw StepFailure("set_bus: " + (e.errorDescription ?? ""), reason: e.reason, keyed: e.keyed) }
             }

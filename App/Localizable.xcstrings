@@ -7003,13 +7003,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "that strip plays no sound field to turn: yaw, pitch and roll are a track's whose files are Ambisonics (set_track field)."
+            "value": "that strip plays no sound field to turn: yaw, pitch and roll are a track's whose files are Ambisonics (set_track field), or a bus's in an Ambisonics document."
           }
         },
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "den kanalen spelar inget ljudfält att vrida: yaw, pitch och roll hör till ett spår vars filer är Ambisonics (set_track field)."
+            "value": "den kanalen spelar inget ljudfält att vrida: yaw, pitch och roll hör till ett spår vars filer är Ambisonics (set_track field), eller till en buss i ett Ambisonics-dokument."
           }
         }
       }
@@ -11935,6 +11935,24 @@
         }
       }
     },
+    "error.value.bus_field_ambisonic": {
+      "comment": "Button.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "a bus's field is turned in an Ambisonics document; this one is %@. In a loudspeaker layout a bus is turned by azimuth."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "en buss ljudfält vrids i ett Ambisonics-dokument; det här är %@. I en högtalarlayout vrids en buss med azimut."
+          }
+        }
+      }
+    },
     "error.value.bus_needs_name_1": {
       "extractionState": "manual",
       "localizations": {
@@ -12237,6 +12255,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "en VCA-grupp behöver ett namn på 1 till 200 tecken."
+          }
+        }
+      }
+    },
+    "error.value.yaw_pitch_roll": {
+      "comment": "Button.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "yaw is −360 to 360, pitch −90 to 90 and roll −180 to 180 degrees."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "yaw är −360 till 360, pitch −90 till 90 och roll −180 till 180 grader."
           }
         }
       }

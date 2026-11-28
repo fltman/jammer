@@ -237,6 +237,9 @@ struct Bus {
     /// The bus's image turned round the listener by an azimuth over time (degrees): each loudspeaker's
     /// channel re-panned from its direction plus the turn. Empty: not turned.
     Curve turn;
+    /// In an Ambisonics document: the bus's sound field turned by yaw, pitch and roll over time (its `base` the
+    /// identity). Null: not turned.
+    std::shared_ptr<FieldTurn> field;
 };
 
 /// The mixer with plugins on buses. A plugin on a bus makes what leaves the bus late by its latency,
@@ -277,6 +280,7 @@ public:
 
     /// A bus's image turned by an azimuth (see Bus::turn).
     void turnImage(const PanLayout &layout, const Curve &turn, const float *in, float *out, int64_t at, int64_t q) const;
+    void turnField(const FieldTurn &turn, const float *in, float *out, int64_t at, int64_t q) const JM_NONBLOCKING;
 private:
     static constexpr int64_t kQuantum = Chain::kQuantum;
     std::mutex mutex_;

@@ -5,6 +5,7 @@ Not a list of commits: what behaves differently from before, for a user, an agen
 ## 2026-11-28
 
 - **ADM objects in a WAV export**: in a 5.1, 7.1 or 7.1.4 document, Export Audio's "ADM objects for placed tracks" writes each placed track as an ADM object (ITU-R BS.2076-3) with its place over time, after a bed of everything else; a stereo track is two objects, what a track sends to a bus stays in the bed, and Jämmer reads the objects back. For an agent, `POST …/export` takes `objects: true`. Not yet tried with another program that renders ADM.
+- **An Ambisonics bus can be turned**: yaw, pitch and roll on a bus in an Ambisonics document turn everything that goes through it, after its fader, fixed or by automation, with the same slider and menu as a track that plays a field. For an agent, `set_bus` takes `yaw`, `pitch`, `roll` and `turned: false`.
 - **Freezing in surround**: a frozen placed track kept only where it started, not where its azimuth and elevation lanes moved it, and a frozen bus that was turned round the listener was turned twice. Both now sound as they did live, and a frozen track's place can't be changed under it.
 
 ## 2026-11-27

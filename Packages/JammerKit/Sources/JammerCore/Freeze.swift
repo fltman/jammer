@@ -124,7 +124,12 @@ extension Project {
                 for send in other.sends where send.to == id { inputs.append("send:\(send.gainDB),\(send.pre):" + (signal(of: other.id, afterFader: !send.pre, places: places, seen: &seen) ?? "")) }
             }
             var s = "bus{inserts:\(encoded(b.inserts)),keys:[\(keys(b.inserts, &seen))],in:[\(inputs.joined(separator: "|"))]"
-            if afterFader { let h = heard(gainDB: b.gainDB, muted: b.isMuted, vca: b.vca); s += ",fader:\(h.gainDB),\(h.muted),\(b.pan)" + lanes(id) }
+            if afterFader {
+                let h = heard(gainDB: b.gainDB, muted: b.isMuted, vca: b.vca)
+                s += ",fader:\(h.gainDB),\(h.muted),\(b.pan)" + lanes(id)
+                // Its turn, after the fader (only when it has one, so that what was frozen before stays good).
+                if places, b.azimuth != nil || b.rotation != nil { s += ",turn:\(encoded(b.azimuth)),\(encoded(b.rotation))" }
+            }
             return s + "}"
         }
         return nil
@@ -163,7 +168,7 @@ extension Project {
             for o in p.tracks.indices where o != t && p.tracks[o].output == nil { p.tracks[o].output = sink.id }
             for b in p.buses.indices where p.buses[b].output == nil { p.buses[b].output = sink.id }
         } else if let b = p.buses.firstIndex(where: { $0.id == strip }) {
-            p.buses[b].gainDB = 0; p.buses[b].pan = 0; p.buses[b].isMuted = false; p.buses[b].azimuth = nil
+            p.buses[b].gainDB = 0; p.buses[b].pan = 0; p.buses[b].isMuted = false; p.buses[b].azimuth = nil; p.buses[b].rotation = nil
             p.buses[b].output = nil; p.buses[b].sends = []; p.buses[b].vca = nil; p.buses[b].frozen = nil
             for o in p.tracks.indices where p.tracks[o].output == nil { p.tracks[o].output = sink.id }
             for o in p.buses.indices where o != b && p.buses[o].output == nil { p.buses[o].output = sink.id }

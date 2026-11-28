@@ -249,6 +249,23 @@ void field_harmonics(double az, double el, int32_t order, double *y) JM_NONBLOCK
 }
 } // namespace
 
+namespace {
+/// The points a turn's matrix is worked out from: Gauss–Legendre in sin(elevation) (4 nodes) times 8 azimuths,
+/// exact for the products of harmonics up to order 3.
+void quadrature(FieldTurn &f) {
+    const double node[4] = {-0.8611363115940526, -0.3399810435848563, 0.3399810435848563, 0.8611363115940526};
+    const double gw[4] = {0.3478548451374538, 0.6521451548625461, 0.6521451548625461, 0.3478548451374538};
+    int32_t k = 0;
+    for (int32_t i = 0; i < 4; ++i)
+        for (int32_t a = 0; a < 8; ++a, ++k) {
+            const double az = 2 * 3.14159265358979323846 * a / 8, el = std::asin(node[i]);
+            f.dir[k][0] = std::cos(az) * std::cos(el); f.dir[k][1] = std::sin(az) * std::cos(el); f.dir[k][2] = std::sin(el);
+            f.weight[k] = gw[i] / 2 / 8;
+            field_harmonics(az, el, 3, f.harmonics[k]);
+        }
+}
+} // namespace
+
 void FieldTurn::matrix(int64_t t, float *out) const JM_NONBLOCKING {
     const double d2r = 3.14159265358979323846 / 180;
     const double r = roll.dbAt(t) * d2r, p = pitch.dbAt(t) * d2r, yw = yaw.dbAt(t) * d2r;
@@ -300,18 +317,29 @@ void jm_plan_set_source_turn(jm_plan *plan, int32_t source, int32_t order, const
     f->yaw.frames.assign(yaw_frames, yaw_frames + yaw_count); f->yaw.db.assign(yaw_values, yaw_values + yaw_count);
     f->pitch.frames.assign(pitch_frames, pitch_frames + pitch_count); f->pitch.db.assign(pitch_values, pitch_values + pitch_count);
     f->roll.frames.assign(roll_frames, roll_frames + roll_count); f->roll.db.assign(roll_values, roll_values + roll_count);
-    // Gauss–Legendre in sin(elevation) (4 nodes) times 8 azimuths: exact for the products of harmonics up to order 3.
-    const double node[4] = {-0.8611363115940526, -0.3399810435848563, 0.3399810435848563, 0.8611363115940526};
-    const double gw[4] = {0.3478548451374538, 0.6521451548625461, 0.6521451548625461, 0.3478548451374538};
-    int32_t k = 0;
-    for (int32_t i = 0; i < 4; ++i)
-        for (int32_t a = 0; a < 8; ++a, ++k) {
-            const double az = 2 * 3.14159265358979323846 * a / 8, el = std::asin(node[i]);
-            f->dir[k][0] = std::cos(az) * std::cos(el); f->dir[k][1] = std::sin(az) * std::cos(el); f->dir[k][2] = std::sin(el);
-            f->weight[k] = gw[i] / 2 / 8;
-            field_harmonics(az, el, 3, f->harmonics[k]);
-        }
+    quadrature(*f);
     p.sourceTurn[size_t(source)] = f;
+}
+
+void jm_plan_set_bus_field_turn(jm_plan *plan, int32_t bus, int32_t order,
+                                const int64_t *yaw_frames, const float *yaw_values, int32_t yaw_count,
+                                const int64_t *pitch_frames, const float *pitch_values, int32_t pitch_count,
+                                const int64_t *roll_frames, const float *roll_values, int32_t roll_count) {
+    Plan &p = *plan->ptr;
+    if (bus < 0 || size_t(bus) >= p.buses.size() || order < 1 || order > 3 || yaw_count < 1 || pitch_count < 1 || roll_count < 1) return;
+    auto f = std::make_shared<FieldTurn>();
+    f->order = order;
+    f->components = (order + 1) * (order + 1);
+    f->channels = p.channels;
+    // The bus carries the document's own field: as many channels as it has components.
+    if (p.channels != f->components) return;
+    f->base.assign(size_t(f->components * p.channels), 0.0f);
+    for (int32_t i = 0; i < f->components; ++i) f->base[size_t(i * p.channels + i)] = 1.0f;
+    f->yaw.frames.assign(yaw_frames, yaw_frames + yaw_count); f->yaw.db.assign(yaw_values, yaw_values + yaw_count);
+    f->pitch.frames.assign(pitch_frames, pitch_frames + pitch_count); f->pitch.db.assign(pitch_values, pitch_values + pitch_count);
+    f->roll.frames.assign(roll_frames, roll_frames + roll_count); f->roll.db.assign(roll_values, roll_values + roll_count);
+    quadrature(*f);
+    p.buses[size_t(bus)].field = f;
 }
 
 namespace {
