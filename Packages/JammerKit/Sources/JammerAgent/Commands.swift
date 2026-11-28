@@ -145,7 +145,7 @@ public enum Commands {
         add("file.exportTranscript", .file, 3, key("file.exportTranscript"), agent: .operation("export_transcript"))
         add("file.exportTimeline", .file, 3, key("file.exportTimeline"), agent: .operation("export_timeline"))
         add("file.sendToFlimmer", .file, 4, key("file.sendToFlimmer"), agent: .none(.anotherApp))
-        add("file.collect", .file, 5, key("file.collect"), agent: .none(.userFiles))
+        add("file.collect", .file, 5, key("file.collect"), agent: .route("POST", doc + "/save"))
         add("file.linkedWaiting", .file, 5, key("menu.file.linkedWaiting"), agent: .none(.userFiles))
         add("file.batch", .file, 5, key("file.batch"), key: "b", [.option], agent: .operation("batch"))
         add("file.storage", .file, 5, key("file.storage"), agent: .route("GET", "/api/v1/storage"))

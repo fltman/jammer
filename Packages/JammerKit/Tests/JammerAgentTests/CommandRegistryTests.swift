@@ -35,6 +35,7 @@ struct CommandRegistryTests {
         #expect(Commands.knownGaps.count <= 0, "knownGaps may only shrink")
         // Exemptions closed (the coordinator, 2026-11-28): each is a route now, and stays one.
         #expect(Commands.command("file.duplicate")?.agent == .route("POST", "/api/v1/documents/{id}/duplicate"))
+        #expect(Commands.command("file.collect")?.agent == .route("POST", "/api/v1/documents/{id}/save"))
         // Consent and payment are answered by the user; nothing else may claim it.
         #expect(Commands.all.filter { $0.agent == .none(.consent) }.allSatisfy { ["speech.cloneVoice", "speech.overdub"].contains($0.id) })
     }

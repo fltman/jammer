@@ -271,6 +271,19 @@ final class JammerDocument: NSDocument {
     nonisolated(unsafe) private var pendingCollected: Project?
 
     /// Copies every file the project plays from into the package, then saves.
+    /// How many files the last Collect Audio and Save copied into the package (for an agent's answer).
+    private(set) var lastCollected = 0
+
+    /// Collect Audio and Save for an agent: the menu's, on a document that already has its file (nil when it has
+    /// none: naming one is the user's). The originals stay where they are; copies go into the package's media.
+    func collectAndSave() async throws -> Int? {
+        guard let url = fileURL, let type = fileType else { return nil }
+        lastCollected = 0
+        collectOnSave = true
+        try await save(to: url, ofType: type, for: .saveOperation)
+        return lastCollected
+    }
+
     /// An untitled project is saved first (the save panel), then collected.
     @objc func collectAudio(_ sender: Any?) {
         if fileURL == nil {
@@ -422,6 +435,7 @@ final class JammerDocument: NSDocument {
                     self.mediaWrapper = try? FileWrapper(url: package.appending(path: ProjectPackage.mediaFolderName))
                     self.session?.adoptCollected(resolved.sources.filter { $0.packagePath != nil })
                     let n = self.pendingCopies.count
+                    self.lastCollected = n
                     self.session?.status = n == 0 ? L10n.text("collect.nothing") : L10n.count("collect.done", n)
                 } else if let error, collecting {
                     self.session?.status = L10n.text("collect.failed", L10n.error(error))

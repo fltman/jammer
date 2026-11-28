@@ -473,6 +473,20 @@ enum AgentRouter {
                 // file; a document never saved has no file yet, and naming one is the user's (the file panel).
                 try only("POST")
                 session.checkLink()
+                // File › Collect Audio and Save with "collect": the audio the document reads copied into its package,
+                // the originals untouched; only for a document saved as a Jämmer project (naming a place is the user's).
+                let body = try json(r)
+                if let c = body["collect"], !(c is Bool) { throw APIError.badRequest("collect must be true or false.") }
+                let collect = body["collect"] as? Bool ?? false
+                if collect, session.linkedFile != nil || session.lostLink != nil {
+                    throw APIError(409, "linked", "This document edits a file from Flimmer, so it has no Jämmer project to collect the audio into. File › Save a Jämmer Copy… in the window makes one, where the user chooses.")
+                }
+                if collect {
+                    guard let doc = session.document as? JammerDocument, let n = try await doc.collectAndSave() else {
+                        throw APIError(409, "no_file", "This document has never been saved, so it has no project to collect the audio into. The user saves it the first time in the window (File › Save), choosing where.")
+                    }
+                    return .json(["saved": doc.fileURL?.lastPathComponent ?? "", "linked": false, "collected": n, "edited": doc.isDocumentEdited])
+                }
                 if let link = session.linkedFile {
                     // The mix is rendered and written in the background, as the window's Save Back does; the answer
                     // waits for the file to be written, and says why when it isn't (COMFORT.md e32a6c8, Glimmer's lesson).
