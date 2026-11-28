@@ -1,6 +1,6 @@
 # Jämmer: guide for agents
 
-Jämmer 0.5.0 is a native macOS audio editor (speech, restoration, post). This page tells an agent how to drive the running app through its local HTTP API. Everything here works today; nothing else does yet. Any agent the user runs themselves can use it (Claude Code, Codex, or another that can make HTTP requests on this Mac): Jämmer doesn't start agents and never sees an agent's login.
+Jämmer 0.5.1 is a native macOS audio editor (speech, restoration, post). This page tells an agent how to drive the running app through its local HTTP API. Everything here works today; nothing else does yet. Any agent the user runs themselves can use it (Claude Code, Codex, or another that can make HTTP requests on this Mac): Jämmer doesn't start agents and never sees an agent's login.
 
 - Base URL: `http://127.0.0.1:9003` (this Mac only; the server listens on loopback). Before you change anything, check that `app.name` in `GET /api/v1/status` is exactly `"Jammer"` (ASCII, no ä); `app.bundleID` is `com.brattoo.jammer`, or `com.brattoo.jammer.debug` for a development build. The window and splash say "Jämmer"; it's the same app. Glimmer and Flimmer run similar APIs on nearby ports.
 - Every request that isn't a GET needs the header **`X-Jammer-Agent: 1`**. Without it you get `403 forbidden`.
