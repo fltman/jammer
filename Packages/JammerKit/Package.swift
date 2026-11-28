@@ -43,6 +43,7 @@ let package = Package(
         .library(name: "JammerAgent", targets: ["JammerAgent"]),
         .library(name: "JammerSpeech", targets: ["JammerSpeech"]),
         .library(name: "JammerAssistant", targets: ["JammerAssistant"]),
+        .library(name: "JammerControls", targets: ["JammerControls"]),
     ],
     targets: [
         // The realtime core. C++20 behind a C API; the compiler proves the
@@ -79,6 +80,9 @@ let package = Package(
                 linkerSettings: [.linkedFramework("FoundationModels")]),
         // The local agent API: parsing, security rules, operations and the guide. Pure.
         .target(name: "JammerAgent", dependencies: ["JammerCore"]),
+        // The window's own controls that can be tried without it (the sliders' VoiceOver and gestures).
+        .target(name: "JammerControls", dependencies: ["JammerCore"]),
+        .testTarget(name: "JammerControlsTests", dependencies: ["JammerControls"]),
         .testTarget(name: "JammerEngineTests", dependencies: ["JammerEngine"]),
         .testTarget(name: "JammerCoreTests", dependencies: ["JammerCore", "JammerEngine"]),
         // Refuses every request from a test to anything but this Mac; loaded before the tests run (+load).

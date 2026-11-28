@@ -164,21 +164,17 @@ private struct TrackHeader: View {
             }
             MeterBar(level: session.meters.level(track.id)) { session.meters.clearClip(track.id) }.frame(height: 6)
             if height >= 74 {
-                ResettableSlider(value: Binding(get: { level ?? track.gainDB }, set: { level = ($0 * 2).rounded() / 2 }), in: -60...12, reset: 0) { editing in
+                ResettableSlider(value: Binding(get: { level ?? track.gainDB }, set: { level = ($0 * 2).rounded() / 2 }), in: -60...12, reset: 0, label: L10n.text("trackHeader.level.ax", track.name), valueText: L10n.number(level ?? track.gainDB, 1) + " dB") { editing in
                     if !editing, let v = level { if v != track.gainDB { set(["gainDB": .number(v)]) }; level = nil }
                 }
                 .controlSize(.mini)
-                .accessibilityLabel(L10n.text("trackHeader.level.ax", track.name))
-                .accessibilityValue(L10n.number(level ?? track.gainDB, 1) + " dB")
                 .help(L10n.text("trackHeader.level.help"))
             }
             if height >= 96, stereo {
-                ResettableSlider(value: Binding(get: { pan ?? track.pan }, set: { pan = ($0 * 50).rounded() / 50 }), in: -1...1, reset: 0) { editing in
+                ResettableSlider(value: Binding(get: { pan ?? track.pan }, set: { pan = ($0 * 50).rounded() / 50 }), in: -1...1, reset: 0, label: L10n.text("mixer.pan.ax", track.name), valueText: panText(pan ?? track.pan)) { editing in
                     if !editing, let v = pan { if v != track.pan { set(["pan": .number(v)]) }; pan = nil }
                 }
                 .controlSize(.mini)
-                .accessibilityLabel(L10n.text("mixer.pan.ax", track.name))
-                .accessibilityValue(panText(pan ?? track.pan))
                 .help(panText(pan ?? track.pan))
             }
             Spacer(minLength: 0)
