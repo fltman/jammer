@@ -164,7 +164,7 @@ private struct TrackHeader: View {
             }
             MeterBar(level: session.meters.level(track.id)) { session.meters.clearClip(track.id) }.frame(height: 6)
             if height >= 74 {
-                Slider(value: Binding(get: { level ?? track.gainDB }, set: { level = ($0 * 2).rounded() / 2 }), in: -60...12) { editing in
+                ResettableSlider(value: Binding(get: { level ?? track.gainDB }, set: { level = ($0 * 2).rounded() / 2 }), in: -60...12, reset: 0) { editing in
                     if !editing, let v = level { if v != track.gainDB { set(["gainDB": .number(v)]) }; level = nil }
                 }
                 .controlSize(.mini)
@@ -173,7 +173,7 @@ private struct TrackHeader: View {
                 .help(L10n.text("trackHeader.level.help"))
             }
             if height >= 96, stereo {
-                Slider(value: Binding(get: { pan ?? track.pan }, set: { pan = ($0 * 50).rounded() / 50 }), in: -1...1) { editing in
+                ResettableSlider(value: Binding(get: { pan ?? track.pan }, set: { pan = ($0 * 50).rounded() / 50 }), in: -1...1, reset: 0) { editing in
                     if !editing, let v = pan { if v != track.pan { set(["pan": .number(v)]) }; pan = nil }
                 }
                 .controlSize(.mini)

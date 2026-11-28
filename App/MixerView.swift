@@ -236,7 +236,7 @@ private struct VCAStrip: View {
                 .fixedSize()
                 .accessibilityLabel(L10n.text("mixer.vca.mute.ax", vca.name))
                 .accessibilityIdentifier("mixer.vca.mute")
-            Slider(value: $level, in: -60...12, onEditingChanged: { editing in
+            ResettableSlider(value: $level, in: -60...12, reset: 0, onEditingChanged: { editing in
                 dragging = editing
                 if !editing, level != vca.gainDB { change(["gainDB": .number((level * 10).rounded() / 10)]) }
             })
@@ -282,7 +282,7 @@ private struct MasterStrip: View {
             HStack(spacing: 10) {
                 Text(L10n.text("strip.master")).frame(width: 150, alignment: .leading)
                 MeterBar(level: meters.level(Master.id)) { meters.clearClip(Master.id) }.frame(width: 110, height: 8)
-                Slider(value: $level, in: -60...12, onEditingChanged: { editing in
+                ResettableSlider(value: $level, in: -60...12, reset: 0, onEditingChanged: { editing in
                     dragging = editing
                     if !editing, level != master.gainDB { change(["gainDB": .number((level * 10).rounded() / 10)]) }
                 })
@@ -297,7 +297,7 @@ private struct MasterStrip: View {
                     .accessibilityLabel(L10n.text("mixer.master.limiter.ax"))
                     .accessibilityIdentifier("mixer.master.limiter")
                 if master.limiter != nil {
-                    Slider(value: $ceiling, in: -12...0, onEditingChanged: { editing in
+                    ResettableSlider(value: $ceiling, in: -12...0, reset: -1, onEditingChanged: { editing in
                         dragging = editing
                         if !editing, ceiling != master.limiter?.ceilingDB { change(["ceiling": .number((ceiling * 10).rounded() / 10)]) }
                     })
@@ -507,7 +507,7 @@ struct MixerStrip: View {
                 .accessibilityLabel(L10n.text("mixer.freeze.ax", name))
                 .accessibilityIdentifier("mixer.strip.frozen")
                 .help(L10n.text("mixer.frozen.help"))
-            Slider(value: $level, in: -60...12, onEditingChanged: { editing in
+            ResettableSlider(value: $level, in: -60...12, reset: 0, onEditingChanged: { editing in
                 dragging = editing
                 if editing {
                     // Taken while the sound plays in Touch or Latch: from where the level is now (the fader with its lane).
@@ -550,7 +550,7 @@ struct MixerStrip: View {
                 }
             }
             if stereo {
-                Slider(value: $position, in: -1...1, onEditingChanged: { editing in
+                ResettableSlider(value: $position, in: -1...1, reset: 0, onEditingChanged: { editing in
                     dragging = editing
                     // Close to the middle is the middle: the centre is the one position that leaves the sound untouched.
                     if !editing { if abs(position) < 0.03 { position = 0 }; if position != pan { change(["pan": .number((position * 100).rounded() / 100)]) } }
@@ -582,7 +582,7 @@ struct MixerStrip: View {
             } else if field {
                 // A sound field turned round the listener: the slider turns it (to the left is to the left, as a place),
                 // the menu lifts its front or its side, or takes the turn away.
-                Slider(value: $yaw, in: -180...180, onEditingChanged: { editing in
+                ResettableSlider(value: $yaw, in: -180...180, reset: 0, onEditingChanged: { editing in
                     if !editing {
                         yaw = (yaw / 5).rounded() * 5
                         if -yaw != (rotation?.yaw ?? 0) { change(["yaw": .number(-yaw == 0 ? 0 : -yaw)]) }
@@ -608,7 +608,7 @@ struct MixerStrip: View {
                 .accessibilityIdentifier("mixer.strip.field")
             } else if placeable {
                 // The surround panner: where the sound comes from, positive to the left (BS.2051's convention).
-                Slider(value: $azimuth, in: -180...180, onEditingChanged: { editing in
+                ResettableSlider(value: $azimuth, in: -180...180, reset: 0, onEditingChanged: { editing in
                     if !editing {
                         azimuth = (azimuth / 5).rounded() * 5
                         if -azimuth != (place?.azimuth ?? 0) || place == nil { change(["azimuth": .number(-azimuth == 0 ? 0 : -azimuth)]) }
