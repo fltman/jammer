@@ -307,6 +307,18 @@ extension Project {
 
     /// The tracks that are heard while `solo` (ids of tracks and buses) is on: a soloed track, and every
     /// track that reaches a soloed bus through its output or a send. Ids that aren't strips count for nothing.
+    /// What a track's lane shows of how it is heard (the comfort sweep: a lane looked the same muted, soloed or
+    /// frozen): muted, not heard because another strip is soloed, soloed, or heard. By the rules playback uses.
+    public enum LaneSound: Sendable, Equatable { case heard, muted, soloedAway, soloed }
+    public func laneSound(_ track: UUID, solo: Set<UUID>) -> LaneSound {
+        guard let t = tracks.first(where: { $0.id == track }) else { return .heard }
+        if t.isMuted { return .muted }
+        let real = solo.filter { id in tracks.contains { $0.id == id } || bus(id) != nil }
+        guard !real.isEmpty else { return .heard }
+        guard heardInSolo(real).contains(track) else { return .soloedAway }
+        return real.contains(track) ? .soloed : .heard
+    }
+
     public func heardInSolo(_ solo: Set<UUID>) -> Set<UUID> {
         var heard = Set<UUID>()
         for t in tracks {

@@ -1163,6 +1163,28 @@ final class TimelineOverlay: NSView {
                 if c.fadeIn > 0 { drawFade(from: c.start, to: c.start + c.fadeIn, rising: true, y: y, height: laneHeight, shape: c.fadeShape) }
                 if c.fadeOut > 0 { drawFade(from: c.end - c.fadeOut, to: c.end, rising: false, y: y, height: laneHeight, shape: c.fadeShape) }
             }
+            // How the track is heard, on its lane (the comfort sweep): muted, or silent because another is soloed, is
+            // dimmed and said on a plate; soloed has a bar at its left edge; frozen is said.
+            let sound = project.laneSound(track.id, solo: session.solo)
+            if sound == .muted || sound == .soloedAway {
+                NSColor(white: 0, alpha: 0.5).setFill()
+                NSRect(x: 0, y: y, width: bounds.width, height: laneHeight).fill()
+            }
+            if sound == .soloed {
+                NSColor.systemYellow.withAlphaComponent(0.85).setFill()
+                NSRect(x: 0, y: y, width: 3, height: laneHeight).fill()
+            }
+            let states = [sound == .muted ? L10n.text("lane.muted") : sound == .soloedAway ? L10n.text("lane.soloedAway") : nil,
+                          project.frozen(track.id) != nil ? L10n.text("lane.frozen") : nil].compactMap { $0 }
+            if !states.isEmpty, laneHeight >= 20 {
+                let attrs: [NSAttributedString.Key: Any] = [.font: AutomationLanesView.nameFont, .foregroundColor: NSColor.white]
+                let plate = states.joined(separator: " · ") as NSString
+                let size = plate.size(withAttributes: attrs)
+                let at = NSPoint(x: bounds.width - size.width - 12, y: y + 4)
+                NSColor(white: 0, alpha: 0.6).setFill()
+                NSBezierPath(roundedRect: NSRect(x: at.x - 5, y: at.y - 2, width: size.width + 10, height: size.height + 4), xRadius: 4, yRadius: 4).fill()
+                plate.draw(at: at, withAttributes: attrs)
+            }
             // On a plate: the name lies over the waveform and must be read whatever is under it. A track that plays
             // speech made with a cloned voice says so on its plate (the mark is the file's; SEND-TO-FLIMMER-API.md).
             let nameAttrs: [NSAttributedString.Key: Any] = [.font: AutomationLanesView.nameFont, .foregroundColor: NSColor.white]

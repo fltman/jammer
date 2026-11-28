@@ -352,4 +352,16 @@ struct MixerTests {
         jm_plan_release(plan)
         jm_source_release(src)
     }
+
+    @Test("What a lane shows of how its track is heard: muted, silent because another is soloed, soloed, or heard")
+    func laneSound() {
+        var (p, _) = Self.document()
+        let (a, b, c) = (p.tracks[0].id, p.tracks[1].id, p.tracks[2].id)
+        #expect([a, b, c].map { p.laneSound($0, solo: []) } == [.heard, .heard, .heard])
+        p.tracks[1].isMuted = true
+        #expect(p.laneSound(b, solo: []) == .muted)
+        #expect(p.laneSound(a, solo: [a]) == .soloed && p.laneSound(c, solo: [a]) == .soloedAway)
+        #expect(p.laneSound(b, solo: [b]) == .muted, "muted is said first, soloed or not")
+        #expect(p.laneSound(c, solo: [UUID()]) == .heard, "a solo of nothing that exists silences nothing")
+    }
 }

@@ -14921,6 +14921,60 @@
         }
       }
     },
+    "lane.frozen": {
+      "comment": "Button.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Frozen"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fryst"
+          }
+        }
+      }
+    },
+    "lane.muted": {
+      "comment": "Button.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Muted"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mutat"
+          }
+        }
+      }
+    },
+    "lane.soloedAway": {
+      "comment": "Button.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not heard: another is soloed"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hörs inte: ett annat är solat"
+          }
+        }
+      }
+    },
     "lang.da": {
       "extractionState": "manual",
       "localizations": {

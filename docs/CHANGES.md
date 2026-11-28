@@ -4,6 +4,7 @@ Not a list of commits: what behaves differently from before, for a user, an agen
 
 ## 2026-11-27
 
+- **A track's lane shows how it is heard**: a muted track, or one silent because another is soloed, is dimmed and says so ("Muted", "Not heard: another is soloed"); a soloed track has a yellow bar at its left edge; a frozen one says "Frozen".
 - **The spectrogram has a frequency scale and a readout**: each track shows its frequencies at its left edge (as many ticks as fit), and the time and frequency under the pointer are written beside it.
 - **Heal Area says in its menu why it can't**: an area longer than half a second, or at the very start or end of the document, leaves Repair › Heal Area off with the reason, instead of failing once it has run; and a failure of heal or attenuate is said in the window's language.
 - **Plugins change places**: drag one up or down in the plugins window to change its place in the chain (VoiceOver: Move Up, Move Down), one undo step; for an agent, `set_insert` takes `position`.
