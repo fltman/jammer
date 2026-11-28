@@ -1,0 +1,75 @@
+# Jämmer <VERSION>
+
+<!-- Draft (2026-11-28) for the next version, from docs/CHANGES.md and the commits since 0.1.0 (daa7c36). The
+     version is Anders's to choose; rename to <version>.en.md and replace <VERSION> when it is made. 0.1.1 was never
+     published, so its fixes are here too. Not shipped by itself. -->
+
+What is new since 0.1.0. Requires macOS 27 or later on Apple silicon.
+
+## Fixed
+
+- **A batch could send audio to OpenAI without asking.** In 0.1.0, a batch job that transcribed with OpenAI uploaded the audio and was charged to your OpenAI account without a question, if you had added your own OpenAI key and used a recipe of your own with such a job, or let an agent ask for one. Now the Batch window asks once before such a run, naming every paid job.
+- **A large document no longer stops Jämmer while it opens.** Before its waveforms were ready, the timeline read the sound from disk on the main thread: for 24 tracks of an hour, Jämmer didn't answer for about two and a half minutes. Now each track says it is waiting or how far its waveform has been read, and the window answers at once.
+- **Damaged files are read within limits.** Markers, labels and coding history in a WAV, a peak file, a DAWproject's packed files and EDL and OTIO files each have an upper limit, so a broken or hostile file is refused or opened with a warning instead of stopping Jämmer.
+- **Freezing in surround.** A frozen placed track kept only where it started, not where its automation moved it, and a frozen bus that was turned round the listener was turned twice. Both now sound as they did before freezing.
+- A clip that an edit renders again keeps its link to the Flimmer clip it came from, so Send to Flimmer sends it back as a new take of that clip.
+
+## Recording
+
+- Press **R** in a track's header to arm it, then **Transport › Record** (⌘R). Several tracks record at once, each from its own input, while the others play. A selection is a punch-in, with two seconds of pre-roll.
+- Every take over a stretch is kept; a clip's menu chooses another or deletes one. A crash loses at most the last second, and the document offers its takes back when it opens again.
+- macOS asks the first time whether Jämmer may use the microphone. An agent can see the recording and choose among takes, but never arms a track or records.
+
+## The timeline
+
+- **A tool palette** left of the timeline with ten tools, each with its letter: Selection A, Split S, Trim T, Fade F, Gain G, Box B, Lasso L, Brush P, Zoom Z, Hand H.
+- **Handles:** the pointer shows what a press will grab. Drag a clip's edge to trim it, its fade squares to set fades, and the selection's edges to change it.
+- **Track headers** with the name, mute, solo, arm, a lock, the level and a peak meter, and level and pan sliders when the track is tall enough. **Track › Lock Track** keeps a track from being edited. A clip light in the status bar says where the mix first reaches 0 dBFS; click it to go there.
+- **Many tracks scroll in height.** A vertical swipe or wheel now always scrolls the tracks; time scrolls with a sideways swipe or ⇧ with the wheel, and with the new scroller along the bottom. **View › Taller Tracks** (⌃⌘+), **Shorter Tracks** (⌃⌘−) and **Fit Tracks** (⌃⌘0).
+- **Track › Previous Track** and **Next Track** (⌥↑, ⌥↓). ⌥← and ⌥→ nudge the selected clips by 10 ms, with ⇧ by 100 ms.
+- **The Audio menu is split** into Track, Audio, Repair and Speech, and right-clicking a clip, a track header or a mixer strip gives its own menu.
+- **Sliders:** double-click or ⌥-click returns one to its default, ⌥-drag moves it a tenth as far, and the value beside a level or pan slider can be typed into.
+- A track shows how it is heard: muted, silent because another is soloed, soloed or frozen.
+
+## The spectrogram
+
+- A frequency scale at each track's left edge, and the time and frequency under the pointer.
+- A box can be adjusted by its corners and edges, or moved by dragging inside it. The brush shows how wide it paints. Esc stops a drawing and puts the area back.
+- **Repair › Heal Area** says in the menu why it can't take an area (longer than half a second, or at the very start or end), instead of failing once it has run.
+
+## Transcripts and voices
+
+- **Klang Pianissimo** for Swedish and Danish, with word timings, on your Mac (Settings › Models; CC-BY-4.0, by Klang AI AB from NVIDIA Parakeet), or hosted by Berget AI with your own key, at Berget's published rate, asked before each request.
+- Voice tracks are named from more ways of introducing oneself ("I'm Anna", "jag är Anna", "jeg er Anna"), never from a nationality or a day.
+- In the transcript panel, double-click or Return on a word opens Correct Word, and clearing the selection on the timeline clears the highlighted words.
+- A cloned voice is deleted only from the window (**Speech › Delete Cloned Voice…**), never by an agent.
+
+## Mixing, surround and tempo
+
+- **Plugins in a window of their own** beside the document (**Track › Plugins…**, ⌥⇧⌘P), so Space plays while it is open. Drag a plugin up or down to change its place in the chain. Each mixer strip lists its plugins.
+- **ADM objects:** in a 5.1, 7.1 or 7.1.4 document, Export Audio's "ADM objects for placed tracks" writes each placed track as an ADM object (ITU-R BS.2076) with its place over time, after a bed of everything else. Jämmer reads them back; it hasn't yet been tried with another program that renders ADM.
+- **An Ambisonics bus can be turned** by yaw, pitch and roll, fixed or by automation, with the same slider and menu as a track that plays a sound field.
+- **Detect Tempo** follows a tempo that changes in steps, as a tempo map with a tempo per stretch. A tempo that glides is refused, saying from what to what and where.
+
+## Delivering
+
+- **Audio › Match ACX Requirements** brings an audiobook file within ACX's loudness and peak limits in one step, using the limiter only when the peaks are in the way.
+- **File › Storage…** opens at once and reads in the background, with Refresh and Show in Finder.
+
+## Stop and paid services
+
+- Every job, and every wait longer than half a second, shows in the status bar with a Stop that stops only that one (**Edit › Stop Job**). A stopped job changes nothing, and what was already paid for and has come back is kept.
+- Return never sends a paid request or deletes; Esc cancels.
+- The assistant's text requests to a paid service show the price at the first request; tick the service once to stop asking, and untick it in **Settings › Paid Services**.
+
+## For agents
+
+- New: `POST …/export` `objects`, `set_bus` `yaw`/`pitch`/`roll`, `set_insert` `position`, `select_track`, `move_clip`, `set_clip`, `acx_match`, `set_take` and `GET …/recording`, `DELETE /api/v1/documents/{id}`, and `POST /api/v1/transcribe` and `/transcribe/file` for another app's captions.
+- `detect_tempo` answers `tempi`, and `GET …/analysis/rhythm` answers `segments`. A save of a linked document answers when the file is written. A call's method and values are checked before whether its document is open.
+- `delete_voice` is gone: deleting a cloned voice is the person's own.
+
+## Also
+
+- Nothing in the window flashes more than three times a second.
+- The app is now named Jämmer.app, in Jämmer-<VERSION>.zip.
+- Jämmer works only with a Glimmer or Flimmer of exactly its own kind (a released app with released apps).

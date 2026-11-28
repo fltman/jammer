@@ -41,6 +41,11 @@
       "file": "site/app.json",
       "on": "with a box, a lasso or a brush, then heal it",
       "off": "with a box, then heal it"
+    },
+    {
+      "file": "site/manual/13-restoration.md",
+      "on": "Esc puts the area back as it was. Over the spectrogram the brush's pointer is a ring as wide as what it paints, so you see its reach before a stroke.",
+      "off": "Esc puts the area back as it was."
     }
   ],
   "clap": [

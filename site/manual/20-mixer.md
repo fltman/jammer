@@ -8,7 +8,7 @@
 
 - **Meters**: next to each strip's name, and the master's, a peak meter shows the strip's highest sample after its fader (before its pan) as the sound plays, from −60 to 0 dBFS. It holds a peak for a moment, then falls 20 dB a second. The light beside it turns red when the strip reaches full scale and stays red until you click it. The master's meter is what leaves Jämmer, after the limiter.
 
-- **Level** is the track's gain, from −60 to +12 dB on the slider. Let go of the slider and the change is made; one drag is one undo step. Click the value beside it to type one (−3,5 or −3.5 both work), and double-click it to go back to 0 dB. The pan's value takes L 30, R 30 or −100 to 100, and a double-click puts it in the middle.
+- **Level** is the track's gain, from −60 to +12 dB on the slider. Let go of the slider and the change is made; one drag is one undo step. Click the value beside it to type one (−3,5 or −3.5 both work), and double-click it to go back to 0 dB. The pan's value takes L 30, R 30 or −100 to 100, and a double-click puts it in the middle. The sliders themselves go back to their default with a double-click or an ⌥-click, as one undo step, and with ⌥ held a drag moves a tenth as far.
 - **Pan** places a track between left and right in a stereo document. In the center the track is left exactly as it is. Toward one side, that side stays as it is and the other falls away, so panning never makes anything louder and can't clip. A mono document has no pan.
 - **Mute** silences the strip. A muted track is left out of exports too.
 
