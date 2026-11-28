@@ -63,6 +63,7 @@ extension AgentAPI {
         .init("POST", doc + "/steps", body: ["steps", "allowPaid"]),
         .init("POST", doc + "/undo"),
         .init("POST", doc + "/save"), .init("POST", doc + "/redo"),
+        .init("POST", doc + "/duplicate"),
         .init("GET", doc + "/analysis", query: range.union(tracks)),
         .init("GET", doc + "/analysis/rhythm", query: range.union(tracks)),
         .init("GET", doc + "/analysis/dialogue", query: range.union(["profile"])),

@@ -137,7 +137,7 @@ public enum Commands {
         add("file.close", .file, 1, key("file.close"), key: "w", agent: .route("DELETE", doc))
         add("file.save", .file, 1, key("file.save"), key: "s", agent: .route("POST", doc + "/save"))
         add("file.saveAs", .file, 1, key("file.saveAs"), key: "s", [.shift], agent: .none(.userFiles))
-        add("file.duplicate", .file, 1, key("file.duplicate"), key: "s", [.option, .shift], agent: .none(.userFiles))
+        add("file.duplicate", .file, 1, key("file.duplicate"), key: "s", [.option, .shift], agent: .route("POST", doc + "/duplicate"))
         add("file.revert", .file, 1, key("file.revert"), agent: .none(.userFiles))
         add("file.importTracks", .file, 2, key("file.importTracks"), key: "i", [.shift], agent: .route("POST", doc + "/tracks"))
         add("file.importTimeline", .file, 2, key("file.importTimeline"), agent: .operation("import_timeline"))

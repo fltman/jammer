@@ -455,6 +455,19 @@ enum AgentRouter {
             case ["undo"], ["redo"]:
                 try only("POST")
                 return try await undoRedo(session, redo: p.last == "redo")
+            case ["duplicate"]:
+                // File › Duplicate for an agent: the window's own (NSDocument's duplicate), an untitled copy in a
+                // window of its own; nothing is saved. A document that came from Flimmer is copied in the window by
+                // Save a Jämmer Copy…, whose place is the user's to choose (userFiles), so the agent is told so.
+                try only("POST")
+                session.checkLink()
+                if session.wasLinked {
+                    throw APIError(409, "linked", "This document edits a file from Flimmer: a copy of it is made in the window by File › Save a Jämmer Copy…, where the user chooses its place.")
+                }
+                guard let doc = session.document else { throw APIError.notFound("No open document with id \(p[3]).") }
+                let copy = try doc.duplicate()
+                guard let made = (copy as? JammerDocument)?.session else { throw APIError.internalError("The copy's window didn't open.") }
+                return .json(["document": detail(made), "from": session.agentID], status: 201)
             case ["save"]:
                 // File › Save for an agent: the same path as the window's. A linked document is saved back into its
                 // file; a document never saved has no file yet, and naming one is the user's (the file panel).
